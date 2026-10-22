@@ -1,0 +1,41 @@
+# The dependencies
+node_modules/
+
+# The output of the builds
+dist/
+
+# The environment of the process
+.env
+.env.local
+.env.test
+
+# The logs
+logs
+*.log
+
+# The coverage of the tests
+coverage
+*.lcov
+
+# The caches of the tools
+*.tsbuildinfo
+.eslintcache
+.cache
+
+# The runtime data
+pids
+*.pid
+*.pid.lock
+*.seed
+
+# The state of a development machine
+.pg/
+.tmp/
+.access/
+
+# The keys and the configuration of the development machine: they are
+# generated, and they are not secrets. The script
+# `bun run scripts/dev-keys.ts` writes them.
+deploy/secrets/
+deploy/config/bindings.local.json
+deploy/config/routes.local.json
