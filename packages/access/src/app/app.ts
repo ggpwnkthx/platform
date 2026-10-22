@@ -1,0 +1,203 @@
+/**
+ * The application of the access service.
+ *
+ * The application is thin on purpose: it holds the order of the pipeline,
+ * it maps the failures of the domains to the answers of the protocol and it
+ * writes the headers of the answers. Every rule lives in a domain.
+ */
+
+import { randomUUID } from 'node:crypto'
+import { Hono, type ExecutionContext } from 'hono'
+import type { AccessDependencies } from './dependencies'
+import {
+  grantHandler,
+  grantsHandler,
+  groupHandler,
+  groupsHandler,
+  principalHandler,
+  principalsHandler,
+  removeRoleHandler,
+  revokeGrantHandler,
+  roleHandler,
+  rolesHandler,
+  tenantHandler,
+  tenantsHandler,
+  auditHandler,
+} from './administration'
+import { decisionHandler } from './decision-contract'
+import { accessContextDiscoveryHandler, accessContextHandler } from './access-context-contract'
+import { authorizeHandler, callbackHandler } from './login'
+import { tokenHandler } from './oauth'
+import { healthHandler, readyHandler } from './endpoints'
+import { metricsHandler } from './metrics'
+import { discoveryHandler, jwksHandler, userinfoHandler } from './provider'
+import { jsonError } from './errors'
+import type { AccessEnv, AccessState } from './state'
+
+/** The shape of the identifier of a request. */
+const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,64}$/
+
+/**
+ * The identifier of a request.
+ *
+ * The identifier of the request is reused when it is valid: a client that
+ * sends one can follow its request in the logs. An identifier that is not
+ * valid is replaced by a generated one: the identifier ends up in a log
+ * line and in a header, so it may not carry anything else.
+ */
+function resolveRequestId(request: Request): string {
+  const incoming = request.headers.get('x-request-id')
+  if (incoming && REQUEST_ID_PATTERN.test(incoming)) return incoming
+  return randomUUID()
+}
+
+/** The state of a request that has just arrived. */
+function initialState(request: Request): AccessState {
+  return {
+    requestId: resolveRequestId(request),
+    startedAt: Date.now(),
+  }
+}
+
+/**
+ * The application, as the listener of the platform sees it.
+ *
+ * The platform does not know the framework of the application: the
+ * application answers the requests itself and hands the platform the
+ * capabilities it needs.
+ */
+export interface AccessHandler {
+  handle(request: Request, env: AccessEnv['Bindings']): Response | Promise<Response>
+}
+
+/** Wraps the application of the access service for the listener of the platform. */
+export function createAccessHandler(app: Hono<AccessEnv>): AccessHandler {
+  const executionCtx: ExecutionContext = {
+    waitUntil: () => undefined,
+    passThroughOnException: () => undefined,
+    props: {},
+  }
+  return {
+    handle: (request, env) => app.fetch(request, env, executionCtx),
+  }
+}
+
+/** Builds the application of the access service. */
+export function createAccessApp(dependencies: AccessDependencies): Hono<AccessEnv> {
+  const app = new Hono<AccessEnv>()
+
+  // The identifier of the request is the first thing: it is in every log
+  // line of the request and in the answer.
+  app.use('*', async (context, next) => {
+    const state = initialState(context.req.raw)
+    context.set('requestId', state.requestId)
+    context.set('startedAt', state.startedAt)
+    await next()
+    try {
+      context.res.headers.set('x-request-id', state.requestId)
+      // The headers of a browser: the answer of the access service is never framed, it
+      // is never sniffed, and it never carries the url of another site.
+      context.res.headers.set('x-content-type-options', 'nosniff')
+      context.res.headers.set('x-frame-options', 'DENY')
+      context.res.headers.set('referrer-policy', 'no-referrer')
+      if (context.res.headers.get('content-type')?.startsWith('text/html')) {
+        // The pages of the refusals carry nothing but their text.
+        context.res.headers.set('content-security-policy', "default-src 'none'")
+      }
+      if (context.req.url.startsWith('https://')) {
+        // The transport of a deployment that is served in https.
+        context.res.headers.set('strict-transport-security', 'max-age=31536000')
+      }
+    } catch {
+      // The headers of the answer are immutable, there is nothing to do.
+    }
+    dependencies.logger.debug('the request was answered', {
+      requestId: state.requestId,
+      method: context.req.method,
+      path: context.req.path,
+      status: context.res.status,
+      durationMs: Date.now() - state.startedAt,
+    })
+  })
+
+  // The probes of the service.
+  app.get('/healthz', (context) => healthHandler(context, dependencies))
+  app.get('/readyz', async (context) => await readyHandler(context, dependencies))
+
+  // The login of the callers: the gateway sends the browser here and the
+  // provider of the tenant sends it back.
+  app.get('/oauth/authorize', async (context) => await authorizeHandler(context, dependencies))
+  app.get('/oauth/tenant/callback', async (context) => await callbackHandler(context, dependencies))
+
+  // The token endpoint of the gateway.
+  app.post('/oauth/token', async (context) => await tokenHandler(context, dependencies))
+
+  // The provider of the gateway: the discovery document, the keys and the
+  // claims of a principal.
+  app.get(
+    '/.well-known/openid-configuration',
+    async (context) => await discoveryHandler(context, dependencies)
+  )
+  app.get('/oauth/jwks', async (context) => await jwksHandler(context, dependencies))
+  app.get('/oauth/userinfo', async (context) => await userinfoHandler(context, dependencies))
+
+  // The decision contract of the gateway.
+  app.post('/v1/decisions', async (context) => await decisionHandler(context, dependencies))
+
+  // The access context contract: the complete set of the capabilities of
+  // a principal, for a consumer that owns data.
+  app.get('/v1/access-context', async (context) =>
+    accessContextDiscoveryHandler(context, {
+      store: dependencies.accessContexts,
+      credentials: dependencies.accessContextCredentials,
+      observer: dependencies.observer,
+    })
+  )
+  app.post(
+    '/v1/access-context',
+    async (context) =>
+      await accessContextHandler(context, {
+        store: dependencies.accessContexts,
+        credentials: dependencies.accessContextCredentials,
+        observer: dependencies.observer,
+      })
+  )
+
+  // The metrics of the service.
+  app.get('/metrics', async (context) => await metricsHandler(context, dependencies))
+
+  // The administration of the platform: twelve endpoints, and they are the
+  // whole surface.
+  app.post('/v1/admin/tenants', async (context) => await tenantHandler(context, dependencies))
+  app.get('/v1/admin/tenants', async (context) => await tenantsHandler(context, dependencies))
+  app.post('/v1/admin/users', async (context) => await principalHandler(context, dependencies))
+  app.get('/v1/admin/users', async (context) => await principalsHandler(context, dependencies))
+  app.post('/v1/admin/groups', async (context) => await groupHandler(context, dependencies))
+  app.get('/v1/admin/groups', async (context) => await groupsHandler(context, dependencies))
+  app.put('/v1/admin/roles', async (context) => await roleHandler(context, dependencies))
+  app.get('/v1/admin/roles', async (context) => await rolesHandler(context, dependencies))
+  app.delete(
+    '/v1/admin/roles/:id',
+    async (context) => await removeRoleHandler(context, dependencies)
+  )
+  app.put('/v1/admin/grants', async (context) => await grantHandler(context, dependencies))
+  app.get('/v1/admin/grants', async (context) => await grantsHandler(context, dependencies))
+  app.delete('/v1/admin/grants/:id', async (context) => revokeGrantHandler(context, dependencies))
+  // The audit of the administration: the trail of the changes. It reads
+  // and it does not change.
+  app.get('/v1/admin/audit', async (context) => auditHandler(context, dependencies))
+
+  // Every other path is refused: the access service has a fixed surface and the paths
+  // that are not part of it are not part of it.
+  app.all('*', () => jsonError(404, 'not_found', 'unknown path'))
+
+  app.onError((error, context) => {
+    dependencies.logger.error('the service failed to handle the request', {
+      requestId: context.get('requestId'),
+      error,
+    })
+    return jsonError(500, 'internal_error', 'the service failed to handle the request')
+  })
+
+  return app
+}
