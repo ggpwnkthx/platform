@@ -1,0 +1,615 @@
+/**
+ * The environment of the access service.
+ *
+ * The environment is read once, at the start of the process, and it is
+ * validated as a whole: a value that cannot be understood stops the service,
+ * because a setting that looks active but is not is a security hole. The
+ * only exception is the level of the log, which falls back to `info`: a
+ * typo in the level of a log must not keep a deployment down.
+ *
+ * The names of the variables never leave this module: the rest of the access service
+ * receives the settings it needs, not the environment.
+ */
+
+import { readFileSync } from 'node:fs'
+import { z } from 'zod'
+import type { LogLevel } from '../observability'
+import { parseLogLevel } from '../observability'
+
+/** The environment the process runs in. */
+type Environment = 'development' | 'production'
+
+/** The settings of the listener. */
+interface NetworkSettings {
+  /** The address the listener binds to. */
+  host: string
+  /** The port the listener binds to. */
+  port: number
+}
+
+/** The urls the browser and the gateway use. */
+interface PublicSettings {
+  /** The public issuer url of the access service: the `iss` of every token it issues. */
+  issuer: string
+  /** The public url of the access service, when it differs from the issuer. */
+  publicUrl: string
+}
+
+/** The settings of the database of the eight tables. */
+interface DatabaseSettings {
+  /** The driver of the database. */
+  driver: 'postgres' | 'pglite'
+  /** The url of the PostgreSQL server, when the driver is the server. */
+  url?: string
+  /** The directory of the embedded database, when the driver is embedded. */
+  path?: string
+}
+
+/** The settings of the shared store of the authorization codes. */
+interface StoreSettings {
+  /** The url of the Redis of the deployment, when there is one. */
+  url?: string
+  /**
+   * True when the deployment accepts the state in the memory of the process.
+   *
+   * The state of a deployment has to be shared: a code that lives in the
+   * memory of one replica is unknown to the others. A deployment that is a
+   * single node may say so explicitly.
+   */
+  allowMemoryState: boolean
+}
+
+/** The settings of the administration. */
+interface AdminSettings {
+  /** The bearer token of the twelve administrative endpoints. */
+  token?: string
+  /**
+   * The token that the current one replaced.
+   *
+   * It is accepted until the deployment removes it: a rotation of the
+   * token of the administration is a rolling change and not a
+   * simultaneous one.
+   */
+  previousToken?: string
+  /**
+   * The credentials of the tenants (spec §10.1).
+   *
+   * A credential of a tenant may only act for that tenant, and it may
+   * carry the name of its operator.
+   */
+  credentials?: string
+}
+
+/** The settings of the decision contract of the gateway. */
+interface AccessSettings {
+  /** The bearer token the gateway presents on `POST /v1/decisions`. */
+  token?: string
+  /**
+   * The token that the current one replaced.
+   *
+   * It is accepted until the deployment removes it: a rotation of the
+   * token is a rolling change and not a simultaneous one.
+   */
+  previousToken?: string
+  /**
+   * The credentials of the access context contract.
+   *
+   * The value is a json object: every key is a bearer token and every
+   * value holds the tenants the token may ask about. A `null` scope
+   * means every tenant: it is a choice of the deployment and not the
+   * default of a tenant credential.
+   */
+  contextTokens?: string
+}
+
+/** The settings of the metrics. */
+interface MetricsSettings {
+  /** The bearer token that guards the metrics endpoint. */
+  token?: string
+}
+
+/** The settings of the secrets of the process. */
+interface SecretSettings {
+  /** The secret that signs and encrypts the state of a login. */
+  stateSecret?: string
+  /** The key that encrypts the client secrets at rest. */
+  encryptionKey?: string
+}
+
+/** The settings of the key the access service signs its tokens with. */
+interface SigningSettings {
+  /** The private key of the access service, in PEM. */
+  key?: string
+  /** The identifier of the key in the JWKS. */
+  kid?: string
+  /** The private key of the previous rotation, in PEM. */
+  previousKey?: string
+  /** The identifier of the previous key in the JWKS. */
+  previousKid?: string
+}
+
+/** The settings of the deadlines. */
+interface TimeoutSettings {
+  /** How long the access service waits for the provider of a tenant. */
+  idpTimeoutMs: number
+  /** How long a decision may take before it is a denial. */
+  decisionTimeoutMs: number
+  /** The tolerance of the clock on the tokens of a provider. */
+  clockSkewSeconds: number
+}
+
+/** The settings of the observation. */
+interface ObservabilitySettings {
+  /** The level of the log. */
+  logLevel: LogLevel
+}
+
+/** Everything the access service needs to start. */
+export interface RuntimeSettings {
+  /** The environment of the process. */
+  environment: Environment
+  /** True when the environment is a production one. */
+  production: boolean
+  network: NetworkSettings
+  public: PublicSettings
+  database: DatabaseSettings
+  store: StoreSettings
+  admin: AdminSettings
+  access: AccessSettings
+  metrics: MetricsSettings
+  secrets: SecretSettings
+  signing: SigningSettings
+  timeouts: TimeoutSettings
+  observability: ObservabilitySettings
+}
+
+/** The issuer of a development deployment. */
+function developmentIssuer(port: number): string {
+  return `http://localhost:${port}`
+}
+
+/** The smallest size of a secret, in bytes. */
+const MINIMUM_SECRET_BYTES = 32
+
+/**
+ * The smallest size of a bearer token of the environment, in bytes.
+ *
+ * A token is compared in the bytes it is written in, so it is measured
+ * the same way: a token of one character is a token of one byte
+ * (spec §4.1).
+ */
+const MINIMUM_TOKEN_BYTES = 16
+
+/**
+ * The values of the file of examples.
+ *
+ * A deployment that copies the example of a development machine into a
+ * production one keeps a published secret. A production deployment
+ * refuses to start with one of these values (spec §4.1).
+ */
+const EXAMPLE_SECRETS: readonly string[] = [
+  'the-admin-token-of-the-development',
+  'the-previous-admin-token-of-the-development',
+  'the-access-token-of-the-development',
+  'the-previous-access-token-of-the-development',
+  'the-metrics-token-of-the-development',
+]
+
+/**
+ * The directory of the embedded database of a development machine.
+ *
+ * The database of the development stack lives in the working directory, so
+ * the tenants and the principals of a development machine survive the
+ * restarts of the process.
+ */
+const DEFAULT_EMBEDDED_DATABASE_PATH = './.access/pglite'
+
+/** An integer of the environment. */
+function intEnv(defaultValue: number, options: { min?: number; max?: number } = {}) {
+  let schema = z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? Number.NaN : value),
+    z.coerce.number().int('a whole number is expected')
+  )
+  if (options.min !== undefined) {
+    const min = options.min
+    schema = schema.refine((value) => value >= min, {
+      message: `the value must be at least ${min}`,
+    })
+  }
+  if (options.max !== undefined) {
+    const max = options.max
+    schema = schema.refine((value) => value <= max, {
+      message: `the value must be at most ${max}`,
+    })
+  }
+  return schema.default(defaultValue)
+}
+
+/** A boolean of the environment. */
+function boolEnv() {
+  return z
+    .enum(['true', 'false', '1', '0'])
+    .transform((value) => value === 'true' || value === '1')
+    .optional()
+}
+
+/** The environment of the process. */
+export type Env = Record<string, string | undefined>
+
+const EnvSchema = z.object({
+  ACCESS_HOST: z.string().default('0.0.0.0'),
+  ACCESS_PORT: intEnv(8081, { min: 0, max: 65_535 }),
+
+  ACCESS_ISSUER: z.string().optional(),
+  ACCESS_PUBLIC_URL: z.string().optional(),
+
+  ACCESS_DATABASE_URL: z.string().optional(),
+  ACCESS_REDIS_URL: z.string().optional(),
+  ACCESS_ALLOW_MEMORY_STATE: boolEnv(),
+
+  ACCESS_ADMIN_TOKEN: z.string().optional(),
+  ACCESS_PREVIOUS_ADMIN_TOKEN: z.string().optional(),
+  ACCESS_ADMIN_TOKENS: z.string().optional(),
+  ACCESS_DECISION_TOKEN: z.string().optional(),
+  ACCESS_PREVIOUS_DECISION_TOKEN: z.string().optional(),
+  ACCESS_CONTEXT_TOKENS: z.string().optional(),
+  ACCESS_METRICS_TOKEN: z.string().optional(),
+
+  ACCESS_STATE_SECRET: z.string().optional(),
+  ACCESS_SECRET_ENCRYPTION_KEY: z.string().optional(),
+
+  ACCESS_SIGNING_KEY: z.string().optional(),
+  ACCESS_SIGNING_KID: z.string().optional(),
+  ACCESS_PREVIOUS_SIGNING_KEY: z.string().optional(),
+  ACCESS_PREVIOUS_SIGNING_KID: z.string().optional(),
+
+  ACCESS_IDP_TIMEOUT_MS: intEnv(5_000, { min: 1 }),
+  ACCESS_DECISION_TIMEOUT_MS: intEnv(2_000, { min: 1 }),
+  ACCESS_CLOCK_SKEW_SECONDS: intEnv(60, { min: 0 }),
+
+  ACCESS_LOG_LEVEL: z.string().optional(),
+  ACCESS_ENVIRONMENT: z.enum(['development', 'production']).default('development'),
+})
+
+/**
+ * The number of bytes of a secret.
+ *
+ * A secret is handed over as a hex string, as a base64 string or as a
+ * passphrase: the three are counted the way they are read, so a 32 byte
+ * secret is 64 hexadecimal characters and 44 base64 characters.
+ */
+export function secretBytes(value: string): number {
+  const trimmed = value.trim()
+  if (/^[0-9a-fA-F]+$/.test(trimmed) && trimmed.length % 2 === 0) {
+    return trimmed.length / 2
+  }
+  if (/^[A-Za-z0-9+/]+={0,2}$/.test(trimmed) && trimmed.length % 4 === 0) {
+    return Buffer.from(trimmed, 'base64').length
+  }
+  return Buffer.byteLength(trimmed, 'utf8')
+}
+
+/** Reports whether a value is an absolute http url. */
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+/** Reports whether a value looks like a PEM private key. */
+function isPrivateKeyPem(value: string): boolean {
+  return /-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(value)
+}
+
+/**
+ * Reports whether a secret is one of the values of the example.
+ *
+ * The example file is published, and so is every deployment that kept
+ * one of its values: a production deployment refuses to start with one
+ * of them (spec §4.1).
+ */
+function isExampleSecret(value: string): boolean {
+  const trimmed = value.trim()
+  return EXAMPLE_SECRETS.includes(trimmed)
+}
+
+/**
+ * Reports whether a secret is one repeated character.
+ *
+ * A secret of `000…0` or of `111…1` is the secret of the example file,
+ * and a secret of one repeated character is not a secret whatever its
+ * length (spec §4.1).
+ */
+function isRepeatedCharacterSecret(value: string): boolean {
+  const trimmed = value.trim()
+  if (trimmed.length < 8) return false
+  return [...trimmed].every((character) => character === trimmed[0])
+}
+
+/**
+ * The secrets of the environment that may be given in a file.
+ *
+ * A secret of a deployment is a file that a secret manager writes, and a
+ * private key in a variable of the environment is a private key that a
+ * shell mangles (spec §4.5).
+ */
+const FILE_VARIABLES: readonly string[] = [
+  'ACCESS_ADMIN_TOKEN',
+  'ACCESS_PREVIOUS_ADMIN_TOKEN',
+  'ACCESS_DECISION_TOKEN',
+  'ACCESS_PREVIOUS_DECISION_TOKEN',
+  'ACCESS_CONTEXT_TOKENS',
+  'ACCESS_METRICS_TOKEN',
+  'ACCESS_STATE_SECRET',
+  'ACCESS_SECRET_ENCRYPTION_KEY',
+  'ACCESS_SIGNING_KEY',
+  'ACCESS_PREVIOUS_SIGNING_KEY',
+]
+
+/**
+ * Reads the values of the environment that are in a file.
+ *
+ * The value of `X_FILE` is the value of `X`. A variable and its file are
+ * not set at the same time: a deployment that sets both does not know
+ * which one it meant, and the service says so instead of choosing.
+ */
+function readSecretFiles(env: Env): Env {
+  const resolved: Env = { ...env }
+  for (const name of FILE_VARIABLES) {
+    const file = env[`${name}_FILE`]
+    if (!file || file.trim().length === 0) continue
+    const value = env[name]
+    if (value !== undefined && value.trim().length > 0) {
+      throw new Error(
+        `${name} and ${name}_FILE are both set: a value is either in the environment or in a file`
+      )
+    }
+    let content: string
+    try {
+      content = readFileSync(file.trim(), 'utf8')
+    } catch {
+      throw new Error(`${name}_FILE names a file that cannot be read: ${file.trim()}`)
+    }
+    resolved[name] = content.trim()
+  }
+  return resolved
+}
+
+/**
+ * Reads the environment.
+ *
+ * A value that cannot be understood stops the service: the message names
+ * the variable, so the operator knows what to fix. Every problem of the
+ * environment is reported at once: a deployment that fixes one variable
+ * and restarts to learn about the next one is a deployment that stays down.
+ */
+export function readEnv(env: Env = process.env): RuntimeSettings {
+  const result = EnvSchema.safeParse(readSecretFiles(env))
+  if (!result.success) {
+    const problems = result.error.issues
+      .map((issue) => `${issue.path.join('.') || 'the environment'}: ${issue.message}`)
+      .join('; ')
+    throw new Error(`the environment is invalid: ${problems}`)
+  }
+  const parsed = result.data
+  const production = parsed.ACCESS_ENVIRONMENT === 'production'
+  const problems: string[] = []
+
+  // The database of the eight tables. A deployment talks to a PostgreSQL
+  // server: the replicas share their tables. A development machine runs
+  // the embedded PostgreSQL of the process when nothing is named.
+  const rawDatabase = parsed.ACCESS_DATABASE_URL?.trim()
+  let driver: 'postgres' | 'pglite' = 'pglite'
+  let databaseUrl: string | undefined
+  let databasePath: string | undefined
+  if (!rawDatabase) {
+    if (production) {
+      problems.push(
+        'ACCESS_DATABASE_URL must be set in a production environment: it names the PostgreSQL of the eight tables of the access service'
+      )
+    } else {
+      databasePath = DEFAULT_EMBEDDED_DATABASE_PATH
+    }
+  } else if (/^postgres(ql)?:\/\//i.test(rawDatabase)) {
+    driver = 'postgres'
+    databaseUrl = rawDatabase
+  } else if (/^pglite:\/\//i.test(rawDatabase)) {
+    driver = 'pglite'
+    databasePath = rawDatabase.slice('pglite://'.length) || DEFAULT_EMBEDDED_DATABASE_PATH
+  } else {
+    problems.push(
+      'ACCESS_DATABASE_URL must name a PostgreSQL server (postgres://...) or the embedded database of a development machine (pglite://...)'
+    )
+  }
+  if (production && driver === 'pglite') {
+    problems.push(
+      'ACCESS_DATABASE_URL must name a PostgreSQL server in a production environment: the embedded database lives in one process and the replicas of a deployment share their tables'
+    )
+  }
+
+  // The urls the browser and the gateway use. A value that is not a url is
+  // a setting that looks active but is not.
+  const issuer =
+    parsed.ACCESS_ISSUER ?? (production ? undefined : developmentIssuer(parsed.ACCESS_PORT))
+  if (!issuer) {
+    problems.push(
+      'ACCESS_ISSUER must be set in a production environment: it is the issuer of the tokens of the access service and the one the gateway is configured with'
+    )
+  } else if (!isHttpUrl(issuer)) {
+    problems.push('ACCESS_ISSUER must be an absolute http url')
+  }
+  const publicUrl = parsed.ACCESS_PUBLIC_URL ?? issuer
+  if (publicUrl && !isHttpUrl(publicUrl)) {
+    problems.push('ACCESS_PUBLIC_URL must be an absolute http url')
+  }
+
+  // The secrets of the deployment. They are required in production: a
+  // deployment without them cannot sign a login, encrypt a secret at rest
+  // or authenticate a call.
+  if (production) {
+    if (!parsed.ACCESS_ADMIN_TOKEN && !parsed.ACCESS_ADMIN_TOKENS) {
+      problems.push(
+        'ACCESS_ADMIN_TOKEN must be set in a production environment: it is the bearer token of the twelve administrative endpoints, unless the deployment names its credentials in ACCESS_ADMIN_TOKENS'
+      )
+    }
+    if (!parsed.ACCESS_STATE_SECRET) {
+      problems.push(
+        'ACCESS_STATE_SECRET must be set in a production environment: it signs and encrypts the state of a login and it has to be the same on every replica'
+      )
+    }
+    if (!parsed.ACCESS_SECRET_ENCRYPTION_KEY) {
+      problems.push(
+        'ACCESS_SECRET_ENCRYPTION_KEY must be set in a production environment: it encrypts the client secrets of the tenants at rest'
+      )
+    }
+    if (!parsed.ACCESS_SIGNING_KEY) {
+      problems.push(
+        'ACCESS_SIGNING_KEY must be set in a production environment: it is the private key the access service signs its tokens with, and a key that is generated at the start of a process invalidates every token that is alive'
+      )
+    }
+    if (!parsed.ACCESS_SIGNING_KID) {
+      problems.push(
+        'ACCESS_SIGNING_KID must be set in a production environment: it is the identifier of the key in the JWKS'
+      )
+    }
+    // The state of a deployment has to be shared by the replicas. A
+    // deployment that is a single node may say so explicitly.
+    if (!parsed.ACCESS_REDIS_URL && !parsed.ACCESS_ALLOW_MEMORY_STATE) {
+      problems.push(
+        'ACCESS_REDIS_URL must be set in a production environment: the authorization codes have to be shared by the replicas, or ACCESS_ALLOW_MEMORY_STATE=true when the deployment is a single node that accepts it'
+      )
+    }
+  }
+
+  // The secrets that are set are checked wherever they are set: a short
+  // secret is a secret that is not a secret.
+  if (
+    parsed.ACCESS_STATE_SECRET &&
+    secretBytes(parsed.ACCESS_STATE_SECRET) < MINIMUM_SECRET_BYTES
+  ) {
+    problems.push(
+      `ACCESS_STATE_SECRET must be at least ${MINIMUM_SECRET_BYTES} bytes long: it signs and encrypts the state of a login`
+    )
+  }
+  if (
+    parsed.ACCESS_SECRET_ENCRYPTION_KEY &&
+    secretBytes(parsed.ACCESS_SECRET_ENCRYPTION_KEY) < MINIMUM_SECRET_BYTES
+  ) {
+    problems.push(
+      `ACCESS_SECRET_ENCRYPTION_KEY must be at least ${MINIMUM_SECRET_BYTES} bytes long: it encrypts the client secrets of the tenants at rest`
+    )
+  }
+  if (parsed.ACCESS_SIGNING_KEY && !isPrivateKeyPem(parsed.ACCESS_SIGNING_KEY)) {
+    problems.push('ACCESS_SIGNING_KEY must be a PEM private key')
+  }
+
+  // The tokens of the environment are not short, and they are not the
+  // values of the example (spec §4.1, §4.4). A deployment that is a
+  // development one may use the values of the example: the example is
+  // published, and a development machine is not a deployment.
+  const tokens: [string, string | undefined][] = [
+    ['ACCESS_ADMIN_TOKEN', parsed.ACCESS_ADMIN_TOKEN],
+    ['ACCESS_PREVIOUS_ADMIN_TOKEN', parsed.ACCESS_PREVIOUS_ADMIN_TOKEN],
+    ['ACCESS_DECISION_TOKEN', parsed.ACCESS_DECISION_TOKEN],
+    ['ACCESS_PREVIOUS_DECISION_TOKEN', parsed.ACCESS_PREVIOUS_DECISION_TOKEN],
+    ['ACCESS_METRICS_TOKEN', parsed.ACCESS_METRICS_TOKEN],
+  ]
+  for (const [name, value] of tokens) {
+    if (!value || value.trim().length === 0) continue
+    const bytes = Buffer.byteLength(value.trim(), 'utf8')
+    if (production && bytes < MINIMUM_TOKEN_BYTES) {
+      problems.push(
+        `${name} must be at least ${MINIMUM_TOKEN_BYTES} bytes long: it is a bearer token of the service`
+      )
+    }
+    if (production && (isExampleSecret(value) || isRepeatedCharacterSecret(value))) {
+      problems.push(
+        `${name} is the value of the example of a development machine: it is published, and a deployment does not start with it`
+      )
+    }
+  }
+
+  // The two secrets of the signing and of the encryption are not the
+  // values of the example either (spec §4.1).
+  const secrets: [string, string | undefined][] = [
+    ['ACCESS_STATE_SECRET', parsed.ACCESS_STATE_SECRET],
+    ['ACCESS_SECRET_ENCRYPTION_KEY', parsed.ACCESS_SECRET_ENCRYPTION_KEY],
+  ]
+  for (const [name, value] of secrets) {
+    if (!production || !value) continue
+    if (isExampleSecret(value) || isRepeatedCharacterSecret(value)) {
+      problems.push(
+        `${name} is the value of the example of a development machine: it is published, and a deployment does not start with it`
+      )
+    }
+  }
+
+  // The previous token of the decisions without the token it replaced is
+  // a mistake: the deployment believes it removed the shared secret, and
+  // the secret is still accepted (spec §4.3.1, §8.8).
+  if (parsed.ACCESS_PREVIOUS_DECISION_TOKEN && !parsed.ACCESS_DECISION_TOKEN) {
+    problems.push(
+      'ACCESS_PREVIOUS_DECISION_TOKEN is set without ACCESS_DECISION_TOKEN: the token it replaced is still accepted on POST /v1/decisions, and the shared secret of the deployment is not gone'
+    )
+  }
+
+  if (problems.length > 0) {
+    throw new Error(`the environment is invalid: ${problems.join('; ')}`)
+  }
+
+  return {
+    environment: parsed.ACCESS_ENVIRONMENT,
+    production,
+    network: {
+      host: parsed.ACCESS_HOST,
+      port: parsed.ACCESS_PORT,
+    },
+    public: {
+      issuer: issuer!,
+      publicUrl: publicUrl!,
+    },
+    database: {
+      driver,
+      url: databaseUrl,
+      path: databasePath,
+    },
+    store: {
+      url: parsed.ACCESS_REDIS_URL,
+      allowMemoryState: parsed.ACCESS_ALLOW_MEMORY_STATE ?? false,
+    },
+    admin: {
+      token: parsed.ACCESS_ADMIN_TOKEN,
+      previousToken: parsed.ACCESS_PREVIOUS_ADMIN_TOKEN,
+      credentials: parsed.ACCESS_ADMIN_TOKENS,
+    },
+    access: {
+      token: parsed.ACCESS_DECISION_TOKEN,
+      previousToken: parsed.ACCESS_PREVIOUS_DECISION_TOKEN,
+      contextTokens: parsed.ACCESS_CONTEXT_TOKENS,
+    },
+    metrics: {
+      token: parsed.ACCESS_METRICS_TOKEN,
+    },
+    secrets: {
+      stateSecret: parsed.ACCESS_STATE_SECRET,
+      encryptionKey: parsed.ACCESS_SECRET_ENCRYPTION_KEY,
+    },
+    signing: {
+      key: parsed.ACCESS_SIGNING_KEY,
+      kid: parsed.ACCESS_SIGNING_KID,
+      previousKey: parsed.ACCESS_PREVIOUS_SIGNING_KEY,
+      previousKid: parsed.ACCESS_PREVIOUS_SIGNING_KID,
+    },
+    timeouts: {
+      idpTimeoutMs: parsed.ACCESS_IDP_TIMEOUT_MS,
+      decisionTimeoutMs: parsed.ACCESS_DECISION_TIMEOUT_MS,
+      clockSkewSeconds: parsed.ACCESS_CLOCK_SKEW_SECONDS,
+    },
+    observability: {
+      logLevel: parseLogLevel(parsed.ACCESS_LOG_LEVEL),
+    },
+  }
+}
