@@ -1,0 +1,73 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/**/*.ts", "tooling/**/*.ts", "test/**/*.ts"],
+      "project": ["scripts/**/*.ts", "tooling/**/*.ts", "test/**/*.ts"]
+    },
+    "packages/gateway": {
+      "entry": [
+        "src/main.ts",
+        "src/control-main.ts",
+        "src/**/*.test.ts",
+        "test/**/*.ts",
+        "scripts/**/*.ts",
+        "services/**/*.ts",
+        "examples/**/*.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "test/**/*.ts",
+        "scripts/**/*.ts",
+        "services/**/*.ts",
+        "examples/**/*.ts"
+      ],
+      "ignoreExportsUsedInFile": true,
+      "includeEntryExports": true,
+      "ignoreIssues": {
+        "test/**": ["exports", "types"],
+        "scripts/**": ["exports", "types"],
+        "services/**": ["exports", "types"],
+        "examples/**": ["exports", "types"],
+        "src/**/*.test.ts": ["exports", "types"]
+      }
+    },
+    "packages/access": {
+      "entry": ["src/**/*.test.ts", "test/**/*.test.ts", "scripts/**/*.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"]
+    },
+    "packages/data": {
+      "entry": ["src/main.ts", "test/**/*.ts", "scripts/**/*.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"],
+      "ignoreExportsUsedInFile": true,
+      "includeEntryExports": true
+    },
+    "packages/console": {
+      "entry": [
+        "src/main.ts",
+        "src/app/server.ts",
+        "src/app/client.ts",
+        "src/app/islands/**/*.tsx",
+        "src/app/routes/**/*.{ts,tsx}",
+        "test/**/*.ts",
+        "scripts/**/*.ts",
+        "vite.config.ts"
+      ],
+      "project": ["src/**/*.ts", "src/**/*.tsx", "test/**/*.ts", "scripts/**/*.ts"],
+      "ignoreExportsUsedInFile": true,
+      "includeEntryExports": true,
+      "ignoreIssues": {
+        "src/app/routes/**": ["exports"],
+        "src/app/islands/**": ["exports"],
+        "src/app/server.ts": ["exports"],
+        "vite.config.ts": ["exports"]
+      }
+    },
+    "packages/data/packages/client": {
+      "entry": ["src/deployment.ts", "test/**/*.ts", "scripts/**/*.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"],
+      "ignoreExportsUsedInFile": true,
+      "includeEntryExports": true
+    }
+  }
+}
