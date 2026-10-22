@@ -1,0 +1,20 @@
+# The dependencies
+node_modules
+**/node_modules
+
+# The output of the builds
+dist
+**/dist
+
+# The state of a development machine
+.pg
+.tmp
+.access
+
+# The environment of the process
+.env
+.env.local
+.env.test
+
+# The logs
+**/*.log
