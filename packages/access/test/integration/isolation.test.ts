@@ -1,0 +1,237 @@
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { bypassesRowLevelSecurity, type Database } from '../../src/platform/postgres'
+import { OTHER_TENANT, seedTenant } from '../fixtures/tenant'
+import { againstServer, openTestDatabase, openTestSession } from './database'
+
+/**
+ * The isolation of the tenants, enforced by the database.
+ *
+ * The test does not trust the application: it connects as a role that is
+ * subject to the policies of the tables, it opens a scope of a tenant and
+ * it reads the rows of the platform. The rows of the other tenant are not
+ * there.
+ */
+let database: Database
+let acme: string
+
+/**
+ * Drops a role of the test, with the privileges that were granted to it.
+ *
+ * The role is a role of the database and not of the schema of the test:
+ * a database that is used twice has to be able to run the test again.
+ */
+async function dropRole(name: string): Promise<void> {
+  await database.exec(`
+    do $$
+    begin
+      if exists (select 1 from pg_roles where rolname = '${name}') then
+        execute 'drop owned by ${name}';
+        execute 'drop role ${name}';
+      end if;
+    end $$;
+  `)
+}
+
+beforeAll(async () => {
+  database = await openTestDatabase()
+  const first = await seedTenant(database, { subject: 'the-subject-of-acme' })
+  await seedTenant(database, {
+    tenant: OTHER_TENANT,
+    subject: 'the-subject-of-other',
+  })
+  acme = first.tenantId
+})
+
+afterAll(async () => {
+  await database.close()
+})
+
+describe('the isolation of the tenants', () => {
+  test('the policies of the tables are there', async () => {
+    const rows = await database.query<{ table_name: string; enabled: boolean; forced: boolean }>(
+      `select c.relname as table_name, c.relrowsecurity as enabled, c.relforcerowsecurity as forced
+       from pg_class c
+       join pg_namespace n on n.oid = c.relnamespace
+       where n.nspname = current_schema()
+         and c.relname in ('tenants', 'users', 'permissions', 'grants', 'groups')
+       order by c.relname`
+    )
+    expect(rows).toHaveLength(5)
+    for (const row of rows) {
+      expect(row.enabled).toBe(true)
+      expect(row.forced).toBe(true)
+    }
+  })
+
+  test('a scope of a tenant hides the rows of the other tenants', async () => {
+    // The role of the test is not a superuser: the policies are the rules
+    // for it. It needs the usage of the schema of the test: a role
+    // without it does not see the tables at all.
+    const schema = await database.query<{ name: string }>(`select current_schema() as name`)
+    const schemaName = schema[0]!.name
+    await dropRole('access_isolation_test')
+    await database.exec(`create role access_isolation_test`)
+    await database.exec(`grant usage on schema "${schemaName}" to access_isolation_test`)
+    await database.exec(
+      `grant select on tenants, users, permissions, grants, groups to access_isolation_test`
+    )
+
+    try {
+      // Everything in one transaction: the role and the statements are on
+      // the same connection of the pool.
+      await database.transaction(async (client) => {
+        await client.query(`set role access_isolation_test`)
+
+        const everyone = await client.query<{ count: number }>(
+          `select count(*)::int as count from users`
+        )
+        expect(everyone[0]?.count).toBe(2)
+
+        await client.query(`select set_config('access.tenant_id', $1, true)`, [acme])
+        const users = await client.query<{ tenant_id: string }>(`select tenant_id from users`)
+        const tenants = await client.query<{ slug: string }>(`select slug from tenants`)
+        expect(users).toHaveLength(1)
+        expect(users[0]?.tenant_id).toBe(acme)
+        expect(tenants.map((row) => row.slug)).toEqual(['acme'])
+
+        // The role is given back before the transaction is committed: a
+        // committed `set role` would stay on the connection of the pool.
+        await client.query(`reset role`)
+      })
+    } finally {
+      await dropRole('access_isolation_test')
+    }
+  })
+
+  test('the statements of the platform work on a connection that has run a scoped statement', async () => {
+    // The pool of a deployment reuses its connections, and PostgreSQL
+    // leaves the placeholder of the scope on a connection that has run a
+    // scoped statement: the placeholder is empty, and it is empty for
+    // the rest of the life of the connection. The empty scope is the
+    // scope of the platform: a statement of the platform on such a
+    // connection sees the platform, and it may write it.
+    //
+    // Without the rule, the administration of the platform stops working
+    // on the second call, on the connection of the pool that served the
+    // first one, and the write of a principal is refused by the policy
+    // of the table.
+    const schema = await database.query<{ name: string }>(`select current_schema() as name`)
+    const schemaName = schema[0]!.name
+    await dropRole('access_scope_leak_test')
+    await database.exec(`create role access_scope_leak_test`)
+    await database.exec(`grant usage on schema "${schemaName}" to access_scope_leak_test`)
+    await database.exec(
+      `grant select, insert on tenants, users, permissions, grants, groups, admin_audit to access_scope_leak_test`
+    )
+
+    // A pool of one connection: the scoped statement and the statement
+    // of the platform are on the same session.
+    const session = await openTestSession()
+    try {
+      await session.transaction(async (client) => {
+        await client.query(`set role access_scope_leak_test`)
+        // The scope of a tenant, for the transaction that asks for it.
+        await client.query(`select set_config('access.tenant_id', $1, true)`, [acme])
+        await client.query(`select count(*)::int as count from users`)
+        await client.query(`reset role`)
+      })
+
+      // The scope of the platform, on the same connection: the rows of
+      // the platform are there.
+      await session.transaction(async (client) => {
+        await client.query(`set role access_scope_leak_test`)
+        const everyone = await client.query<{ count: number }>(
+          `select count(*)::int as count from users`
+        )
+        expect(everyone[0]?.count).toBe(2)
+        await client.query(`reset role`)
+      })
+
+      // And the write of a principal, on the same connection: the policy
+      // of the table lets it through.
+      await session.transaction(async (client) => {
+        await client.query(`set role access_scope_leak_test`)
+        await client.query(`insert into users (tenant_id, external_subject) values ($1, $2)`, [
+          acme,
+          'the-subject-of-the-leak',
+        ])
+        await client.query(`reset role`)
+      })
+    } finally {
+      if (session !== database) await session.close()
+      await dropRole('access_scope_leak_test')
+    }
+  })
+
+  test('the role of the deployment is told when it bypasses the isolation', async () => {
+    // The role of the test is a superuser: it is not subject to the
+    // policies, and a production deployment refuses to start with it.
+    expect(await bypassesRowLevelSecurity(database)).toBe(true)
+
+    await dropRole('access_not_super_test')
+    await database.exec(`create role access_not_super_test nosuperuser nobypassrls`)
+    try {
+      // The role and the statement are on the same connection of the
+      // pool: the role of the connection is a property of the session.
+      await database.transaction(async (client) => {
+        await client.query(`set role access_not_super_test`)
+        expect(await bypassesRowLevelSecurity(client)).toBe(false)
+        await client.query(`reset role`)
+      })
+    } finally {
+      await dropRole('access_not_super_test')
+    }
+  })
+})
+
+describe('the start of a production deployment', () => {
+  test.skipIf(!againstServer)(
+    'a production deployment refuses a role that bypasses the isolation',
+    async () => {
+      const { generateKeyPairSync } = await import('node:crypto')
+      const { createRuntime } = await import('../../src/runtime/composition')
+      const { readEnv } = await import('../../src/runtime/env')
+      const { createDatabase } = await import('../../src/platform/postgres')
+      const url = process.env.ACCESS_TEST_DATABASE_URL ?? ''
+      const schema = 'access_test_production'
+      const admin = await createDatabase({ driver: 'postgres', url })
+      try {
+        await admin.exec(`create schema if not exists "${schema}"`)
+      } finally {
+        await admin.close()
+      }
+      const scoped = `${url}${url.includes('?') ? '&' : '?'}options=-c%20search_path%3D${schema}`
+      const { privateKey } = generateKeyPairSync('rsa', {
+        modulusLength: 2048,
+        privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+        publicKeyEncoding: { type: 'spki', format: 'pem' },
+      })
+      let message = ''
+      try {
+        const runtime = await createRuntime(
+          readEnv({
+            ACCESS_ENVIRONMENT: 'production',
+            ACCESS_HOST: '127.0.0.1',
+            ACCESS_PORT: '0',
+            ACCESS_DATABASE_URL: scoped,
+            ACCESS_ISSUER: 'https://access.example.com',
+            ACCESS_ADMIN_TOKEN: 'the-admin-token-of-the-production',
+            ACCESS_DECISION_TOKEN: 'the-access-token-of-the-production',
+            ACCESS_ALLOW_MEMORY_STATE: 'true',
+            ACCESS_STATE_SECRET: '4f9a2c8e'.repeat(8),
+            ACCESS_SECRET_ENCRYPTION_KEY: 'b31e7d09'.repeat(8),
+            ACCESS_SIGNING_KEY: privateKey,
+            ACCESS_SIGNING_KID: 'the-kid-of-the-test',
+          })
+        )
+        await runtime.close()
+      } catch (error) {
+        message = String(error)
+      }
+      // The role of the test is a superuser: the deployment refuses to
+      // start with it.
+      expect(message).toContain('bypasses the isolation of the tenants')
+    },
+    30_000
+  )
+})

@@ -1,0 +1,273 @@
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { existsSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { createLogger } from '../../src/observability'
+import {
+  createDatabase,
+  MIGRATIONS_DIRECTORY,
+  MIGRATIONS_TABLE,
+  runMigrations,
+  type Database,
+} from '../../src/platform/postgres'
+import { openTestDatabase } from './database'
+
+/**
+ * The database of the integration tests.
+ *
+ * The file has a schema of its own when the tests run against a server:
+ * its rows do not share their rows with the rows of another file, and a
+ * second run of the suite starts from a schema that is empty.
+ */
+let database: Database
+
+/** The table of the audit of the administration: it is infrastructure. */
+const AUDIT_TABLE = 'admin_audit'
+
+beforeAll(async () => {
+  database = await openTestDatabase()
+})
+
+afterAll(async () => {
+  await database.close()
+})
+
+/** Creates a tenant and returns its id. */
+async function tenant(slug: string, options: { default?: boolean } = {}): Promise<string> {
+  const rows = await database.query<{ id: string }>(
+    `insert into tenants (slug, display_name, idp_issuer, idp_client_id, idp_client_secret,
+       idp_redirect_uri, client_id, client_secret, is_default)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     returning id`,
+    [
+      slug,
+      slug,
+      'https://login.example.com',
+      `access-${slug}`,
+      Buffer.from('secret'),
+      'https://access.example.com/oauth/tenant/callback',
+      `gateway-${slug}`,
+      Buffer.from('secret'),
+      options.default ?? false,
+    ]
+  )
+  return rows[0]!.id
+}
+
+/** Creates a principal and returns its id. */
+async function user(tenantId: string, subject: string): Promise<string> {
+  const rows = await database.query<{ id: string }>(
+    `insert into users (tenant_id, external_subject) values ($1, $2) returning id`,
+    [tenantId, subject]
+  )
+  return rows[0]!.id
+}
+
+describe('the schema of the access service', () => {
+  test('the migration is applied and it is idempotent', async () => {
+    const applied = await database.query<{ name: string }>(
+      `select name from ${MIGRATIONS_TABLE} order by name`
+    )
+    expect(applied.map((row) => row.name)).toEqual([
+      '0001_initial.sql',
+      '0002_list_indexes.sql',
+      '0003_tenant_isolation.sql',
+      '0004_groups.sql',
+      '0005_group_members_index.sql',
+      '0006_secret_rotation.sql',
+      '0007_admin_audit.sql',
+      '0008_gateway_redirect_uris.sql',
+      '0009_empty_scope_is_the_platform.sql',
+      '0010_group_membership.sql',
+      '0011_roles.sql',
+      '0012_roles_scope.sql',
+    ])
+
+    const second = await runMigrations({
+      database,
+      directory: MIGRATIONS_DIRECTORY,
+      logger: createLogger({ level: 'silent' }),
+    })
+    expect(second.applied).toEqual([])
+    expect(second.alreadyApplied).toEqual([
+      '0001_initial.sql',
+      '0002_list_indexes.sql',
+      '0003_tenant_isolation.sql',
+      '0004_groups.sql',
+      '0005_group_members_index.sql',
+      '0006_secret_rotation.sql',
+      '0007_admin_audit.sql',
+      '0008_gateway_redirect_uris.sql',
+      '0009_empty_scope_is_the_platform.sql',
+      '0010_group_membership.sql',
+      '0011_roles.sql',
+      '0012_roles_scope.sql',
+    ])
+  })
+
+  test('the eight tables are the only tables of the domain', async () => {
+    const rows = await database.query<{ table_name: string }>(
+      `select table_name from information_schema.tables
+       where table_schema = current_schema()
+         and table_name not in ('${MIGRATIONS_TABLE}', '${AUDIT_TABLE}')
+       order by table_name`
+    )
+    expect(rows.map((row) => row.table_name)).toEqual([
+      'grants',
+      'groups',
+      'permissions',
+      'role_permissions',
+      'role_roles',
+      'roles',
+      'tenants',
+      'users',
+    ])
+  })
+
+  test('the tables of the infrastructure are the migrations and the audit', async () => {
+    const rows = await database.query<{ table_name: string }>(
+      `select table_name from information_schema.tables
+       where table_schema = current_schema()
+         and table_name in ('${MIGRATIONS_TABLE}', '${AUDIT_TABLE}')
+       order by table_name`
+    )
+    expect(rows.map((row) => row.table_name)).toEqual([AUDIT_TABLE, MIGRATIONS_TABLE])
+  })
+
+  test('the empty scope is the scope of the platform in every policy', async () => {
+    // The setting of the scope leaves its **placeholder** on a session
+    // that has run a scoped statement: `current_setting(…)` answers `''`
+    // and not `null` there. A policy that reads `current_setting(…)
+    // is null` treats every row of the platform as invisible on such a
+    // connection, and the write is refused (spec §3.10).
+    //
+    // The test reads the policies of the domain tables and holds that
+    // every one of them reads the empty scope as the platform. It is the
+    // guard of a table that is added to the model: a policy written with
+    // the other form breaks the administration of the platform on the
+    // second call, on the connection of the pool that served the first.
+    const rows = await database.query<{ tablename: string; qual: string | null }>(
+      `select tablename, qual from pg_policies
+        where schemaname = current_schema()
+          and tablename in ('tenants', 'users', 'permissions', 'grants', 'groups',
+                            'roles', 'role_permissions', 'role_roles')
+        order by tablename`
+    )
+    expect(rows.length).toBe(8)
+    const wrong = rows.filter((row) => {
+      const qual = (row.qual ?? '').toLowerCase().replace(/\s+/g, '')
+      return !qual.includes('nullif(current_setting(')
+    })
+    expect(wrong.map((row) => row.tablename)).toEqual([])
+  })
+
+  test('a client id belongs to one tenant', async () => {
+    const first = await tenant('acme')
+    expect(first).toBeTruthy()
+    await expect(
+      database.query(
+        `insert into tenants (slug, display_name, idp_issuer, idp_client_id, idp_client_secret,
+           idp_redirect_uri, client_id, client_secret)
+         values ('acme-two', 'Acme Two', 'https://login.example.com', 'access-acme-two', $1,
+           'https://access.example.com/oauth/tenant/callback', 'gateway-acme', $2)`,
+        [Buffer.from('secret'), Buffer.from('secret')]
+      )
+    ).rejects.toThrow()
+  })
+
+  test('at most one tenant is the default', async () => {
+    await tenant('default-one', { default: true })
+    await expect(
+      database.query(
+        `insert into tenants (slug, display_name, idp_issuer, idp_client_id, idp_client_secret,
+           idp_redirect_uri, client_id, client_secret, is_default)
+         values ('default-two', 'Default Two', 'https://login.example.com', 'access-default-two', $1,
+           'https://access.example.com/oauth/tenant/callback', 'gateway-default-two', $2, true)`,
+        [Buffer.from('secret'), Buffer.from('secret')]
+      )
+    ).rejects.toThrow()
+  })
+
+  test('the mapping key is the pair (tenant, subject)', async () => {
+    const acme = await tenant('mapping')
+    const subject = '00u1a2b3c4d5'
+    await user(acme, subject)
+    await expect(user(acme, subject)).rejects.toThrow()
+  })
+
+  test('a grant can never name a principal of another tenant', async () => {
+    const acme = await tenant('grants-acme')
+    const other = await tenant('grants-other')
+    const principal = await user(acme, 'the-subject')
+    const rows = await database.query<{ id: string }>(
+      `insert into permissions (tenant_id, key) values ($1, 'workspace.read') returning id`,
+      [acme]
+    )
+    const permission = rows[0]!.id
+
+    await expect(
+      database.query(`insert into grants (tenant_id, user_id, permission_id) values ($1, $2, $3)`, [
+        other,
+        principal,
+        permission,
+      ])
+    ).rejects.toThrow()
+  })
+
+  test('the catalogue of the platform holds one row per key', async () => {
+    await database.query(`insert into permissions (tenant_id, key) values (null, 'platform.read')`)
+    await expect(
+      database.query(`insert into permissions (tenant_id, key) values (null, 'platform.read')`)
+    ).rejects.toThrow()
+  })
+
+  test('a revoked grant does not hold the tuple of a live one', async () => {
+    const acme = await tenant('revoked')
+    const principal = await user(acme, 'the-subject')
+    const rows = await database.query<{ id: string }>(
+      `insert into permissions (tenant_id, key) values ($1, 'workspace.write') returning id`,
+      [acme]
+    )
+    const permission = rows[0]!.id
+
+    const live = await database.query<{ id: string }>(
+      `insert into grants (tenant_id, user_id, permission_id) values ($1, $2, $3) returning id`,
+      [acme, principal, permission]
+    )
+    await expect(
+      database.query(`insert into grants (tenant_id, user_id, permission_id) values ($1, $2, $3)`, [
+        acme,
+        principal,
+        permission,
+      ])
+    ).rejects.toThrow()
+
+    await database.query(`update grants set revoked_at = now() where id = $1`, [live[0]!.id])
+    const revived = await database.query<{ id: string }>(
+      `insert into grants (tenant_id, user_id, permission_id) values ($1, $2, $3) returning id`,
+      [acme, principal, permission]
+    )
+    expect(revived).toHaveLength(1)
+  })
+
+  test('the index of the decision is there', async () => {
+    const rows = await database.query<{ indexname: string }>(
+      `select indexname from pg_indexes
+       where tablename = 'grants' and schemaname = current_schema()
+       order by indexname`
+    )
+    expect(rows.map((row) => row.indexname)).toContain('grants_user_live')
+  })
+
+  test('the embedded database is created in its directory', async () => {
+    const directory = join(tmpdir(), `access-pglite-${Date.now()}`)
+    const embedded = await createDatabase({ driver: 'pglite', path: directory })
+    try {
+      const rows = await embedded.query<{ answer: number }>('select 1 as answer')
+      expect(rows[0]!.answer).toBe(1)
+    } finally {
+      await embedded.close()
+    }
+    expect(existsSync(directory)).toBe(true)
+  })
+})
