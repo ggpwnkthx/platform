@@ -1,0 +1,46 @@
+{
+  "name": "@platform/data",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The data service of the platform: a headless, permission aware data API behind the gateway, authorized by the access service.",
+  "scripts": {
+    "start": "bun run src/main.ts",
+    "dev": "bun --watch src/main.ts",
+    "migrate": "bun run scripts/cli/migrate.ts",
+    "workspace": "bun run scripts/cli/workspace.ts",
+    "policy": "bun run scripts/cli/policy.ts",
+    "collection": "bun run scripts/cli/collection.ts",
+    "delivery": "bun run scripts/cli/delivery.ts",
+    "typecheck": "tsc --noEmit",
+    "architecture": "bun run scripts/gates/architecture.ts",
+    "test": "bun test test/unit test/contract test/architecture",
+    "test:unit": "bun test test/unit",
+    "test:contract": "bun test test/contract",
+    "test:integration": "bun test test/integration",
+    "test:architecture": "bun test test/architecture",
+    "test:client": "bun test packages/client/test",
+    "test:mutation": "bun run scripts/gates/mutation.ts",
+    "test:compatibility": "bun run scripts/compat/compatibility.ts",
+    "test:compat": "bun run scripts/compat/compatibility.ts",
+    "check:compatibility": "bun run scripts/compat/check-compatibility.ts",
+    "check:client-package": "bun run scripts/gates/check-client-package.ts",
+    "generate:client": "bun run scripts/dev/generate-client.ts",
+    "fixtures": "bun run scripts/dev/generate-fixtures.ts",
+    "capacity": "bun run scripts/ops/capacity.ts",
+    "scale": "bun run scripts/ops/scale.ts",
+    "retention": "bun run scripts/cli/retention.ts",
+    "provision": "bun run scripts/cli/provision.ts",
+    "build:client": "bun run --cwd packages/client build"
+  },
+  "dependencies": {
+    "hono": "4.13.13",
+    "jose": "6.2.12",
+    "pg": "8.23.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {},
+  "engines": {
+    "bun": ">=1.4.3"
+  }
+}
