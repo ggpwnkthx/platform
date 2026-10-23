@@ -1,0 +1,44 @@
+{
+  "name": "@data-backend/client",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "The typed client of the headless data backend.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ggpwnkthx/platform.git",
+    "directory": "packages/data/packages/client"
+  },
+  "homepage": "https://github.com/ggpwnkthx/platform#readme",
+  "bugs": {
+    "url": "https://github.com/ggpwnkthx/platform/issues"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./deployment": {
+      "types": "./dist/deployment.d.ts",
+      "import": "./dist/deployment.js",
+      "default": "./dist/deployment.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "scripts": {
+    "test": "bun test test",
+    "typecheck": "tsc --noEmit",
+    "architecture": "bun run scripts/architecture.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "bun run build"
+  },
+  "files": [
+    "dist"
+  ]
+}
