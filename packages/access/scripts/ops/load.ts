@@ -1,0 +1,195 @@
+#!/usr/bin/env bun
+/**
+ * The capacity of the decision (docs/access/operations.md, "The capacity").
+ *
+ * The script measures the latency of the decision and the number of
+ * decisions per second, on the shape of the production: one principal
+ * with a hundred grants, the decisions of a workspace and of a route.
+ *
+ * The measurement runs the statement of the production: the repository
+ * of the decisions is the one of the service, and the deadline of the
+ * deployment is the one of the service. A measurement of a copy of the
+ * statement is a measurement of the copy.
+ *
+ *   ACCESS_DATABASE_URL=postgres://… bun run scripts/load.ts --requests 20000 --concurrency 100
+ */
+import { DecisionRepository } from '../../src/platform/postgres'
+import { openToolDatabase, seedToolTenant } from '../support/database'
+import { readOption } from '../support/options'
+import { failure } from '../support/report'
+
+/** The number of requests of the run. */
+const requests = Number(readOption('requests') ?? '20000')
+/** The number of the requests that are in flight at the same time. */
+const concurrency = Number(readOption('concurrency') ?? '100')
+/** The number of grants of the principal of the measurement. */
+const grants = Number(readOption('grants') ?? '100')
+/** The deadline of a decision, in milliseconds. */
+const timeoutMs = Number(readOption('timeout') ?? '2000')
+/** True when the measurement is the one of the decision of a tenant. */
+const scoped = process.argv.includes('--scoped')
+
+/**
+ * The thresholds of the measurement.
+ *
+ * A threshold that is not given is not a threshold: a run without any
+ * measures and reports, and a run with them **fails** when the
+ * measurement is outside of them. The gate of the CI is the thing that
+ * turns a number of a log into a regression of the build.
+ */
+const thresholds = {
+  /** The `p50` of the decision may not be above this, in milliseconds. */
+  maxP50Ms: readOption('max-p50-ms') === undefined ? null : Number(readOption('max-p50-ms')),
+  /** The `p95` of the decision may not be above this, in milliseconds. */
+  maxP95Ms: readOption('max-p95-ms') === undefined ? null : Number(readOption('max-p95-ms')),
+  /** The `p99` of the decision may not be above this, in milliseconds. */
+  maxP99Ms: readOption('max-p99-ms') === undefined ? null : Number(readOption('max-p99-ms')),
+  /** The decisions per second may not be below this. */
+  minPerSecond:
+    readOption('min-per-second') === undefined ? null : Number(readOption('min-per-second')),
+}
+
+/** The percentile of a list of durations. */
+function percentile(values: number[], share: number): number {
+  if (values.length === 0) return 0
+  const sorted = [...values].sort((left, right) => left - right)
+  const index = Math.min(sorted.length - 1, Math.floor(sorted.length * share))
+  return sorted[index]!
+}
+
+async function main(): Promise<void> {
+  const url = process.env.ACCESS_DATABASE_URL ?? 'pglite://memory://'
+  const database = await openToolDatabase(url)
+  try {
+    await seedToolTenant(database, {
+      slug: 'load',
+      displayName: 'Load',
+      issuer: 'https://login.load.example',
+      clientId: 'access-load',
+    })
+    await database.exec(`
+      insert into users (tenant_id, external_subject)
+      select (select id from tenants where slug = 'load'), 'the-subject-of-the-load'
+      on conflict do nothing;
+    `)
+    await database.exec(`
+      insert into grants (tenant_id, user_id, permission_id, workspace_id, route_id)
+      select (select id from tenants where slug = 'load'),
+             (select id from users where external_subject = 'the-subject-of-the-load'),
+             (select id from permissions where key = 'workspace.read' limit 1),
+             'workspace-' || w,
+             'workspace-api'
+      from generate_series(1, ${grants}) w
+      on conflict do nothing;
+    `)
+
+    const subject = await database.query<{ id: string }>(
+      `select id from users where external_subject = 'the-subject-of-the-load' limit 1`
+    )
+    const subjectId = subject[0]?.id ?? ''
+    const tenant = await database.query<{ id: string }>(
+      `select id from tenants where slug = 'load' limit 1`
+    )
+    const tenantId = tenant[0]?.id ?? null
+
+    // The repository of the service: the statement of the production and
+    // the deadline of the deployment.
+    const repository = new DecisionRepository(database, timeoutMs)
+    // The scope of a tenant is a transaction: the scope of the statement
+    // is local to it. The measurement of the scoped decision is the one
+    // of the deployments whose gateway holds the credentials of a tenant.
+    const request = {
+      subject: subjectId,
+      workspaceId: 'workspace-1',
+      routeId: 'workspace-api',
+      roles: [],
+      tenantId: scoped ? tenantId : null,
+    }
+
+    // The warm-up: the first calls pay for the caches of the server.
+    for (let index = 0; index < 100; index += 1) {
+      await repository.decide(request)
+    }
+
+    const durations: number[] = []
+    let completed = 0
+    const started = Date.now()
+
+    const worker = async (): Promise<void> => {
+      while (completed < requests) {
+        const begin = performance.now()
+        await repository.decide(request)
+        durations.push(performance.now() - begin)
+        completed += 1
+      }
+    }
+
+    await Promise.all(Array.from({ length: Math.min(concurrency, requests) }, () => worker()))
+    const elapsed = (Date.now() - started) / 1000
+
+    const measurement = {
+      environment: url.startsWith('pglite://') ? 'pglite' : 'postgres',
+      scope: scoped ? 'tenant' : 'platform',
+      requests,
+      concurrency,
+      grants,
+      seconds: Number(elapsed.toFixed(2)),
+      perSecond: Math.round(completed / elapsed),
+      p50Ms: Number(percentile(durations, 0.5).toFixed(3)),
+      p95Ms: Number(percentile(durations, 0.95).toFixed(3)),
+      p99Ms: Number(percentile(durations, 0.99).toFixed(3)),
+      maxMs: Number(Math.max(...durations).toFixed(3)),
+    }
+
+    console.log(
+      JSON.stringify(
+        { level: 'info', msg: 'the capacity of the decision', ...measurement },
+        null,
+        2
+      )
+    )
+
+    // The thresholds of the run: a measurement that is outside of them
+    // is a failure of the run, and the run fails with a non zero status.
+    const failures: string[] = []
+    if (thresholds.maxP50Ms !== null && measurement.p50Ms > thresholds.maxP50Ms) {
+      failures.push(
+        `the p50 is ${measurement.p50Ms} ms and it must not be above ${thresholds.maxP50Ms} ms`
+      )
+    }
+    if (thresholds.maxP95Ms !== null && measurement.p95Ms > thresholds.maxP95Ms) {
+      failures.push(
+        `the p95 is ${measurement.p95Ms} ms and it must not be above ${thresholds.maxP95Ms} ms`
+      )
+    }
+    if (thresholds.maxP99Ms !== null && measurement.p99Ms > thresholds.maxP99Ms) {
+      failures.push(
+        `the p99 is ${measurement.p99Ms} ms and it must not be above ${thresholds.maxP99Ms} ms`
+      )
+    }
+    if (thresholds.minPerSecond !== null && measurement.perSecond < thresholds.minPerSecond) {
+      failures.push(
+        `the throughput is ${measurement.perSecond} decisions per second and it must not be below ${thresholds.minPerSecond}`
+      )
+    }
+    if (failures.length > 0) {
+      console.error(
+        JSON.stringify(
+          {
+            level: 'error',
+            msg: 'the capacity of the decision is outside of its thresholds',
+            failures,
+            measurement,
+          },
+          null,
+          2
+        )
+      )
+      process.exitCode = 1
+    }
+  } finally {
+    await database.close()
+  }
+}
+
+main().catch(failure('the measurement failed'))
