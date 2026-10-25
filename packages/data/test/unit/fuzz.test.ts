@@ -1,0 +1,389 @@
+import { describe, expect, test } from 'bun:test'
+import { base64url, importSPKI } from 'jose'
+import { generateKeyPairSync, sign as signRaw } from 'node:crypto'
+import {
+  canonicalIdentityPayload,
+  verifyIdentitySignature,
+} from '../../src/domains/gateway-context'
+import { compileFilter } from '../../src/domains/authorization/filter/compile'
+import { parseFilter } from '../../src/domains/authorization/filter/parse'
+import { FilterError } from '../../src/domains/authorization/filter/types'
+import type { FieldDefinition } from '../../src/domains/schema'
+
+/**
+ * The fuzzing of the trust boundary.
+ *
+ * Two things decide whether a request may touch the data of a
+ * workspace: the parser of the filter and the verification of the
+ * signature of the gateway. Both of them read a value that a caller
+ * controls, and both of them have to answer with a refusal and never
+ * with an error of the process.
+ *
+ * The checks of the other files write the values that were thought of.
+ * These two write the values that were not: a random json, a random
+ * signature, and the signature of the pinned gateway with one of its
+ * characters changed.
+ */
+
+/** The seed of the run. */
+const SEED = Number(process.env.FUZZ_SEED ?? 4242)
+
+/** The number of the cases of the run. */
+const CASES = Number(process.env.FUZZ_CASES ?? 3000)
+
+/** The fixtures of the pinned gateway. */
+const fixture = (await Bun.file('test/fixtures/gateway-identity.json').json()) as {
+  current: {
+    publicKeyPem: string
+    cases: {
+      identity: { subject: string; email?: string; roles: string[]; workspaceId: string }
+      request: { method: string; path: string; query: string; host: string }
+      canonicalPayload: string
+      signature: string
+    }[]
+  }
+}
+
+/** The verification of the current format. */
+const verification = {
+  version: 'v5',
+  algorithm: 'ES256',
+  key: await importSPKI(fixture.current.publicKeyPem, 'ES256'),
+} as const
+
+/** The first case of the fixtures. */
+const entry = fixture.current.cases[0]!
+
+/** A generator of numbers that replays the same run. */
+function mulberry32(seed: number): () => number {
+  let state = seed >>> 0
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0
+    let t = state
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+/** The catalogue of the fuzzing. */ const catalogue: Record<string, FieldDefinition> = {
+  title: { type: 'string', required: false, nullable: true },
+  version: { type: 'integer', required: false, nullable: true },
+  published: { type: 'boolean', required: false, nullable: true },
+  ref: { type: 'uuid', required: false, nullable: true },
+  at: { type: 'timestamp', required: false, nullable: true },
+  price: { type: 'decimal', required: false, nullable: true },
+  body: { type: 'json', required: false, nullable: true },
+}
+
+/**
+ * The texts of the fuzzing.
+ *
+ * They hold the characters that break a naive implementation: the quote,
+ * the backslash, the newline, the semicolon, the comment of the
+ * database, and the text of a statement.
+ */
+const TEXTS = [
+  '',
+  'a',
+  'Launch notes',
+  "'",
+  '"',
+  '\\',
+  '\n',
+  '\r\n',
+  '; drop table data.articles; --',
+  "' or '1'='1",
+  '" or ""=""',
+  '%00',
+  '$' + '{jndi:ldap://x}',
+  '../../etc/passwd',
+  '😀',
+  'ä',
+  'a'.repeat(4096),
+]
+
+/** Generates a random json value. */
+function randomJson(random: () => number, depth: number): unknown {
+  const roll = random()
+  if (depth > 3 || roll < 0.35) {
+    const kind = random()
+    if (kind < 0.3) return null
+    if (kind < 0.5) return random() < 0.5
+    if (kind < 0.75) return Math.floor(random() * 2000) - 1000
+    return TEXTS[Math.floor(random() * TEXTS.length)]!
+  }
+  if (roll < 0.7) {
+    const size = Math.floor(random() * 4)
+    return Array.from({ length: size }, () => randomJson(random, depth + 1))
+  }
+  const size = Math.floor(random() * 4)
+  const object: Record<string, unknown> = {}
+  for (let index = 0; index < size; index += 1) {
+    const name = random() < 0.5 ? TEXTS[Math.floor(random() * TEXTS.length)]! : `field${index}`
+    object[name] = randomJson(random, depth + 1)
+  }
+  return object
+}
+
+/** Generates a random filter that names the fields of the catalogue. */
+function randomFilter(random: () => number, depth: number): unknown {
+  const fields = Object.keys(catalogue)
+  const field = fields[Math.floor(random() * fields.length)]!
+  const operators = [
+    '_eq',
+    '_neq',
+    '_in',
+    '_nin',
+    '_lt',
+    '_lte',
+    '_gt',
+    '_gte',
+    '_is_null',
+    '_and',
+    '_or',
+    '_not',
+    'unknown',
+  ]
+  const operator = operators[Math.floor(random() * operators.length)]!
+  if (depth < 3 && (operator === '_and' || operator === '_or')) {
+    const size = 1 + Math.floor(random() * 3)
+    return {
+      [operator]: Array.from({ length: size }, () => randomFilter(random, depth + 1)),
+    }
+  }
+  if (operator === '_not') return { _not: randomFilter(random, depth + 1) }
+  const operand = randomJson(random, depth + 1)
+  if (operator === '_in' || operator === '_nin') {
+    const values = Array.isArray(operand) ? operand : [operand]
+    return { [field]: { [operator]: values } }
+  }
+  return { [field]: { [operator]: operand } }
+}
+
+describe('the parser of the filter', () => {
+  test('a random filter is refused with a filter error and never with a crash', () => {
+    const random = mulberry32(SEED)
+    let accepted = 0
+    for (let index = 0; index < CASES; index += 1) {
+      const filter = randomFilter(random, 1)
+      try {
+        const node = parseFilter(filter, { fields: catalogue, substitutions: true })
+        accepted += 1
+        // A filter that is accepted compiles, and the statement holds
+        // no value of the caller.
+        const compiled = compileFilter(node, { fields: catalogue, startIndex: 1 })
+        expect(compiled.sql).toMatch(/^[\s\S]*$/)
+        const placeholders = compiled.sql.match(/\$\d+/g) ?? []
+        expect(placeholders.length).toBe(compiled.params.length)
+        for (const param of compiled.params) {
+          if (typeof param !== 'string') continue
+          if (param.length < 4) continue
+          expect(compiled.sql).not.toContain(param)
+        }
+      } catch (error) {
+        expect(error).toBeInstanceOf(FilterError)
+        expect((error as FilterError).code).toBeTruthy()
+      }
+    }
+    expect(accepted).toBeGreaterThan(0)
+  })
+
+  test('a random json is refused and never reaches a statement', () => {
+    const random = mulberry32(SEED + 1)
+    for (let index = 0; index < CASES; index += 1) {
+      const value = randomJson(random, 0)
+      try {
+        const node = parseFilter(value, { fields: catalogue, substitutions: true })
+        const compiled = compileFilter(node, { fields: catalogue, startIndex: 1 })
+        // The identifiers of the statement are the ones of the
+        // catalogue: they are quoted, and nothing else is.
+        for (const identifier of compiled.sql.match(/"[^"]*"/g) ?? []) {
+          const name = identifier.slice(1, -1)
+          expect(
+            name in catalogue || ['id', 'version'].includes(name),
+            `the statement holds the identifier "${name}"`
+          ).toBe(true)
+        }
+      } catch (error) {
+        expect(error).toBeInstanceOf(FilterError)
+      }
+    }
+  })
+})
+
+describe('the verification of the signature', () => {
+  test('a random signature is refused and never throws', async () => {
+    const random = mulberry32(SEED + 2)
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.='
+    for (let index = 0; index < CASES; index += 1) {
+      const length = Math.floor(random() * 200)
+      let signature = ''
+      for (let position = 0; position < length; position += 1) {
+        signature += alphabet[Math.floor(random() * alphabet.length)]!
+      }
+      const valid = await verifyIdentitySignature(
+        entry.identity,
+        entry.request,
+        verification,
+        signature
+      )
+      expect(valid).toBe(false)
+    }
+  })
+
+  test('a signature with one character changed is refused', async () => {
+    for (let position = 0; position < entry.signature.length; position += 1) {
+      const character = entry.signature[position]!
+      if (character === '.') continue
+      // The last character of the base64 of the signature carries bits
+      // that the signature does not use: a change of it is the same
+      // signature. It is not a change of the signature at all.
+      if (position === entry.signature.length - 1) continue
+      for (const replacement of ['A', 'z', '0', '-', '_', '/', '+']) {
+        if (replacement === character) continue
+        const mutated =
+          entry.signature.slice(0, position) + replacement + entry.signature.slice(position + 1)
+        const valid = await verifyIdentitySignature(
+          entry.identity,
+          entry.request,
+          verification,
+          mutated
+        )
+        expect(valid, `the signature mutated at ${position} was accepted`).toBe(false)
+      }
+    }
+  })
+
+  test('a signature of another algorithm or type is refused', async () => {
+    const parts = entry.signature.slice('v5='.length).split('.')
+    const signature = parts[2]!
+    const payload = base64url.encode(
+      new TextEncoder().encode(canonicalIdentityPayload(entry.identity, entry.request, 'v5'))
+    )
+    const headers = [
+      { alg: 'none', typ: 'gateway-identity' },
+      { alg: 'HS512', typ: 'gateway-identity' },
+      { alg: 'ES256', typ: 'jwt' },
+      { alg: 'ES256', typ: 'gateway-identity', extra: true },
+      { alg: 'ES256' },
+      {},
+    ]
+    for (const value of headers) {
+      const encoded = base64url.encode(new TextEncoder().encode(JSON.stringify(value)))
+      const valid = await verifyIdentitySignature(
+        entry.identity,
+        entry.request,
+        verification,
+        `v5=${encoded}.${payload}.${signature}`
+      )
+      expect(valid, `the header ${JSON.stringify(value)} was accepted`).toBe(false)
+    }
+  })
+
+  test('the payload of the signature is detached and it is rebuilt', async () => {
+    // The signature is detached: the payload is rebuilt from the
+    // request, and the segment that would carry it in the header has to
+    // be empty. A signature that carries its payload is not the format
+    // of the gateway and it is refused.
+    const parts = entry.signature.slice('v5='.length).split('.')
+    const header = parts[0]!
+    const signature = parts[2]!
+    const payload = base64url.encode(
+      new TextEncoder().encode(canonicalIdentityPayload(entry.identity, entry.request, 'v5'))
+    )
+    const detached = await verifyIdentitySignature(
+      entry.identity,
+      entry.request,
+      verification,
+      `v5=${header}..${signature}`
+    )
+    expect(detached).toBe(true)
+    const variants = [
+      `v5=${header}.${payload}.${signature}`,
+      `v5=${header}.Zm9yZWJhcg.${signature}`,
+    ]
+    for (const variant of variants) {
+      const valid = await verifyIdentitySignature(
+        entry.identity,
+        entry.request,
+        verification,
+        variant
+      )
+      expect(valid, `the signature "${variant}" was accepted`).toBe(false)
+    }
+  })
+
+  test('a signature of a truncated or of an extended signature is refused', async () => {
+    const parts = entry.signature.slice('v5='.length).split('.')
+    const header = parts[0]!
+    const payload = parts[1]!
+    const signature = parts[2]!
+    const variants = [
+      `v5=${header}.${payload}`,
+      `v5=${header}.${payload}.${signature}AA`,
+      `v5=${header}.${payload}.${signature.slice(0, -1)}`,
+      `v5=.${payload}.${signature}`,
+      `v5=${header}.${payload}.`,
+      `v4=${header}.${payload}.${signature}`,
+    ]
+    for (const variant of variants) {
+      const valid = await verifyIdentitySignature(
+        entry.identity,
+        entry.request,
+        verification,
+        variant
+      )
+      expect(valid, `the signature "${variant}" was accepted`).toBe(false)
+    }
+  })
+
+  test('a signature that is valid and that carries another header is refused', async () => {
+    // The signature of this case is **valid** over the payload: it is
+    // signed with the private key of the pair, and the only reason of
+    // the refusal is the protected header that it carries. A test that
+    // changes the header of a signature that was signed elsewhere
+    // proves nothing: the refusal would be the one of the signature.
+    const pair = generateKeyPairSync('ec', {
+      namedCurve: 'P-256',
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    })
+    const publicKey = await importSPKI(pair.publicKey, 'ES256')
+    const own = { version: 'v5', algorithm: 'ES256', key: publicKey } as const
+    const payload = new TextEncoder().encode(
+      canonicalIdentityPayload(entry.identity, entry.request, 'v5')
+    )
+
+    // The signature is written by hand: the library of the test refuses
+    // to sign a header that it does not know, and the header of the
+    // gateway is exactly a header that the library does not know.
+    const sign = (header: Record<string, unknown>): string => {
+      const encodedHeader = base64url.encode(new TextEncoder().encode(JSON.stringify(header)))
+      const encodedPayload = base64url.encode(payload)
+      const signature = signRaw('sha256', `${encodedHeader}.${encodedPayload}`, {
+        key: pair.privateKey,
+        dsaEncoding: 'ieee-p1363',
+      })
+      // The payload of the signature of the gateway is detached.
+      return `v5=${encodedHeader}..${base64url.encode(signature)}`
+    }
+
+    // The header of the route is the one that the gateway writes.
+    const accepted = sign({ alg: 'ES256', typ: 'gateway-identity' })
+    expect(await verifyIdentitySignature(entry.identity, entry.request, own, accepted)).toBe(true)
+
+    const headers: Record<string, unknown>[] = [
+      { alg: 'ES256', typ: 'jwt' },
+      { alg: 'ES256' },
+      { alg: 'ES256', typ: 'gateway-identity', crit: ['x'], x: 'y' },
+      { alg: 'ES256', typ: 'gateway-identity', crit: ['exp'], exp: 1 },
+      { alg: 'ES256', typ: 'gateway-identity', crit: ['b64'], b64: true },
+    ]
+    for (const header of headers) {
+      const variant = sign(header)
+      const valid = await verifyIdentitySignature(entry.identity, entry.request, own, variant)
+      expect(valid, `the header ${JSON.stringify(header)} was accepted`).toBe(false)
+    }
+  })
+})
