@@ -1,0 +1,297 @@
+# The gateway
+
+The gateway is an application gateway. It authenticates a caller against
+an OpenID Connect provider, asks an access service whether the caller
+may use a workspace, and forwards the request to an upstream of the route
+it matched.
+
+It has no domain model of its own: the workspaces, the roles and the
+quotas live in the access service. The gateway enforces "authenticated +
+authorized for this workspace + forwarded safely" and nothing else.
+
+It is the workspace `packages/gateway/` of [the platform](../../README.md).
+
+The documentation is in [`docs/gateway/`](../../docs/gateway/), and its
+index is [docs/gateway/README.md](../../docs/gateway/README.md):
+
+| Document | What it holds |
+| --- | --- |
+| [docs/gateway/overview.md](../../docs/gateway/overview.md) | Start here: what the gateway does and how the pieces fit, in one page. |
+| [docs/gateway/spec.md](../../docs/gateway/spec.md) | The normative behavior, and the only document that changes the contract. |
+| [docs/gateway/architecture.md](../../docs/gateway/architecture.md) | How the code is laid out, which import is allowed where, and which file owns what. |
+| [docs/gateway/decisions.md](../../docs/gateway/decisions.md) | The decisions behind the contract, with their evidence. |
+| [docs/gateway/operations.md](../../docs/gateway/operations.md) | How to deploy, configure, run and review it. |
+| [docs/gateway/capacity.md](../../docs/gateway/capacity.md) | The measurements of the capacity. |
+| [docs/gateway/runtime.md](../../docs/gateway/runtime.md) | The capabilities of the runtime the gateway is written against. |
+| [docs/gateway/upstream-identity.md](../../docs/gateway/upstream-identity.md) | How an upstream verifies the identity of a request, with the code. |
+
+## The platform around the gateway
+
+The gateway is one of the three services of the platform. They are
+separate processes and separate deployments, and they are three
+workspaces of one repository:
+
+| Workspace | What it is |
+| --- | --- |
+| [`packages/gateway/`](../gateway/) | The gateway. It owns the routing, the contract of the access decision and the format of the identity it forwards. |
+| [`packages/access/`](../access/) | The access service. It is an OpenID Connect broker and the access decision service: it implements the contracts the gateway integrates with. |
+| [`packages/data/`](../data/) | The data service behind the gateway. It verifies the identity the gateway forwards and asks the access service for the access context. |
+
+The repository is the **source code** of the three services. It is not
+the addresses of the services: a deployment names the addresses in its
+environment and in its route table, and it names them as the urls of the
+services.
+
+A deployment of the gateway in front of the access service and the data
+service looks like this:
+
+| What | Where the address is configured |
+| --- | --- |
+| The issuer of the access service | `GATEWAY_OIDC_ISSUER`, with the client and the redirect of the deployment |
+| The access service | `GATEWAY_ACCESS_URL` |
+| The upstream address of the data service | The `upstream` of the route in the route table |
+
+The gateway integrates with **any** conforming identity provider, access
+service and upstream. The access service and the data service are the
+ones that ship with it, not the only ones it can talk to.
+
+## How a project consumes the gateway
+
+The gateway is a service, not a library. There is no published package
+and no exported api: the gateway is built, deployed and reached over
+http.
+
+An upstream that wants to trust the identity of a request copies the
+reference verifier — [examples/upstream-identity/verify.ts](examples/upstream-identity/verify.ts),
+which imports nothing of the gateway — or writes its own, and it checks it
+against the revision of the gateway it pins. The
+[guide for the upstream](../../docs/gateway/upstream-identity.md) says how.
+
+## What it does
+
+| | |
+| --- | --- |
+| **Routing** | One upstream or several per route, matched on host, path and method, with a fixed precedence and an ambiguity check at load time. A route may declare the path its upstream receives. |
+| **Authentication** | OpenID Connect with PKCE for the browser, bearer tokens for the API clients, in four modes that decide predictably which credential a route accepts. |
+| **Authorization** | The access service decides who may use a workspace; the gateway asks and fails closed. A route may ask the service about itself instead of a workspace, and a route may ask for a grace: the last decision of the service is served for a bounded time while the service is down. The protocol of the service is published and a reference implementation ships with the project. A breaker keeps the gateway from waiting on a service that is down. |
+| **Proxying** | Streamed bodies, server sent events, uploads, a budget per phase of the upstream exchange and a limit on the body. A route with several upstreams fails over to the next one when the first one does not answer, and a passive breaker moves an upstream that failed recently to the end of the list, so a request that may not be sent twice still reaches an upstream that answered recently. |
+| **Header policy** | The hop-by-hop headers and the spoofable headers are removed, the identity is written by the gateway and signed with a JWS an upstream verifies with a standard library, and the forwarding headers are only trusted from known proxies. The gateway writes the trace of the request. |
+| **Sessions** | Server side, in the process or in a server the replicas share (Redis or Postgres), with an idle lifetime and a maximum age. Every session of one caller is revoked at once with `bun run sessions -- --subject <sub>`. |
+| **Limits** | Four scopes of sliding windows, shared by the replicas through the shared state (Redis or Postgres), that bound a flood without a boundary burst. The number of requests that are inside the gateway is bounded as well, so a dependency that hangs cannot pile them up. |
+| **WebSockets** | The upstream handshake first, bounded buffers, keepalive, and a revalidation that closes a connection whose access was revoked. |
+| **Operations** | Health and readiness probes, Prometheus metrics, structured logs with redaction, the log of the policy that is running, a hot reload of the configuration and a graceful drain. |
+
+The shared state — the sessions, the rate limits and the cached decisions —
+lives in a **Redis server** or in a **Postgres server**. The two hold the
+same state with the same contract, and the gateway measures them side by
+side: see [docs/gateway/capacity.md](../../docs/gateway/capacity.md). The gateway is built and
+tested against **PostgreSQL 18** and does not refuse an older server: the
+version of a deployment is the choice of the deployment.
+
+## Quick start
+
+The quick start of the platform is at the root of the repository:
+
+```bash
+bun install
+bun run dev          # the platform: the three services and the server of the development
+```
+
+The gateway alone, with its fixtures and nothing but bun, is:
+
+```bash
+bun run dev:gateway  # the gateway with the local fixtures
+```
+
+The development runner starts the identity provider, the access service
+and two upstreams, writes a configuration file for them, and starts the
+gateway on `http://localhost:8080`.
+
+```bash
+curl -s http://localhost:8080/healthz
+curl -s http://localhost:8080/readyz | jq
+```
+
+### The shared state
+
+The scheme of the url picks the backend of the shared state:
+
+```bash
+# a Redis server
+GATEWAY_SESSION_URL=rediss://:<password>@redis:6379/0
+
+# a Postgres server
+GATEWAY_SESSION_URL=postgres://user:<password>@postgres:5432/gateway
+```
+
+The two are interchangeable: the same suite of tests runs against both, and
+the script of the comparison measures them on the same traffic:
+
+```bash
+bun run benchmark -- --redis redis://127.0.0.1:6379/0 \
+                     --postgres postgres://127.0.0.1:5432/gateway
+```
+
+A developer without a server of either kind runs the tests of the shared
+state against the in-process engine of Postgres:
+
+```bash
+bun test test/integration
+```
+
+### The control plane
+
+The administrative surface of a deployment is a separate process. It
+needs a shared state and a map of tokens:
+
+```bash
+export GATEWAY_CONTROL_STATE_URL=redis://127.0.0.1:6379/0
+export GATEWAY_CONTROL_TOKENS='{"a-token-of-at-least-16-characters":{"operator":"me","scope":"config"}}'
+bun run control        # http://127.0.0.1:9090
+```
+
+The scopes are `read` (the endpoints that read), `operate` (`read` and the
+purges of the sessions and of the decisions) and `config` (`read` and the
+writes of the route table). The gateway exposes no administrative
+endpoint: the control plane is never routed through it.
+
+## The configuration
+
+The route table is a JSON file, validated as a whole and rejected as a whole
+when it is invalid. The last valid configuration stays active when a reload
+fails.
+
+```jsonc
+{
+  "version": 1,
+  "defaults": {
+    "auth": { "mode": "none" },
+    "timeouts": { "responseMs": 5000, "firstByteMs": 30000, "bodyMs": 300000 },
+    "maxBodyBytes": 10485760
+  },
+  "trustedProxies": ["10.0.0.0/8"],
+  "routes": [
+    {
+      "id": "workspace-api",
+      "match": { "host": "api.example.com", "path": "/ws/{workspaceId}/" },
+      "upstream": "http://upstream-b:3000",
+      "auth": { "mode": "any", "workspace": { "param": "workspaceId", "requireUuid": true } },
+      "websocket": true
+    }
+  ]
+}
+```
+
+Three policies belong to a route rather than to the deployment, and they
+replace the value of the defaults: `crossSite` (`navigation` or `strict`)
+refuses the navigations from another site on that route,
+`forwardAuthorization` (`true` or `false`) decides whether the token of the
+caller reaches its upstream, and `accessCacheTtlMs` is the lifetime of the
+cached decisions of the access service on that route — the latency of a
+revocation there. They are described in [docs/gateway/operations.md](../../docs/gateway/operations.md).
+
+A route that names no workspace may still be checked by the access service:
+`accessCheck` asks it about the route itself, and `accessStaleGraceMs` is
+the time the last decision of the service may be served while the service
+is down.
+
+A route may also declare the path its upstream receives — `rewrite` — and
+several upstreams, which are tried in the order of the list.
+
+The environment is described in [.env.example](.env.example). Every variable
+has a default, except the ones a production deployment has to set: the
+session secret, the key of the identity signature, the identity provider,
+the access service, the shared state and at least one rate limit.
+
+## The endpoints of the gateway
+
+| Endpoint | Behaviour |
+| --- | --- |
+| `GET /healthz` | Always `200`. |
+| `GET /readyz` | `200` when a configuration is loaded and the session store answers, `503` otherwise. |
+| `GET /metrics` | Prometheus text. `404` without `GATEWAY_METRICS_TOKEN`, `401` with a wrong bearer token. |
+| `GET /auth/login` | Redirect to the identity provider (PKCE). |
+| `GET /auth/callback` | Completes the login and sets the session cookie. |
+| `GET /auth/logout` | Destroys the session. Refused when it comes from another site. |
+
+Every other request is dispatched: the route is matched, the limiters are
+applied, the caller is authenticated, the cross-site guard runs, the access
+service is asked, and the request is forwarded.
+
+## The endpoints of the control plane
+
+The control plane is the administrative surface of a deployment. It is a
+**separate process** (`gateway-control`, the same image as the gateway),
+it listens on its own socket, on the internal network of the deployment,
+and it acts on the shared state directly. The gateway exposes **no**
+administrative endpoint and accepts **no** administrative token.
+
+| Endpoint | Scope | Behaviour |
+| --- | --- | --- |
+| `GET /healthz` | — | Always `200`. |
+| `GET /readyz` | — | `200` when the shared state answers, `503` otherwise. |
+| `GET /v1/config` | `read` | The active revision of the route table, the table it holds and the warnings of the configuration. |
+| `POST /v1/config/validate` | `read` | The errors, the ambiguities, the warnings and the difference with the active table. It writes nothing. |
+| `PUT /v1/config` | `config` | Writes the whole table as a new revision. The `If-Match` header carries the revision it replaces: a mismatch is `409`. |
+| `GET /v1/config/history` | `read` | The revisions of the table, paginated. |
+| `POST /v1/config/rollback` | `config` | Writes the table of an older revision again, as a new revision. |
+| `GET /v1/replicas` | `read` | The replicas that serve the route table. |
+| `DELETE /v1/sessions` | `operate` | Revokes the sessions of a subject. |
+| `DELETE /v1/decisions` | `operate` | Purges the cached decisions of a subject and of a workspace. |
+| `GET /v1/audit` | `read` | The trail of the writes, paginated. |
+
+The scopes are not a hierarchy: `operate` does not write the route table
+and `config` does not revoke a session. A missing or a wrong token is
+`401`, a token of the wrong scope is `403`, and every write of the control
+plane leaves an entry in the trail.
+
+## The binaries
+
+The release compiles the gateway for seven platforms and publishes the
+binaries on the release of the tag. They carry the runtime inside them:
+nothing else has to be installed.
+
+```bash
+gateway-1.0.0-linux-x64-musl   # Linux, Alpine
+gateway-1.0.0-linux-x64        # Linux, glibc
+gateway-1.0.0-darwin-arm64     # macOS
+gateway-1.0.0-windows-x64.exe  # Windows
+```
+
+The checks of the platform are at the root of the repository:
+
+```bash
+bun run typecheck      # the types
+bun run lint           # the linter
+bun run format:check   # the formatting
+bun run dead           # the code that nothing uses
+bun run versions       # the version of the release is the same everywhere
+bun run test           # every test of the three workspaces
+```
+
+The tests of the gateway alone:
+
+```bash
+bun test --cwd packages/gateway src           # the unit tests of the domains
+bun test --cwd packages/gateway test/contract  # the contract tests of the pipeline
+bun test --cwd packages/gateway test/network   # the tests against a real socket
+bun test --cwd packages/gateway test/browser   # the tests in a real browser
+bun test --cwd packages/gateway test/integration # the tests against a real Redis and a real Postgres
+```
+
+The tests that need a Redis server or a Postgres server are skipped
+without one. To run them locally:
+
+```bash
+scripts/dev/redis-dev.sh start 6399
+GATEWAY_TEST_REDIS_URL=redis://127.0.0.1:6399/0 bun test test/integration
+scripts/dev/redis-dev.sh stop 6399
+
+scripts/dev/postgres-dev.sh start 5432
+GATEWAY_TEST_POSTGRES_URL=postgres://postgres@127.0.0.1:5432/gateway bun test test/integration
+scripts/dev/postgres-dev.sh stop 5432
+```
+
+The script of the development starts a **PostgreSQL 18** server (the
+packages are downloaded and extracted, nothing is installed), the same
+version the workflow of the CI runs the tests against.

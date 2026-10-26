@@ -1,0 +1,58 @@
+{
+  "name": "@platform/gateway",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The gateway of the platform: it authenticates a caller, asks an access service and forwards the request to an upstream of its route.",
+  "scripts": {
+    "dev": "bun run scripts/dev/dev.ts",
+    "start": "bun run src/main.ts",
+    "control": "bun run src/control-main.ts",
+    "test": "bun test src test/contract test/architecture",
+    "test:unit": "bun test src",
+    "test:contract": "bun test test/contract",
+    "test:architecture": "bun test test/architecture",
+    "test:fuzz": "bun test test/fuzz",
+    "test:network": "bun test test/network",
+    "test:integration": "bun test test/integration",
+    "test:browser": "bun test test/browser",
+    "test:load": "bun test test/load",
+    "test:interop": "bun test test/interop",
+    "test:all": "bun test src test/contract test/architecture test/fuzz test/network",
+    "typecheck": "tsc --noEmit",
+    "architecture": "bun run scripts/gates/architecture.ts",
+    "versions": "bun run scripts/gates/version.ts",
+    "environment": "bun run scripts/gates/environment.ts",
+    "identity:key": "bun run scripts/cli/identity-key.ts",
+    "load": "bun run scripts/ops/load.ts",
+    "benchmark": "bun run scripts/ops/benchmark.ts",
+    "postgres:migrate": "bun run scripts/cli/postgres-migrate.ts",
+    "sessions": "bun run scripts/cli/sessions.ts"
+  },
+  "dependencies": {
+    "chokidar": "4.0.3",
+    "cookie": "2.0.1",
+    "hono": "4.13.13",
+    "ipaddr.js": "2.5.0",
+    "jose": "6.2.12",
+    "lru-cache": "11.5.3",
+    "openid-client": "6.8.8",
+    "path-to-regexp": "8.4.2",
+    "pg": "8.23.1",
+    "pino": "10.4.0",
+    "prom-client": "15.1.3",
+    "redis": "6.3.0",
+    "ws": "8.22.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.11",
+    "@types/ws": "8.18.2",
+    "oidc-provider": "9.12.2",
+    "playwright": "1.64.1",
+    "yaml": "2.8.1"
+  },
+  "engines": {
+    "bun": ">=1.4.3"
+  }
+}
