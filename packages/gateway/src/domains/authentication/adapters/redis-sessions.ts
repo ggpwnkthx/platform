@@ -1,0 +1,285 @@
+/**
+ * The store of the sessions that lives in a Redis server.
+ *
+ * The Redis wire protocol is spoken by most managed caches (Amazon
+ * ElastiCache, Google Cloud Memorystore, Azure Cache for Redis, Aiven,
+ * Upstash and a Helm managed Redis on Kubernetes), so one implementation
+ * covers every provider a deployment can offer.
+ *
+ * The refresh of the expiry of a session is **one** script of the server:
+ *
+ * - it reads the record and checks the maximum age of the session, and it
+ *   removes the session when it is over;
+ * - it refreshes the expiry only when the touch interval is over, so a busy
+ *   caller is not written on every request, and the interval is the same on
+ *   every replica;
+ * - the new expiry never reaches beyond the maximum age of the session;
+ * - a session that was deleted (a logout) is never recreated: the script
+ *   only refreshes a session that it found.
+ */
+
+import { createHash } from 'node:crypto'
+import { serializeAudit, type AuditEntry } from '../../../observability'
+import {
+  isPastIdleLifetime,
+  isPastMaximumAge,
+  newSessionRecord,
+  parseSessionRecord,
+  serializeSessionRecord,
+  type CreateSessionInput,
+  type SessionLifetime,
+  type SessionRecord,
+  type SessionStore,
+} from '../session'
+
+/**
+ * The part of a Redis client the store needs.
+ *
+ * The domain does not know the client of the runtime: it knows the commands
+ * it sends, and the platform builds a client that speaks them.
+ */
+export interface RedisSessionCommands {
+  get(key: string): Promise<string | null>
+  set(key: string, value: string, ...args: (string | number)[]): Promise<unknown>
+  del(key: string): Promise<number>
+  ping(): Promise<string>
+  eval(script: string, numkeys: number, ...keysAndArgs: (string | number)[]): Promise<unknown>
+  /** Adds a member to a set. */
+  sadd(key: string, member: string): Promise<number>
+  /** Removes a member from a set. */
+  srem(key: string, member: string): Promise<number>
+  /** The members of a set. */
+  smembers(key: string): Promise<string[]>
+  /** The lifetime of a key, in milliseconds. */
+  pexpire(key: string, ms: number): Promise<number>
+  /** Appends a value at the end of a list. */
+  rpush(key: string, ...values: string[]): Promise<number>
+}
+
+/**
+ * The script that reads a session and refreshes its expiry.
+ *
+ * It returns the record of the session (the refreshed one when the expiry
+ * was refreshed) or an empty string when the session does not exist or is
+ * older than its maximum age.
+ */
+export const TOUCH_SCRIPT = `
+local raw = redis.call('GET', KEYS[1])
+if not raw then return '' end
+local idle = tonumber(ARGV[1])
+local now = tonumber(ARGV[2])
+local interval = tonumber(ARGV[3])
+local record = cjson.decode(raw)
+local absolute = tonumber(record.absoluteExpiresAt) or 0
+if absolute > 0 and now >= absolute then
+  redis.call('DEL', KEYS[1])
+  return ''
+end
+local expires = tonumber(record.expiresAt) or 0
+local lastTouch = expires - idle
+if now - lastTouch >= interval then
+  local ttl = idle
+  if absolute > 0 then
+    local left = absolute - now
+    if left < ttl then ttl = left end
+  end
+  if ttl <= 0 then
+    redis.call('DEL', KEYS[1])
+    return ''
+  end
+  record.expiresAt = now + ttl
+  local ok, encoded = pcall(cjson.encode, record)
+  if ok then
+    redis.call('SET', KEYS[1], encoded, 'PX', ttl)
+  else
+    redis.call('PEXPIRE', KEYS[1], ttl)
+  end
+  return encoded
+end
+return raw
+`
+
+/**
+ * The script that revokes the sessions of a subject.
+ *
+ * It removes the sessions, forgets the index of the subject and writes the
+ * entry of the audit trail: a script is a transaction of the server, so
+ * the revocation and its trace cannot exist without each other.
+ */
+export const REVOKE_SCRIPT = `
+local ids = redis.call('SMEMBERS', KEYS[1])
+local removed = 0
+for index = 1, #ids do
+  removed = removed + redis.call('DEL', ARGV[1] .. ids[index])
+end
+redis.call('DEL', KEYS[1])
+if ARGV[2] ~= '' then
+  redis.call('RPUSH', KEYS[2], ARGV[2])
+end
+return removed
+`
+
+export interface RedisSessionStoreOptions extends Partial<SessionLifetime> {
+  /** The client of the server. */
+  client: RedisSessionCommands
+  /** Prefix of every key, so several environments can share one server. */
+  keyPrefix?: string
+  /**
+   * The key of the audit trail of the state.
+   *
+   * It is empty when the store does not write the trail: the gateway never
+   * revokes a session by itself, and only the control plane does.
+   */
+  auditKey?: string
+}
+
+/**
+ * The shared session store.
+ *
+ * There is exactly one behaviour when the store cannot be reached: the
+ * request is denied. A gateway that mirrors the sessions in its own memory
+ * would authenticate a caller that no other replica knows.
+ */
+export class RedisSessionStore implements SessionStore {
+  #client: RedisSessionCommands
+  #prefix: string
+  #lifetime: SessionLifetime
+  #auditKey: string
+
+  constructor(options: RedisSessionStoreOptions) {
+    this.#client = options.client
+    this.#prefix = options.keyPrefix ?? 'gateway'
+    this.#auditKey = options.auditKey ?? ''
+    this.#lifetime = {
+      ttlMs: options.ttlMs ?? 8 * 60 * 60_000,
+      maxAgeMs: options.maxAgeMs ?? 24 * 60 * 60_000,
+      touchIntervalMs: options.touchIntervalMs ?? 60_000,
+    }
+  }
+
+  get ttlMs(): number {
+    return this.#lifetime.ttlMs
+  }
+
+  get maxAgeMs(): number {
+    return this.#lifetime.maxAgeMs
+  }
+
+  get touchIntervalMs(): number {
+    return this.#lifetime.touchIntervalMs
+  }
+
+  async create(input: CreateSessionInput): Promise<SessionRecord> {
+    const now = Date.now()
+    const record = newSessionRecord(input, this.#lifetime, now)
+    await this.#client.set(
+      this.#sessionKey(record.id),
+      serializeSessionRecord(record),
+      'PX',
+      this.#lifetime.ttlMs
+    )
+    // The session is remembered by its subject, so the sessions of one
+    // caller can be revoked at once.
+    await this.#client.sadd(this.#subjectKey(record.subject), record.id)
+    await this.#client.pexpire(this.#subjectKey(record.subject), this.#lifetime.ttlMs)
+    return record
+  }
+
+  async get(id: string | undefined): Promise<SessionRecord | null> {
+    if (!id) return null
+    const now = Date.now()
+    const raw = await this.#client.eval(
+      TOUCH_SCRIPT,
+      1,
+      this.#sessionKey(id),
+      this.#lifetime.ttlMs,
+      now,
+      this.#lifetime.touchIntervalMs
+    )
+    if (typeof raw !== 'string' || raw === '') return null
+    const record = parseSessionRecord(raw, now)
+    if (!record) {
+      await this.destroy(id)
+      return null
+    }
+    if (isPastMaximumAge(record, now) || isPastIdleLifetime(record, now)) {
+      await this.destroy(id)
+      return null
+    }
+    return record
+  }
+
+  async destroy(id: string | undefined): Promise<void> {
+    if (!id) return
+    // The record is read first: it holds the subject of the session, and
+    // the index of the subject has to forget the session.
+    const raw = await this.#client.get(this.#sessionKey(id))
+    if (typeof raw === 'string' && raw !== '') {
+      const record = parseSessionRecord(raw)
+      if (record) await this.#client.srem(this.#subjectKey(record.subject), id)
+    }
+    await this.#client.del(this.#sessionKey(id))
+  }
+
+  async destroyBySubject(subject: string, audit?: AuditEntry): Promise<number> {
+    const key = this.#subjectKey(subject)
+    const entry = audit ? serializeAudit(audit) : ''
+    try {
+      // The revocation and its trace are one script: the server runs them
+      // without another client in between.
+      const removed = await this.#client.eval(
+        REVOKE_SCRIPT,
+        2,
+        key,
+        this.#auditKey,
+        `${this.#prefix}:s:`,
+        entry
+      )
+      return Number(removed)
+    } catch {
+      // A cluster that does not accept a script over several keys: the
+      // sessions are removed one by one and the entry of the trail follows
+      // the revocation.
+      const ids = await this.#client.smembers(key)
+      let removed = 0
+      for (const id of ids) {
+        removed += await this.#client.del(this.#sessionKey(id))
+      }
+      await this.#client.del(key)
+      if (entry !== '' && this.#auditKey !== '') {
+        await this.#client.rpush(this.#auditKey, entry)
+      }
+      return removed
+    }
+  }
+
+  async ping(): Promise<boolean> {
+    try {
+      await this.#client.ping()
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async close(): Promise<void> {
+    // The client is owned by the runtime.
+  }
+
+  /** The key of a session. */
+  #sessionKey(id: string): string {
+    return `${this.#prefix}:s:${id}`
+  }
+
+  /**
+   * The key of the index of the sessions of a subject.
+   *
+   * The subject is hashed: it comes from the identity provider and it may
+   * carry anything, and a key of Redis is a byte string that is read by
+   * the operators of the deployment.
+   */
+  #subjectKey(subject: string): string {
+    const digest = createHash('sha256').update(subject).digest('hex')
+    return `${this.#prefix}:u:${digest}`
+  }
+}
