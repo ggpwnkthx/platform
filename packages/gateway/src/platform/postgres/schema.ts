@@ -1,0 +1,423 @@
+/**
+ * The schema of the shared state in a Postgres server.
+ *
+ * The three tables and the two functions are the equivalent of what the
+ * Redis server does with its keys and its two scripts:
+ *
+ * | Redis | Postgres |
+ * | --- | --- |
+ * | a session in a key with a `PX` expiry | a row of `gateway.sessions` with an `expires_at` |
+ * | the `TOUCH_SCRIPT` | `gateway.session_touch` |
+ * | the `WINDOW_SCRIPT` | `gateway.rate_limit_check` |
+ * | a decision in a key with a `PX` expiry | a row of `gateway.access_decisions` with an `expires_at` |
+ *
+ * The functions are the reason the behaviour is the same: a function call
+ * is a transaction of the server, so the read, the decision and the write
+ * of a window happen without another session in between, exactly like a
+ * script of Redis does.
+ *
+ * The statements are idempotent: they can be applied to a server that
+ * already holds the schema, so the bootstrap of a replica that starts
+ * while another one is starting does not fail.
+ */
+
+/** The schema the tables and the functions live in. */
+export const SCHEMA_NAME = 'gateway'
+
+/**
+ * The statements that build the schema.
+ *
+ * They are applied by the bootstrap of the client and by the script
+ * `scripts/postgres-migrate.ts`.
+ */
+export const SCHEMA_STATEMENTS: readonly string[] = [
+  `CREATE SCHEMA IF NOT EXISTS ${SCHEMA_NAME}`,
+
+  // The sessions of the callers. The record is the jsonb of the session;
+  // the columns beside it are the moments the sweeper reads.
+  `CREATE TABLE IF NOT EXISTS ${SCHEMA_NAME}.sessions (
+     id                text PRIMARY KEY,
+     record            jsonb NOT NULL,
+     subject           text,
+     expires_at        timestamptz NOT NULL,
+     absolute_expires_at timestamptz,
+     updated_at        timestamptz NOT NULL DEFAULT now()
+   )`,
+  // The subject of a session is a column of its own, so the sessions of a
+  // caller can be revoked at once. The column is added to the deployments
+  // that were created before it existed: the statement is idempotent.
+  `ALTER TABLE ${SCHEMA_NAME}.sessions ADD COLUMN IF NOT EXISTS subject text`,
+  `CREATE INDEX IF NOT EXISTS ${SCHEMA_NAME}_sessions_subject_idx
+     ON ${SCHEMA_NAME}.sessions (subject)`,
+  `CREATE INDEX IF NOT EXISTS ${SCHEMA_NAME}_sessions_expires_at_idx
+     ON ${SCHEMA_NAME}.sessions (expires_at)`,
+
+  // The decisions of access.
+  `CREATE TABLE IF NOT EXISTS ${SCHEMA_NAME}.access_decisions (
+     key         text PRIMARY KEY,
+     decision    jsonb NOT NULL,
+     expires_at  timestamptz NOT NULL
+   )`,
+  `CREATE INDEX IF NOT EXISTS ${SCHEMA_NAME}_access_decisions_expires_at_idx
+     ON ${SCHEMA_NAME}.access_decisions (expires_at)`,
+  // The caller and the workspace a decision is about, hashed: the control
+  // plane purges the decisions of a caller, and it cannot do it without
+  // knowing which decision is about whom. The values are hashes, because
+  // the subject comes from the identity provider.
+  `ALTER TABLE ${SCHEMA_NAME}.access_decisions ADD COLUMN IF NOT EXISTS subject_hash text`,
+  `ALTER TABLE ${SCHEMA_NAME}.access_decisions ADD COLUMN IF NOT EXISTS workspace_hash text`,
+  `CREATE INDEX IF NOT EXISTS ${SCHEMA_NAME}_access_decisions_subject_hash_idx
+     ON ${SCHEMA_NAME}.access_decisions (subject_hash)`,
+
+  // The revisions of the route table and the pointer that names the
+  // active one. A revision is immutable: only the pointer moves.
+  //
+  // The gateway reads them and writes nothing in them; the control plane
+  // writes them (see the grants of the roles).
+  `CREATE TABLE IF NOT EXISTS ${SCHEMA_NAME}.config_revisions (
+     namespace  text NOT NULL,
+     revision   bigint NOT NULL,
+     body       jsonb NOT NULL,
+     author     text NOT NULL,
+     created_at timestamptz NOT NULL,
+     PRIMARY KEY (namespace, revision)
+   )`,
+  `CREATE TABLE IF NOT EXISTS ${SCHEMA_NAME}.config_active (
+     namespace  text PRIMARY KEY,
+     revision   bigint NOT NULL,
+     updated_at timestamptz NOT NULL
+   )`,
+  // The heartbeats of the replicas that serve the route table. A heartbeat
+  // has a lifetime: a replica that is gone disappears on its own.
+  `CREATE TABLE IF NOT EXISTS ${SCHEMA_NAME}.config_heartbeats (
+     namespace  text NOT NULL,
+     replica_id text NOT NULL,
+     revision   bigint,
+     last_error text,
+     at         timestamptz NOT NULL,
+     expires_at timestamptz NOT NULL,
+     PRIMARY KEY (namespace, replica_id)
+   )`,
+  `CREATE INDEX IF NOT EXISTS ${SCHEMA_NAME}_config_heartbeats_expires_at_idx
+     ON ${SCHEMA_NAME}.config_heartbeats (expires_at)`,
+
+  // The trail of the writes of the control plane. An entry is written with
+  // the change it records, in the same transaction.
+  `CREATE TABLE IF NOT EXISTS ${SCHEMA_NAME}.audit (
+     id       bigserial PRIMARY KEY,
+     action   text NOT NULL,
+     target   text NOT NULL,
+     operator text NOT NULL,
+     scope    text NOT NULL,
+     address  text NOT NULL,
+     request  jsonb,
+     at       timestamptz NOT NULL
+   )`,
+  `CREATE INDEX IF NOT EXISTS ${SCHEMA_NAME}_audit_at_idx ON ${SCHEMA_NAME}.audit (at DESC)`,
+
+  // The failures of the authentication of the control plane. The counter
+  // lives in the shared state, so the limit holds across the replicas of
+  // the control plane.
+  `CREATE TABLE IF NOT EXISTS ${SCHEMA_NAME}.control_failures (
+     key        text NOT NULL,
+     bucket     bigint NOT NULL,
+     failures   bigint NOT NULL DEFAULT 0,
+     expires_at timestamptz NOT NULL,
+     PRIMARY KEY (key, bucket)
+   )`,
+  `CREATE INDEX IF NOT EXISTS ${SCHEMA_NAME}_control_failures_expires_at_idx
+     ON ${SCHEMA_NAME}.control_failures (expires_at)`,
+
+  // The buckets of the windows of the limiters. A window holds at most
+  // sixty buckets, so the state of a caller does not grow with its
+  // traffic.
+  `CREATE TABLE IF NOT EXISTS ${SCHEMA_NAME}.rate_limit_buckets (
+     key        text NOT NULL,
+     bucket     bigint NOT NULL,
+     requests   bigint NOT NULL DEFAULT 0,
+     expires_at timestamptz NOT NULL,
+     PRIMARY KEY (key, bucket)
+   )`,
+  `CREATE INDEX IF NOT EXISTS ${SCHEMA_NAME}_rate_limit_buckets_expires_at_idx
+     ON ${SCHEMA_NAME}.rate_limit_buckets (expires_at)`,
+
+  /**
+   * Reads a session and refreshes its expiry.
+   *
+   * It is the counterpart of the `TOUCH_SCRIPT` of the Redis adapter:
+   *
+   * - it reads the record and checks the maximum age of the session, and
+   *   it removes the session when it is over;
+   * - it refreshes the expiry only when the touch interval is over, so a
+   *   busy caller is not written on every request, and the interval is the
+   *   same on every replica;
+   * - the new expiry never reaches beyond the maximum age of the session;
+   * - a session that was deleted (a logout) is never recreated.
+   *
+   * The row is locked for the duration of the call, so two replicas that
+   * touch the same session at the same time do not write it twice.
+   */
+  `CREATE OR REPLACE FUNCTION ${SCHEMA_NAME}.session_touch(
+     p_id        text,
+     p_idle_ms   bigint,
+     p_now       bigint,
+     p_touch_ms  bigint
+   ) RETURNS text
+   LANGUAGE plpgsql
+   AS $$
+   DECLARE
+     v_row        ${SCHEMA_NAME}.sessions%ROWTYPE;
+     v_record     jsonb;
+     v_last_touch bigint;
+     v_ttl        bigint;
+     v_absolute   bigint;
+     v_expires    bigint;
+   BEGIN
+     SELECT * INTO v_row
+       FROM ${SCHEMA_NAME}.sessions
+      WHERE id = p_id
+      FOR UPDATE;
+
+     IF NOT FOUND THEN
+       RETURN NULL;
+     END IF;
+
+     v_record   := v_row.record;
+     v_absolute := COALESCE(
+       (EXTRACT(EPOCH FROM v_row.absolute_expires_at) * 1000)::bigint, 0);
+     v_expires  := (EXTRACT(EPOCH FROM v_row.expires_at) * 1000)::bigint;
+
+     -- The maximum age: the session is over whatever the activity is.
+     IF v_absolute > 0 AND p_now >= v_absolute THEN
+       DELETE FROM ${SCHEMA_NAME}.sessions WHERE id = p_id;
+       RETURN NULL;
+     END IF;
+
+     -- The idle lifetime: the row is removed when it is over, the way the
+     -- expiry of a key of Redis removes it.
+     IF p_now >= v_expires THEN
+       DELETE FROM ${SCHEMA_NAME}.sessions WHERE id = p_id;
+       RETURN NULL;
+     END IF;
+
+     v_last_touch := v_expires - p_idle_ms;
+
+     -- The expiry is refreshed only when the touch interval is over.
+     IF p_now - v_last_touch < p_touch_ms THEN
+       RETURN v_record::text;
+     END IF;
+
+     v_ttl := p_idle_ms;
+     IF v_absolute > 0 THEN
+       v_ttl := LEAST(v_ttl, v_absolute - p_now);
+     END IF;
+
+     IF v_ttl <= 0 THEN
+       DELETE FROM ${SCHEMA_NAME}.sessions WHERE id = p_id;
+       RETURN NULL;
+     END IF;
+
+     v_record := jsonb_set(v_record, '{expiresAt}', to_jsonb(p_now + v_ttl));
+
+     UPDATE ${SCHEMA_NAME}.sessions
+        SET record      = v_record,
+            expires_at  = to_timestamp(((p_now + v_ttl) / 1000.0)::double precision),
+            updated_at  = now()
+      WHERE id = p_id;
+
+     RETURN v_record::text;
+   END $$`,
+
+  /**
+   * Counts a request in the window of a key.
+   *
+   * It is the counterpart of the `WINDOW_SCRIPT` of the Redis adapter:
+   *
+   * - the buckets that left the window are removed first, so the count is
+   *   the count of the last `p_window` milliseconds;
+   * - a request that is over the limit is not counted, so a client that
+   *   keeps hammering does not push the window further away;
+   * - the `retry_after` is the time until the oldest requests of the
+   *   window leave it.
+   *
+   * The checks of one key are serialized with an advisory lock: two
+   * replicas that count the same key at the same time must not count the
+   * same request twice.
+   */
+  `CREATE OR REPLACE FUNCTION ${SCHEMA_NAME}.rate_limit_check(
+     p_key        text,
+     p_now        bigint,
+     p_bucket_ms  bigint,
+     p_buckets    int,
+     p_max        bigint
+   ) RETURNS bigint[]
+   LANGUAGE plpgsql
+   AS $$
+   DECLARE
+     v_current bigint := p_now / p_bucket_ms;
+     v_oldest  bigint := (p_now / p_bucket_ms) - p_buckets + 1;
+     v_total   bigint := 0;
+     v_allowed bigint := 1;
+     v_needed  bigint;
+     v_prefix  bigint := 0;
+     v_retry   bigint;
+     v_indices bigint[] := '{}';
+     v_counts  bigint[] := '{}';
+     v_index   bigint;
+     v_count   bigint;
+     v_i       int;
+   BEGIN
+     -- The checks of one key are serialized.
+     PERFORM pg_advisory_xact_lock(hashtextextended(p_key, 0));
+
+     -- The buckets that left the window are forgotten.
+     DELETE FROM ${SCHEMA_NAME}.rate_limit_buckets
+      WHERE key = p_key AND bucket < v_oldest;
+
+     -- The buckets of the window, in the order of their index.
+     FOR v_index, v_count IN
+       SELECT bucket, requests
+         FROM ${SCHEMA_NAME}.rate_limit_buckets
+        WHERE key = p_key AND bucket >= v_oldest
+        ORDER BY bucket
+     LOOP
+       v_total   := v_total + v_count;
+       v_indices := array_append(v_indices, v_index);
+       v_counts  := array_append(v_counts, v_count);
+     END LOOP;
+
+     IF v_total >= p_max THEN
+       -- The caller waits for the oldest requests of the window to leave
+       -- it.
+       v_allowed := 0;
+       v_needed  := v_total - (p_max - 1);
+       v_retry   := (v_current + p_buckets) * p_bucket_ms - p_now;
+       FOR v_i IN 1..COALESCE(array_length(v_indices, 1), 0) LOOP
+         IF v_prefix + v_counts[v_i] >= v_needed THEN
+           v_retry := (v_indices[v_i] + p_buckets) * p_bucket_ms - p_now;
+           EXIT;
+         END IF;
+         v_prefix := v_prefix + v_counts[v_i];
+       END LOOP;
+       RETURN ARRAY[v_allowed, v_total, v_retry];
+     END IF;
+
+     INSERT INTO ${SCHEMA_NAME}.rate_limit_buckets (key, bucket, requests, expires_at)
+     VALUES (
+       p_key,
+       v_current,
+       1,
+       to_timestamp((((v_current + p_buckets) * p_bucket_ms) / 1000.0)::double precision)
+     )
+     ON CONFLICT (key, bucket) DO UPDATE
+        SET requests = ${SCHEMA_NAME}.rate_limit_buckets.requests + 1;
+
+     RETURN ARRAY[v_allowed, v_total + 1, 0];
+   END $$`,
+]
+
+/**
+ * The advisory lock that guards the bootstrap of the schema.
+ *
+ * Several replicas may start at the same time: the lock makes one of them
+ * build the schema while the others wait for it.
+ */
+export const BOOTSTRAP_LOCK_KEY = 'gateway_schema_bootstrap'
+
+/** The name of the role of the gateway. */
+export const GATEWAY_ROLE = 'gateway_app'
+
+/** The name of the role of the control plane. */
+export const CONTROL_ROLE = 'control_app'
+
+/**
+ * The statements that create the two roles of the shared state.
+ *
+ * The roles are created without a password: the deployment sets it, and a
+ * password that travels in a repository is a password that is not a secret.
+ * The statements are idempotent.
+ */
+export const ROLE_STATEMENTS: readonly string[] = [
+  `DO $$
+   BEGIN
+     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${GATEWAY_ROLE}') THEN
+       CREATE ROLE ${GATEWAY_ROLE} LOGIN;
+     END IF;
+     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${CONTROL_ROLE}') THEN
+       CREATE ROLE ${CONTROL_ROLE} LOGIN;
+     END IF;
+   END $$`,
+]
+
+/**
+ * The grants of the two roles.
+ *
+ * The boundary of the control plane is the credential of the shared state
+ * and not the token of the caller:
+ *
+ * - the role of the gateway **reads** the route table and writes nothing
+ *   in it; it still writes the sessions, the limits, the cached decisions
+ *   and the heartbeats, which are its own state;
+ * - the role of the control plane **writes** the route table, the history
+ *   and the trail of the writes, and it may revoke the sessions and purge
+ *   the cached decisions.
+ *
+ * The statements are idempotent.
+ */
+export const ROLE_GRANTS: readonly string[] = [
+  `GRANT USAGE ON SCHEMA ${SCHEMA_NAME} TO ${GATEWAY_ROLE}, ${CONTROL_ROLE}`,
+
+  // The gateway reads the route table and writes nothing in it.
+  `GRANT SELECT ON ${SCHEMA_NAME}.config_revisions, ${SCHEMA_NAME}.config_active TO ${GATEWAY_ROLE}`,
+  `GRANT SELECT, INSERT, UPDATE ON ${SCHEMA_NAME}.config_heartbeats TO ${GATEWAY_ROLE}`,
+  `GRANT SELECT, INSERT, UPDATE, DELETE ON ${SCHEMA_NAME}.sessions TO ${GATEWAY_ROLE}`,
+  `GRANT SELECT, INSERT, UPDATE, DELETE ON ${SCHEMA_NAME}.rate_limit_buckets TO ${GATEWAY_ROLE}`,
+  `GRANT SELECT, INSERT, UPDATE, DELETE ON ${SCHEMA_NAME}.access_decisions TO ${GATEWAY_ROLE}`,
+
+  // The control plane writes the route table, the history and the trail.
+  `GRANT SELECT, INSERT, UPDATE, DELETE
+     ON ${SCHEMA_NAME}.config_revisions, ${SCHEMA_NAME}.config_active TO ${CONTROL_ROLE}`,
+  `GRANT SELECT, INSERT, UPDATE, DELETE ON ${SCHEMA_NAME}.config_heartbeats TO ${CONTROL_ROLE}`,
+  `GRANT SELECT, INSERT, UPDATE, DELETE ON ${SCHEMA_NAME}.audit TO ${CONTROL_ROLE}`,
+  `GRANT SELECT, INSERT, UPDATE, DELETE ON ${SCHEMA_NAME}.control_failures TO ${CONTROL_ROLE}`,
+  `GRANT SELECT, INSERT, UPDATE, DELETE
+     ON ${SCHEMA_NAME}.sessions, ${SCHEMA_NAME}.access_decisions TO ${CONTROL_ROLE}`,
+
+  `GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA ${SCHEMA_NAME} TO ${GATEWAY_ROLE}, ${CONTROL_ROLE}`,
+]
+
+/** The part of the client the bootstrap needs. */
+export interface SchemaClient {
+  query<T>(text: string, params?: readonly unknown[]): Promise<{ rows: T[] }>
+  /**
+   * Runs the body in a transaction.
+   *
+   * The bootstrap needs it: the lock that guards the schema is held by
+   * the transaction, so it is released whatever happens, and the schema is
+   * built by one replica at a time.
+   */
+  transaction<T>(
+    body: (client: {
+      query<T>(text: string, params?: readonly unknown[]): Promise<{ rows: T[] }>
+    }) => Promise<T>
+  ): Promise<T>
+}
+
+/**
+ * Builds the schema of the shared state.
+ *
+ * The statements are idempotent and the advisory lock makes one replica
+ * build the schema while the others wait for it, so a deployment whose
+ * replicas start at the same time does not race with itself.
+ *
+ * The whole bootstrap is one transaction: a failure leaves the schema as it
+ * was, and the lock of the transaction is released with it.
+ */
+export async function ensureSchema(client: SchemaClient): Promise<void> {
+  await client.transaction(async (tx) => {
+    await tx.query(`SELECT pg_advisory_xact_lock(hashtextextended('${BOOTSTRAP_LOCK_KEY}', 0))`)
+    for (const statement of SCHEMA_STATEMENTS) {
+      await tx.query(statement)
+    }
+  })
+}
