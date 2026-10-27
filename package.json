@@ -1,0 +1,65 @@
+{
+  "name": "platform",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The platform: an application gateway, an access service, a data service and the console that is the interface of the three, as workspaces of one repository.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ggpwnkthx/platform.git"
+  },
+  "homepage": "https://github.com/ggpwnkthx/platform#readme",
+  "bugs": {
+    "url": "https://github.com/ggpwnkthx/platform/issues"
+  },
+  "license": "MIT",
+  "workspaces": [
+    "packages/gateway",
+    "packages/access",
+    "packages/data",
+    "packages/console"
+  ],
+  "scripts": {
+    "dev": "bun run scripts/dev.ts",
+    "dev:gateway": "bun run --cwd packages/gateway dev",
+    "start:gateway": "bun run --cwd packages/gateway start",
+    "start:access": "bun run --cwd packages/access start",
+    "start:data": "bun run --cwd packages/data start",
+    "start:console": "bun run --cwd packages/console start",
+    "build:console": "bun run --cwd packages/console build",
+    "control:gateway": "bun run --cwd packages/gateway control",
+    "test": "bun run test:platform && bun run --workspaces test",
+    "test:platform": "bun test test/*.test.ts",
+    "test:gateway": "bun run --cwd packages/gateway test",
+    "test:access": "bun run --cwd packages/access test",
+    "test:data": "bun run --cwd packages/data test",
+    "test:console": "bun run --cwd packages/console test",
+    "typecheck": "bun run --workspaces typecheck",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "architecture": "bun run --workspaces architecture",
+    "dead": "knip",
+    "evidence:check": "bun run scripts/check-evidence.ts",
+    "versions": "bun run scripts/version.ts",
+    "repositories:check": "bun run scripts/check-repositories.ts",
+    "vocabulary:check": "bun run scripts/check-vocabulary.ts",
+    "deploy:check": "bun run scripts/check-deploy.ts",
+    "docs:check": "bun run scripts/check-docs.ts",
+    "atlas": "bun run scripts/atlas.ts",
+    "compatibility": "bun run scripts/compatibility.ts",
+    "release:tag": "bun run scripts/tag.ts",
+    "release:tag:dry-run": "bun run scripts/tag.ts --dry-run"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@types/bun": "1.4.3",
+    "@types/pg": "8.23.1",
+    "knip": "6.42.1",
+    "typescript": "5.9.3",
+    "yaml": "2.8.1"
+  },
+  "engines": {
+    "bun": ">=1.4.3"
+  }
+}
