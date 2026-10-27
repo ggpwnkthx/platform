@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "repository": "https://github.com/ggpwnkthx/platform.git",
+  "workspaces": {
+    "gateway": {
+      "path": "packages/gateway",
+      "source": {
+        "repository": "https://github.com/ggpwnkthx/platform.git",
+        "commit": "d3cdb48b79c3962e66bf51d8f386132baff824b7"
+      }
+    },
+    "access": {
+      "path": "packages/access",
+      "source": {
+        "repository": "https://github.com/ggpwnkthx/platform.git",
+        "commit": "d3cdb48b79c3962e66bf51d8f386132baff824b7"
+      }
+    },
+    "data": {
+      "path": "packages/data"
+    }
+  }
+}
