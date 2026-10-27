@@ -1,0 +1,26 @@
+{
+  "name": "@platform/console",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The console of the platform: the web application that is the interface of the gateway, the access service and the data service. It is a client of the three, and it decides nothing.",
+  "scripts": {
+    "start": "bun run src/main.ts",
+    "build": "vite build --mode client && vite build",
+    "test": "bun test test",
+    "typecheck": "tsc --noEmit",
+    "architecture": "bun run scripts/architecture.ts"
+  },
+  "dependencies": {
+    "@casl/ability": "7.0.2",
+    "hono": "4.13.13",
+    "honox": "0.1.62",
+    "jose": "6.2.12"
+  },
+  "devDependencies": {
+    "vite": "7.3.7"
+  },
+  "engines": {
+    "bun": ">=1.4.3"
+  }
+}
