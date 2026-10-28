@@ -1368,104 +1368,6 @@ The WebSocket url is built the same way, with `http` → `ws` and `https` →
 `wss`. An upstream of a websocket is served over plain http: a `wss`
 upstream is refused (§11.1.2).
 
-### 11.4 The upstreams of a route
-
-A route may name one upstream or several:
-
-```jsonc
-{
-  "id": "workspace-api",
-  "upstream": ["http://upstream-a:3000", "http://upstream-b:3000"]
-}
-```
-
-The upstreams are tried in the order of the list. The next one is tried
-when the **connection** to the first one fails, and only when the request
-may be sent again:
-
-| The request | It is tried again |
-| --- | --- |
-| `GET`, `HEAD`, `OPTIONS`, `TRACE`, `PUT` or `DELETE` without a body | Yes. |
-| Any other method | No: it may change the state of an upstream. The body is streamed and the request is sent to one upstream. |
-| A request with a body that is too large to be held in memory | No: the bytes are already on their way to the first upstream. |
-| A request with a body that fits in `replayMaxBytes` | Yes: the body is held in memory and sent again. |
-
-The budget of the answer is the budget of the **whole** exchange: the
-upstreams that are tried share it, so a list of upstreams does not make
-the timeout of a route longer.
-
-**The budget of an attempt.** An attempt that has another upstream behind
-it is abandoned when it does not answer within `upstreamAttemptMs`
-(`GATEWAY_UPSTREAM_ATTEMPT_TIMEOUT_MS`, 2 s by default), and the next
-upstream is tried. Without it, an upstream that accepts the connection and
-never answers eats the whole budget of the route, and the upstreams behind
-it are never reached.
-
-The budget of an attempt applies only to a request that may be sent again:
-a request that changes the state of an upstream is never sent to two of
-them, whatever the budget says. The last upstream of the list has no
-successor: the budget of the answer governs it.
-
-**The body that may be sent again.** A body is held in memory when it
-announced a length that fits in `replayMaxBytes`
-(`GATEWAY_REPLAY_MAX_BYTES`, 64 KiB by default), so that it may be sent to
-a second upstream. A body that does not fit is streamed and the request is
-sent once.
-
-The body of a request that may **not** be sent again is never held in
-memory, whatever its size: it would be held for nothing, and the upstream
-would only be reached once the whole body arrived, which loses the early
-answer of the upstream (§11.2). A `POST` of a route that names several
-upstreams is therefore streamed like the `POST` of a route that names one.
-
-**The health of the upstreams.** The failover above only reaches the second
-upstream when the request may be sent again, so the traffic that matters
-most — the `POST` of an API — had no failover at all: when the first
-upstream accepted the connection and never answered, the request burned the
-whole budget of the route and the second upstream was never reached.
-
-The gateway therefore remembers the upstreams that failed recently and it
-**moves them to the end of the list**, so that the next request of the
-route goes to an upstream that answered recently. The rules are:
-
-- the breaker is **passive**: it learns from the failures the gateway
-  observes — a connection that was refused, an attempt that ran out of its
-  budget — and it never probes an upstream. A probe would be a request of
-  its own, and the deployment would have to decide what a healthy upstream
-  is;
-- the upstreams that are not skipped come first, in the order of the list,
-  and the skipped ones come after them, also in the order of the list. The
-  order of the file is the order of the upstreams;
-- an upstream is skipped after `GATEWAY_UPSTREAM_BREAKER_FAILURES`
-  consecutive failures (3 by default) and for
-  `GATEWAY_UPSTREAM_BREAKER_COOLDOWN_MS` milliseconds (30 s by default). It
-  is never removed: it is tried again when the cooldown is over, even when
-  it failed in the meantime;
-- `GATEWAY_UPSTREAM_BREAKER_FAILURES=0` disables the breaker: the order of
-  the list is then always the order of the file;
-- the state is **per process**. Every replica learns on its own, from the
-  traffic it handles: a replica that did not see the failure sends its next
-  requests to the upstream that is down, and pays the budget of the route,
-  the way it paid it before the breaker existed;
-- a request is still sent to **one** upstream: the breaker chooses which
-  one, it never sends the request twice.
-
-The failures are published in `gateway_upstream_failures_total` and the
-requests that were sent to another upstream are published in
-`gateway_upstreams_skipped_total`.
-
-The body is only held in memory when the route names **several** upstreams:
-a route with one upstream has nothing to fail over to, and its body is
-streamed, so the upstream is reached while the caller uploads and the early
-answer of the upstream is preserved (§11.2).
-
-The memory of the gateway is bounded by the limit and by the number of
-exchanges that run at the same time: `GATEWAY_MAX_CONCURRENT_REQUESTS` ×
-`GATEWAY_REPLAY_MAX_BYTES` in the worst case.
-
-The handshake of a websocket goes to the **first** upstream of the route: a
-handshake is not a request that may be sent twice.
-
 ### 11.1.2 The TLS of the connections to the upstreams
 
 An upstream that is served over `https` is reached over TLS. The gateway
@@ -1573,6 +1475,104 @@ The upstream request is cancelled when the caller disconnects, so a client
 that goes away does not leave the upstream working.
 
 ---
+
+### 11.4 The upstreams of a route
+
+A route may name one upstream or several:
+
+```jsonc
+{
+  "id": "workspace-api",
+  "upstream": ["http://upstream-a:3000", "http://upstream-b:3000"]
+}
+```
+
+The upstreams are tried in the order of the list. The next one is tried
+when the **connection** to the first one fails, and only when the request
+may be sent again:
+
+| The request | It is tried again |
+| --- | --- |
+| `GET`, `HEAD`, `OPTIONS`, `TRACE`, `PUT` or `DELETE` without a body | Yes. |
+| Any other method | No: it may change the state of an upstream. The body is streamed and the request is sent to one upstream. |
+| A request with a body that is too large to be held in memory | No: the bytes are already on their way to the first upstream. |
+| A request with a body that fits in `replayMaxBytes` | Yes: the body is held in memory and sent again. |
+
+The budget of the answer is the budget of the **whole** exchange: the
+upstreams that are tried share it, so a list of upstreams does not make
+the timeout of a route longer.
+
+**The budget of an attempt.** An attempt that has another upstream behind
+it is abandoned when it does not answer within `upstreamAttemptMs`
+(`GATEWAY_UPSTREAM_ATTEMPT_TIMEOUT_MS`, 2 s by default), and the next
+upstream is tried. Without it, an upstream that accepts the connection and
+never answers eats the whole budget of the route, and the upstreams behind
+it are never reached.
+
+The budget of an attempt applies only to a request that may be sent again:
+a request that changes the state of an upstream is never sent to two of
+them, whatever the budget says. The last upstream of the list has no
+successor: the budget of the answer governs it.
+
+**The body that may be sent again.** A body is held in memory when it
+announced a length that fits in `replayMaxBytes`
+(`GATEWAY_REPLAY_MAX_BYTES`, 64 KiB by default), so that it may be sent to
+a second upstream. A body that does not fit is streamed and the request is
+sent once.
+
+The body of a request that may **not** be sent again is never held in
+memory, whatever its size: it would be held for nothing, and the upstream
+would only be reached once the whole body arrived, which loses the early
+answer of the upstream (§11.2). A `POST` of a route that names several
+upstreams is therefore streamed like the `POST` of a route that names one.
+
+**The health of the upstreams.** The failover above only reaches the second
+upstream when the request may be sent again, so the traffic that matters
+most — the `POST` of an API — had no failover at all: when the first
+upstream accepted the connection and never answered, the request burned the
+whole budget of the route and the second upstream was never reached.
+
+The gateway therefore remembers the upstreams that failed recently and it
+**moves them to the end of the list**, so that the next request of the
+route goes to an upstream that answered recently. The rules are:
+
+- the breaker is **passive**: it learns from the failures the gateway
+  observes — a connection that was refused, an attempt that ran out of its
+  budget — and it never probes an upstream. A probe would be a request of
+  its own, and the deployment would have to decide what a healthy upstream
+  is;
+- the upstreams that are not skipped come first, in the order of the list,
+  and the skipped ones come after them, also in the order of the list. The
+  order of the file is the order of the upstreams;
+- an upstream is skipped after `GATEWAY_UPSTREAM_BREAKER_FAILURES`
+  consecutive failures (3 by default) and for
+  `GATEWAY_UPSTREAM_BREAKER_COOLDOWN_MS` milliseconds (30 s by default). It
+  is never removed: it is tried again when the cooldown is over, even when
+  it failed in the meantime;
+- `GATEWAY_UPSTREAM_BREAKER_FAILURES=0` disables the breaker: the order of
+  the list is then always the order of the file;
+- the state is **per process**. Every replica learns on its own, from the
+  traffic it handles: a replica that did not see the failure sends its next
+  requests to the upstream that is down, and pays the budget of the route,
+  the way it paid it before the breaker existed;
+- a request is still sent to **one** upstream: the breaker chooses which
+  one, it never sends the request twice.
+
+The failures are published in `gateway_upstream_failures_total` and the
+requests that were sent to another upstream are published in
+`gateway_upstreams_skipped_total`.
+
+The body is only held in memory when the route names **several** upstreams:
+a route with one upstream has nothing to fail over to, and its body is
+streamed, so the upstream is reached while the caller uploads and the early
+answer of the upstream is preserved (§11.2).
+
+The memory of the gateway is bounded by the limit and by the number of
+exchanges that run at the same time: `GATEWAY_MAX_CONCURRENT_REQUESTS` ×
+`GATEWAY_REPLAY_MAX_BYTES` in the worst case.
+
+The handshake of a websocket goes to the **first** upstream of the route: a
+handshake is not a request that may be sent twice.
 
 ## 12. The operations
 
