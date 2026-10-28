@@ -9,7 +9,7 @@ import { referenceRoot } from './reference'
 import { login, request, waitFor } from './browser'
 
 /**
- * The rehearsal of the cutover of a tenant (docs/access/release.md §4).
+ * The rehearsal of the cutover of a tenant (docs/access/operations.md, "Tenant cutover").
  *
  * The rehearsal is the cutover, played against the gateway of the
  * reference, unchanged. It follows the phases of the runbook:

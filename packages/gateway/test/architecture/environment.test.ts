@@ -70,6 +70,6 @@ describe('the environment of the gateway', () => {
   test('the files of the check are the ones of the project', () => {
     expect(SOURCE).toBe('src/runtime/env')
     expect(EXAMPLE).toBe('.env.example')
-    expect(MANUAL).toBe('../../docs/gateway/operations.md')
+    expect(MANUAL).toBe('../../docs/gateway/configuration.md')
   })
 })

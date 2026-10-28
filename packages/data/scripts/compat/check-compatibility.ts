@@ -38,7 +38,7 @@ export const MANIFEST_END = '<!-- compatibility-manifest:end -->'
 const SPECS_FILE = '../../docs/data/spec.md'
 
 /** The guide of the compatibility with the platform. */
-const GUIDE_FILE = '../../docs/data/compatibility.md'
+const GUIDE_FILE = '../../docs/data/internals.md'
 
 /** The directory of the workflows of the platform. */
 const WORKFLOWS_DIRECTORY = '../../.github/workflows'

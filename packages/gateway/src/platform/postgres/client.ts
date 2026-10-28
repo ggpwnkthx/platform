@@ -5,7 +5,7 @@
  * to a Redis server for: the sessions, the rate limits and the cached
  * decisions. The two backends are interchangeable: the scheme of the url
  * picks one of them, and the deployment measures them side by side (see
- * `docs/gateway/capacity.md`).
+ * `docs/gateway/internals.md#shared-state-backends`).
  *
  * The client is the one of the `pg` package: it is the driver that the
  * managed Postgres services of every cloud speak to, and it is not tied to

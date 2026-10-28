@@ -10,7 +10,7 @@
  * different windows and none of them changes the answer of another one.
  * They are therefore checked **at the same time**, so a request that
  * reaches a server that holds the state the replicas share pays one round
- * trip instead of three. The measurements of `docs/gateway/capacity.md` attribute
+ * trip instead of three. The measurements of `docs/gateway/internals.md#shared-state-backends` attribute
  * the cost of the shared state to the number of round trips, and this is
  * the round trip that is on the path of every request.
  *

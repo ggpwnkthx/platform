@@ -13,7 +13,7 @@
  * workflow, so a violation fails the build instead of being noticed in
  * a review.
  *
- * The rules are the ones of the gateway (`docs/gateway/architecture.md`),
+ * The rules are the ones of the gateway (`docs/gateway/internals.md`),
  * copied and extended with the matrix of the access service:
  *
  * 1. A domain is imported through its public entry point (`index.ts`).

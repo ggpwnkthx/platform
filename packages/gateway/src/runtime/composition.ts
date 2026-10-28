@@ -113,7 +113,7 @@ export interface GatewayRuntime {
  *
  * The scheme of the url picks the backend: a Redis server and a Postgres
  * server hold the same three things, and a deployment measures them side by
- * side (see `docs/gateway/capacity.md`).
+ * side (see `docs/gateway/internals.md#shared-state-backends`).
  */
 export type SharedStateConnection =
   | { kind: 'redis'; client: SharedStateClient }

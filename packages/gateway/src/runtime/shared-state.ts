@@ -9,7 +9,7 @@
  *
  * The scheme of the url picks the backend, so the infrastructure only has
  * to provide a single value and a deployment can measure the two side by
- * side (see `docs/gateway/capacity.md`).
+ * side (see `docs/gateway/internals.md#shared-state-backends`).
  *
  * The module is in the runtime layer because it is the runtime that
  * assembles the two backends; the platforms know nothing of each other.

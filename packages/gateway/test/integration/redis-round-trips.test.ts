@@ -8,7 +8,7 @@ import { createRedisClient, type SharedStateClient } from '../../src/platform/re
  * The gateway asks the server that holds the state the replicas share for
  * the windows of the limiters, for the session of the caller and for the
  * cached decisions. Every one of those is a round trip, and the
- * measurements of `docs/gateway/capacity.md` attribute the cost of the shared
+ * measurements of `docs/gateway/internals.md#shared-state-backends` attribute the cost of the shared
  * state to the number of round trips.
  *
  * The three budgets of a request are independent, so they are counted at

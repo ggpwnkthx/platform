@@ -2,7 +2,7 @@
 /**
  * The measurement of the shape of the statements at scale.
  *
- * The report of `docs/data/capacity.md` measures the latency of the service
+ * The Capacity section of `docs/data/internals.md` measures the latency of the service
  * on a small table of a development machine. This command measures
  * something else: the *plan* of the statements of the service when the
  * table is large.

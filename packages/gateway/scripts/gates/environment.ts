@@ -27,7 +27,7 @@ export const SOURCE = 'src/runtime/env'
 export const EXAMPLE = '.env.example'
 
 /** The file that holds the manual of the deployment. */
-export const MANUAL = '../../docs/gateway/operations.md'
+export const MANUAL = '../../docs/gateway/configuration.md'
 
 /**
  * The prefix of the variables of the test suite.

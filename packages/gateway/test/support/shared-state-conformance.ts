@@ -3,7 +3,7 @@
  *
  * The same suite runs against the Redis server and against the Postgres
  * server: the two are interchangeable, and the suite is what proves it. A
- * deployment that measures them side by side (see `docs/gateway/capacity.md`) has
+ * deployment that measures them side by side (see `docs/gateway/internals.md#shared-state-backends`) has
  * to be sure that they behave the same way, not only that they are fast.
  */
 

@@ -24,7 +24,7 @@
  *
  * The numbers are the ones of the machine it runs on: they are a
  * measurement and not a promise. The targets of the deployment are in
- * `docs/gateway/capacity.md`.
+ * `docs/gateway/internals.md#capacity`.
  *
  *   bun run benchmark -- --redis redis://127.0.0.1:6379/0 \
  *                        --postgres postgres://127.0.0.1:5432/gateway

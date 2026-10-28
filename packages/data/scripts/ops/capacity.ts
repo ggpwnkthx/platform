@@ -7,7 +7,7 @@
  * measures the latency of the reads, the latency of the writes and the
  * behaviour under the failure of a dependency.
  *
- * The numbers of the report of `docs/data/capacity.md` come from this command.
+ * The numbers in the Capacity section of `docs/data/internals.md` come from this command.
  * They describe the machine they were measured on, and they are not a
  * promise about another one.
  */

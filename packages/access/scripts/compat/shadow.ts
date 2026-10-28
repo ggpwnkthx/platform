@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * The shadow comparison (docs/access/release.md §3).
+ * The shadow comparison (docs/access/operations.md, "Shadow comparison").
  *
  * The tool asks the access service of the tree and the access service that is in
  * production the same decisions, and it reports the answers that differ. It reads the

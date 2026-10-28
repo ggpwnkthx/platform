@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * The capacity of the decision (docs/access/operations.md, "Capacity").
+ * The capacity of the decision (docs/access/internals.md, "Capacity").
  *
  * The script measures the latency of the decision and the number of
  * decisions per second, on the shape of the production: one principal

@@ -109,7 +109,7 @@ export class WsUpstreamHandshake implements UpstreamHandshakePort {
     // The websocket client of the runtime cannot speak TLS: the handshake
     // fails with an error that says nothing about the cause. The gateway
     // says it plainly instead, and the operator reads the reason in the log
-    // (the measurements are in docs/gateway/runtime.md).
+    // (the measurements are in docs/gateway/internals.md#runtime).
     if (request.url.startsWith('wss://')) {
       return {
         kind: 'failed',

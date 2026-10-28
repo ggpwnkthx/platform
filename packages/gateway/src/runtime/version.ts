@@ -11,7 +11,7 @@
  * (the early answer of an upstream while the upload runs, the cancellation
  * of the producer of the body, the refusal of the handshake of an upstream
  * websocket and the upgrade of the caller with the headers of the gateway).
- * The measurements are in `docs/gateway/runtime.md`, and the gateway refuses to
+ * The measurements are in `docs/gateway/internals.md#runtime`, and the gateway refuses to
  * start on a runtime that does not have them: a gateway that starts on a
  * runtime it cannot rely on answers in ways the specification does not
  * describe, and the difference is only visible in production.
@@ -74,6 +74,6 @@ export function isRuntimeVersionSupported(version: string): boolean {
 export function assertRuntimeVersion(version: string = runtimeVersion()): void {
   if (isRuntimeVersionSupported(version)) return
   throw new Error(
-    `the gateway needs Bun ${MINIMUM_RUNTIME_VERSION} or later and this runtime is ${version}: the boundaries the gateway relies on — the early answer of an upstream while the upload runs, the cancellation of the producer of the body, the refusal of the handshake of an upstream websocket and the upgrade of the caller with the headers of the gateway — are not observable on this version (docs/gateway/runtime.md)`
+    `the gateway needs Bun ${MINIMUM_RUNTIME_VERSION} or later and this runtime is ${version}: the boundaries the gateway relies on — the early answer of an upstream while the upload runs, the cancellation of the producer of the body, the refusal of the handshake of an upstream websocket and the upgrade of the caller with the headers of the gateway — are not observable on this version (docs/gateway/internals.md#runtime)`
   )
 }
