@@ -1,0 +1,219 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platform-gateway
+  labels:
+    app.kubernetes.io/name: platform-gateway
+    app.kubernetes.io/component: gateway
+spec:
+  replicas: 3
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: platform-gateway
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # The pods of a rollout are replaced one by one: the replicas that
+      # understand each other are needed, because the secret of the sessions
+      # signs the state of the login.
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: platform-gateway
+        app.kubernetes.io/component: gateway
+      annotations:
+        # The secret of the sessions changes with the rotation of the
+        # secrets: the pods are replaced when it changes.
+        checksum/secrets: "replaced-by-the-pipeline"
+    spec:
+      # The gateway closes its websockets and lets the requests that are in
+      # flight finish: the grace period is longer than its own deadline
+      # (GATEWAY_SHUTDOWN_TIMEOUT_MS, 15 seconds by default).
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: gateway
+          image: ghcr.io/ggpwnkthx/gateway:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: GATEWAY_CONFIG
+              value: /etc/platform/routes.json
+            - name: GATEWAY_HOST
+              value: 0.0.0.0
+            - name: GATEWAY_PORT
+              value: "8080"
+            - name: GATEWAY_OIDC_ISSUER
+              value: https://dex.example.com/dex
+            - name: GATEWAY_OIDC_CLIENT_ID
+              value: gateway
+            - name: GATEWAY_OIDC_REDIRECT_URI
+              value: https://gateway.example.com/auth/callback
+            - name: GATEWAY_OIDC_AUDIENCE
+              value: gateway
+            - name: GATEWAY_ACCESS_URL
+              value: https://access.example.com
+            # The clients of the provider and of the access service, the
+            # secret of the sessions, the url of the shared state and the
+            # token of the metrics come from the secret of the platform.
+            - name: GATEWAY_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: platform-gateway-secrets
+                  key: GATEWAY_OIDC_CLIENT_SECRET
+            - name: GATEWAY_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: platform-gateway-secrets
+                  key: GATEWAY_ACCESS_TOKEN
+            - name: GATEWAY_SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: platform-gateway-secrets
+                  key: GATEWAY_SESSION_SECRET
+            # The private key that signs the identity of the requests. The
+            # upstreams are given the public key of it.
+            - name: GATEWAY_IDENTITY_SIGNING_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: platform-gateway-secrets
+                  key: GATEWAY_IDENTITY_SIGNING_KEY
+            - name: GATEWAY_SESSION_URL
+              valueFrom:
+                secretKeyRef:
+                  name: platform-gateway-secrets
+                  key: GATEWAY_SESSION_URL
+            - name: GATEWAY_SHARED_STATE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: platform-gateway-secrets
+                  key: GATEWAY_SHARED_STATE_URL
+            - name: GATEWAY_METRICS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: platform-gateway-secrets
+                  key: GATEWAY_METRICS_TOKEN
+            # The shared state may live in a Postgres server instead of a
+            # Redis server: the two hold the same state with the same
+            # contract, and the gateway measures them side by side.
+            #
+            # The urls above then name the database, the pool of the
+            # connections is bounded, and the schema is built by the
+            # migration of the platform:
+            #
+            #   - name: GATEWAY_SESSION_URL
+            #     valueFrom:
+            #       secretKeyRef:
+            #         name: platform-gateway-secrets
+            #         key: GATEWAY_SESSION_URL
+            #   - name: GATEWAY_SHARED_STATE_URL
+            #     valueFrom:
+            #       secretKeyRef:
+            #         name: platform-gateway-secrets
+            #         key: GATEWAY_SHARED_STATE_URL
+            #   - name: GATEWAY_POSTGRES_POOL_MAX
+            #     value: "10"
+            #   - name: GATEWAY_POSTGRES_AUTO_MIGRATE
+            #     value: "false"
+            #
+            # The server does not wait for the disk: the state of the
+            # shared state is a protection and not a ledger.
+            # - name: GATEWAY_POSTGRES_SYNCHRONOUS_COMMIT
+            #   value: "off"
+            # The protocol the callers use towards the gateway: the ingress
+            # terminates the tls.
+            - name: GATEWAY_EXTERNAL_PROTO
+              value: https
+            - name: GATEWAY_COOKIE_SECURE
+              value: "true"
+            # The ranges of the ingress: the forwarding headers of a request
+            # are only trusted from them. The ranges name the proxies of the
+            # deployment, and they should be as narrow as the cluster allows:
+            # a range that covers the addresses of the callers trusts every
+            # one of them to write the headers of the chain.
+            - name: GATEWAY_TRUSTED_PROXIES
+              value: 10.0.0.0/8
+            # The number of the proxies that are in front of the gateway: the
+            # ingress of the cluster is one.
+            - name: GATEWAY_TRUSTED_PROXY_HOPS
+              value: "1"
+            # The limits. At least one of them has to be set: the gateway
+            # refuses to start in production without one.
+            # The scope of the deployment is the only one that bounds a
+            # flood that spreads over many addresses; the scope of a
+            # principal is the only one that tells two tenants behind the
+            # same address apart.
+            - name: GATEWAY_RATE_LIMIT_TOTAL_MAX
+              value: "1000"
+            - name: GATEWAY_RATE_LIMIT_GLOBAL_MAX
+              value: "600"
+            - name: GATEWAY_RATE_LIMIT_MAX
+              value: "600"
+            - name: GATEWAY_RATE_LIMIT_PRINCIPAL_MAX
+              value: "300"
+            - name: GATEWAY_LOG_LEVEL
+              value: info
+            - name: GATEWAY_SHUTDOWN_TIMEOUT_MS
+              value: "15000"
+          # The gateway answers /healthz while it starts and /readyz when it
+          # can serve the traffic: the readiness fails while the
+          # configuration is missing or while the shared state cannot be
+          # reached.
+          startupProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 3
+            failureThreshold: 20
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              # The gateway holds the sessions, the connections of the
+              # websockets and the buffers of the exchanges in memory: the
+              # limit of the pod has to leave room for them.
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: routes
+              mountPath: /etc/platform
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: routes
+          configMap:
+            name: platform-gateway-routes
+            items:
+              - key: routes.json
+                path: routes.json
+        - name: tmp
+          emptyDir: {}

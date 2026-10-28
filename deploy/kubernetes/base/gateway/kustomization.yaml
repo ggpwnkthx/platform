@@ -1,0 +1,30 @@
+# The gateway on its own.
+#
+#   kubectl apply -k deploy/kubernetes/base/gateway
+#
+# The overlay of the platform composes the three bases:
+#
+#   kubectl apply -k deploy/kubernetes/overlays/platform
+#
+# The namespace is not named here: a base is applied in the namespace of
+# the operator, and the overlay of the platform names the one of the
+# platform.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+  # The control plane is the administrative surface of the deployment. It is
+  # internal: the service is a ClusterIP and it is not routed by the
+  # ingress.
+  - control.yaml
+  # The secret is not part of the manifests: it is applied from the secret
+  # store of the platform (sealed secrets, the external secrets operator
+  # or the equivalent of the platform).
+images:
+  - name: ghcr.io/ggpwnkthx/gateway
+    newTag: 1.0.0
+commonLabels:
+  app.kubernetes.io/part-of: platform

@@ -1,0 +1,21 @@
+# The access service of the composition.
+#
+# The base of the gateway points at the access service of the example,
+# and the overlay points it at the service of the platform.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platform-gateway
+spec:
+  template:
+    spec:
+      containers:
+        - name: gateway
+          env:
+            - name: GATEWAY_ACCESS_URL
+              value: http://platform-access.platform.svc.cluster.local
+            # The issuer of the identity provider of the platform.
+            - name: GATEWAY_OIDC_ISSUER
+              value: https://dex.platform.svc.cluster.local/dex
+            - name: GATEWAY_OIDC_REDIRECT_URI
+              value: https://gateway.example.com/auth/callback

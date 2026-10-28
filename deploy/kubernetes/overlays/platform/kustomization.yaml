@@ -1,0 +1,36 @@
+# The composition of the platform: the three services, in the namespace
+# of the platform.
+#
+#   kubectl apply -k deploy/kubernetes/overlays/platform
+#
+# Each service is also a base of its own, and it is deployed on its own:
+#
+#   kubectl apply -k deploy/kubernetes/base/gateway
+#   kubectl apply -k deploy/kubernetes/base/access
+#   kubectl apply -k deploy/kubernetes/base/data
+#
+# The overlay names the namespace of the platform, it routes the gateway to
+# the data service, and it points the gateway to the access service of the
+# platform.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: platform
+resources:
+  - ../../base/gateway
+  - ../../base/access
+  - ../../base/data
+patches:
+  # The route table of the composition: the gateway forwards to the data
+  # service of the platform.
+  - path: gateway-routes.yaml
+    target:
+      kind: ConfigMap
+      name: platform-gateway-routes
+  # The access service of the composition: the gateway asks the service of
+  # the platform and not the one of the example.
+  - path: gateway-access.yaml
+    target:
+      kind: Deployment
+      name: platform-gateway
+commonLabels:
+  app.kubernetes.io/part-of: platform

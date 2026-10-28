@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: platform-data
+  labels:
+    app.kubernetes.io/name: platform-data
+    app.kubernetes.io/component: data
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: platform-data
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# The autoscaling of the service.
+#
+# The signal is the CPU: the service does not export a gauge of the
+# requests that are in flight, and the bound of the requests of a tenant
+# is the one the service holds itself.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: platform-data
+  labels:
+    app.kubernetes.io/name: platform-data
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: platform-data
+  minReplicas: 2
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleDown:
+      # A pod that is removed takes the requests that are in flight with
+      # it: the window is long enough for the drain of the service.
+      stabilizationWindowSeconds: 300
+---
+# The pods of a deployment are spread over the nodes: a node that fails
+# does not take the service with it.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: platform-data
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: platform-data
+---
+# The service is reached by the gateway of the platform, and by nothing
+# else.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: platform-data
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: platform-data
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: platform
+      ports:
+        - protocol: TCP
+          port: 8082

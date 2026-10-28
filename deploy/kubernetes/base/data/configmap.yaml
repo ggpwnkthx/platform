@@ -1,0 +1,32 @@
+# The bindings of the data service: the routes the gateway forwards to it
+# and the public key that verifies the identity of the requests.
+#
+# The key of the gateway is the public half of the pair of the identity
+# signature. It is not a secret: it is in the secret of the deployment
+# because the deployment writes it, and it is mounted at the path the
+# bindings name.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: platform-data-bindings
+  labels:
+    app.kubernetes.io/name: platform-data
+    app.kubernetes.io/component: data
+data:
+  bindings.json: |
+    {
+      "version": 2,
+      "bindings": [
+        {
+          "id": "data-api",
+          "host": "api.gateway.test",
+          "upstreamPathPattern": "/ws/{workspaceId}/v1/*",
+          "routeId": "data-api",
+          "identity": {
+            "version": "v5",
+            "algorithm": "ES256",
+            "publicKeyFile": "/run/secrets/identity-signing.public.pem"
+          }
+        }
+      ]
+    }

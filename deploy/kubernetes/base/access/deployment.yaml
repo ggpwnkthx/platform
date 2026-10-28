@@ -1,0 +1,169 @@
+# The access service on its own.
+#
+# It holds the tenants, the providers they authenticate against and the
+# decisions of the gateway. The gateway and the data service ask it, and
+# neither of them has to be in the same deployment.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platform-access
+  labels:
+    app.kubernetes.io/name: platform-access
+    app.kubernetes.io/component: access
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: platform-access
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # The pods of a rollout are replaced one by one: the state of a
+      # login is shared by the replicas, and the secret of the state signs
+      # it.
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: platform-access
+        app.kubernetes.io/component: access
+      annotations:
+        # The secrets change with the rotation of the secrets: the pods
+        # are replaced when they change.
+        checksum/secrets: "replaced-by-the-pipeline"
+    spec:
+      # The service drains the requests that are in flight before it stops.
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: access
+          image: ghcr.io/ggpwnkthx/access:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8081
+          env:
+            - name: ACCESS_ENVIRONMENT
+              value: production
+            - name: ACCESS_HOST
+              value: 0.0.0.0
+            - name: ACCESS_PORT
+              value: "8081"
+            # The issuer is the `iss` of every token the service issues, and
+            # the url the gateway and the browser use to reach it.
+            - name: ACCESS_ISSUER
+              value: https://access.example.com
+            # The database of the five tables. The replicas share them, and
+            # the service applies its migrations when it starts.
+            - name: ACCESS_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: platform-access-secrets
+                  key: ACCESS_DATABASE_URL
+            # The shared state of the authorization codes: a code that lives
+            # in the memory of one replica is unknown to the others.
+            - name: ACCESS_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: platform-access-secrets
+                  key: ACCESS_REDIS_URL
+            # The bearer token of the nine administrative endpoints.
+            - name: ACCESS_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: platform-access-secrets
+                  key: ACCESS_ADMIN_TOKEN
+            # The bearer token the gateway presents on `POST /v1/decisions`.
+            - name: ACCESS_DECISION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: platform-access-secrets
+                  key: ACCESS_DECISION_TOKEN
+            # The credentials of the access context contract: the data
+            # service presents one of them and asks about a scope.
+            - name: ACCESS_CONTEXT_TOKENS
+              valueFrom:
+                secretKeyRef:
+                  name: platform-access-secrets
+                  key: ACCESS_CONTEXT_TOKENS
+            # The secret that signs and encrypts the state of a login. It
+            # has to be the same on every replica.
+            - name: ACCESS_STATE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: platform-access-secrets
+                  key: ACCESS_STATE_SECRET
+            # The key that encrypts the client secrets of the tenants at
+            # rest.
+            - name: ACCESS_SECRET_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: platform-access-secrets
+                  key: ACCESS_SECRET_ENCRYPTION_KEY
+            # The private key the service signs its tokens with, and the
+            # identifier of it in the JWKS.
+            - name: ACCESS_SIGNING_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: platform-access-secrets
+                  key: ACCESS_SIGNING_KEY
+            - name: ACCESS_SIGNING_KID
+              valueFrom:
+                secretKeyRef:
+                  name: platform-access-secrets
+                  key: ACCESS_SIGNING_KID
+            # The token that guards the metrics endpoint. Without it the
+            # endpoint is absent and it answers `404`.
+            - name: ACCESS_METRICS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: platform-access-secrets
+                  key: ACCESS_METRICS_TOKEN
+                optional: true
+            - name: ACCESS_LOG_LEVEL
+              value: info
+          # The service answers /healthz while it starts and /readyz when
+          # the database answers and the migrations are applied.
+          startupProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 3
+            failureThreshold: 20
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

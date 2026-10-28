@@ -1,0 +1,100 @@
+# The migration of the deployment.
+#
+# The service refuses to start against a database that is not migrated, and
+# the migration is an operator command: it runs once per deployment, with
+# the credentials of the administrator of the server and of the owner of
+# the schema.
+#
+# The job is applied by hand, before the deployment of the service:
+#
+#   kubectl apply -k deploy/kubernetes/base/data
+#   kubectl -n platform delete job platform-data-migrate --ignore-not-found
+#   kubectl -n platform apply -f deploy/kubernetes/base/data/migrate-job.yaml
+#   kubectl -n platform wait --for=condition=complete job/platform-data-migrate
+#
+# The image of the job is the image of the service: the migrations are
+# part of it, and a migration that runs with another version of the code
+# is a migration of another release.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: platform-data-migrate
+  labels:
+    app.kubernetes.io/name: platform-data
+    app.kubernetes.io/component: migrate
+spec:
+  # The migration is applied once: a job that is retried after a failure
+  # applies the migrations that are missing and nothing else.
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: platform-data
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          image: ghcr.io/ggpwnkthx/data:1.0.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - bun run scripts/cli/provision.ts && bun run scripts/cli/migrate.ts
+          env:
+            # The administrator of the server: it creates the roles and the
+            # database of the deployment.
+            - name: DATA_ADMIN_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: platform-data-secrets
+                  key: DATA_ADMIN_DATABASE_URL
+            # The owner of the schema: it applies the migrations.
+            - name: DATA_OWNER_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: platform-data-secrets
+                  key: DATA_OWNER_DATABASE_URL
+            - name: DATA_OWNER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: platform-data-secrets
+                  key: DATA_OWNER_PASSWORD
+            - name: DATA_RUNTIME_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: platform-data-secrets
+                  key: DATA_RUNTIME_PASSWORD
+            - name: DATA_REGISTRY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: platform-data-secrets
+                  key: DATA_REGISTRY_PASSWORD
+            - name: DATA_DELIVERY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: platform-data-secrets
+                  key: DATA_DELIVERY_PASSWORD
+            - name: DATA_MAINTENANCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: platform-data-secrets
+                  key: DATA_MAINTENANCE_PASSWORD
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

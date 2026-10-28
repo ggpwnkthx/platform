@@ -1,0 +1,161 @@
+# The data service on its own.
+#
+# It owns the workspaces, the collections, the policies, the records, the
+# audit and the events. It asks the access service about the scope of a
+# context, and the access service of the deployment is somewhere else.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platform-data
+  labels:
+    app.kubernetes.io/name: platform-data
+    app.kubernetes.io/component: data
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: platform-data
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # The pods of a rollout are replaced one by one: the schema of the
+      # deployment is migrated before the pods that use it start.
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: platform-data
+        app.kubernetes.io/component: data
+      annotations:
+        # The credentials change with the rotation of the secrets: the
+        # pods are replaced when they change.
+        checksum/secrets: "replaced-by-the-pipeline"
+    spec:
+      # The service drains the requests that are in flight before it stops.
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: data
+          image: ghcr.io/ggpwnkthx/data:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8082
+          env:
+            - name: DATA_ENVIRONMENT
+              value: production
+            - name: DATA_HOST
+              value: 0.0.0.0
+            - name: DATA_PORT
+              value: "8082"
+            # The role of the process: the api answers the requests, and
+            # the workers of the deliveries run apart.
+            - name: DATA_PROCESS_ROLE
+              value: api
+            # The scoped role of the api and the narrow reader of the
+            # registry: two credentials, and neither of them may alter the
+            # schema.
+            - name: DATA_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: platform-data-secrets
+                  key: DATA_DATABASE_URL
+            - name: DATA_REGISTRY_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: platform-data-secrets
+                  key: DATA_REGISTRY_DATABASE_URL
+            - name: DATA_SCHEMA_BUNDLE_FILE
+              value: /app/packages/data/manifests/schema.json
+            - name: DATA_POLICY_BUNDLE_FILE
+              value: /app/packages/data/manifests/policies.json
+            # The bindings of the gateway: the routes it forwards to the
+            # service and the key that verifies the identity of the
+            # requests.
+            - name: DATA_GATEWAY_BINDINGS_FILE
+              value: /etc/platform/bindings.json
+            # The access service of the access context contract. The credential travels
+            # with the request, so the url is https in a production
+            # deployment.
+            - name: DATA_ACCESS_URL
+              value: https://access.platform.svc.cluster.local
+            # The credential of the context contract and the key that signs
+            # the cursors are files: they are in the secret of the
+            # deployment.
+            - name: DATA_ACCESS_CONTEXT_TOKEN_FILE
+              value: /run/secrets/access-context.token
+            - name: DATA_CURSOR_KEY_FILE
+              value: /run/secrets/cursor.key
+            - name: DATA_LOG_LEVEL
+              value: info
+          # The service answers /healthz while it starts and /readyz when
+          # the schema is applied and the access service answers.
+          startupProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 3
+            failureThreshold: 20
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: bindings
+              mountPath: /etc/platform
+              readOnly: true
+            - name: deployment-secrets
+              mountPath: /run/secrets
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: bindings
+          configMap:
+            name: platform-data-bindings
+            items:
+              - key: bindings.json
+                path: bindings.json
+        # The credential of the context contract, the key that signs the
+        # cursors and the public key of the gateway. The names of the keys
+        # are the names of the files: the service reads them at the paths
+        # of its environment.
+        - name: deployment-secrets
+          secret:
+            secretName: platform-data-secrets
+            items:
+              - key: access-context.token
+                path: access-context.token
+              - key: cursor.key
+                path: cursor.key
+              - key: identity-signing.public.pem
+                path: identity-signing.public.pem
+        - name: tmp
+          emptyDir: {}

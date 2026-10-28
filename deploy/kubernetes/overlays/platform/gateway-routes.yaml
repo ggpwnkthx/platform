@@ -1,0 +1,32 @@
+# The route table of the composition.
+#
+# The gateway of the platform forwards to the data service of the
+# platform. The base of the gateway carries the routes of a gateway that
+# is deployed on its own, and the overlay replaces them with the ones of
+# the composition.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: platform-gateway-routes
+data:
+  routes.json: |
+    {
+      "version": 1,
+      "defaults": {
+        "auth": { "mode": "none" },
+        "timeouts": { "responseMs": 5000, "firstByteMs": 30000, "bodyMs": 300000 },
+        "maxBodyBytes": 10485760
+      },
+      "trustedProxies": [],
+      "reservedPaths": [],
+      "routes": [
+        {
+          "id": "data-api",
+          "match": { "host": "api.gateway.test", "path": "/ws/{workspaceId}/" },
+          "upstream": "http://platform-data.platform.svc.cluster.local:8082",
+          "auth": { "mode": "any", "workspace": { "param": "workspaceId", "requireUuid": true } },
+          "websocket": true,
+          "accessCacheTtlMs": 0
+        }
+      ]
+    }
