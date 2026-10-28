@@ -34,6 +34,16 @@ curl -sS https://access.example.com/metrics -H "authorization: Bearer $ACCESS_ME
 
 ---
 
+## The description of the API
+
+### `GET /openapi.json`
+
+The description of the API of the service: the paths it serves and the
+shape of their answers. It is the document that the check of the API
+holds against the routes of the service.
+
+---
+
 ## The OpenID Connect provider
 
 ### `GET /oauth/authorize`

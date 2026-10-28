@@ -54,6 +54,19 @@ describe('the probes of the access service', () => {
     }
   })
 
+  test('the description of the API is served', async () => {
+    const response = await fetch(`${service.base}/openapi.json`)
+    expect(response.status).toBe(200)
+    const document = (await response.json()) as {
+      openapi: string
+      paths: Record<string, unknown>
+    }
+    expect(document.openapi).toBe('3.1.0')
+    expect(Object.keys(document.paths)).toContain('/healthz')
+    expect(Object.keys(document.paths)).toContain('/readyz')
+    expect(Object.keys(document.paths)).toContain('/v1/decisions')
+  })
+
   test('every answer carries the identifier of the request', async () => {
     const generated = await fetch(`${service.base}/healthz`)
     expect(generated.headers.get('x-request-id')).toBeTruthy()

@@ -136,9 +136,16 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
   )
 
   app.get('/readyz', async (c) => {
+    // A service that drains does not accept new work: the readiness
+    // probe takes it out of the rotation. The vocabulary of the status
+    // is the one of the three services: `ready`, `draining` and
+    // `not-ready`.
+    if (dependencies.isDraining?.() ?? false) {
+      return c.json({ status: 'draining' }, 503)
+    }
     const state = await dependencies.readiness.check()
     if (!state.ready) {
-      return c.json({ status: 'not_ready', reason: state.reason ?? 'unknown' }, 503)
+      return c.json({ status: 'not-ready', reason: state.reason ?? 'unknown' }, 503)
     }
     return c.json({ status: 'ready' })
   })

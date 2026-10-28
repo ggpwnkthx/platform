@@ -29,6 +29,7 @@ import { accessContextDiscoveryHandler, accessContextHandler } from './access-co
 import { authorizeHandler, callbackHandler } from './login'
 import { tokenHandler } from './oauth'
 import { healthHandler, readyHandler } from './endpoints'
+import { openapiDocument } from './openapi'
 import { metricsHandler } from './metrics'
 import { discoveryHandler, jwksHandler, userinfoHandler } from './provider'
 import { jsonError } from './errors'
@@ -123,6 +124,13 @@ export function createAccessApp(dependencies: AccessDependencies): Hono<AccessEn
   // The probes of the service.
   app.get('/healthz', (context) => healthHandler(context, dependencies))
   app.get('/readyz', async (context) => await readyHandler(context, dependencies))
+
+  // The description of the API of the service.
+  app.get('/openapi.json', (context) =>
+    context.json(openapiDocument(dependencies.version), 200, {
+      'cache-control': 'public, max-age=300',
+    })
+  )
 
   // The login of the callers: the gateway sends the browser here and the
   // provider of the tenant sends it back.

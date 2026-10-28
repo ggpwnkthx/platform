@@ -10,6 +10,32 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The probes of the three services answer the same way
+
+The probes of the platform were three answers of three services: the
+data service answered `not_ready` where the other two answered
+`not-ready`, and it did not answer `draining` at all, although it
+drains. A deployment reads the probes of the three services with the
+same code, and a probe that answers differently in one service is a
+probe the deployment cannot read.
+
+The probes are aligned now. The vocabulary of the status of the
+readiness is the vocabulary of the platform — `ready`, `draining` and
+`not-ready` — and the health of every service carries the status, the
+name of the role of the service and the version of the release. The
+data service says that it drains before it stops admitting requests.
+
+Every service publishes a description of its API as well. The access
+service answers `GET /openapi.json`, the gateway answers it on the
+surface the callers reach and the control plane answers the description
+of its own surface, and the description of the data service holds the
+probes of the service beside the paths of the scope of a workspace.
+
+The check of the API reads the descriptions and holds them against the
+routes the code registers, and it refuses the descriptions when their
+probes do not agree: the same paths, the same fields and the same
+vocabulary of the status.
+
 ### The services serve the endpoints their documentation names
 
 The documentation of the API of a service and the routes of its code

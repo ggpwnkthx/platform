@@ -74,6 +74,7 @@ whatever the configuration says.
 | `GET /auth/login` | Login limiter, then an OIDC redirect (§5.2). |
 | `GET /auth/callback` | Completes the login (§5.2). |
 | `GET /auth/logout` | Cross-site navigation guard, then the session is destroyed and the answer is `302 /`. |
+| `GET /openapi.json` | The description of the API of the gateway: the paths it serves itself and the shape of their answers. The check of the API holds it against the routes of the gateway. |
 
 `/auth/login` needs the address of the caller for its limiter, so the
 handler computes the forwarding context itself (§7.3), exactly like the
@@ -1813,6 +1814,7 @@ that cannot be counted is not a limit.
 | --- | --- | --- |
 | `GET /healthz` | — | Always `200`. It says that the process answers. |
 | `GET /readyz` | — | `200` when the shared state answers, `503` otherwise. |
+| `GET /openapi.json` | — | The description of the API of the control plane. The check of the API holds it against the routes of the control plane. |
 | `GET /v1/config` | `read` | The active revision, the table it holds, the source, and the warnings of the configuration (§12.2). |
 | `POST /v1/config/validate` | `read` | The errors, the conflicts, the warnings and the **diff** against the active table. It writes nothing. |
 | `PUT /v1/config` | `config` | Writes the whole table as a new revision. |

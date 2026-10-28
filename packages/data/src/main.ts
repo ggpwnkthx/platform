@@ -37,6 +37,10 @@ const shutdown = async (signal: string): Promise<void> => {
   if (closing) return
   closing = true
   runtime.logger.info('the service drains', { signal })
+  // The readiness probe says that the service drains before the
+  // listener stops admitting requests: a deployment takes the instance
+  // out of the rotation.
+  runtime.setDraining(true)
   await listener.drain()
   await runtime.stop()
   process.exit(0)

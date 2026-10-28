@@ -53,6 +53,18 @@ describe('the operational endpoints', () => {
   test('the readiness probe answers when the service is ready', async () => {
     const response = await harness.raw('/readyz')
     expect(response.status).toBe(200)
+    const body = await json(response)
+    // The vocabulary of the status is the one of the three services.
+    expect(body.status).toBe('ready')
+  })
+
+  test('the description of the API holds the probes of the service', async () => {
+    const response = await harness.raw(`/ws/${WORKSPACE_ID}/v1/openapi.json`)
+    expect(response.status).toBe(200)
+    const document = await json(response)
+    expect(document.paths['/healthz']).toBeTruthy()
+    expect(document.paths['/readyz']).toBeTruthy()
+    expect(document.paths['/metrics']).toBeTruthy()
   })
 
   test('the metrics endpoint is absent without a token', async () => {

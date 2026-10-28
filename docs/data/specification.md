@@ -1425,9 +1425,14 @@ The variables, their defaults and their bounds are in
 
 | The endpoint | The contract |
 | --- | --- |
-| `GET /healthz` | `200` with the version of the service and the version of the manifest, while the process is alive. It calls no dependency. |
-| `GET /readyz` | `200` only when the configuration, the schema and the policies, the privileges of the role and the recent discovery of the context of the access service pass. Otherwise `503` with a safe code of readiness. |
+| `GET /healthz` | `200 {"status":"ok","service":"data-backend","version":"<version>","schemaVersion":"<version>"}`, while the process is alive. It calls no dependency. |
+| `GET /readyz` | `200 {"status":"ready"}` only when the configuration, the schema and the policies, the privileges of the role and the recent discovery of the context of the access service pass. `503 {"status":"draining"}` during a drain, and `503 {"status":"not-ready","reason":"<reason>"}` otherwise. |
 | `GET /metrics` | The text of Prometheus, with a dedicated bearer token. `404` when it is disabled, `401` when the credentials are invalid or absent. |
+
+The status of the readiness is the vocabulary of the three services:
+`ready`, `draining` and `not-ready`. A service that drains answers
+`draining` before it stops admitting requests, so that a deployment
+takes the instance out of the rotation.
 
 The readiness may reuse a successful authenticated discovery of the access service for
 at most ten seconds. The workers also require the access to the store

@@ -264,6 +264,7 @@ export const GATEWAY_ENDPOINTS = {
   login: '/auth/login',
   callback: '/auth/callback',
   logout: '/auth/logout',
+  openapi: '/openapi.json',
 } as const
 
 /** The paths the gateway serves itself. */

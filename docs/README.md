@@ -86,4 +86,6 @@ contracts of the services it calls.
 | The environment | `GATEWAY_*` | `ACCESS_*` | `DATA_*` |
 | The listener | `8080` | `8081` | `8082` |
 | The state it holds | The sessions, the limits and the cached decisions, in a Redis server or a PostgreSQL server. | The five tables of the platform, in a PostgreSQL server, and the codes of the logins, in a Redis server. | The rows of the business data, in a PostgreSQL server. |
+| The probes | `/healthz` and `/readyz`, with the vocabulary of the platform: `ready`, `draining` and `not-ready`. | `/healthz` and `/readyz`, with the vocabulary of the platform: `ready`, `draining` and `not-ready`. | `/healthz` and `/readyz`, with the vocabulary of the platform: `ready`, `draining` and `not-ready`. |
+| The description of its API | `/openapi.json`, and the description of its control plane. | `/openapi.json`. | `/ws/{workspaceId}/v1/openapi.json`. |
 | The version | `1.0.0` | `1.0.0` | `1.0.0` |

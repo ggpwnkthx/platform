@@ -52,6 +52,19 @@ async function readMetrics(): Promise<Map<string, number>> {
 }
 
 describe('the endpoints of the gateway', () => {
+  test('the description of the API is served', async () => {
+    const response = await fetch(`${harness.gatewayUrl}/openapi.json`)
+    expect(response.status).toBe(200)
+    const document = (await response.json()) as {
+      openapi: string
+      paths: Record<string, unknown>
+    }
+    expect(document.openapi).toBe('3.1.0')
+    expect(Object.keys(document.paths)).toContain('/healthz')
+    expect(Object.keys(document.paths)).toContain('/readyz')
+    expect(Object.keys(document.paths)).toContain('/auth/login')
+  })
+
   test('the health is always available', async () => {
     const response = await fetch(`${harness.gatewayUrl}/healthz`)
     expect(response.status).toBe(200)

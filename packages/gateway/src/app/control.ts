@@ -21,6 +21,7 @@ import {
   type ControlService,
 } from '../domains/control'
 import type { Logger } from '../observability'
+import { controlDocument } from './openapi'
 
 /** The number of failed authentications an address may make in the window. */
 export const MAX_FAILED_AUTHENTICATIONS = 5
@@ -181,6 +182,13 @@ export function createControlApp(dependencies: ControlDependencies): Hono<Contro
     await next()
     return undefined
   })
+
+  // The description of the API of the control plane.
+  app.get('/openapi.json', (context) =>
+    context.json(controlDocument(dependencies.version), 200, {
+      'cache-control': 'public, max-age=300',
+    })
+  )
 
   // The route table of the deployment.
   app.get('/v1/config', async (context) => {

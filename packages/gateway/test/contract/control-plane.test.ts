@@ -259,6 +259,19 @@ function harness(options: { protectedRoutes?: string[] } = {}): Harness {
 }
 
 describe('the control plane', () => {
+  test('the description of the API is served', async () => {
+    const { call } = harness()
+    const response = await call('/openapi.json')
+    expect(response.status).toBe(200)
+    const document = (await response.json()) as {
+      openapi: string
+      paths: Record<string, unknown>
+    }
+    expect(document.openapi).toBe('3.1.0')
+    expect(Object.keys(document.paths)).toContain('/healthz')
+    expect(Object.keys(document.paths)).toContain('/v1/config')
+  })
+
   test('the health and the readiness need no token', async () => {
     const { call } = harness()
     const health = await call('/healthz')

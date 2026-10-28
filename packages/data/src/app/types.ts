@@ -49,6 +49,11 @@ export interface AppDependencies {
   readonly clock: Clock
   readonly readiness: ReadinessLike
   /**
+   * True while the service drains: it does not accept new work, and
+   * the readiness probe says so.
+   */
+  readonly isDraining?: () => boolean
+  /**
    * The bound of a tenant.
    *
    * It is applied once the tenant of the request is known, and it

@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto'
 import { Hono, type Context, type ExecutionContext } from 'hono'
 import { serializeCookie } from '../domains/authentication'
 import { GATEWAY_ENDPOINTS } from '../domains/configuration'
+import { gatewayDocument } from './openapi'
 import { resolveForwardingContext } from '../domains/forwarding'
 import { UNMATCHED_ROUTE } from '../observability'
 import type { GatewayDependencies } from './dependencies'
@@ -150,6 +151,11 @@ export function createGatewayApp(dependencies: GatewayDependencies): Hono<Gatewa
     context.set('forwarding', forwardingOf(context, dependencies))
     return logoutHandler(context, dependencies)
   })
+  app.get(GATEWAY_ENDPOINTS.openapi, (context) =>
+    context.json(gatewayDocument(dependencies.version), 200, {
+      'cache-control': 'public, max-age=300',
+    })
+  )
 
   // Everything else is dispatched.
   app.all('*', async (context) => {

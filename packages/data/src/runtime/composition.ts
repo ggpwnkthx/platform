@@ -52,6 +52,8 @@ export interface Runtime {
   readonly metrics: ReturnType<typeof createMetrics>
   readonly worker?: SubscriberWorker
   readonly readiness: Readiness
+  /** Stops the admission of new work: the readiness probe says so. */
+  setDraining: (draining: boolean) => void
   /** Closes the pools and the worker. */
   stop: () => Promise<void>
 }
@@ -254,6 +256,7 @@ export async function createRuntime(options: CompositionOptions = {}): Promise<R
     metrics,
   })
 
+  const state = { draining: false }
   const app = createApp({
     settings: {
       production: settings.production,
@@ -270,6 +273,7 @@ export async function createRuntime(options: CompositionOptions = {}): Promise<R
     logger,
     clock: systemClock,
     readiness,
+    isDraining: () => state.draining,
     limiter,
     serviceVersion: SERVICE_VERSION,
     schemaVersion: manifest.schemaVersion,
@@ -302,6 +306,9 @@ export async function createRuntime(options: CompositionOptions = {}): Promise<R
     metrics,
     ...(worker ? { worker } : {}),
     readiness,
+    setDraining: (draining: boolean) => {
+      state.draining = draining
+    },
     stop: async () => {
       // The stop is idempotent: a deployment may send a second signal
       // while the first one is draining, and the pools refuse to be

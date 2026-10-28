@@ -755,6 +755,7 @@ The bodies of the requests and of the answers are in [api.md](api.md).
 | `GET /healthz` | `200 {"status":"ok",…}`. Always available. |
 | `GET /readyz` | `200` when the database answers and the migrations are applied, `503` otherwise. |
 | `GET /metrics` | Prometheus text. `404` when `ACCESS_METRICS_TOKEN` is unset, `401` when the bearer token does not match. |
+| `GET /openapi.json` | The description of the API of the access service: the paths it serves and the shape of their answers. |
 | `POST /v1/admin/tenants` | Administration (§10.2). |
 | `GET /v1/admin/tenants` | Administration (§10.3). |
 | `POST /v1/admin/users` | Administration (§10.4). |

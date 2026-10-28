@@ -62,6 +62,17 @@ export function jsonResponse(description: string): Record<string, unknown> {
   }
 }
 
+/** A response with a json body of a known shape. */
+export function shapedResponse(
+  description: string,
+  schema: Record<string, unknown>
+): Record<string, unknown> {
+  return {
+    description,
+    content: { 'application/json': { schema } },
+  }
+}
+
 /** A response with an error envelope. */
 export function errorResponse(description: string): Record<string, unknown> {
   return {
@@ -75,6 +86,61 @@ export function errorResponse(description: string): Record<string, unknown> {
 /** The paths of the API. */
 export function apiPaths(): Record<string, unknown> {
   return {
+    '/healthz': {
+      get: {
+        summary: 'The health of the service.',
+        description:
+          'It says that the process answers. It calls no dependency, and it answers as long as the process is alive.',
+        responses: {
+          200: shapedResponse('The service is alive.', {
+            type: 'object',
+            required: ['status', 'service', 'version'],
+            properties: {
+              status: { type: 'string', enum: ['ok'] },
+              service: { type: 'string', description: 'The name of the role of the service.' },
+              version: { type: 'string', description: 'The version of the release.' },
+              schemaVersion: { type: 'string', description: 'The version of the manifest.' },
+            },
+          }),
+        },
+      },
+    },
+    '/readyz': {
+      get: {
+        summary: 'The readiness of the service.',
+        description:
+          'It says that the service accepts new work. A service that drains answers `draining` before it stops admitting requests.',
+        responses: {
+          200: shapedResponse('The service is ready.', {
+            type: 'object',
+            required: ['status'],
+            properties: {
+              status: { type: 'string', enum: ['ready'] },
+            },
+          }),
+          503: shapedResponse('The service is not ready.', {
+            type: 'object',
+            required: ['status'],
+            properties: {
+              status: { type: 'string', enum: ['draining', 'not-ready'] },
+              reason: { type: 'string', description: 'Why the service is not ready.' },
+            },
+          }),
+        },
+      },
+    },
+    '/metrics': {
+      get: {
+        summary: 'The metrics of the service.',
+        description:
+          'The text of Prometheus. It answers only when a token is configured, and the token is a bearer token.',
+        responses: {
+          200: { description: 'The metrics of the service.' },
+          401: errorResponse('The token of the metrics is missing or wrong.'),
+          404: errorResponse('The metrics are disabled.'),
+        },
+      },
+    },
     '/ws/{workspaceId}/v1/me': {
       get: {
         summary: 'The identity of the caller in the workspace.',
