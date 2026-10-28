@@ -1,0 +1,576 @@
+name: release
+
+# The release of the images of the platform.
+#
+# The workflow runs on a tag: it checks that the tag names the version of
+# the package, it builds the three images of the three workspaces, it
+# publishes them, it proves that the published bytes are the bytes that
+# answer, and it exports them as the artifacts of the run.
+#
+#   git tag v1.0.0 && git push origin v1.0.0
+#
+# The images are published with two tags: the tag of the release
+# (`v1.0.0`) and the version itself (`1.0.0`). A deployment that pins a
+# version pins the image of that release, and the digest of the image is
+# what it pins.
+#
+# **The images are built once.** The build is published, and every gate
+# of the release — the probes, the decisions, the refusals, the drain,
+# the scan and the compatibility suite — runs against the **digest** of
+# that build, never against a tag and never against a second build. The
+# image that was tested is the image that runs: the digest that the
+# gates proved is the digest that the deployment pins.
+#
+# The workflow runs on the tag, and it can be **dispatched** with the tag
+# it releases: the push of the tag by the workflow of the tag carries the
+# token of the workflow, and GitHub does not start a workflow on a push
+# that carries it. The dispatch is the exception to that rule.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'The tag of the release'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  # The images are published to the registry of the repository, and they
+  # are withdrawn from it when a gate of the release fails.
+  packages: write
+
+# One release at a time for a tag: two runs of the same release publish
+# the same bytes twice, and the second one replaces the first.
+concurrency:
+  group: the-release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  # The version of the runtime the images are built and released with.
+  BUN_VERSION: '1.4.3'
+  # The registry of the images of the platform.
+  REGISTRY: 'ghcr.io/ggpwnkthx'
+
+jobs:
+  version:
+    name: the version of the release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      sha: ${{ steps.revision.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The tag of the release: the ref of a push, the input of a
+          # dispatch. The release is the tag, and the tag is the commit
+          # that the CI proved.
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: the tag names the version of the package
+        id: version
+        run: |
+          set -euo pipefail
+          expected=$(node -p "require('./package.json').version")
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          tag="${tag#v}"
+          if [ "$tag" != "$expected" ]; then
+            echo "the tag $tag does not name the version $expected of the package"
+            exit 1
+          fi
+          echo "version=$expected" >> "$GITHUB_OUTPUT"
+          echo "tag=v$expected" >> "$GITHUB_OUTPUT"
+
+      - name: the version of the release is known
+        run: |
+          if [ -z "${{ steps.version.outputs.tag }}" ] || [ -z "${{ steps.version.outputs.version }}" ]; then
+            echo "the version of the release is empty: the step that computes it did not write its outputs"
+            exit 1
+          fi
+          echo "the release is ${{ steps.version.outputs.tag }} (${{ steps.version.outputs.version }})"
+
+      # The revision of the release is the commit of the tag, and not the
+      # head of the branch: it is what the image carries as a label.
+      - name: the revision of the release
+        id: revision
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: the versions of the platform agree
+        run: bun run versions
+
+  build:
+    name: the image of ${{ matrix.service }} is built and published
+    needs: version
+    runs-on: ubuntu-latest
+    strategy:
+      # One service that fails does not hide the state of the others.
+      fail-fast: false
+      matrix:
+        service: [gateway, access, data]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.tag }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: the login in the registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The one build of the release. It is published with its provenance
+      # and its SBOM: the registry carries the attestations, and the
+      # digest of what it carries is the digest of the release.
+      - name: build and publish the image
+        id: publish
+        uses: docker/build-push-action@v7
+        with:
+          # The context is the root of the repository: the dependencies of
+          # a workspace are installed by the root `bun install`, and the
+          # lockfile of the root holds the three workspaces.
+          context: .
+          file: packages/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ matrix.service }}:${{ needs.version.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ matrix.service }}:${{ needs.version.outputs.version }}
+          build-args: |
+            VERSION=${{ needs.version.outputs.version }}
+            REVISION=${{ needs.version.outputs.sha }}
+
+      - name: the digest of the image is known
+        id: build
+        run: |
+          set -euo pipefail
+          # Every gate of the release runs against the digest, and the
+          # digest is what a deployment pins: a gate that ran against
+          # something else proves nothing about what is deployed.
+          #
+          # The digest is read from the registry itself: it is the digest
+          # of the bytes that were published, and not the digest of a
+          # local build that looks like them.
+          image="${{ env.REGISTRY }}/${{ matrix.service }}:${{ needs.version.outputs.tag }}"
+          digest="$(docker buildx imagetools inspect "$image" | awk '/^Digest:/ { print $2 }')"
+          if [ -z "$digest" ]; then
+            echo "the build did not publish anything: the release cannot be proven"
+            exit 1
+          fi
+          echo "$digest" > "digest-${{ matrix.service }}.txt"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "the image of the release is ${{ env.REGISTRY }}/${{ matrix.service }}@${digest}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.service }}
+          path: digest-${{ matrix.service }}.txt
+          retention-days: 7
+
+  prove:
+    name: the published image of ${{ matrix.service }} is proven
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    strategy:
+      # One service that fails does not hide the state of the others.
+      fail-fast: false
+      matrix:
+        service: [gateway, access, data]
+    services:
+      # A deployment talks to a PostgreSQL server: the image applies the
+      # migrations of the schema before it accepts a request.
+      postgres:
+        image: postgres:18-alpine
+        ports:
+          - '5432:5432'
+        env:
+          POSTGRES_USER: platform
+          POSTGRES_PASSWORD: platform
+          POSTGRES_DB: platform
+        options: >-
+          --health-cmd "pg_isready -U platform"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      # The deployment of a production needs the store of the codes of the
+      # logins: the image connects to it at the start and refuses to
+      # start when it does not answer.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - '6379:6379'
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - name: the digest of the image is read
+        uses: actions/download-artifact@v4
+        with:
+          name: digest-${{ matrix.service }}
+
+      - name: the image of the release is pulled by its digest
+        run: |
+          set -euo pipefail
+          # The digest is the one that the build published: every gate
+          # of the release runs against it, and it is what a deployment
+          # pins.
+          digest="$(cat "digest-${{ matrix.service }}.txt")"
+          if [ -z "$digest" ]; then
+            echo "the build did not publish anything: the release cannot be proven"
+            exit 1
+          fi
+          image="${{ env.REGISTRY }}/${{ matrix.service }}@${digest}"
+          echo "IMAGE=$image" >> "$GITHUB_ENV"
+          docker pull "$image"
+          # The digest of the registry is read from the registry itself:
+          # the image that the gates of the release run against is the
+          # image that the deployment will pin.
+          actual="$(docker buildx imagetools inspect "$image" | awk '/^Digest:/ { print $2 }')"
+          echo "the image of the release is ${actual}"
+          if [ -z "$actual" ] || [ "${{ env.REGISTRY }}/${{ matrix.service }}@${actual}" != "$image" ]; then
+            echo "the image that was pulled is $actual and the release is $image"
+            exit 1
+          fi
+
+      - name: the image of the gateway starts with the configuration of a deployment
+        if: matrix.service == 'gateway'
+        run: |
+          set -euo pipefail
+          # The key of the identity signature: the private key that signs
+          # the identity of the requests.
+          openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 \
+            -out "$RUNNER_TEMP/identity-key.pem"
+          {
+            echo "GATEWAY_IDENTITY_SIGNING_KEY<<EOF"
+            cat "$RUNNER_TEMP/identity-key.pem"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+          docker run -d --name gateway -p 8080:8080 \
+            --add-host host.docker.internal:host-gateway \
+            -e GATEWAY_SESSION_SECRET=release-secret \
+            -e GATEWAY_IDENTITY_SIGNING_KEY \
+            -e GATEWAY_OIDC_ISSUER=https://dex.example.com/dex \
+            -e GATEWAY_OIDC_CLIENT_ID=platform \
+            -e GATEWAY_OIDC_CLIENT_SECRET=release-client-secret \
+            -e GATEWAY_OIDC_REDIRECT_URI=https://platform.example.com/auth/callback \
+            -e GATEWAY_ACCESS_URL=https://access.example.com \
+            -e GATEWAY_ACCESS_TOKEN=release-access-token \
+            -e GATEWAY_METRICS_TOKEN=release-metrics-token \
+            -e GATEWAY_RATE_LIMIT_TOTAL_MAX=1000 \
+            -e GATEWAY_SESSION_URL=redis://host.docker.internal:6379/0 \
+            -e GATEWAY_SHARED_STATE_URL=redis://host.docker.internal:6379/1 \
+            -v "$PWD/deploy/config/routes.json:/etc/platform/routes.json:ro" \
+            "$IMAGE"
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/healthz > /dev/null; then
+              echo "the gateway is healthy"
+              break
+            fi
+            sleep 1
+          done
+          # The readiness of the gateway needs the shared state: the image
+          # is ready only when the sessions of the callers can be stored.
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/readyz > /dev/null; then
+              echo "the gateway is ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs gateway
+          exit 1
+
+      - name: the image of the gateway refuses to start without its secrets
+        if: matrix.service == 'gateway'
+        run: |
+          set -euo pipefail
+          if docker run --rm \
+            -e GATEWAY_OIDC_ISSUER=https://dex.example.com/dex \
+            -e GATEWAY_OIDC_CLIENT_ID=platform \
+            -e GATEWAY_OIDC_CLIENT_SECRET=release-client-secret \
+            -e GATEWAY_OIDC_REDIRECT_URI=https://platform.example.com/auth/callback \
+            -e GATEWAY_ACCESS_URL=https://access.example.com \
+            -e GATEWAY_ACCESS_TOKEN=release-access-token \
+            "$IMAGE"; then
+            echo "the gateway started without the secret of the sessions"
+            exit 1
+          fi
+
+      - name: the image of the access service starts with the configuration of a deployment
+        if: matrix.service == 'access'
+        run: |
+          set -euo pipefail
+          # The key that signs the tokens of the access service: it comes
+          # from the secret manager of the deployment and never from the
+          # image.
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
+            -out "$RUNNER_TEMP/access-key.pem" 2>/dev/null
+          {
+            echo "ACCESS_SIGNING_KEY<<EOF"
+            cat "$RUNNER_TEMP/access-key.pem"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+          docker run -d --name access -p 8081:8081 \
+            --add-host host.docker.internal:host-gateway \
+            -e ACCESS_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
+            -e ACCESS_REDIS_URL=redis://host.docker.internal:6379/0 \
+            -e ACCESS_ISSUER=https://access.example.com \
+            -e ACCESS_ADMIN_TOKEN=release-admin-token \
+            -e ACCESS_DECISION_TOKEN=release-access-token \
+            -e ACCESS_STATE_SECRET="$(printf '4f9a2c8e%.0s' {1..8})" \
+            -e ACCESS_SECRET_ENCRYPTION_KEY="$(printf 'b31e7d09%.0s' {1..8})" \
+            -e ACCESS_SIGNING_KEY \
+            -e ACCESS_SIGNING_KID=access-release \
+            "$IMAGE"
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8081/healthz > /dev/null; then
+              echo "the service is healthy"
+              break
+            fi
+            sleep 1
+          done
+          # The logs of the container are always printed: a failure that
+          # does not say why is a failure that costs an afternoon.
+          docker logs access || true
+          if ! curl -fsS http://127.0.0.1:8081/healthz; then
+            echo "the service does not answer the probe of the health"
+            exit 1
+          fi
+          # The database answers and the migrations are applied: the
+          # service is ready.
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8081/readyz > /dev/null; then
+              echo "the service is ready"
+              break
+            fi
+            sleep 1
+          done
+          if ! curl -fsS http://127.0.0.1:8081/readyz > /dev/null; then
+            echo "the service does not answer the probe of the readiness"
+            docker logs access || true
+            exit 1
+          fi
+
+      - name: the image of the access service refuses to start without its secrets
+        if: matrix.service == 'access'
+        run: |
+          set -euo pipefail
+          if docker run --rm \
+            -e ACCESS_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
+            -e ACCESS_REDIS_URL=redis://host.docker.internal:6379/0 \
+            "$IMAGE"; then
+            echo "the service started without a secret"
+            exit 1
+          fi
+
+      - name: the image of the data service starts with the configuration of a deployment
+        if: matrix.service == 'data'
+        run: |
+          set -euo pipefail
+          docker run -d --name data -p 8082:8082 \
+            --add-host host.docker.internal:host-gateway \
+            -e DATA_ENVIRONMENT=development \
+            -e DATA_HOST=0.0.0.0 -e DATA_PORT=8082 \
+            -e DATA_PROCESS_ROLE=api \
+            -e DATA_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
+            -e DATA_REGISTRY_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
+            -e DATA_SCHEMA_BUNDLE_FILE=/app/packages/data/manifests/schema.json \
+            -e DATA_POLICY_BUNDLE_FILE=/app/packages/data/manifests/policies.json \
+            -e DATA_GATEWAY_BINDINGS_FILE=/etc/data/bindings.json \
+            -e DATA_ACCESS_URL=http://host.docker.internal:9 \
+            -e DATA_ACCESS_CONTEXT_TOKEN_FILE=/run/secrets/access-context.token \
+            -e DATA_CURSOR_KEY_FILE=/run/secrets/cursor.key \
+            -v "$PWD/deploy/fixtures/bindings.json:/etc/data/bindings.json:ro" \
+            -v "$PWD/deploy/fixtures/secrets:/run/secrets:ro" \
+            "$IMAGE"
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8082/healthz > /dev/null; then
+              echo 'the service of the image is healthy'
+              break
+            fi
+            sleep 1
+          done
+          # The readiness of the service needs the schema of the
+          # deployment, the role of the connection and the access service.
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8082/readyz > /dev/null; then
+              echo 'the service of the image is ready'
+              exit 0
+            fi
+            sleep 1
+          done
+          echo 'the service of the image did not become ready'
+          docker logs data
+          exit 1
+
+      - name: the image of the data service refuses to start without the key of the cursors
+        if: matrix.service == 'data'
+        run: |
+          set -euo pipefail
+          if docker run --rm \
+            --add-host host.docker.internal:host-gateway \
+            -e DATA_ENVIRONMENT=development \
+            -e DATA_HOST=0.0.0.0 -e DATA_PORT=8082 \
+            -e DATA_PROCESS_ROLE=api \
+            -e DATA_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
+            -e DATA_REGISTRY_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
+            -e DATA_SCHEMA_BUNDLE_FILE=/app/packages/data/manifests/schema.json \
+            -e DATA_POLICY_BUNDLE_FILE=/app/packages/data/manifests/policies.json \
+            -e DATA_GATEWAY_BINDINGS_FILE=/etc/data/bindings.json \
+            -e DATA_ACCESS_URL=http://host.docker.internal:9 \
+            -e DATA_ACCESS_CONTEXT_TOKEN_FILE=/run/secrets/access-context.token \
+            -v "$PWD/deploy/fixtures/bindings.json:/etc/data/bindings.json:ro" \
+            -v "$PWD/deploy/fixtures/secrets:/run/secrets:ro" \
+            "$IMAGE"; then
+            echo "the service started without the key that signs the cursors"
+            exit 1
+          fi
+
+      - name: the scan of the image
+        run: |
+          # A finding of a severity above high fails the release. The
+          # scan reads the image of the release: the one that is
+          # published.
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD:/work" aquasec/trivy:latest \
+            image --severity HIGH,CRITICAL --exit-code 1 --no-progress "$IMAGE"
+
+      - name: export the image
+        run: |
+          # The exported image is the published one: a deployment that
+          # unpacks the artifact runs the image of the release, digest
+          # for digest, with its attestations.
+          docker pull "$IMAGE"
+          docker save "$IMAGE" | gzip > "${{ matrix.service }}-${{ needs.version.outputs.tag }}.tar.gz"
+          # The digest of the image: it is what a deployment pins.
+          docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.service }}-${{ needs.version.outputs.tag }}
+          path: ${{ matrix.service }}-${{ needs.version.outputs.tag }}.tar.gz
+          retention-days: 30
+
+  withdraw:
+    name: the images of a failed release are withdrawn
+    # The images are published before the gates run, so that the gates
+    # can run against the bytes that ship. A release whose gates failed
+    # does not ship: the images are withdrawn from the registry.
+    needs: [version, build, prove]
+    if: failure()
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [gateway, access, data]
+    steps:
+      - uses: docker/setup-buildx-action@v4
+
+      - name: the login in the registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: the digest of the image is read
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: digest-${{ matrix.service }}
+
+      - name: the image is withdrawn
+        run: |
+          set -euo pipefail
+          digest=""
+          if [ -f "digest-${{ matrix.service }}.txt" ]; then
+            digest="$(cat "digest-${{ matrix.service }}.txt")"
+          fi
+          if [ -z "$digest" ]; then
+            echo "the build of the release did not publish anything: there is nothing to withdraw"
+            exit 0
+          fi
+          if docker buildx imagetools rm "${{ env.REGISTRY }}/${{ matrix.service }}@${digest}"; then
+            echo "the image $digest is withdrawn from the registry"
+          else
+            echo "the image $digest could not be withdrawn: it must be removed by hand"
+          fi
+
+  release:
+    name: the release of the tag
+    needs: [version, prove]
+    runs-on: ubuntu-latest
+    permissions:
+      # The release of the tag is created here.
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: 'image-*'
+          merge-multiple: true
+
+      - name: the images of the release
+        run: |
+          ls -la dist
+          test -n "$(ls dist/*.tar.gz)"
+
+      - name: the notes of the release
+        run: |
+          cat > notes.md <<EOF
+          The images of the platform: the gateway, the access service and
+          the data service, at the same version.
+
+          | Image | What it is |
+          | --- | --- |
+          | \`${{ env.REGISTRY }}/gateway:${{ needs.version.outputs.version }}\` | The gateway: it authenticates a caller, asks the access service and forwards the request to an upstream. |
+          | \`${{ env.REGISTRY }}/access:${{ needs.version.outputs.version }}\` | The access service: an OpenID Connect broker and an access decision service. |
+          | \`${{ env.REGISTRY }}/data:${{ needs.version.outputs.version }}\` | The data service: a headless, permission aware data API. |
+
+          The images carry the runtime of the release (Bun ${{ env.BUN_VERSION }})
+          and the version of the platform (${{ needs.version.outputs.version }}).
+          The environment of each service is described in
+          [the documentation](https://github.com/ggpwnkthx/platform/blob/${{ needs.version.outputs.tag }}/docs/platform/operations.md).
+
+          \`\`\`bash
+          docker pull ${{ env.REGISTRY }}/gateway:${{ needs.version.outputs.version }}
+          docker pull ${{ env.REGISTRY }}/access:${{ needs.version.outputs.version }}
+          docker pull ${{ env.REGISTRY }}/data:${{ needs.version.outputs.version }}
+          \`\`\`
+          EOF
+
+      - name: publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.version.outputs.tag }}
+          # The job does not check the repository out: the name of the
+          # repository is given to the command, or it cannot tell which
+          # repository it publishes to.
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # The release is created once: a run that is repeated uploads
+          # the images again and replaces them.
+          if ! gh release view "${TAG}" --repo "${REPOSITORY}" > /dev/null 2>&1; then
+            gh release create "${TAG}" \
+              --repo "${REPOSITORY}" \
+              --title "Platform ${TAG}" \
+              --notes-file notes.md \
+              --verify-tag
+          fi
+          gh release upload "${TAG}" dist/* --repo "${REPOSITORY}" --clobber
+          gh release view "${TAG}" --repo "${REPOSITORY}"

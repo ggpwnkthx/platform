@@ -1,0 +1,121 @@
+name: tag
+
+# The tag of a release of the platform.
+#
+# The workflow cuts the tag of a release when the version of the package
+# goes up. The workflows of the release run on the tag: they publish the
+# three images and the three binaries of the three workspaces.
+#
+# The tag is cut **after** the CI of the commit is green: a release that
+# was never tested is not a release. The tag names the commit that the
+# CI proved, and not the head of the branch: two commits that land in
+# the meantime do not change what is released.
+#
+# The tag is pushed **with the token of the workflow**, and GitHub does
+# not start a workflow on a push that carries it. The release is
+# therefore **dispatched** instead of being triggered by the push: the
+# dispatch is the exception to that rule, and it is the only path that
+# starts a release on its own.
+#
+# The tagger refuses what the release would refuse: a tag is only cut
+# when the version of the platform, the version of the image and the
+# status of the specification of each workspace are in their place, and
+# the version is newer than every tag of the repository.
+
+on:
+  # The CI of the commit has to be green before a release is cut.
+  workflow_run:
+    workflows: ['ci']
+    types: [completed]
+    branches: [main]
+  # A run by hand, for the commit that is already merged.
+  workflow_dispatch:
+
+permissions:
+  # The tag is pushed to the repository: it is what publishes the
+  # release.
+  contents: write
+  # The release is dispatched by this workflow: the dispatch is what
+  # starts the workflows of the release, because the push of the tag
+  # carries the token of the workflow.
+  actions: write
+
+# One tag at a time: two runs that push the same tag race each other,
+# and the loser fails for a reason that has nothing to do with the
+# release.
+concurrency:
+  group: the-tag-of-the-release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: the tag of the release
+    # The CI of the commit was red: there is no release.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The commit that the CI proved, and the tags of the repository:
+          # the history is needed to read them.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.3'
+
+      - name: install
+        run: bun install --frozen-lockfile
+
+      - name: the identity of the commit
+        run: |
+          # The tag is annotated: it says which release it names, and it
+          # says who cut it.
+          git config user.name "Platform"
+          git config user.email "platform@ggpwnkthx.com"
+
+      - name: the tag of the release
+        id: tag
+        run: bun run release:tag
+
+      - name: the release starts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          CREATED: ${{ steps.tag.outputs.created }}
+        run: |
+          set -euo pipefail
+          if [ "$CREATED" != "true" ]; then
+            echo "the release is not dispatched: the tag of this version was not cut by this run"
+            exit 0
+          fi
+          # The tag was pushed with the token of the workflow: GitHub does
+          # not start a workflow on a push that carries it. The release is
+          # dispatched instead, and the dispatch is the exception to that
+          # rule.
+          #
+          # The workflows are dispatched at the tag: the release is the
+          # tag, and the tag is the commit that the CI proved.
+          for workflow in release.yml release-binaries.yml; do
+            gh workflow run "$workflow" --repo "$REPOSITORY" --ref "$TAG" -f "tag=$TAG"
+          done
+          # The dispatch is asynchronous: the run is created a moment
+          # later. The workflow waits for it and fails when it is not
+          # there: a release that was never dispatched is a release that
+          # never starts, and it has to be visible rather than silent.
+          for workflow in release.yml release-binaries.yml; do
+            started=""
+            for _ in $(seq 1 12); do
+              started=$(gh run list --repo "$REPOSITORY" --workflow "$workflow" \
+                --event workflow_dispatch --limit 1 --json headBranch --jq '.[0].headBranch // ""')
+              if [ "$started" = "$TAG" ]; then break; fi
+              sleep 5
+            done
+            if [ "$started" != "$TAG" ]; then
+              echo "the run of $workflow was not created: the release of $TAG did not start"
+              exit 1
+            fi
+            echo "the release of $TAG is dispatched: $workflow"
+          done

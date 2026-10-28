@@ -1,0 +1,520 @@
+name: release-binaries
+
+# The release of the standalone binaries of the platform.
+#
+# The workflow runs on a tag: it checks that the tag names the version of
+# the package, it compiles the three services for every supported
+# platform, it proves that the binary of the runner starts and serves,
+# and it publishes the binaries on the release of the tag.
+#
+#   git tag v1.0.0 && git push origin v1.0.0
+#
+# A binary of the platform is not only an executable: the access service
+# reads the migrations of the schema from the disk, and the data service
+# reads the manifests of the collections, the policies and the migrations
+# of the deployment from it. Every archive of a release carries them next
+# to the executable.
+#
+# The binaries are the services and nothing else: the fixtures of the
+# development stack are not part of them. The container images of the same
+# release are built by the workflow of the release (release.yml).
+#
+# A binary carries the runtime of the release inside it, and it carries
+# the artifacts of the deployment next to it.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'The tag of the release'
+        required: true
+        type: string
+
+permissions:
+  # The release is created by the job that publishes it: the jobs that
+  # only build the binaries need nothing but the source.
+  contents: read
+
+# One release at a time for a tag: two runs of the same release publish
+# the same binaries twice, and the second one replaces the first.
+concurrency:
+  group: the-release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  # The version of the runtime the binaries are built and released with.
+  BUN_VERSION: '1.4.3'
+
+jobs:
+  version:
+    name: the version of the release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: the tag names the version of the package
+        id: version
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          tag="${tag#v}"
+          expected=$(node -p "require('./package.json').version")
+          if [ "$tag" != "$expected" ]; then
+            echo "the tag $tag does not name the version $expected of the package"
+            exit 1
+          fi
+          echo "version=$expected" >> "$GITHUB_OUTPUT"
+          echo "tag=v$expected" >> "$GITHUB_OUTPUT"
+
+      - name: the versions of the platform agree
+        run: bun run versions
+
+      # The client of the data service: it is published as a tarball of
+      # the release and on the registry of the packages. The check of the
+      # packaging installs the tarball in a consumer outside of this
+      # repository and calls the api with it: a tarball that nobody can
+      # install is not a release.
+      - name: the client of the release
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/client"
+          (cd packages/data/packages/client && bun pm pack --destination "$RUNNER_TEMP/client")
+          ls -la "$RUNNER_TEMP/client"
+          test -n "$(ls "$RUNNER_TEMP/client"/*.tgz)"
+          version=$(node -p "require('./packages/data/packages/client/package.json').version")
+          test -f "$RUNNER_TEMP/client/data-backend-client-$version.tgz"
+          echo "the tarball of the release is data-backend-client-$version.tgz"
+
+      - name: the packaged client works outside of the repository
+        run: bun run --cwd packages/data check:client-package
+
+      # The client of a stable release is a library of the two runtimes,
+      # and it is published on the registry of the packages. The
+      # publication is a step of its own: a release that does not carry
+      # the secret of the registry publishes the tarball of the release
+      # and nothing else.
+      #
+      # The secret is read by the step and not by its condition: the
+      # context of the secrets is not available in the condition of a
+      # step, and a workflow that reads it there is refused by the runner
+      # before it runs.
+      - name: the client on the registry of the packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NODE_AUTH_TOKEN}" ]; then
+            echo "the release does not carry the secret of the registry: the tarball of the release is published and nothing else"
+            exit 0
+          fi
+          cd packages/data/packages/client
+          npm publish --access public --provenance
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: data-client
+          path: ${{ runner.temp }}/client/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  binaries:
+    name: the binary of ${{ matrix.service }} for ${{ matrix.platform }}
+    needs: version
+    runs-on: ubuntu-latest
+    strategy:
+      # One platform that fails does not hide the state of the others.
+      fail-fast: false
+      matrix:
+        # The three services of the platform, for every supported
+        # platform. The target of the compiler is the name of the
+        # platform with the `bun-` prefix: `bun-linux-x64-musl` is the
+        # musl build of the Linux x64 platform.
+        service: [gateway, access, data]
+        platform:
+          - 'linux-x64'
+          - 'linux-x64-musl'
+          - 'linux-arm64'
+          - 'darwin-x64'
+          - 'darwin-arm64'
+          - 'windows-x64'
+          - 'windows-arm64'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.tag }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: install the dependencies of the platform
+        run: bun install --frozen-lockfile --production
+
+      - name: compile
+        run: |
+          set -euo pipefail
+          version="${{ needs.version.outputs.version }}"
+          service="${{ matrix.service }}"
+          platform="${{ matrix.platform }}"
+          target="bun-${{ matrix.platform }}"
+          bundle="dist/${service}-${version}-${platform}"
+          mkdir -p "$bundle"
+          case "$target" in
+            bun-windows-*) binary="${bundle}/${service}.exe" ;;
+            *) binary="${bundle}/${service}" ;;
+          esac
+          # The embedded PostgreSQL is a development dependency: it is not
+          # in the image of a deployment either, and a deployment names a
+          # PostgreSQL server. The import is left external so that the
+          # bundler does not look for a module that is not there.
+          bun build "packages/${service}/src/main.ts" --compile \
+            --target="$target" \
+            --external @electric-sql/pglite \
+            --outfile "$binary"
+          if [ "$service" = "gateway" ]; then
+            # The control plane is a separate process: it is compiled
+            # into a binary of its own, with the same runtime inside it.
+            case "$target" in
+              bun-windows-*) control="${bundle}/gateway-control.exe" ;;
+              *) control="${bundle}/gateway-control" ;;
+            esac
+            bun build "packages/${service}/src/control-main.ts" --compile \
+              --target="$target" \
+              --outfile "$control"
+          fi
+          if [ "$service" = "access" ]; then
+            # The schema of the release is applied by the service when it
+            # starts: a binary that does not carry it starts against a
+            # schema it does not understand. The migrations are the
+            # directory next to the executable.
+            mkdir -p "$bundle/migrations"
+            cp "packages/${service}"/src/platform/postgres/migrations/*.sql "$bundle/migrations/"
+          fi
+          if [ "$service" = "data" ]; then
+            # The service reads the artifacts of the deployment from the
+            # disk: they are next to the executable of the archive.
+            mkdir -p "$bundle/manifests" "$bundle/migrations"
+            cp "packages/${service}"/manifests/schema.json "packages/${service}"/manifests/policies.json "$bundle/manifests/"
+            cp "packages/${service}"/migrations/*.sql "$bundle/migrations/"
+          fi
+          ls -la "$bundle"
+
+      - name: the binary is of the expected format
+        run: |
+          set -euo pipefail
+          version="${{ needs.version.outputs.version }}"
+          service="${{ matrix.service }}"
+          platform="${{ matrix.platform }}"
+          target="bun-${{ matrix.platform }}"
+          bundle="dist/${service}-${version}-${platform}"
+          case "$target" in
+            bun-windows-*) binary="${bundle}/${service}.exe" ;;
+            *) binary="${bundle}/${service}" ;;
+          esac
+          test -f "$binary"
+          magic=$(head -c 4 "${binary}" | od -An -tx1 | tr -d ' \n')
+          case "$target" in
+            bun-windows-*) expected="4d5a7800" ;;
+            bun-darwin-*) expected="cffaedfe" ;;
+            *) expected="7f454c46" ;;
+          esac
+          if [ "${magic}" != "${expected}" ]; then
+            echo "the binary of ${target} starts with ${magic} and not with ${expected}"
+            exit 1
+          fi
+          echo "the binary of ${target} is of the expected format"
+
+      - name: the archive of the platform
+        run: |
+          set -euo pipefail
+          version="${{ needs.version.outputs.version }}"
+          service="${{ matrix.service }}"
+          platform="${{ matrix.platform }}"
+          (cd dist && tar -czf "${service}-${version}-${platform}.tar.gz" "${service}-${version}-${platform}")
+          tar -tzf "dist/${service}-${version}-${platform}.tar.gz"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.service }}-${{ matrix.platform }}
+          path: dist/${{ matrix.service }}-*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  smoke:
+    name: the binary of ${{ matrix.service }} starts and serves
+    needs: [version, binaries]
+    runs-on: ubuntu-latest
+    strategy:
+      # One service that fails does not hide the state of the others.
+      fail-fast: false
+      matrix:
+        service: [gateway, access, data]
+    services:
+      # The binary of a deployment talks to a PostgreSQL server: the
+      # engine of a deployment is the one of the tests.
+      postgres:
+        image: postgres:18-alpine
+        ports:
+          - '5432:5432'
+        env:
+          POSTGRES_USER: platform
+          POSTGRES_PASSWORD: platform
+          POSTGRES_DB: platform
+        options: >-
+          --health-cmd "pg_isready -U platform"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      # The store of the codes of the logins is shared: a deployment that
+      # has no shared store is refused at the start.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - '6379:6379'
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-linux-x64'
+          path: dist
+          merge-multiple: true
+
+      - name: the binary of the gateway starts, serves and stops
+        if: matrix.service == 'gateway'
+        run: |
+          set -euo pipefail
+          version="${{ needs.version.outputs.version }}"
+          cd "dist/gateway-${version}-linux-x64"
+          cat > routes.json <<'JSON'
+          {
+            "version": 1,
+            "defaults": { "auth": { "mode": "none" } },
+            "routes": [
+              {
+                "id": "smoke",
+                "match": { "host": "smoke.platform.test", "path": "/" },
+                "upstream": "http://127.0.0.1:1",
+                "auth": { "mode": "none" }
+              }
+            ]
+          }
+          JSON
+          GATEWAY_CONFIG=routes.json \
+          GATEWAY_HOST=127.0.0.1 \
+          GATEWAY_PORT=18099 \
+          GATEWAY_OIDC_ISSUER=http://127.0.0.1:1 \
+          GATEWAY_OIDC_CLIENT_ID=smoke \
+          GATEWAY_OIDC_CLIENT_SECRET=smoke \
+          GATEWAY_OIDC_REDIRECT_URI=http://127.0.0.1:1/auth/callback \
+          GATEWAY_OIDC_ALLOW_INSECURE=true \
+          GATEWAY_ACCESS_URL=http://127.0.0.1:1 \
+          GATEWAY_SESSION_SECRET=smoke \
+          GATEWAY_SESSION_URL=memory://smoke \
+          GATEWAY_LOG_LEVEL=error \
+          ./gateway > gateway.log 2>&1 &
+          pid=$!
+          ready=0
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18099/healthz > /dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          kill "${pid}" 2>/dev/null || true
+          wait "${pid}" 2>/dev/null || true
+          if [ "${ready}" != "1" ]; then
+            echo "the compiled binary did not answer the health probe:"
+            cat gateway.log
+            exit 1
+          fi
+          echo "the compiled binary starts, serves the health probe and stops"
+
+      - name: the binary of the access service starts, serves and stops
+        if: matrix.service == 'access'
+        run: |
+          set -euo pipefail
+          version="${{ needs.version.outputs.version }}"
+          cd "dist/access-${version}-linux-x64"
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out access-key.pem 2>/dev/null
+          ACCESS_ENVIRONMENT=development \
+          ACCESS_HOST=127.0.0.1 \
+          ACCESS_PORT=18099 \
+          ACCESS_ISSUER=http://127.0.0.1:18099 \
+          ACCESS_PUBLIC_URL=http://127.0.0.1:18099 \
+          ACCESS_DATABASE_URL=postgres://platform:platform@127.0.0.1:5432/platform \
+          ACCESS_REDIS_URL=redis://127.0.0.1:6379/0 \
+          ACCESS_ADMIN_TOKEN=release-admin-token \
+          ACCESS_DECISION_TOKEN=release-access-token \
+          ACCESS_STATE_SECRET=4f9a2c8e4f9a2c8e4f9a2c8e4f9a2c8e4f9a2c8e4f9a2c8e4f9a2c8e4f9a2c8e \
+          ACCESS_SECRET_ENCRYPTION_KEY=b31e7d09b31e7d09b31e7d09b31e7d09b31e7d09b31e7d09b31e7d09b31e7d09b31e7d09 \
+          ACCESS_SIGNING_KEY="$(cat access-key.pem)" \
+          ACCESS_SIGNING_KID=access-release \
+          ./access > access.log 2>&1 &
+          pid=$!
+          ready=0
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18099/healthz > /dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          kill "${pid}" 2>/dev/null || true
+          wait "${pid}" 2>/dev/null || true
+          if [ "${ready}" != "1" ]; then
+            echo "the compiled binary did not answer the health probe:"
+            cat access.log
+            exit 1
+          fi
+          echo "the compiled binary starts, serves the health probe and stops"
+
+      - name: the binary of the data service starts, serves and stops
+        if: matrix.service == 'data'
+        run: |
+          set -euo pipefail
+          version="${{ needs.version.outputs.version }}"
+          cd "dist/data-${version}-linux-x64"
+          DATA_ENVIRONMENT=development \
+          DATA_HOST=127.0.0.1 \
+          DATA_PORT=18099 \
+          DATA_PROCESS_ROLE=api \
+          DATA_DATABASE_URL=postgres://platform:platform@127.0.0.1:5432/platform \
+          DATA_REGISTRY_DATABASE_URL=postgres://platform:platform@127.0.0.1:5432/platform \
+          DATA_SCHEMA_BUNDLE_FILE="$PWD/manifests/schema.json" \
+          DATA_POLICY_BUNDLE_FILE="$PWD/manifests/policies.json" \
+          DATA_ACCESS_URL=http://127.0.0.1:9 \
+          DATA_LOG_LEVEL=error \
+          ./data > data.log 2>&1 &
+          pid=$!
+          ready=0
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18099/healthz > /dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          kill "${pid}" 2>/dev/null || true
+          wait "${pid}" 2>/dev/null || true
+          if [ "${ready}" != "1" ]; then
+            echo "the compiled binary did not answer the health probe:"
+            cat data.log
+            exit 1
+          fi
+          echo "the compiled binary starts, serves the health probe and stops"
+
+  release:
+    name: the release of the binaries
+    needs: [version, binaries, smoke]
+    runs-on: ubuntu-latest
+    permissions:
+      # The release of the tag is created here.
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: '*-*'
+          merge-multiple: true
+
+      - name: the binaries of the release
+        run: |
+          ls -la dist
+          test -n "$(ls dist/*.tar.gz)"
+          # The tarball of the client travels with the binaries of the
+          # release.
+          if [ -d dist/data-client ]; then
+            mv dist/data-client/*.tgz dist/
+            rmdir dist/data-client
+          fi
+          ls -la dist
+
+      - name: the checksums of the binaries
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum -- *.tar.gz *.tgz > checksums.txt
+          cat checksums.txt
+
+      - name: the notes of the release
+        run: |
+          cat > notes.md <<EOF
+          The platform, as standalone executables: the gateway, the access
+          service and the data service. The runtime is inside every
+          binary: nothing else has to be installed.
+
+          | Platform | Archive of the gateway | Archive of the access service | Archive of the data service |
+          | --- | --- | --- | --- |
+          | Linux x64 (glibc) | \`gateway-${{ needs.version.outputs.version }}-linux-x64.tar.gz\` | \`access-${{ needs.version.outputs.version }}-linux-x64.tar.gz\` | \`data-${{ needs.version.outputs.version }}-linux-x64.tar.gz\` |
+          | Linux x64 (musl, Alpine) | \`gateway-${{ needs.version.outputs.version }}-linux-x64-musl.tar.gz\` | \`access-${{ needs.version.outputs.version }}-linux-x64-musl.tar.gz\` | \`data-${{ needs.version.outputs.version }}-linux-x64-musl.tar.gz\` |
+          | Linux arm64 | \`gateway-${{ needs.version.outputs.version }}-linux-arm64.tar.gz\` | \`access-${{ needs.version.outputs.version }}-linux-arm64.tar.gz\` | \`data-${{ needs.version.outputs.version }}-linux-arm64.tar.gz\` |
+          | macOS x64 | \`gateway-${{ needs.version.outputs.version }}-darwin-x64.tar.gz\` | \`access-${{ needs.version.outputs.version }}-darwin-x64.tar.gz\` | \`data-${{ needs.version.outputs.version }}-darwin-x64.tar.gz\` |
+          | macOS arm64 | \`gateway-${{ needs.version.outputs.version }}-darwin-arm64.tar.gz\` | \`access-${{ needs.version.outputs.version }}-darwin-arm64.tar.gz\` | \`data-${{ needs.version.outputs.version }}-darwin-arm64.tar.gz\` |
+          | Windows x64 | \`gateway-${{ needs.version.outputs.version }}-windows-x64.tar.gz\` | \`access-${{ needs.version.outputs.version }}-windows-x64.tar.gz\` | \`data-${{ needs.version.outputs.version }}-windows-x64.tar.gz\` |
+          | Windows arm64 | \`gateway-${{ needs.version.outputs.version }}-windows-arm64.tar.gz\` | \`access-${{ needs.version.outputs.version }}-windows-arm64.tar.gz\` | \`data-${{ needs.version.outputs.version }}-windows-arm64.tar.gz\` |
+
+          The archive of the gateway holds the gateway and the control
+          plane, the administrative surface of a deployment. The archive
+          of the access service holds the migrations of the schema, and
+          the archive of the data service holds the manifests of the
+          collections, the policies and the migrations of the deployment.
+          The three are deployed in the same directory.
+
+          The binaries carry the runtime of the release (Bun ${{ env.BUN_VERSION }})
+          and the version of the platform (${{ needs.version.outputs.version }}).
+          The environment of each service is described in
+          [the documentation](https://github.com/ggpwnkthx/platform/blob/${{ needs.version.outputs.tag }}/docs/platform/operations.md).
+
+          The checksums are in \`checksums.txt\`:
+
+          \`\`\`bash
+          sha256sum --check checksums.txt
+          \`\`\`
+
+          The container images of the same release are on the registry of
+          the repository:
+
+          \`\`\`bash
+          docker pull ghcr.io/ggpwnkthx/gateway:${{ needs.version.outputs.version }}
+          docker pull ghcr.io/ggpwnkthx/access:${{ needs.version.outputs.version }}
+          docker pull ghcr.io/ggpwnkthx/data:${{ needs.version.outputs.version }}
+          \`\`\`
+          EOF
+
+      - name: publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.version.outputs.tag }}
+          # The job does not check the repository out: the name of the
+          # repository is given to the command, or it cannot tell which
+          # repository it publishes to.
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # The release is created once: a run that is repeated uploads
+          # the binaries again and replaces them.
+          if ! gh release view "${TAG}" --repo "${REPOSITORY}" > /dev/null 2>&1; then
+            gh release create "${TAG}" \
+              --repo "${REPOSITORY}" \
+              --title "Platform ${TAG}" \
+              --notes-file notes.md \
+              --verify-tag
+          fi
+          gh release upload "${TAG}" --repo "${REPOSITORY}" --clobber dist/*.tar.gz dist/*.tgz
+          gh release view "${TAG}" --repo "${REPOSITORY}"
