@@ -16,11 +16,12 @@ index is [docs/gateway/README.md](../../docs/gateway/README.md):
 
 | Document | What it holds |
 | --- | --- |
-| [docs/gateway/overview.md](../../docs/gateway/overview.md) | Start here: what the gateway does and how the pieces fit, in one page. |
+| [docs/gateway/README.md](../../docs/gateway/README.md) | Start here: what the gateway does and how the pieces fit, in one page. |
 | [docs/gateway/spec.md](../../docs/gateway/spec.md) | The normative behavior, and the only document that changes the contract. |
 | [docs/gateway/architecture.md](../../docs/gateway/architecture.md) | How the code is laid out, which import is allowed where, and which file owns what. |
 | [docs/gateway/decisions.md](../../docs/gateway/decisions.md) | The decisions behind the contract, with their evidence. |
 | [docs/gateway/operations.md](../../docs/gateway/operations.md) | How to deploy, configure, run and review it. |
+| [docs/gateway/recovery.md](../../docs/gateway/recovery.md) | How to recover it when a dependency fails, a rollback is needed, a session has to end or a secret has to rotate. |
 | [docs/gateway/capacity.md](../../docs/gateway/capacity.md) | The measurements of the capacity. |
 | [docs/gateway/runtime.md](../../docs/gateway/runtime.md) | The capabilities of the runtime the gateway is written against. |
 | [docs/gateway/upstream-identity.md](../../docs/gateway/upstream-identity.md) | How an upstream verifies the identity of a request, with the code. |
@@ -188,7 +189,7 @@ refuses the navigations from another site on that route,
 `forwardAuthorization` (`true` or `false`) decides whether the token of the
 caller reaches its upstream, and `accessCacheTtlMs` is the lifetime of the
 cached decisions of the access service on that route — the latency of a
-revocation there. They are described in [docs/gateway/operations.md](../../docs/gateway/operations.md).
+revocation there. They are described in [docs/gateway/recovery.md](../../docs/gateway/recovery.md).
 
 A route that names no workspace may still be checked by the access service:
 `accessCheck` asks it about the route itself, and `accessStaleGraceMs` is
