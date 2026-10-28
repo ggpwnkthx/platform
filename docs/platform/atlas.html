@@ -1,0 +1,1644 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>The atlas of the platform</title>
+    <meta
+      name="description"
+      content="The whole platform on one page: the callers, the three services, the stores, and the contracts between them."
+    />
+    <style>
+      /* The sheet of the atlas: the palette of the console, written as a
+         theme, and the semantics of the platform kept apart from it. */
+      :root {
+        --paper: #fbfbfd;
+        --card: #ffffff;
+        --rule: #d9dae0;
+        --ink: #1b1c20;
+        --graphite: #5c5f68;
+        --accent: #2f5bd7;
+        --ok: #1d7a4c;
+        --warn: #9a6412;
+        --error: #b3261e;
+        --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+        --measure: 74rem;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --paper: #14151a;
+          --card: #1c1e25;
+          --rule: #31343d;
+          --ink: #e9eaee;
+          --graphite: #a0a4b0;
+          --accent: #8fb0ff;
+          --ok: #63c894;
+          --warn: #e0b060;
+          --error: #f2837b;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 1rem;
+        line-height: 1.55;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      code,
+      pre,
+      .value {
+        font-family: var(--mono);
+        font-size: 0.86em;
+      }
+
+      a {
+        color: var(--accent);
+        text-decoration: underline;
+        text-underline-offset: 0.18em;
+      }
+
+      a:hover {
+        text-decoration-thickness: 2px;
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+
+      .skip {
+        position: absolute;
+        left: -999px;
+        top: 0;
+        background: var(--card);
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        padding: 0.4rem 0.8rem;
+      }
+
+      .skip:focus {
+        left: 1rem;
+        top: 1rem;
+      }
+
+      header.masthead {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.9rem 1.5rem;
+        border-bottom: 1px solid var(--rule);
+        background: var(--card);
+      }
+
+      .masthead .brand {
+        color: var(--ink);
+        font-weight: 600;
+        text-decoration: none;
+      }
+
+      .masthead nav {
+        display: flex;
+        gap: 1rem;
+        font-size: 0.9rem;
+      }
+
+      main {
+        max-width: var(--measure);
+        width: 100%;
+        margin: 0 auto;
+        padding: 1.75rem 1.5rem 4rem;
+      }
+
+      h1 {
+        font-size: 1.6rem;
+        font-weight: 400;
+        letter-spacing: -0.012em;
+        line-height: 1.25;
+        margin: 0;
+      }
+
+      h2 {
+        font-size: 1.1rem;
+        font-weight: 400;
+        letter-spacing: -0.006em;
+        line-height: 1.35;
+        margin: 0;
+      }
+
+      h3 {
+        font-size: 1rem;
+        font-weight: 400;
+        line-height: 1.4;
+        margin: 0;
+      }
+
+      .heading {
+        margin-bottom: 1.5rem;
+      }
+
+      .subtitle {
+        color: var(--graphite);
+        margin: 0.4rem 0 0;
+        max-width: 68ch;
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+        padding: 1.1rem 1.25rem 1.25rem;
+        margin-bottom: 1.25rem;
+        container-type: inline-size;
+      }
+
+      /* A card that is narrow: the names of the fields stack over their
+         values, so that a card of sixteen rem still reads. */
+      @container (max-width: 34rem) {
+        .fields,
+        .step .fields {
+          grid-template-columns: 1fr;
+        }
+
+        .fields dt {
+          margin-top: 0.5rem;
+        }
+
+        .fields dt:first-child {
+          margin-top: 0;
+        }
+      }
+
+      .card-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+        padding-bottom: 0.65rem;
+        margin-bottom: 0.9rem;
+        border-bottom: 1px solid var(--rule);
+      }
+
+      .card-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-shrink: 0;
+        align-items: center;
+      }
+
+      .muted {
+        color: var(--graphite);
+      }
+
+      .note {
+        color: var(--graphite);
+        font-size: 0.9rem;
+        max-width: 68ch;
+        margin: 0.9rem 0 0;
+      }
+
+      /* The controls: a chip, like every control of the console. */
+      .chip {
+        display: inline-block;
+        padding: 0.25rem 0.6rem;
+        border: 1px solid var(--rule);
+        border-radius: 999px;
+        background: var(--card);
+        color: var(--ink);
+        font: inherit;
+        font-size: 0.85rem;
+        line-height: 1.5;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .chip:hover {
+        border-color: var(--accent);
+      }
+
+      .chip[aria-pressed="true"] {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+
+      /* The map: a drawing, in the ink of the sheet. */
+      .map-wrap {
+        overflow-x: auto;
+      }
+
+      svg.map {
+        display: block;
+        width: 100%;
+        min-width: 72rem;
+        height: auto;
+        font-family: var(--sans);
+      }
+
+      .map .station-box {
+        fill: var(--card);
+        stroke: var(--rule);
+        stroke-width: 1;
+      }
+
+      .map .station-name {
+        fill: var(--ink);
+        font-size: 17px;
+      }
+
+      .map .station-kind {
+        fill: var(--graphite);
+        font-size: 13.5px;
+      }
+
+      /* The name of a store is long: it is set one step below the name
+         of a service, and the box of a store is wider than the box of a
+         service. */
+      .map .station-store .station-name {
+        font-size: 13px;
+      }
+
+      .map .station {
+        cursor: pointer;
+      }
+
+      .map .station:hover .station-box {
+        stroke: var(--accent);
+      }
+
+      .map .station.is-selected .station-box {
+        stroke: var(--accent);
+        stroke-width: 2;
+      }
+
+      /* A line that carries a contract is content, and not a rule that
+         separates: it is drawn in the ink of the text. */
+      .map .hop-line {
+        fill: none;
+        stroke: var(--graphite);
+        stroke-width: 1.75;
+      }
+
+      .map .hop-head {
+        fill: var(--graphite);
+      }
+
+      .map .hop-label {
+        fill: var(--graphite);
+        font-size: 15px;
+        paint-order: stroke;
+        stroke: var(--card);
+        stroke-width: 5px;
+        stroke-linejoin: round;
+      }
+
+      .map .hop-label.mono {
+        font-family: var(--mono);
+        font-size: 14px;
+      }
+
+      .map .hop {
+        cursor: pointer;
+      }
+
+      .map .hop:hover .hop-line {
+        stroke: var(--accent);
+      }
+
+      .map .hop:hover .hop-head {
+        fill: var(--accent);
+      }
+
+      .map .hop.is-live .hop-line {
+        stroke: var(--accent);
+        stroke-width: 2;
+      }
+
+      .map .hop.is-live .hop-head {
+        fill: var(--accent);
+      }
+
+      .map .hop.is-live .hop-label {
+        fill: var(--ink);
+      }
+
+      .map .hop.is-selected .hop-line {
+        stroke: var(--accent);
+        stroke-width: 2;
+      }
+
+      .map .hop.is-selected .hop-head {
+        fill: var(--accent);
+      }
+
+      .without-stores .station-store,
+      .without-stores .hop-store {
+        display: none;
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.25rem;
+        margin-top: 0.9rem;
+        padding-top: 0.65rem;
+        border-top: 1px solid var(--rule);
+        color: var(--graphite);
+        font-size: 0.85rem;
+      }
+
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+      }
+
+      .legend i {
+        width: 0.7rem;
+        height: 0.7rem;
+        border: 1px solid var(--rule);
+        border-radius: 3px;
+        background: var(--card);
+        display: inline-block;
+      }
+
+      .legend i.service {
+        border-color: var(--accent);
+      }
+
+      .legend i.store {
+        border-style: dashed;
+      }
+
+      footer {
+        border-top: 1px solid var(--rule);
+        padding: 1.25rem 1.5rem;
+        color: var(--graphite);
+        font-size: 0.85rem;
+      }
+
+      footer p {
+        margin: 0 auto;
+        max-width: var(--measure);
+      }
+
+      /* The dossier: what the reader pressed. */
+      .dossier {
+        margin-top: 1rem;
+        padding-top: 0.9rem;
+        border-top: 1px solid var(--rule);
+      }
+
+      .dossier h3 {
+        margin-bottom: 0.4rem;
+      }
+
+      .dossier p {
+        margin: 0 0 0.6rem;
+        max-width: 68ch;
+      }
+
+      .fields {
+        display: grid;
+        grid-template-columns: minmax(9rem, 14rem) 1fr;
+        gap: 0.35rem 1.25rem;
+        margin: 0;
+      }
+
+      .fields dt {
+        color: var(--graphite);
+        font-size: 0.85rem;
+      }
+
+      .fields dd {
+        margin: 0;
+        min-width: 0;
+      }
+
+      /* The request: the steps of the path. */
+      .steps {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      .steps[hidden] {
+        display: none;
+      }
+
+      .step {
+        display: grid;
+        grid-template-columns: 2rem 1fr;
+        gap: 0.75rem;
+        padding: 0.7rem 0;
+        border-bottom: 1px solid var(--rule);
+        cursor: pointer;
+      }
+
+      .step:last-child {
+        border-bottom: none;
+      }
+
+      .step-title {
+        display: block;
+        margin-bottom: 0.3rem;
+      }
+
+      .step:hover .step-title,
+      .step.is-selected .step-title {
+        color: var(--accent);
+      }
+
+      .step-number {
+        color: var(--graphite);
+        font-family: var(--mono);
+        font-size: 0.86em;
+        padding-top: 0.15rem;
+      }
+
+      .step .fields {
+        grid-template-columns: minmax(7rem, 10rem) 1fr;
+        gap: 0.15rem 1rem;
+      }
+
+      .step-note {
+        padding: 0.7rem 0 0;
+        color: var(--graphite);
+        font-size: 0.85rem;
+      }
+
+      /* The tables: the index of the map. */
+      .table-scroll {
+        overflow-x: auto;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.94rem;
+        font-variant-numeric: tabular-nums;
+      }
+
+      th,
+      td {
+        text-align: left;
+        padding: 0.5rem 0.6rem;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: top;
+      }
+
+      th {
+        color: var(--graphite);
+        font-weight: 600;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        white-space: nowrap;
+      }
+
+      tbody tr:hover {
+        background: color-mix(in srgb, var(--accent) 6%, transparent);
+      }
+
+      tbody tr.is-selected {
+        background: color-mix(in srgb, var(--accent) 6%, transparent);
+      }
+
+      .name-button {
+        background: none;
+        border: none;
+        padding: 0;
+        font: inherit;
+        color: var(--accent);
+        cursor: pointer;
+        text-align: left;
+        text-decoration: underline;
+        text-underline-offset: 0.18em;
+      }
+
+      .name-button:hover {
+        text-decoration-thickness: 2px;
+      }
+
+      .tag {
+        display: inline-block;
+        font-size: 0.78rem;
+        color: var(--graphite);
+        white-space: nowrap;
+      }
+
+      .tag + .tag::before {
+        content: ", ";
+      }
+
+    </style>
+  </head>
+  <body>
+    <a class="skip" href="#main">The content of the page</a>
+    <header class="masthead">
+      <a class="brand" href="../README.md">the platform</a>
+      <nav aria-label="the sections of the atlas">
+        <a href="../README.md">the documentation</a>
+        <a href="architecture.md">the architecture</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <div class="heading">
+        <h1>The atlas of the platform</h1>
+        <p class="subtitle">
+          The whole platform on one page: the callers, the three services, the stores and the
+          identity provider, and the contracts between them. Every station and every hop of the
+          map opens the contract it speaks, and a request is a path you walk over the map.
+        </p>
+      </div>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>The map</h2>
+          <div class="card-actions">
+            <button
+              type="button"
+              class="chip"
+              id="stores-toggle"
+              aria-pressed="true"
+              aria-controls="the-map"
+            >
+              the stores
+            </button>
+          </div>
+        </div>
+
+        <div class="map-wrap" id="the-map">
+          <svg
+            class="map"
+            viewBox="0 0 1140 430"
+            role="img"
+            aria-labelledby="map-title map-desc"
+          >
+            <title id="map-title">The map of the platform</title>
+            <desc id="map-desc">
+              The browser and the console on the left, the gateway in the middle, the access
+              service above it with the identity provider above that, the data service on the
+              right, and the stores of the three services along the bottom. Every station and
+              every hop of the map is listed in the tables under it.
+            </desc>
+
+            <!-- The hops: the contracts of the platform. -->
+            <g class="hop" data-hop="call">
+              <path class="hop-line" d="M170,124 L250,214" marker-end="url(#arrow)" />
+              <text class="hop-label" x="178" y="112">the credential</text></g>
+            <g class="hop" data-hop="login-page">
+              <path class="hop-line" d="M170,146 L250,240" marker-end="url(#arrow)" />
+              
+            <text class="hop-label" x="176" y="172">the sign-in</text></g>
+            <g class="hop" data-hop="console-access">
+              <path class="hop-line" d="M170,308 C 260,352 430,300 538,126" marker-end="url(#arrow)" />
+              <text class="hop-label" x="176" y="346">the administration</text></g>
+            <g class="hop" data-hop="console-context">
+              <path class="hop-line" d="M170,296 C 280,330 450,260 542,116" marker-end="url(#arrow)" />
+              <text class="hop-label" x="306" y="276">the operator's scope</text></g>
+            <g class="hop" data-hop="login">
+              <path class="hop-line" d="M425,214 L545,124" marker-end="url(#arrow)" />
+              
+            <text class="hop-label" x="430" y="196">the tenant</text></g>
+            <g class="hop" data-hop="provider">
+              <path class="hop-line" d="M637,95 L637,61" marker-end="url(#arrow)" />
+              <text class="hop-label" x="645" y="84">the authorization code</text></g>
+            <g class="hop" data-hop="token">
+              <path class="hop-line" d="M545,120 C 490,110 440,140 395,196" marker-end="url(#arrow)" />
+              
+            <text class="hop-label" x="415" y="130">the identity</text></g>
+            <g class="hop" data-hop="decision">
+              <path class="hop-line" d="M425,244 L545,138" marker-end="url(#arrow)" />
+              
+            <text class="hop-label" x="432" y="222">the decision</text></g>
+            <g class="hop" data-hop="forward">
+              <path class="hop-line" d="M425,250 L855,236" marker-end="url(#arrow)" />
+              <text class="hop-label" x="590" y="228">the signed request</text></g>
+            <g class="hop" data-hop="context">
+              <path class="hop-line" d="M855,212 L730,120" marker-end="url(#arrow)" />
+              
+            <text class="hop-label" x="748" y="160">the permissions</text></g>
+            <g class="hop" data-hop="sessions">
+              <path class="hop-line" d="M317,254 L317,370" marker-end="url(#arrow)" />
+              <text class="hop-label" x="325" y="318">the session</text></g>
+            <g class="hop" data-hop="counters">
+              <path class="hop-line" d="M390,254 L520,370" marker-end="url(#arrow)" />
+              <text class="hop-label" x="420" y="300">the route table and the limits</text></g>
+            <g class="hop" data-hop="codes">
+              <path class="hop-line" d="M610,149 L590,370" marker-end="url(#arrow)" />
+              <text class="hop-label" x="598" y="282">the login codes</text></g>
+            <g class="hop" data-hop="grants">
+              <path class="hop-line" d="M680,149 L775,370" marker-end="url(#arrow)" />
+              <text class="hop-label" x="745" y="290">the grants</text></g>
+            <g class="hop" data-hop="rows">
+              <path class="hop-line" d="M942,254 L1022,370" marker-end="url(#arrow)" />
+              <text class="hop-label" x="958" y="290">the rows</text></g>
+            <g class="station" data-station="browser">
+              <rect
+                class="station-box"
+                x="20"
+                y="110"
+                width="150"
+                height="48"
+                rx="10"
+              />
+              <text class="station-kind" x="95" y="132" text-anchor="middle">
+                a caller
+              </text>
+              <text class="station-name" x="95" y="150" text-anchor="middle">
+                The browser
+              </text>
+            </g>
+            <g class="station" data-station="console">
+              <rect
+                class="station-box"
+                x="20"
+                y="270"
+                width="150"
+                height="48"
+                rx="10"
+              />
+              <text class="station-kind" x="95" y="292" text-anchor="middle">
+                a caller
+              </text>
+              <text class="station-name" x="95" y="310" text-anchor="middle">
+                The console
+              </text>
+            </g>
+            <g class="station" data-station="gateway">
+              <rect
+                class="station-box"
+                x="250"
+                y="200"
+                width="175"
+                height="54"
+                rx="10"
+              />
+              <text class="station-kind" x="337" y="224" text-anchor="middle">
+                a service
+              </text>
+              <text class="station-name" x="337" y="244" text-anchor="middle">
+                The gateway
+              </text>
+            </g>
+            <g class="station" data-station="access">
+              <rect
+                class="station-box"
+                x="545"
+                y="95"
+                width="185"
+                height="54"
+                rx="10"
+              />
+              <text class="station-kind" x="637" y="119" text-anchor="middle">
+                a service
+              </text>
+              <text class="station-name" x="637" y="139" text-anchor="middle">
+                The access service
+              </text>
+            </g>
+            <g class="station" data-station="provider">
+              <rect
+                class="station-box"
+                x="545"
+                y="15"
+                width="185"
+                height="46"
+                rx="10"
+              />
+              <text class="station-kind" x="637" y="35" text-anchor="middle">
+                a provider
+              </text>
+              <text class="station-name" x="637" y="53" text-anchor="middle">
+                The identity provider
+              </text>
+            </g>
+            <g class="station" data-station="data">
+              <rect
+                class="station-box"
+                x="855"
+                y="200"
+                width="175"
+                height="54"
+                rx="10"
+              />
+              <text class="station-kind" x="942" y="224" text-anchor="middle">
+                a service
+              </text>
+              <text class="station-name" x="942" y="244" text-anchor="middle">
+                The data service
+              </text>
+            </g>
+            <g class="station station-store" data-station="gateway-db">
+              <rect
+                class="station-box"
+                x="165"
+                y="370"
+                width="240"
+                height="46"
+                rx="10"
+              />
+              <text class="station-kind" x="285" y="392" text-anchor="middle">
+                PostgreSQL
+              </text>
+              <text class="station-name" x="285" y="410" text-anchor="middle">
+                The database of the gateway
+              </text>
+            </g>
+            <g class="station station-store" data-station="shared">
+              <rect
+                class="station-box"
+                x="415"
+                y="370"
+                width="240"
+                height="46"
+                rx="10"
+              />
+              <text class="station-kind" x="535" y="392" text-anchor="middle">
+                Redis
+              </text>
+              <text class="station-name" x="535" y="410" text-anchor="middle">
+                The shared state
+              </text>
+            </g>
+            <g class="station station-store" data-station="access-db">
+              <rect
+                class="station-box"
+                x="665"
+                y="370"
+                width="240"
+                height="46"
+                rx="10"
+              />
+              <text class="station-kind" x="785" y="392" text-anchor="middle">
+                PostgreSQL
+              </text>
+              <text class="station-name" x="785" y="410" text-anchor="middle">
+                The database of the access service
+              </text>
+            </g>
+            <g class="station station-store" data-station="data-db">
+              <rect
+                class="station-box"
+                x="915"
+                y="370"
+                width="240"
+                height="46"
+                rx="10"
+              />
+              <text class="station-kind" x="1035" y="392" text-anchor="middle">
+                PostgreSQL
+              </text>
+              <text class="station-name" x="1035" y="410" text-anchor="middle">
+                The database of the data service
+              </text>
+            </g>
+            <defs>
+              <marker
+                id="arrow"
+                viewBox="0 0 8 8"
+                refX="7"
+                refY="4"
+                markerWidth="7"
+                markerHeight="7"
+                orient="auto-start-reverse"
+              >
+                <path class="hop-head" d="M0,0 L8,4 L0,8 Z" />
+              </marker>
+            </defs>
+          </svg>
+        </div>
+
+        <div class="legend">
+          <span><i></i>a caller</span>
+          <span><i class="service"></i>a service of the platform</span>
+          <span><i></i>the provider of a tenant</span>
+          <span><i class="store"></i>a store</span>
+        </div>
+
+        <div class="dossier" id="dossier">
+          <h3 id="dossier-title">The gateway</h3>
+          <p id="dossier-what"></p>
+          <dl class="fields" id="dossier-fields"></dl>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>The request</h2>
+          <div class="card-actions chips" id="request-chips"></div>
+        </div>
+        <div id="requests">
+          <ol class="steps" id="steps-record" data-request="record"></ol>
+          <ol class="steps" id="steps-login" data-request="login" hidden></ol>
+          <ol class="steps" id="steps-administration" data-request="administration" hidden></ol>
+        </div>
+        <p class="note">
+          The steps of a request are the hops of the map, in the order the request makes them. The
+          map lights them in the same order, and the hop of a step opens the contract it speaks.
+        </p>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>The stations</h2>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">The station</th>
+                <th scope="col">What it is</th>
+                <th scope="col">What it owns</th>
+                <th scope="col">The code</th>
+              </tr>
+            </thead>
+            <tbody id="stations-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>The hops</h2>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">The hop</th>
+                <th scope="col">The contract</th>
+                <th scope="col">What it carries</th>
+                <th scope="col">What it decides</th>
+                <th scope="col">What it refuses</th>
+                <th scope="col">The requests</th>
+              </tr>
+            </thead>
+            <tbody id="hops-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>
+        The atlas is a drawing of the platform: it says what talks to what, and it is not a
+        contract. The contracts are the specifications of the three services, and the
+        documentation of the platform is the tree that holds them.
+      </p>
+    </footer>
+
+    <script type="application/json" id="atlas-map">
+{
+  "stations": [
+    {
+      "id": "browser",
+      "name": "The browser",
+      "kind": "a caller",
+      "what": "A person, or an application, that holds a session cookie, or a bearer token, and asks the platform for the data of a workspace.",
+      "owns": "nothing of the platform",
+      "contracts": "the contract of the data service, behind the gateway",
+      "code": "",
+      "docs": [
+        [
+          "the contract of the gateway",
+          "../gateway/spec.md"
+        ]
+      ]
+    },
+    {
+      "id": "console",
+      "name": "The console",
+      "kind": "a caller",
+      "what": "The web application of the platform: it shows the data of a workspace and the administration of the access service. It is a client of the three services, it signs no identity of its own, and it decides nothing.",
+      "owns": "the sessions of its own sign-in",
+      "contracts": "the gateway, for the data; the access service, for the administration",
+      "code": "packages/console/src",
+      "docs": [
+        [
+          "the console",
+          "../console/overview.md"
+        ]
+      ]
+    },
+    {
+      "id": "gateway",
+      "name": "The gateway",
+      "kind": "a service of the platform",
+      "what": "It authenticates the caller against an identity provider, asks the access service whether the caller may use the workspace, and forwards the request to the upstream of the route it matched. It never decides an access of its own: it asks, and it refuses the request when the service does not answer.",
+      "owns": "the route table, the sessions, the counters of the limits, the cache of the decisions",
+      "contracts": "GET /auth/login, POST /auth/callback, GET /auth/logout; POST /v1/decisions; the contract of the data service",
+      "code": "packages/gateway/src",
+      "docs": [
+        [
+          "the contract of the gateway",
+          "../gateway/spec.md"
+        ]
+      ]
+    },
+    {
+      "id": "access",
+      "name": "The access service",
+      "kind": "a service of the platform",
+      "what": "It is the OpenID Connect broker and the decision service of the platform: it authenticates a caller against the provider of a tenant, maps the identity to a principal, and answers the decisions of the gateway and the contexts of the data service.",
+      "owns": "the tenants, the principals, the permissions, the groups, the grants, the audit of the administration",
+      "contracts": "GET /oauth/authorize, GET /oauth/tenant/callback, POST /oauth/token; POST /v1/decisions; POST /v1/access-context; /v1/admin/*",
+      "code": "packages/access/src",
+      "docs": [
+        [
+          "the contract of the access service",
+          "../access/spec.md"
+        ]
+      ]
+    },
+    {
+      "id": "provider",
+      "name": "The identity provider",
+      "kind": "the provider of a tenant",
+      "what": "The OpenID Connect provider of a tenant: it holds the identity of the people of the tenant, and the access service brokers it. The gateway may also be registered with a provider of its own.",
+      "owns": "the identity of the people of the tenant",
+      "contracts": "the discovery, the authorization, the token, the userinfo, the keys",
+      "code": "",
+      "docs": [
+        [
+          "the security of the access service",
+          "../access/security.md"
+        ]
+      ]
+    },
+    {
+      "id": "data",
+      "name": "The data service",
+      "kind": "a service of the platform",
+      "what": "The headless backend of the data: it owns the workspaces, the collections, the policies, the records, the versions, the audit and the events. It verifies the identity the gateway signed, asks the access service for the permissions of the caller, and answers with the rows that caller may see.",
+      "owns": "the workspaces, the registry of the collections, the policy bundles, the records, their versions, the audit, the events",
+      "contracts": "/ws/:workspaceId/v1/*",
+      "code": "packages/data/src",
+      "docs": [
+        [
+          "the contract of the data service",
+          "../data/specification.md"
+        ]
+      ]
+    },
+    {
+      "id": "gateway-db",
+      "name": "The database of the gateway",
+      "kind": "a store",
+      "what": "The store of the gateway: the sessions of the callers, the route table and its revisions, the cache of the decisions, the counters of the limits, the audit and the failures of the control plane.",
+      "owns": "the state of the gateway",
+      "contracts": "the schema of the gateway",
+      "code": "packages/gateway/src/platform/postgres",
+      "docs": [
+        [
+          "the operations of the gateway",
+          "../gateway/operations.md"
+        ]
+      ]
+    },
+    {
+      "id": "shared",
+      "name": "The shared state",
+      "kind": "a store",
+      "what": "The Redis of the deployment: the sessions, the route table and the counters of the gateway, and the codes of the logins of the access service. A deployment with several replicas shares it, and a deployment with one may leave it out.",
+      "owns": "the state the replicas share",
+      "contracts": "the commands of the shared state",
+      "code": "packages/gateway/src/platform/redis",
+      "docs": [
+        [
+          "the operations of the platform",
+          "../platform/operations.md"
+        ]
+      ]
+    },
+    {
+      "id": "access-db",
+      "name": "The database of the access service",
+      "kind": "a store",
+      "what": "The store of the access service: the tenants, the principals, the permissions, the groups, the grants and the audit of the administration.",
+      "owns": "the state of the access service",
+      "contracts": "the migrations of the access service",
+      "code": "packages/access/src/platform/postgres",
+      "docs": [
+        [
+          "the operations of the access service",
+          "../access/operations.md"
+        ]
+      ]
+    },
+    {
+      "id": "data-db",
+      "name": "The database of the data service",
+      "kind": "a store",
+      "what": "The store of the data service: the workspaces, the registry of the collections, the policy bundles, the records, their versions, the audit, the events and the receipts of the writes.",
+      "owns": "the data of the workspaces",
+      "contracts": "the migrations of the data service",
+      "code": "packages/data/migrations",
+      "docs": [
+        [
+          "the migrations of the data service",
+          "../data/migrations.md"
+        ]
+      ]
+    }
+  ],
+  "hops": [
+    {
+      "id": "call",
+      "from": "The browser",
+      "to": "The gateway",
+      "contract": "the contract of the data service, behind the gateway",
+      "carries": "the session cookie, or the bearer token",
+      "decides": "who the caller is",
+      "refuses": "401, or a redirect to the sign-in",
+      "store": false,
+      "requests": [
+        "record"
+      ]
+    },
+    {
+      "id": "login-page",
+      "from": "The browser",
+      "to": "The gateway",
+      "contract": "GET /auth/login",
+      "carries": "the target of the redirect",
+      "decides": "that a login is in flight",
+      "refuses": "the sign-in starts again",
+      "store": false,
+      "requests": [
+        "login"
+      ]
+    },
+    {
+      "id": "counters",
+      "from": "The gateway",
+      "to": "The shared state",
+      "contract": "the commands of the shared state",
+      "carries": "the route table, the counters of the limits",
+      "decides": "how much of the budget is left",
+      "refuses": "the request is counted in the process",
+      "store": true,
+      "requests": [
+        "record",
+        "login"
+      ]
+    },
+    {
+      "id": "sessions",
+      "from": "The gateway",
+      "to": "The database of the gateway",
+      "contract": "the table of the sessions",
+      "carries": "the session of the caller",
+      "decides": "whether the session is alive",
+      "refuses": "the caller is refused when the store does not answer",
+      "store": true,
+      "requests": [
+        "record",
+        "login"
+      ]
+    },
+    {
+      "id": "decision",
+      "from": "The gateway",
+      "to": "The access service",
+      "contract": "POST /v1/decisions",
+      "carries": "the subject, the workspace, the route and the roles",
+      "decides": "whether the caller may use the workspace",
+      "refuses": "403, or 503 when the service does not answer",
+      "store": false,
+      "requests": [
+        "record"
+      ]
+    },
+    {
+      "id": "login",
+      "from": "The gateway",
+      "to": "The access service",
+      "contract": "GET /oauth/authorize",
+      "carries": "the client, the redirect and the challenge",
+      "decides": "which tenant the login is for",
+      "refuses": "403, or 502 when the provider is down",
+      "store": false,
+      "requests": [
+        "login"
+      ]
+    },
+    {
+      "id": "forward",
+      "from": "The gateway",
+      "to": "The data service",
+      "contract": "/ws/:workspaceId/v1/*",
+      "carries": "the identity headers and their detached signature",
+      "decides": "nothing: the gateway forwards the request",
+      "refuses": "502",
+      "store": false,
+      "requests": [
+        "record"
+      ]
+    },
+    {
+      "id": "provider",
+      "from": "The access service",
+      "to": "The identity provider",
+      "contract": "the OpenID Connect",
+      "carries": "the authorization code",
+      "decides": "the identity of the person",
+      "refuses": "403 when the person refuses",
+      "store": false,
+      "requests": [
+        "login"
+      ]
+    },
+    {
+      "id": "codes",
+      "from": "The access service",
+      "to": "The shared state",
+      "contract": "the commands of the shared state",
+      "carries": "the codes of the logins",
+      "decides": "whether a code may be exchanged",
+      "refuses": "the sign-in starts again",
+      "store": true,
+      "requests": [
+        "login"
+      ]
+    },
+    {
+      "id": "token",
+      "from": "The access service",
+      "to": "The gateway",
+      "contract": "POST /oauth/token",
+      "carries": "the code and the verifier",
+      "decides": "the identity of the caller",
+      "refuses": "401",
+      "store": false,
+      "requests": [
+        "login"
+      ]
+    },
+    {
+      "id": "context",
+      "from": "The data service",
+      "to": "The access service",
+      "contract": "POST /v1/access-context",
+      "carries": "the subject, the tenant, the workspace and the route",
+      "decides": "which permissions the caller holds",
+      "refuses": "503 when the service does not answer",
+      "store": false,
+      "requests": [
+        "record"
+      ]
+    },
+    {
+      "id": "rows",
+      "from": "The data service",
+      "to": "The database of the data service",
+      "contract": "the query",
+      "carries": "the query and its bound values",
+      "decides": "which rows the caller sees",
+      "refuses": "a row the caller may not see",
+      "store": true,
+      "requests": [
+        "record"
+      ]
+    },
+    {
+      "id": "console-access",
+      "from": "The console",
+      "to": "The access service",
+      "contract": "/v1/admin/*",
+      "carries": "the token of the operator",
+      "decides": "what the operator may change",
+      "refuses": "403",
+      "store": false,
+      "requests": [
+        "administration"
+      ]
+    },
+    {
+      "id": "console-context",
+      "from": "The console",
+      "to": "The access service",
+      "contract": "POST /v1/access-context",
+      "carries": "the subject, the tenant, the workspace and the route",
+      "decides": "the scope of the operator",
+      "refuses": "403",
+      "store": false,
+      "requests": [
+        "administration"
+      ]
+    },
+    {
+      "id": "grants",
+      "from": "The access service",
+      "to": "The database of the access service",
+      "contract": "the table of the grants",
+      "carries": "the tenants, the principals, the grants",
+      "decides": "what a principal may do",
+      "refuses": "503 when the database does not answer",
+      "store": true,
+      "requests": [
+        "administration"
+      ]
+    }
+  ],
+  "requests": [
+    {
+      "id": "record",
+      "label": "A record of a workspace",
+      "steps": [
+        "call",
+        "counters",
+        "sessions",
+        "decision",
+        "forward",
+        "context",
+        "rows"
+      ],
+      "note": "A record is read and written on the same path: the same services, the same contracts, the same order. A write asks the access service for a fresh context — the decision of a moment ago is exactly the decision that has to be checked — and it carries an idempotency key and the etag of the record it changes."
+    },
+    {
+      "id": "login",
+      "label": "A sign-in",
+      "steps": [
+        "login-page",
+        "counters",
+        "sessions",
+        "login",
+        "provider",
+        "codes",
+        "token"
+      ]
+    },
+    {
+      "id": "administration",
+      "label": "A change of a grant",
+      "steps": [
+        "console-access",
+        "console-context",
+        "grants"
+      ]
+    }
+  ]
+}
+    </script>
+
+    <script>
+      /**
+       * The atlas of the platform.
+       *
+       * The page is a document before it is an instrument: every station,
+       * every hop and every step is written in the html, and the script
+       * only makes them explorable. A reader with the scripts of the
+       * browser disabled reads the same page, one table further down.
+       */
+      ;(() => {
+        'use strict'
+
+        /** The data of the platform: the stations, the hops and the requests. */
+        const DATA = JSON.parse(document.getElementById('atlas-map').textContent || '{}')
+        const STATIONS = DATA.stations || []
+        const HOPS = DATA.hops || []
+        const REQUESTS = DATA.requests || []
+
+        /** The hop of an id. */
+        const hopOf = (id) => HOPS.find((hop) => hop.id === id)
+        /** The station of an id. */
+        const stationOf = (id) => STATIONS.find((station) => station.id === id)
+        /** The request of an id. */
+        const requestOf = (id) => REQUESTS.find((request) => request.id === id)
+
+        /** The element of a selector. */
+        const $ = (selector) => document.querySelector(selector)
+        /** The elements of a selector. */
+        const $$ = (selector) => [...document.querySelectorAll(selector)]
+
+        /**
+         * The name of a station, as it reads inside a sentence.
+         *
+         * A station is named as a reader names a thing — "The gateway".
+         * Inside a sentence, the name of the thing that is not the
+         * subject of it is written in the lower case.
+         */
+        const inSentence = (name) => name.charAt(0).toLowerCase() + name.slice(1)
+
+        /** The title of a hop: from, to. */
+        const titleOf = (hop) => `${hop.from} to ${inSentence(hop.to)}`
+
+        /** The dossier: what the reader pressed. */
+        const dossier = $('#dossier')
+        const dossierTitle = $('#dossier-title')
+        const dossierWhat = $('#dossier-what')
+        const dossierFields = $('#dossier-fields')
+
+        /** Fills the dossier with a station. */
+        function showStation(station) {
+          dossierTitle.textContent = station.name
+          dossierWhat.textContent = station.what
+          dossierFields.replaceChildren()
+          const entries = [
+            ['Its kind', station.kind],
+            ['What it owns', station.owns],
+            ['Its contracts', station.contracts],
+          ]
+          if (station.code) entries.push(['The code', station.code])
+          for (const [name, value] of entries) {
+            const term = document.createElement('dt')
+            term.textContent = name
+            const description = document.createElement('dd')
+            if (name === 'The code') {
+              const code = document.createElement('code')
+              code.textContent = value
+              description.append(code)
+            } else {
+              description.textContent = value
+            }
+            dossierFields.append(term, description)
+          }
+          if (station.docs && station.docs.length > 0) {
+            const term = document.createElement('dt')
+            term.textContent = 'The documentation'
+            const description = document.createElement('dd')
+            for (const [label, href] of station.docs) {
+              const link = document.createElement('a')
+              link.href = href
+              link.textContent = label
+              description.append(link)
+              description.append(document.createTextNode(' '))
+            }
+            dossierFields.append(term, description)
+          }
+          dossier.hidden = false
+          markSelected('station', station.id)
+        }
+
+        /** Fills the dossier with a hop. */
+        function showHop(hop) {
+          dossierTitle.textContent = titleOf(hop)
+          dossierWhat.textContent = hop.contract
+          dossierFields.replaceChildren()
+          const entries = [
+            ['What it carries', hop.carries],
+            ['What it decides', hop.decides],
+            ['What it refuses', hop.refuses],
+            ['The requests', hop.requests.map((id) => requestOf(id).label).join(', ')],
+          ]
+          for (const [name, value] of entries) {
+            const term = document.createElement('dt')
+            term.textContent = name
+            const description = document.createElement('dd')
+            description.textContent = value
+            dossierFields.append(term, description)
+          }
+          dossier.hidden = false
+          markSelected('hop', hop.id)
+        }
+
+        /** Marks the pressed thing, in the map and in the tables. */
+        function markSelected(kind, id) {
+          for (const element of $$(`.${kind}.is-selected`)) {
+            element.classList.remove('is-selected')
+          }
+          for (const row of $$('tbody tr.is-selected')) {
+            row.classList.remove('is-selected')
+          }
+          const pressed = $(`.${kind}[data-${kind}="${id}"]`)
+          if (pressed) pressed.classList.add('is-selected')
+          const row = $(`tbody tr[data-key="${id}"]`)
+          if (row) row.classList.add('is-selected')
+        }
+
+        /** The stations table: the index of the map. */
+        function fillStations() {
+          const body = $('#stations-body')
+          for (const station of STATIONS) {
+            const row = document.createElement('tr')
+            row.dataset.key = station.id
+            const name = document.createElement('td')
+            const button = document.createElement('button')
+            button.type = 'button'
+            button.className = 'name-button'
+            button.textContent = station.name
+            button.addEventListener('click', () => showStation(station))
+            name.append(button)
+            const kind = document.createElement('div')
+            kind.className = 'tag'
+            kind.textContent = station.kind
+            name.append(kind)
+            const what = document.createElement('td')
+            what.textContent = station.what
+            const owns = document.createElement('td')
+            owns.textContent = station.owns
+            const code = document.createElement('td')
+            if (station.code) {
+              const element = document.createElement('code')
+              element.textContent = station.code
+              code.append(element)
+            }
+            row.append(name, what, owns, code)
+            body.append(row)
+          }
+        }
+
+        /** The hops table: the index of the contracts. */
+        function fillHops() {
+          const body = $('#hops-body')
+          for (const hop of HOPS) {
+            const row = document.createElement('tr')
+            row.dataset.key = hop.id
+            const name = document.createElement('td')
+            const button = document.createElement('button')
+            button.type = 'button'
+            button.className = 'name-button'
+            button.textContent = titleOf(hop)
+            button.addEventListener('click', () => showHop(hop))
+            name.append(button)
+            const contract = document.createElement('td')
+            contract.textContent = hop.contract
+            const carries = document.createElement('td')
+            carries.textContent = hop.carries
+            const decides = document.createElement('td')
+            decides.textContent = hop.decides
+            const refuses = document.createElement('td')
+            refuses.textContent = hop.refuses
+            const requests = document.createElement('td')
+            for (const id of hop.requests) {
+              const tag = document.createElement('span')
+              tag.className = 'tag'
+              tag.textContent = requestOf(id).label
+              requests.append(tag)
+            }
+            row.append(name, contract, carries, decides, refuses, requests)
+            body.append(row)
+          }
+        }
+
+        /** The steps of a request: the hops, in the order the request makes them. */
+        function fillSteps() {
+          for (const request of REQUESTS) {
+            const list = $(`#steps-${request.id}`) || createSteps(request.id)
+            request.steps.forEach((hopId, index) => {
+              const hop = hopOf(hopId)
+              const item = document.createElement('li')
+              item.className = 'step'
+              item.dataset.hop = hop.id
+              const number = document.createElement('span')
+              number.className = 'step-number'
+              number.textContent = String(index + 1)
+              const body = document.createElement('div')
+              const title = document.createElement('span')
+              title.className = 'step-title'
+              title.textContent = titleOf(hop)
+              body.append(title)
+              const fields = document.createElement('dl')
+              fields.className = 'fields'
+              const entries = [
+                ['The contract', hop.contract],
+                ['What it carries', hop.carries],
+                ['What it decides', hop.decides],
+                ['What it refuses', hop.refuses],
+              ]
+              for (const [label, value] of entries) {
+                const term = document.createElement('dt')
+                term.textContent = label
+                const description = document.createElement('dd')
+                description.textContent = value
+                fields.append(term, description)
+              }
+              body.append(fields)
+              item.append(number, body)
+              item.addEventListener('click', () => {
+                showHop(hop)
+                lightStep(hop.id)
+              })
+              list.append(item)
+            })
+            if (request.note) {
+              const note = document.createElement('li')
+              note.className = 'step-note'
+              note.textContent = request.note
+              list.append(note)
+            }
+          }
+        }
+
+        /**
+         * The list of the steps of a request.
+         *
+         * The page writes the lists of the requests it knows, and a
+         * request that the data of the platform holds and the page does
+         * not is given its list: the data is the truth, and the page
+         * follows it.
+         */
+        function createSteps(id) {
+          const list = document.createElement('ol')
+          list.className = 'steps'
+          list.id = `steps-${id}`
+          list.dataset.request = id
+          list.hidden = true
+          $('#requests').append(list)
+          return list
+        }
+
+        /** The chips of the requests. */
+        function fillChips() {
+          const chips = $('#request-chips')
+          for (const request of REQUESTS) {
+            const chip = document.createElement('button')
+            chip.type = 'button'
+            chip.className = 'chip'
+            chip.textContent = request.label
+            chip.setAttribute('aria-pressed', 'false')
+            chip.dataset.request = request.id
+            chip.addEventListener('click', () => selectRequest(request.id))
+            chips.append(chip)
+          }
+        }
+
+        /** Walks a request over the map. */
+        function selectRequest(id) {
+          for (const chip of $$('#request-chips .chip')) {
+            chip.setAttribute('aria-pressed', chip.dataset.request === id ? 'true' : 'false')
+          }
+          for (const list of $$('.steps')) {
+            list.hidden = list.dataset.request !== id
+          }
+          const request = requestOf(id)
+          for (const hop of $$('.hop')) {
+            const step = request.steps.indexOf(hop.dataset.hop)
+            hop.classList.toggle('is-live', step >= 0)
+          }
+          for (const row of $$('#hops-body tr')) {
+            const hop = hopOf(row.dataset.key)
+            row.hidden = Boolean(hop) && !hop.requests.includes(id)
+          }
+          lightStep(request.steps[0])
+        }
+
+        /** The step of the map that is lit. */
+        function lightStep(hopId) {
+          for (const step of $$('.step')) {
+            step.classList.toggle('is-selected', step.dataset.hop === hopId)
+          }
+          for (const hop of $$('.hop')) {
+            hop.classList.toggle('is-selected', hop.dataset.hop === hopId)
+          }
+        }
+
+        /** The stores: they may be hidden. */
+        function wireStores() {
+          const toggle = $('#stores-toggle')
+          toggle.addEventListener('click', () => {
+            const shown = toggle.getAttribute('aria-pressed') === 'true'
+            toggle.setAttribute('aria-pressed', shown ? 'false' : 'true')
+            document.documentElement.classList.toggle('without-stores', shown)
+          })
+        }
+
+        /** The map: the stations and the hops are pressed with a pointer. */
+        function wireMap() {
+          for (const station of $$('.station')) {
+            const press = () => {
+              const found = stationOf(station.dataset.station)
+              if (found) showStation(found)
+            }
+            station.addEventListener('click', press)
+          }
+          for (const hop of $$('.hop')) {
+            const press = () => {
+              const found = hopOf(hop.dataset.hop)
+              if (found) showHop(found)
+            }
+            hop.addEventListener('click', press)
+          }
+        }
+
+        fillStations()
+        fillHops()
+        fillSteps()
+        fillChips()
+        wireMap()
+        wireStores()
+        showStation(stationOf('gateway'))
+        selectRequest('record')
+      })()
+    </script>
+  </body>
+</html>
