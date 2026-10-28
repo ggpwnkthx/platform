@@ -1000,112 +1000,6 @@ button.button {
   color: var(--accent);
 }
 
-/* ------------------------------------------------------- the documentation */
-
-.doc {
-  max-width: 62rem;
-}
-
-.doc h2 {
-  margin-top: 2.2rem;
-  padding-top: 0.6rem;
-  border-top: 1px solid var(--rule);
-}
-
-.doc h3 {
-  margin-top: 1.6rem;
-}
-
-.doc h4,
-.doc h5,
-.doc h6 {
-  margin-top: 1.2rem;
-  font-size: 0.95rem;
-}
-
-.doc p {
-  margin: 0.8rem 0;
-  line-height: 1.65;
-}
-
-.doc ul,
-.doc ol {
-  margin: 0.8rem 0;
-  padding-left: 1.4rem;
-  line-height: 1.6;
-}
-
-.doc li {
-  margin: 0.25rem 0;
-}
-
-.doc li.task {
-  list-style: none;
-  margin-left: -1.4rem;
-}
-
-.doc li.task input {
-  margin-right: 0.45rem;
-}
-
-.doc pre {
-  margin: 1rem 0;
-}
-
-.doc blockquote {
-  margin: 1rem 0;
-  padding: 0.6rem 1rem;
-  border-left: 3px solid var(--accent-soft);
-  background: var(--sunk);
-  border-radius: 0 var(--radius) var(--radius) 0;
-}
-
-.doc hr {
-  margin: 2rem 0;
-  border: 0;
-  border-top: 1px solid var(--rule);
-}
-
-.doc table {
-  margin: 1rem 0;
-}
-
-.doc-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.35rem;
-}
-
-.doc-list li {
-  padding: 0.45rem 0.7rem;
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  background: var(--sunk);
-}
-
-.toc {
-  margin: 1.4rem 0;
-  padding: 0.8rem 1rem;
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  background: var(--sunk);
-  font-size: 0.9rem;
-}
-
-.toc ol {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.2rem;
-}
-
-.toc li.level-3 {
-  margin-left: 1.2rem;
-}
-
 /* ------------------------------------------------------------ the record */
 
 .diff-added {
@@ -1137,4 +1031,152 @@ button.button {
   .filter-row {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* ------------------------------------------------------- the documentation */
+
+.doc-page {
+  display: flex;
+  flex-direction: column;
+  gap: 2.4rem;
+}
+
+.doc-page .lede {
+  max-width: 68ch;
+}
+
+.doc {
+  max-width: 72ch;
+}
+
+/*
+ * The documents draw their own rules: the markdown of a document holds
+ * a rule between its sections, and the sheet does not draw a second
+ * one on top of it.
+ */
+.doc h2 {
+  margin-top: 2.4rem;
+}
+
+.doc h3 {
+  margin-top: 1.8rem;
+}
+
+.doc h4,
+.doc h5,
+.doc h6 {
+  margin-top: 1.4rem;
+  font-size: 0.95rem;
+}
+
+.doc p {
+  margin: 0.85rem 0;
+  line-height: 1.7;
+}
+
+.doc ul,
+.doc ol {
+  margin: 0.85rem 0;
+  padding-left: 1.5rem;
+  line-height: 1.65;
+}
+
+.doc li {
+  margin: 0.3rem 0;
+}
+
+.doc li.task {
+  list-style: none;
+  margin-left: -1.5rem;
+}
+
+.doc li.task input {
+  margin-right: 0.45rem;
+}
+
+.doc pre {
+  margin: 1.1rem 0;
+}
+
+.doc :not(pre) > code {
+  background: var(--sunk);
+  border-radius: 4px;
+  padding: 0.1em 0.32em;
+}
+
+.doc blockquote {
+  margin: 1.1rem 0;
+  padding: 0.1rem 0 0.1rem 1rem;
+  border-left: 1px solid var(--rule-strong);
+  color: var(--graphite);
+}
+
+.doc blockquote p {
+  margin: 0.5rem 0;
+}
+
+.doc hr {
+  margin: 2.2rem 0;
+  border: 0;
+  border-top: 1px solid var(--rule);
+}
+
+.table-scroll {
+  margin: 1.1rem 0;
+  overflow-x: auto;
+}
+
+.table-scroll table {
+  margin: 0;
+}
+
+.outline {
+  margin: 1.5rem 0 0;
+  max-width: 72ch;
+}
+
+details.disclosure.outline > summary {
+  font-size: 0.88rem;
+}
+
+.outline ol {
+  list-style: none;
+  margin: 0.7rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.outline li.level-3 {
+  margin-left: 1.3rem;
+}
+
+.doc-index {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+  max-width: 72ch;
+}
+
+.doc-index li {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.doc-index a {
+  font-weight: 500;
+}
+
+.doc-index li p {
+  margin: 0;
+  color: var(--graphite);
+  font-size: 0.9rem;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }

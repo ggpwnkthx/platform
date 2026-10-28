@@ -2073,9 +2073,9 @@ The layout, the layers and the boundaries are in
 
 The decisions that shape the contract are in
 [decisions.md](decisions.md): the column **Stated in** of that table names
-the section of this document that states each of them. A decision that
-changes the contract is recorded in this document, in that table and in
-the changelog, never only in the code.
+the section of this document that states each of them. The rule of the
+table, and the rule of a decision that changes the contract, are in [the
+decisions of the platform](../platform/decisions.md).
 
 ## 18. The settled questions
 

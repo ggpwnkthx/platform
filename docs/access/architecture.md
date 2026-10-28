@@ -167,8 +167,8 @@ architecture:
   constraint is in the schema, not in the application.
 - The **isolation has a backstop in the database**: the eight tables have
   the row level security of PostgreSQL, the scope of a statement is the
-  setting `access.tenant_id`, and the scope is local to the transaction, so a
-  pooled connection never carries the scope of another request.
+  setting `access.tenant_id`, and the scope is local to the transaction
+  (the rule is in the specification of the access service).
 - The **grants are the policy**, and there is no policy language: a
   permission, a workspace, a route, an expiry.
 - The **protocol state is not in the database**: the state of a login is

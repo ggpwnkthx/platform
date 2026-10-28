@@ -16,10 +16,10 @@ export {
   type Asset,
   type Document,
   groupsOf,
+  headOf,
   renderOf,
   type Rendered,
   textOf,
-  titleOfContent,
   titleOf,
   type Tree,
 } from './tree'

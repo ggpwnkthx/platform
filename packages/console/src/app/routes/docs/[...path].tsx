@@ -10,7 +10,7 @@
 import { createRoute } from 'honox/factory'
 import { DocumentBlocks } from '../../components/documentation'
 import { PageHead } from '../../components/page'
-import { textOf, titleOf } from '../../../domains/documentation'
+import { textOf } from '../../../domains/documentation'
 import { DOCUMENTATION, renderedOf } from '../../documentation'
 
 export default createRoute(async (c) => {
@@ -22,14 +22,18 @@ export default createRoute(async (c) => {
   const rendered = renderedOf(path)
   if (!rendered) return c.notFound()
   const { document, title, blocks } = rendered
-  const headings = blocks.filter(
+  // The title of the document is the title of the page: the document
+  // says it once, and the page does not say it again.
+  const body = blocks.filter((block) => !(block.kind === 'heading' && block.level === 1))
+  const headings = body.filter(
     (block) => block.kind === 'heading' && block.level >= 2 && block.level <= 3
   )
   return c.render(
-    <>
-      <PageHead title={title} eyebrow={titleOf(document.directory)} />
+    <div class="doc-page">
+      <PageHead title={title} />
       {headings.length > 1 ? (
-        <nav class="toc" aria-label="The document">
+        <details class="disclosure outline">
+          <summary>On this page</summary>
           <ol>
             {headings.map((heading) =>
               heading.kind === 'heading' ? (
@@ -39,12 +43,12 @@ export default createRoute(async (c) => {
               ) : null
             )}
           </ol>
-        </nav>
+        </details>
       ) : null}
       <article class="doc">
-        <DocumentBlocks blocks={blocks} tree={DOCUMENTATION} from={document.source} />
+        <DocumentBlocks blocks={body} tree={DOCUMENTATION} from={document.source} />
       </article>
-    </>,
+    </div>,
     {
       title,
       section: 'docs',

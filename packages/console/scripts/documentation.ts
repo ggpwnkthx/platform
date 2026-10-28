@@ -21,6 +21,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
 import type { Plugin } from 'vite'
 import type { Asset, Document } from '../src/domains/documentation'
+import { headOf } from '../src/domains/documentation'
 
 /** The module the plugin gives to the server. */
 export const VIRTUAL = 'virtual:documentation'
@@ -48,11 +49,15 @@ export async function buildOf(root: string): Promise<{ documents: Document[]; as
     const source = relative(root, path)
     const name = relative(directory, path)
     if (name.endsWith('.md')) {
+      const content = await readFile(path, 'utf8')
+      const head = headOf(content, name.replace(/\.md$/, ''))
       documents.push({
         path: name.replace(/\.md$/, ''),
         source,
         directory: name.includes('/') ? name.slice(0, name.lastIndexOf('/')) : '',
-        content: await readFile(path, 'utf8'),
+        title: head.title,
+        summary: head.summary,
+        content,
       })
       return
     }

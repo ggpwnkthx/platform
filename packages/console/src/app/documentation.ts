@@ -11,22 +11,13 @@
  */
 
 import { assets, documents } from 'virtual:documentation'
-import {
-  renderOf,
-  type Document,
-  type Rendered,
-  type Tree,
-  titleOfContent,
-} from '../domains/documentation'
+import { renderOf, type Rendered, type Tree } from '../domains/documentation'
 
 /** The documentation of the platform, as the console holds it. */
 export const DOCUMENTATION: Tree = { documents, assets }
 
 /** The documents that are read, and the blocks they hold. */
 const read = new Map<string, Rendered>()
-
-/** The titles of the documents that are named. */
-const titles = new Map<string, string>()
 
 /**
  * The document of the documentation, read.
@@ -42,13 +33,4 @@ export function renderedOf(path: string): Rendered | null {
   const rendered = renderOf(document)
   read.set(path, rendered)
   return rendered
-}
-
-/** The title of a document of the documentation. */
-export function titleOf(document: Document): string {
-  const known = titles.get(document.path)
-  if (known !== undefined) return known
-  const title = titleOfContent(document.content, document.path)
-  titles.set(document.path, title)
-  return title
 }

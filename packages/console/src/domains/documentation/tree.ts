@@ -28,6 +28,10 @@ export interface Document {
   readonly directory: string
   /** The document, as it is written. */
   readonly content: string
+  /** The title of the document: the heading of its first level. */
+  readonly title: string
+  /** The summary of the document: the paragraph that follows its title. */
+  readonly summary: string
 }
 
 /**
@@ -58,25 +62,73 @@ export function renderOf(document: Document): Rendered {
   const blocks = parseMarkdown(document.content)
   return {
     document,
-    title: titleOfContent(document.content, document.path),
+    title: headOf(document.content, document.path).title,
     blocks,
   }
 }
 
 /**
- * The title of a document: the heading of its first level.
+ * The head of a document: its title and its summary.
  *
- * The title is read without the blocks of the document: the index of
- * the documentation names every document of it, and it reads every
- * title of it.
+ * The title is the heading of its first level, and the summary is the
+ * paragraph that follows it: the one line that says what the document
+ * holds. The index of the documentation names every document with them,
+ * and a reader chooses a document by what it holds and not by its name.
  */
-export function titleOfContent(content: string, fallback: string): string {
+export interface Head {
+  /** The title of the document. */
+  readonly title: string
+  /** The summary of the document: its first paragraph. */
+  readonly summary: string
+}
+
+/**
+ * The head of a document.
+ *
+ * The head is read without the blocks of the document: the index of the
+ * documentation names every document of it, and it reads the head of
+ * every one of them.
+ */
+export function headOf(content: string, fallback: string): Head {
   const heading = headingLinesOf(content).find((item) => item.level === 1)
-  if (!heading) return fallback
+  const title = heading
+    ? (() => {
+        try {
+          return textOf(inlineOf(heading.text, heading.line))
+        } catch {
+          return heading.text
+        }
+      })()
+    : fallback
+  return { title, summary: summaryOf(content) }
+}
+
+/**
+ * The summary of a document: the paragraph that follows its title.
+ *
+ * The summary is the text of the document and not a description of it:
+ * the index shows the words the document itself opens with.
+ */
+function summaryOf(content: string): string {
+  const lines = content.split('\n')
+  const start = lines.findIndex((line) => /^#\s+\S/.test(line))
+  if (start === -1) return ''
+  const paragraph: string[] = []
+  for (const line of lines.slice(start + 1)) {
+    if (line.trim() === '') {
+      // The blank lines before the paragraph are not the end of it.
+      if (paragraph.length > 0) break
+      continue
+    }
+    if (/^#{1,6}\s/.test(line) || /^\|/.test(line) || /^```/.test(line)) break
+    paragraph.push(line.trim())
+  }
+  const text = paragraph.join(' ')
+  if (text === '') return ''
   try {
-    return textOf(inlineOf(heading.text, heading.line))
+    return textOf(inlineOf(text, start + 2))
   } catch {
-    return heading.text
+    return text
   }
 }
 

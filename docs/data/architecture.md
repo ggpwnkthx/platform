@@ -103,14 +103,13 @@ The **catalog** of a workspace is what it serves: the collections it
 registered and the bundle of policies that applies to it. The
 deployment holds a default catalog, and a workspace may hold its own.
 
-The catalog is a **logical registry**. It never creates a table and
-never alters one: a registration names a collection of the deployment
-manifest and the table that the deployment declares for it. The
-physical schema stays global and reviewed, and the logical schema is
-per workspace.
+The catalog is a **logical registry**: the rule of it is in the
+specification of the data service (§7.5). The physical schema stays
+global and reviewed, and the logical schema is per workspace.
 
 - A workspace that registered nothing serves every collection of the
-  deployment.
+  deployment (the rule is in the specification of the data service,
+  §7.5).
 - A workspace that registered something serves exactly the registered
   and enabled collections. The others answer `404 NOT_FOUND`.
 - The publication of a bundle is an operator command, never an HTTP
@@ -135,9 +134,8 @@ resolved.
 
 The model is applied in realtime: a change of the model is the change
 of the schema of the workspace for every request that follows it, and
-the version of the schema names it. The model never creates a table and
-never alters one — a field of the model is a column of the table of its
-collection, and the type of a field is the type of its column.
+the version of the schema names it. The rule of the model is in the
+specification of the data service (§7.6).
 
 The domain owns the rules of the model and the ports it reads and
 writes through: the store of the model, the reader of the columns of

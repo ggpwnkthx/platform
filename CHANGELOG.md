@@ -10,6 +10,35 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The documentation page of the console reads like a document
+
+The page of a document repeated its title twice — once in the frame of
+the console and once in the document itself — and opened with a table
+of contents that took the whole first screen, so that a reader saw a
+list of headings instead of the document. The index held every link in a
+box of its own, and the boxes were the page.
+
+The page shows the document now. The title is said once, the measure
+of the text is the measure of a document, and the table of contents is
+closed until a reader opens it. The index names every document with the
+paragraph that opens it — the words of the document itself, not a
+description of it — so that a reader chooses a document by what it
+holds and not by its name.
+
+### The documents of the platform say each thing once
+
+Ten documents said the same thing twice: the rule of a decision that
+changes a contract was in five of them, the rule of the catalog of a
+workspace in four, the rule of the model of a workspace in four, and
+the dependency rules of the gateway in its specification and in its
+architecture.
+
+Each of them now says it once and points at the document that holds
+it. The rule of a decision is in the decisions of the platform, the
+rules of the catalog and of the model are in the specification of the
+data service, and the dependency rules of the gateway are in its
+architecture.
+
 ### The probes of the three services answer the same way
 
 The probes of the platform were three answers of three services: the

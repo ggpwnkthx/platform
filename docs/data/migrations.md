@@ -46,7 +46,9 @@ schema when it starts and when it answers its readiness probe:
 - a table of a collection that does not force its row level security,
 - a table of the backend that does not force it.
 
-The service never creates a table and never alters one while it runs. A
+The service never creates a table and never alters one while it runs —
+the rule is in [the architecture of the data
+service](architecture.md#the-storage). A
 drift is stopped by a migration and by a new release of the manifests.
 
 ## The bundles

@@ -9,11 +9,11 @@
 import { createRoute } from 'honox/factory'
 import { PageHead } from '../../components/page'
 import { groupsOf, urlOf } from '../../../domains/documentation'
-import { DOCUMENTATION, titleOf } from '../../documentation'
+import { DOCUMENTATION } from '../../documentation'
 
 export default createRoute(async (c) =>
   c.render(
-    <>
+    <div class="doc-page">
       <PageHead
         title="The documentation of the platform"
         lede="The documents of the platform, the contract of each of the three services and the contract of the console. They are the documents of the repository, and the console shows them as they are written."
@@ -21,16 +21,17 @@ export default createRoute(async (c) =>
       {groupsOf(DOCUMENTATION).map((group) => (
         <section class="stack">
           <h2>{group.title}</h2>
-          <ul class="doc-list">
+          <ul class="doc-index">
             {group.documents.map((document) => (
               <li>
-                <a href={urlOf(document.path)}>{titleOf(document)}</a>
+                <a href={urlOf(document.path)}>{document.title}</a>
+                {document.summary ? <p>{document.summary}</p> : null}
               </li>
             ))}
           </ul>
         </section>
       ))}
-    </>,
+    </div>,
     { title: 'Documentation', section: 'docs' }
   )
 )

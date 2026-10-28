@@ -1,9 +1,9 @@
 # The decisions of the gateway
 
 [spec.md](spec.md) is normative for the behavior. This file records the
-decisions behind it: what was decided, why, and where the evidence is. A
-decision that changes the contract is recorded in the spec and in the
-changelog, never only in the code.
+decisions behind it: what was decided, why, and where the evidence is. The
+rule of a decision that changes the contract, and the shape of the table
+below, are in [the decisions of the platform](../platform/decisions.md).
 
 The decisions that shape the contract are the rows that name a section of
 [spec.md](spec.md); the column **Stated in** names it. The decisions of the

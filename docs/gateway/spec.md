@@ -1963,36 +1963,12 @@ The gateway does not:
 
 ### 14.3 The dependency rules
 
-1. A domain exposes a deliberate `index.ts`. The consumers import that
-   entry point, never an internal file. The concrete adapters expose a
-   separate `adapters/index.ts` for the runtime.
-2. Routing, authentication and rate limiting depend on no other domain.
-   Configuration may use the public schemas of routing and authentication.
-   Workspace access may use the principal of authentication and the
-   identifier types of routing. Forwarding may use the principal type of
-   authentication. Proxying and the websockets may use the plans of
-   forwarding. The control plane may use the public entry points of the
-   configuration, of the authentication and of the workspace access: it
-   writes the route table, it revokes the sessions and it purges the
-   decisions. The application orchestrates the combinations; the domains
-   do not import it.
-3. The core code of a domain imports no framework, no Bun API, no
-   concrete adapter, no application, no platform and no runtime. It
-   receives its dependencies through injected ports. All the production
-   reads of the environment happen in the runtime.
-4. The application uses the public entry points of the domains and the
-   observation interfaces, never a concrete adapter. The platform
-   implements the public ports of the domains without making a policy
-   decision. The runtime is the composition root. The observation layer
-   imports nothing of the project.
-5. There are no catch-all directories (`utils`, `services`, `repositories`,
-   `common`, …) and no import cycle, type-only imports included.
-6. The framework of the application (Hono) is only used by the application,
-   and the API of the runtime (the listener, the sockets, the client of the
-   shared state) is only used by the platform.
-
-The rules are checked by `scripts/gates/architecture.ts`, which runs in the test
-suite and in the CI workflow.
+The dependency rules of the code, the matrix of the domains and the
+gate that checks them are in [the architecture of the
+gateway](architecture.md). The code of the gateway follows them: a
+domain is imported through its public entry point, the core of a
+domain imports nothing of the framework, and the application uses the
+public entry points of the domains.
 
 ### 14.4 The ownership of the resources
 
@@ -2012,9 +1988,9 @@ The completion of a middleware is not the completion of an exchange.
 
 The decisions that shape the contract are in [decisions.md](decisions.md):
 the column **Stated in** of that table names the section of this document
-that states each of them. A decision that changes the contract is
-recorded in this document, in that table and in the changelog, never only
-in the code.
+that states each of them. The rule of the table, and the rule of a
+decision that changes the contract, are in [the decisions of the
+platform](../platform/decisions.md).
 
 ## 16. The compatibility of the release
 

@@ -2,8 +2,8 @@
 
 [specification.md](specification.md) is normative for the behavior. This
 file records the decisions behind it: what was decided, why, and where
-the evidence is. A decision that changes the contract is recorded in the
-specification and in the changelog, never only in the code.
+the evidence is. A rule of a decision that changes the contract, and the shape of the table
+below, are in [the decisions of the platform](../platform/decisions.md).
 
 The decisions that shape the contract are in the table below; the column
 **Stated in** names the section of the specification that states each of
@@ -348,10 +348,9 @@ does not have. The tables of the deployment are the vocabulary of the
 platform, and a deployment that needs another vocabulary adds a
 migration: the review of the change stays where it belongs.
 
-A workspace that registered nothing serves every collection of the
-deployment. The default of a deployment that has not used the registry
-yet is the deployment itself, and a deployment that starts to use it
-does not change the behaviour of the workspaces that did not.
+The rule of the catalog is in the specification of the data service
+(§7.5): a workspace that registered nothing serves every collection of
+the deployment.
 
 ## 20. The publication of a bundle is an operator command and not an HTTP route
 

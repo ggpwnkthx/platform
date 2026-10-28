@@ -85,28 +85,30 @@ function BlockOf(props: { block: Block } & RenderProps) {
       )
     case 'table':
       return (
-        <table>
-          <thead>
-            <tr>
-              {block.head.map((cell) => (
-                <th>
-                  <Inlines inlines={cell} tree={props.tree} from={props.from} />
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {block.rows.map((row) => (
+        <div class="table-scroll">
+          <table>
+            <thead>
               <tr>
-                {row.map((cell) => (
-                  <td>
+                {block.head.map((cell) => (
+                  <th>
                     <Inlines inlines={cell} tree={props.tree} from={props.from} />
-                  </td>
+                  </th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {block.rows.map((row) => (
+                <tr>
+                  {row.map((cell) => (
+                    <td>
+                      <Inlines inlines={cell} tree={props.tree} from={props.from} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )
     case 'quote':
       return (

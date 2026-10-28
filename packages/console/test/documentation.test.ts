@@ -3,9 +3,9 @@ import { readFile, readdir } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import {
   groupsOf,
+  headOf,
   resolveOf,
   textOf,
-  titleOfContent,
   titleOf,
   type Tree,
 } from '../src/domains/documentation'
@@ -139,12 +139,16 @@ describe('the urls of the documentation', () => {
         source: 'docs/console/spec.md',
         directory: 'console',
         content: '# The console\n',
+        title: 'The console',
+        summary: '',
       },
       {
         path: 'platform/architecture',
         source: 'docs/platform/architecture.md',
         directory: 'platform',
         content: '# The architecture\n',
+        title: 'The architecture',
+        summary: '',
       },
     ],
     assets: [{ path: 'platform/atlas.html', source: 'docs/platform/atlas.html', content: '' }],
@@ -191,13 +195,24 @@ describe('the tree of the documentation', () => {
           source: 'docs/console/spec.md',
           directory: 'console',
           content: '# c\n',
+          title: 'c',
+          summary: '',
         },
-        { path: 'README', source: 'docs/README.md', directory: '', content: '# r\n' },
+        {
+          path: 'README',
+          source: 'docs/README.md',
+          directory: '',
+          content: '# r\n',
+          title: 'r',
+          summary: '',
+        },
         {
           path: 'gateway/spec',
           source: 'docs/gateway/spec.md',
           directory: 'gateway',
           content: '# g\n',
+          title: 'g',
+          summary: '',
         },
       ],
       assets: [],
@@ -222,8 +237,14 @@ describe('the tree of the documentation', () => {
     ).toBe('The console and the docs')
   })
 
-  test('the title of a document is its first heading', () => {
-    expect(titleOfContent('# The console\n\n## The places\n', 'the name')).toBe('The console')
-    expect(titleOfContent('a document without a heading\n', 'the name')).toBe('the name')
+  test('the head of a document is its title and its summary', () => {
+    expect(headOf('# The console\n\nThe console shows the data.\n', 'the name')).toEqual({
+      title: 'The console',
+      summary: 'The console shows the data.',
+    })
+    expect(headOf('a document without a heading\n', 'the name')).toEqual({
+      title: 'the name',
+      summary: '',
+    })
   })
 })

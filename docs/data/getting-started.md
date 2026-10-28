@@ -216,6 +216,7 @@ bun run policy -- publish \
 The operator commands run with the credentials of the owner of the
 schema, and they never run inside the api.
 
-A workspace that registered nothing serves every collection of the
-deployment, so the two commands are optional on a machine that only
-wants to see the service answer.
+The two commands are optional on a machine that only wants to see the
+service answer: a workspace that registered nothing serves every
+collection of the deployment (the rule is in the specification of the
+data service, §7.5).
