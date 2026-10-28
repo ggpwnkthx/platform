@@ -14,6 +14,7 @@ is twelve `curl` endpoints, plus one that reads the audit of the changes.
 | [spec.md](spec.md) | **The normative contract.** The behavior of the service. A change of behavior is a change of this document first. |
 | [api.md](api.md) | The HTTP surface: every endpoint, its request, its answer, its errors, with `curl` examples. |
 | [architecture.md](architecture.md) | How the code is laid out, the boundaries the build checks, the two flows, the data model. |
+| [decisions.md](decisions.md) | The decisions behind the contract, with their evidence. |
 | [operations.md](operations.md) | Running it: configuration, deployment, probes, metrics, alerts, runbooks, backup, capacity. |
 | [security.md](security.md) | The security model and the item-by-item review, with the findings that are open. |
 | [release.md](release.md) | Shipping it: readiness, the cutover of a tenant, the delivery of the image, what is still open. |
@@ -49,7 +50,7 @@ The runner of the development machine of the repository
 (`bun run dev` at the root) names the **server of the machine**: the
 machine has one PostgreSQL, and every service has its own database on
 it. The embedded database is the fallback of a service that is run
-alone.
+alone. The rule is in [spec.md](spec.md) §4.
 
 The repository is developed and tested against **PostgreSQL 18**: the
 compose file of the development machine, the jobs of the CI and the gates

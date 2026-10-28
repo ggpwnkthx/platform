@@ -2070,20 +2070,11 @@ The layout, the layers and the boundaries are in
 
 ## 17. The decisions
 
-| # | Question | Decision |
-| --- | --- | --- |
-| 1 | Where does the multi-tenancy live? | In the access service, never in the gateway. The gateway keeps one provider and one access service, so one gateway deployment serves one tenant of the access service (§1.4). |
-| 2 | Is the access service a provider or a client of OpenID Connect? | Both: a client of the provider of the tenant and a provider for the gateway. The gateway does not have to know. |
-| 3 | What is the key of the mapping of an identity? | `(tenant, subject)`. Never the e-mail: an e-mail is mutable and is not an identity (§6.2). |
-| 4 | Is a principal created at the first login? | Only when the tenant has `auto_provision = true`, and it has no grant: the login succeeds and the access does not (§6.4). |
-| 5 | What decides an access? | The table of grants, and nothing else. The roles of the request are context, because they are a snapshot of the token and a policy that read them would allow a revoked grant until the next login (§8.4). |
-| 6 | Is a decision cached by the access service? | No. The table is the truth, the query is a single statement over indexed tables, and the latency of a revocation is the TTL of the cache of the gateway (§8.6). |
-| 7 | How many administrative endpoints? | Nine: five that change something, four that read a list, and one that reads the audit of the changes. They are the whole surface, and the reason a tenant, a principal and a grant can only be changed through them is that the audit is complete (§10). |
-| 8 | Why is the authorization code stored instead of being self-contained? | A self-contained code can be redeemed twice inside its life. The store makes it single use, which is the property the gateway relies on (§5.5). |
-| 9 | Why are there no refresh tokens? | The gateway does not use one. A refresh token is a credential to store, rotate and revoke; it is a feature, it is deferred (§7.2). |
-| 10 | Why is the reason of a denial free text? | The gateway hides it and only counts it. The vocabulary of the reasons is chosen so the count of the gateway separates a missing role from any other denial (§8.7). |
-
----
+The decisions that shape the contract are in
+[decisions.md](decisions.md): the column **Stated in** of that table names
+the section of this document that states each of them. A decision that
+changes the contract is recorded in this document, in that table and in
+the changelog, never only in the code.
 
 ## 18. The settled questions
 

@@ -19,6 +19,7 @@ It is the workspace `packages/access/` of [the platform](../../README.md).
 | [docs/access/security.md](../../docs/access/security.md) | The security model and the review, with the open findings. |
 | [docs/access/release.md](../../docs/access/release.md) | Readiness, the cutover of a tenant, the delivery, the known limits. |
 | [docs/access/compatibility.md](../../docs/access/compatibility.md) | The reference of the compatibility suite and the runner of it. |
+| [docs/access/decisions.md](../../docs/access/decisions.md) | The decisions behind the contract, with their evidence. |
 | [../CHANGELOG.md](../../CHANGELOG.md) | The releases, and the changes of the contract of each one. |
 | [../CONTRIBUTING.md](../../CONTRIBUTING.md) | The order of a change, the commands and the style of the repository. |
 
