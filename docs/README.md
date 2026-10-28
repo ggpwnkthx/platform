@@ -14,15 +14,15 @@ docs/
 ```
 
 There is one documentation, and it is in one place. A reader who wants
-to know what the platform does starts at the
-[overview](platform/overview.md); a reader who implements a service
-starts at the specification of that service.
+to know what the platform does starts at
+[the documentation of the platform](platform/README.md); a reader who
+implements a service starts at the specification of that service.
 
 ## Where to start
 
 | If you are | Read |
 | --- | --- |
-| new to the platform | [the overview](platform/overview.md), then the [architecture](platform/architecture.md) |
+| new to the platform | [the overview](platform/README.md), then the [architecture](platform/architecture.md) |
 | someone who wants to see the whole platform at once | [the atlas](platform/atlas.html) — the map of the platform, and a request walked over it |
 | a developer of the platform | the [development](platform/development.md) |
 | an operator of a deployment | the [operations of the platform](platform/operations.md), then the operations of the service you run |
@@ -39,7 +39,7 @@ security model and the baseline of the compatibility.
 
 | Document | What it holds |
 | --- | --- |
-| [platform/overview.md](platform/overview.md) | What the platform does and how the pieces fit, in one page. |
+| [platform/README.md](platform/README.md) | What the platform does and how the pieces fit, in one page. |
 | [platform/architecture.md](platform/architecture.md) | The layout of the repository, the workspaces and the boundaries between them. |
 | [platform/development.md](platform/development.md) | The machine of a developer: the commands, the tests and the fixtures. |
 | [platform/operations.md](platform/operations.md) | How to deploy, configure, run and review the platform. |
@@ -56,9 +56,9 @@ describe differently is a defect of the documentation of the platform.
 
 | Service | The specification | The api | The operations | The rest |
 | --- | --- | --- | --- | --- |
-| The gateway | [spec.md](gateway/spec.md) | [overview.md](gateway/overview.md) | [operations.md](gateway/operations.md) | [architecture](gateway/architecture.md), [capacity](gateway/capacity.md), [runtime](gateway/runtime.md), [decisions](gateway/decisions.md), [the identity of a request](gateway/upstream-identity.md) |
-| The access service | [spec.md](access/spec.md) | [api.md](access/api.md) | [operations.md](access/operations.md) | [architecture](access/architecture.md), [security](access/security.md), [release](access/release.md), [compatibility](access/compatibility.md) |
-| The data service | [specification.md](data/specification.md) | [api.md](data/api.md) | [operations.md](data/operations.md) | [architecture](data/architecture.md), [configuration](data/configuration.md), [client](data/client.md), [migrations](data/migrations.md), [backup and restore](data/backup-restore.md) |
+| The gateway | [spec.md](gateway/spec.md) | [README.md](gateway/README.md) | [operations.md](gateway/operations.md), [recovery](gateway/recovery.md) | [architecture](gateway/architecture.md), [capacity](gateway/capacity.md), [runtime](gateway/runtime.md), [decisions](gateway/decisions.md), [the identity of a request](gateway/upstream-identity.md) |
+| The access service | [spec.md](access/spec.md) | [api.md](access/api.md) | [operations.md](access/operations.md) | [architecture](access/architecture.md), [security](access/security.md), [release](access/release.md), [compatibility](access/compatibility.md), [decisions](access/decisions.md) |
+| The data service | [specification.md](data/specification.md) | [api.md](data/api.md) | [operations.md](data/operations.md) | [architecture](data/architecture.md), [configuration](data/configuration.md), [client](data/client.md), [migrations](data/migrations.md), [backup and restore](data/backup-restore.md), [decisions](data/decisions.md) |
 
 Each service has an index of its own, and it names the audience of
 every document: [gateway](gateway/README.md), [access](access/README.md),
@@ -74,7 +74,7 @@ contracts of the services it calls.
 | Document | What it holds |
 | --- | --- |
 | [console/README.md](console/README.md) | What the console is and where to start. |
-| [console/overview.md](console/overview.md) | The pages, the flows and the scope of an operator. |
+| [console/spec.md](console/spec.md) | The normative contract of the console. |
 | [console/security.md](console/security.md) | What the console holds, what it never holds and where the trust stops. |
 | [console/operations.md](console/operations.md) | The environment, the deployment, the probes and the rotation of the secrets. |
 

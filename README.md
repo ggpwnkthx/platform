@@ -52,10 +52,10 @@ The documentation of a contract is the **normative** one:
 
 | Service | The specification | The rest |
 | --- | --- | --- |
-| The gateway | [docs/gateway/spec.md](docs/gateway/spec.md) | [overview](docs/gateway/overview.md), [architecture](docs/gateway/architecture.md), [operations](docs/gateway/operations.md), [capacity](docs/gateway/capacity.md), [runtime](docs/gateway/runtime.md), [decisions](docs/gateway/decisions.md), [upstream identity](docs/gateway/upstream-identity.md) |
-| The access service | [docs/access/spec.md](docs/access/spec.md) | [api](docs/access/api.md), [architecture](docs/access/architecture.md), [operations](docs/access/operations.md), [security](docs/access/security.md), [release](docs/access/release.md) |
-| The data service | [docs/data/specification.md](docs/data/specification.md) | [api](docs/data/api.md), [client](docs/data/client.md), [configuration](docs/data/configuration.md), [operations](docs/data/operations.md), [migrations](docs/data/migrations.md), [backup](docs/data/backup-restore.md) |
-| The console | — | [overview](docs/console/overview.md), [security](docs/console/security.md), [operations](docs/console/operations.md) |
+| The gateway | [docs/gateway/spec.md](docs/gateway/spec.md) | [overview](docs/gateway/README.md), [architecture](docs/gateway/architecture.md), [recovery](docs/gateway/recovery.md), [operations](docs/gateway/operations.md), [capacity](docs/gateway/capacity.md), [runtime](docs/gateway/runtime.md), [decisions](docs/gateway/decisions.md), [upstream identity](docs/gateway/upstream-identity.md) |
+| The access service | [docs/access/spec.md](docs/access/spec.md) | [api](docs/access/api.md), [architecture](docs/access/architecture.md), [operations](docs/access/operations.md), [security](docs/access/security.md), [release](docs/access/release.md), [decisions](docs/access/decisions.md) |
+| The data service | [docs/data/specification.md](docs/data/specification.md) | [api](docs/data/api.md), [client](docs/data/client.md), [configuration](docs/data/configuration.md), [operations](docs/data/operations.md), [migrations](docs/data/migrations.md), [backup](docs/data/backup-restore.md), [decisions](docs/data/decisions.md) |
+| The console | [docs/console/spec.md](docs/console/spec.md) | [overview](docs/console/README.md), [security](docs/console/security.md), [operations](docs/console/operations.md) |
 
 The rest of the platform: [CHANGELOG.md](CHANGELOG.md) carries the
 releases of the platform, which are the releases of the three services,
