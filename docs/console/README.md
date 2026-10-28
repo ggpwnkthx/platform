@@ -12,14 +12,15 @@ application of [HonoX](https://github.com/honojs/honox), rendered on the
 server and built with Vite; the parts of a page that live in the browser
 are the islands of HonoX.
 
-The console is one application with four places: the **overview**, the
-**workspaces**, the **operators** and the **status**. Every place is a
-page rendered on the server; the islands of HonoX make some of them
-live in the browser.
+The console is one application with five places: the **overview**, the
+**workspaces**, the **operators**, the **status** and the
+**documentation**. Every place is a page rendered on the server; the
+islands of HonoX make some of them live in the browser.
 
 | If you are | Read |
 | --- | --- |
 | somebody who wants to know what the console shows | [the places of the console](spec.md#62-the-places) |
+| somebody who wants to read the documentation of the platform | [the documentation of the console](spec.md#64-the-documentation) |
 | a reviewer of the console | [the specification](spec.md), then [the security](security.md) |
 | an operator who deploys it | [the operations](operations.md) |
 | a developer of the console | [the README of the workspace](../../packages/console/README.md) |

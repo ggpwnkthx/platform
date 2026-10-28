@@ -14,6 +14,7 @@
 import honox from 'honox/vite'
 import { injectImportingIslands } from 'honox/vite/inject-importing-islands'
 import { defineConfig } from 'vite'
+import { documentation } from './scripts/documentation'
 
 const ISLANDS = '/src/app/islands'
 
@@ -56,6 +57,10 @@ export default defineConfig(({ command, mode }) => {
         },
       }),
       injectImportingIslands({ appDir: '/src/app', islandDir: ISLANDS }),
+      // The documentation of the platform is read when the server is
+      // built, and the build holds it: the image of the console holds
+      // the build of the server and nothing else.
+      documentation(),
     ],
     build: {
       ssr: './src/app/server.ts',

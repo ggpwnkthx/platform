@@ -125,6 +125,69 @@ export function slugOf(text: string): string {
   return name.replace(/ /g, '-')
 }
 
+/** A heading of a document. */
+export interface Heading {
+  /** The level of the heading: 1 for the first, 6 for the last. */
+  readonly level: number
+  /** The text of the heading, without its markup. */
+  readonly text: string
+  /** The line the heading is on. */
+  readonly line: number
+  /**
+   * Whether the heading is a line of text under a line of equal signs
+   * or of hyphens, and not a line that opens with hashes.
+   */
+  readonly setext: boolean
+}
+
+/**
+ * The headings of a document, in the order they are in.
+ *
+ * A heading is a line that opens with hashes, or a line of text under a
+ * line of equal signs or of hyphens. A line that opens a list or a
+ * quote is not a heading: the line of hyphens under it is a rule.
+ *
+ * The headings are read here and not in the parser of the markdown, so
+ * that the console and the check of the documentation agree on the
+ * names of the headings: a link that names a heading has to reach it in
+ * the console as it does in a rendered document.
+ */
+export function headingLinesOf(content: string): Heading[] {
+  const found: Heading[] = []
+  const lines = linesOf(content)
+  for (let index = 0; index < lines.length; index += 1) {
+    const { line, text } = lines[index]!
+    const atx = /^\s{0,3}(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/.exec(text)
+    if (atx) {
+      found.push({ level: atx[1]!.length, text: atx[2]!, line, setext: false })
+      continue
+    }
+    if (/^\s{0,3}(?:[-*+]|\d+[.)])\s+/.test(text)) continue
+    if (/^\s{0,3}>/.test(text)) continue
+    const under = lines[index + 1]
+    if (!under || text.trim() === '') continue
+    if (!/^\s{0,3}(?:=+|-+)\s*$/.test(under.text)) continue
+    found.push({
+      level: under.text.trim().startsWith('=') ? 1 : 2,
+      text: text.trim(),
+      line,
+      setext: true,
+    })
+  }
+  return found
+}
+
+/**
+ * The names of a set of headings.
+ *
+ * The first heading of a name carries the name itself, the second
+ * carries the name with a 1 at its end, and the third with a 2.
+ */
+export function namesOf(headings: readonly Heading[]): string[] {
+  const occurrences = new Map<string, number>()
+  return headings.map((heading) => nameOf(slugOf(heading.text), occurrences))
+}
+
 /**
  * The names of the headings of a document.
  *
@@ -132,24 +195,7 @@ export function slugOf(text: string): string {
  * of its name, so that every one of them keeps a name of its own.
  */
 export function headingsOf(content: string): Set<string> {
-  const names = new Set<string>()
-  const occurrences = new Map<string, number>()
-  const lines = linesOf(content)
-  for (let index = 0; index < lines.length; index += 1) {
-    const { text } = lines[index]!
-    const atx = /^\s{0,3}#{1,6}\s+(.*?)(?:\s+#+)?\s*$/.exec(text)
-    if (atx) {
-      names.add(nameOf(slugOf(atx[1]!), occurrences))
-      continue
-    }
-    // A heading of the second kind: a line of text under a line of
-    // equal signs or of hyphens.
-    const under = lines[index + 1]
-    if (!under || text.trim() === '') continue
-    if (!/^\s{0,3}(?:=+|-+)\s*$/.test(under.text)) continue
-    names.add(nameOf(slugOf(text.trim()), occurrences))
-  }
-  return names
+  return new Set(namesOf(headingLinesOf(content)))
 }
 
 /**
@@ -209,7 +255,7 @@ export function linksOf(file: string, content: string): Link[] {
  * document the names of its elements. A file of another kind carries
  * none, and a link that names a place of it cannot be resolved.
  */
-function namesOf(target: string, content: string): Set<string> | null {
+function namesIn(target: string, content: string): Set<string> | null {
   if (target.endsWith('.md')) return headingsOf(content)
   if (target.endsWith('.html')) return elementsOf(content)
   return null
@@ -247,7 +293,7 @@ export async function linkProblemsOf(root: string, files: readonly string[]): Pr
       let known = names.get(target)
       if (known === undefined) {
         const read = await readFile(target, 'utf8').catch(() => null)
-        known = read === null ? null : namesOf(target, read)
+        known = read === null ? null : namesIn(target, read)
         names.set(target, known)
       }
       if (!known) continue

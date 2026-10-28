@@ -10,6 +10,35 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The console shows the documentation of the platform
+
+The documentation of the platform was a tree of markdown in the
+repository, and a reader of the console had to leave the console to
+read it. The console shows the documentation now: the documents of the
+platform, the contract of each of the three services and the contract
+of the console, at `/docs`.
+
+The console holds no copy of the documentation. The documents are read
+when the console is built, and the build holds them — the image of the
+console holds the build of the server and nothing else, and the
+documentation is a part of that build. A document is parsed when a
+reader asks for it, and the console keeps what it has read.
+
+Every link of a document is rewritten to the address of its target: a
+link that names another document is the address of that document in the
+console, a link that names a place of a document is the address of that
+place, and a link that names a file of the repository is a link to the
+repository, at the tag of the version the console carries. A tag is a
+name that does not move.
+
+The names of the headings are the names of the documentation: they come
+from the same place as the ones the check of the documentation
+resolves, so a link that names a heading reaches it in the console as it
+does in a rendered document. The parser of the markdown refuses what
+the documentation does not write, and the suite of the console reads
+every document of the repository: a document that the console cannot
+show is found before a reader finds it.
+
 ### The names of the headings are checked
 
 The links of the documentation were checked, but only half of them were.

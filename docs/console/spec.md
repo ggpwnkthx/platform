@@ -230,6 +230,7 @@ rule carries.
 | `/operators/tenants/{slug}/roles` | The roles of the tenant. | The same. |
 | `/operators/tenants/{slug}/audit` | The audit of the administration, and its export as CSV or JSONL. | The same. |
 | `/status` | The state of the three services. | `/healthz` and `/readyz` of each of them. |
+| `/docs` | The documentation of the platform: the documents of the platform, the contract of each of the three services and the contract of the console. | Nothing: the documents are in the build of the console. |
 | `/me` | The caller: the subject, the tenant and the keys of its scope. | The access context of the caller. |
 
 A refusal of the data service is shown as it is: its status, its code,
@@ -246,6 +247,35 @@ order.
 The facts of the map are the facts of the [atlas](../platform/atlas.html),
 in their own copy, and the check of the documentation refuses the two when
 they part company.
+
+### 6.4 The documentation
+
+The console shows the documentation of the platform. The documents are
+the documents of the repository — the ones of `docs/` — and the console
+shows them as they are written: it holds no copy of them and it
+changes none of them.
+
+The documents are read when the console is built, and the build holds
+them. The image of the console holds the build of the server and nothing
+else, and the documentation is a part of that build.
+
+Every link of a document is rewritten to the address of its target: a
+link that names another document of the documentation is the address of
+that document in the console, a link that names a place of a document is
+the address of that place, and a link that names a file of the
+repository is a link to the repository, at the tag of the version the
+console carries. A tag is a name that does not move.
+
+The name of a place is the name of its heading: the text of the heading,
+in lower case, without its punctuation, with the spaces replaced by
+hyphens. It is the name the reader sees in the address of a rendered
+document, and it is the name the check of the documentation resolves. A
+link that names a heading reaches it in the console as it does in a
+rendered document.
+
+The place reads the documentation and no service: anybody reads it, and
+a document that is not there is a refusal of the console, as any other
+page that is not there.
 
 ---
 
@@ -323,7 +353,7 @@ session of an operator in the clear: the console refuses to start unless
 
 | Directory | What it holds |
 | --- | --- |
-| `src/domains/` | The rules: the ability, the access, the authentication, the data, the operators, the session, the status and the map. |
+| `src/domains/` | The rules: the ability, the access, the authentication, the data, the documentation, the operators, the session, the status and the map. |
 | `src/app/` | The wiring: the routes, the middleware, the components and the islands. |
 | `src/runtime/` | The composition: the configuration, the services and the log. |
 

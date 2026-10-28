@@ -27,6 +27,11 @@ COPY packages/console/package.json ./packages/console/
 RUN bun install --frozen-lockfile && \
     rm -rf /root/.bun/install/cache
 COPY tsconfig.base.json ./
+# The documentation of the platform is read when the console is built,
+# and the build holds it: the image holds the build of the server and
+# nothing else, and the documents are a part of that build.
+COPY docs ./docs
+COPY tooling ./tooling
 COPY packages/console ./packages/console
 RUN bun run --cwd packages/console build
 

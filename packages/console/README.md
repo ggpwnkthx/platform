@@ -20,6 +20,7 @@ packages/console/
 ├── vite.config.ts        the build: the client (dist/static) and the server (dist/server)
 ├── Dockerfile            the image: the build and the process, and nothing else
 ├── scripts/architecture.ts
+├── scripts/documentation.ts  the build reads the documentation of the platform
 ├── src/
 │   ├── main.ts           the process: it serves the build, or the sources through Vite
 │   ├── runtime/          the configuration, the log and the composition of the clients
@@ -27,6 +28,7 @@ packages/console/
 │   │   ├── access/         the administration and the access context of the access service
 │   │   ├── authentication/ the sign-in at the access service (code flow, PKCE, id token)
 │   │   ├── data/           the data of a workspace, through the gateway; the values of a form
+│   │   ├── documentation/  the documentation of the platform: the tree and the urls of it
 │   │   ├── operators/      the scope of an operator, the rights of a user
 │   │   ├── session/        the sessions and the logins in flight
 │   │   ├── status/         the probes of the services

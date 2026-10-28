@@ -56,6 +56,14 @@ export default createRoute(async (c) => {
               the access service names on the route of the console.
             </p>
           </article>
+          <article class="card">
+            <h2>The documentation</h2>
+            <p class="muted">
+              The documents of the platform, the contract of each of the three services and the
+              contract of the console. They are the documents of the repository, and the console
+              shows them as they are written.
+            </p>
+          </article>
           {status}
         </div>
       </>,
@@ -112,6 +120,15 @@ export default createRoute(async (c) => {
           </a>
         ) : null}
         {status}
+        <a class="card card-link" href="/docs">
+          <header>
+            <h2>The documentation</h2>
+          </header>
+          <p class="muted">
+            The documents of the platform, the contract of each of the three services and the
+            contract of the console.
+          </p>
+        </a>
         <a class="card card-link" href="/me">
           <header>
             <h2>You</h2>

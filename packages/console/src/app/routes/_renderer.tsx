@@ -30,6 +30,7 @@ async function Masthead(props: { section?: Section }) {
       shown: ability?.can(CONSOLE_ACTIONS.admin, CONSOLE_SUBJECT) ?? false,
     },
     { href: '/status', label: 'Status', section: 'status', shown: true },
+    { href: '/docs', label: 'Documentation', section: 'docs', shown: true },
   ]
   return (
     <header class="masthead">

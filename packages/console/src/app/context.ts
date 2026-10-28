@@ -14,7 +14,7 @@ export interface Crumb {
 }
 
 /** The sections of the console. */
-export type Section = 'home' | 'workspaces' | 'operators' | 'status' | 'me'
+export type Section = 'home' | 'workspaces' | 'operators' | 'status' | 'docs' | 'me'
 
 /** The properties of a page. */
 export interface PageProps {

@@ -1000,6 +1000,112 @@ button.button {
   color: var(--accent);
 }
 
+/* ------------------------------------------------------- the documentation */
+
+.doc {
+  max-width: 62rem;
+}
+
+.doc h2 {
+  margin-top: 2.2rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--rule);
+}
+
+.doc h3 {
+  margin-top: 1.6rem;
+}
+
+.doc h4,
+.doc h5,
+.doc h6 {
+  margin-top: 1.2rem;
+  font-size: 0.95rem;
+}
+
+.doc p {
+  margin: 0.8rem 0;
+  line-height: 1.65;
+}
+
+.doc ul,
+.doc ol {
+  margin: 0.8rem 0;
+  padding-left: 1.4rem;
+  line-height: 1.6;
+}
+
+.doc li {
+  margin: 0.25rem 0;
+}
+
+.doc li.task {
+  list-style: none;
+  margin-left: -1.4rem;
+}
+
+.doc li.task input {
+  margin-right: 0.45rem;
+}
+
+.doc pre {
+  margin: 1rem 0;
+}
+
+.doc blockquote {
+  margin: 1rem 0;
+  padding: 0.6rem 1rem;
+  border-left: 3px solid var(--accent-soft);
+  background: var(--sunk);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.doc hr {
+  margin: 2rem 0;
+  border: 0;
+  border-top: 1px solid var(--rule);
+}
+
+.doc table {
+  margin: 1rem 0;
+}
+
+.doc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.doc-list li {
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--sunk);
+}
+
+.toc {
+  margin: 1.4rem 0;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--sunk);
+  font-size: 0.9rem;
+}
+
+.toc ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.toc li.level-3 {
+  margin-left: 1.2rem;
+}
+
 /* ------------------------------------------------------------ the record */
 
 .diff-added {
