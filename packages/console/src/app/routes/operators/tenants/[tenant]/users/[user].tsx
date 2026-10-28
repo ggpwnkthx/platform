@@ -106,7 +106,7 @@ export default createRoute(async (c) => {
         <div class="stack">
           <section class="card">
             <header>
-              <h2>Rights of their own</h2>
+              <h2>Direct rights</h2>
               <a class="small" href={showAll ? path : `${path}?all=1`}>
                 {showAll ? 'only the live rights' : 'with the revoked and the expired'}
               </a>
@@ -122,7 +122,7 @@ export default createRoute(async (c) => {
             </details>
           </section>
           <section class="card">
-            <h2>Rights through their groups</h2>
+            <h2>Rights through groups</h2>
             {inherited.length === 0 ? (
               <p class="muted">No group of theirs holds a right.</p>
             ) : (
@@ -137,7 +137,7 @@ export default createRoute(async (c) => {
         <aside class="stack">
           <section class="card">
             <header>
-              <h2>The user</h2>
+              <h2>User</h2>
               <UserStatus user={user} />
             </header>
             <KeyValues

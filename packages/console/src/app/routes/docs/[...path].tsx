@@ -18,6 +18,7 @@ import {
   neighboursOf,
   outlineOf,
   sourceUrlOf,
+  tierOf,
   titleOf,
   urlOf,
 } from '../../../domains/documentation'
@@ -51,6 +52,7 @@ export default createRoute(async (c) => {
   )
   const { previous, next } = neighboursOf(DOCUMENTATION, document.path)
   const tree = DOCUMENTATION
+  const tier = tierOf(document)
   return c.render(
     <DocsShell
       tree={tree}
@@ -72,9 +74,19 @@ export default createRoute(async (c) => {
                   <span>{group}</span>
                 )}
               </li>
+              {tier === 'reference' || tier === 'internals' ? (
+                <li>
+                  <span>{tier === 'reference' ? 'Reference' : 'Internals'}</span>
+                </li>
+              ) : null}
             </ol>
           </nav>
           <h1>{title}</h1>
+          {tier === 'internals' ? (
+            <p class="doc-banner">
+              Maintainer documentation — you don't need this to use or operate the platform.
+            </p>
+          ) : null}
           {lede ? (
             <p class="doc-lede">
               <Inlines inlines={lede} tree={tree} from={document.source} />

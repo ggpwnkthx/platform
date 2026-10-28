@@ -72,7 +72,7 @@ export default createRoute(async (c) => {
       <TenantHead
         slug={slug}
         title="Roles"
-        lede="A role is a named set of permissions. A role may name another role: the permissions of the named role are the permissions of the role that names it. A right of a role is granted on the page of the rights."
+        lede="A role is a named set of permissions, and can include other roles. Grant roles on the Rights page."
       />
       <TenantTabs slug={slug} current="roles" />
       {refusal ? <Refusal refusal={refusal} /> : null}

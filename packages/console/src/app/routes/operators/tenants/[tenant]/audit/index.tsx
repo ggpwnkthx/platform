@@ -61,7 +61,7 @@ export default createRoute(async (c) => {
       <TenantHead
         slug={slug}
         title="Audit"
-        lede="Every change of the tenant, the latest first. The change and its row of the audit are committed together, or neither is."
+        lede="Every change to this tenant, newest first. A change and its audit entry are committed together."
       />
       <TenantTabs slug={slug} current="audit" />
       <div class="row spread">

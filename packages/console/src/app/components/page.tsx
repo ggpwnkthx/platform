@@ -13,9 +13,22 @@ import { UnreachableError } from '../../domains/transport'
 export function PageHead(props: { title: string; lede?: Child; actions?: Child; eyebrow?: Child }) {
   return (
     <header class="page-head">
-      {props.eyebrow ? <div class="muted small">{props.eyebrow}</div> : null}
+      {props.eyebrow ? <div class="eyebrow">{props.eyebrow}</div> : null}
       <div class="page-head-row">
         <h1>{props.title}</h1>
+        {props.actions ? <div class="row">{props.actions}</div> : null}
+      </div>
+      {props.lede ? <p class="lede">{props.lede}</p> : null}
+    </header>
+  )
+}
+
+/** The head of a section of a page: its title, a line about it and its actions. */
+export function SectionHead(props: { title: string; lede?: Child; actions?: Child }) {
+  return (
+    <header class="section-head">
+      <div class="page-head-row">
+        <h2>{props.title}</h2>
         {props.actions ? <div class="row">{props.actions}</div> : null}
       </div>
       {props.lede ? <p class="lede">{props.lede}</p> : null}
@@ -114,7 +127,7 @@ export function refusalOf(error: unknown): RefusalView {
   }
   return {
     title: 'Something went wrong in the console',
-    message: 'The console could not complete the request. The log of the console holds the cause.',
+    message: 'The console could not complete the request. The cause is in the console log.',
     code: null,
     requestId: null,
     details: [],

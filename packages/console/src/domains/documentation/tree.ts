@@ -168,18 +168,69 @@ export interface Tree {
   readonly assets: readonly Asset[]
 }
 
+/**
+ * The tier of a document: what kind of reader it is for.
+ *
+ * - `overview`: the README of an area, the page to start with.
+ * - `guides`: how to run, operate and integrate with the platform.
+ * - `reference`: the contracts — specifications, APIs, configuration.
+ * - `internals`: for maintainers only — collapsed in the navigation and
+ *   kept out of the reading path.
+ */
+export type Tier = 'overview' | 'guides' | 'reference' | 'internals'
+
+/**
+ * The documents of each tier, by file name, in reading order. A file no
+ * tier names is a guide, listed after the named guides by name.
+ */
+const TIERS: Record<Exclude<Tier, 'overview'>, readonly string[]> = {
+  guides: [
+    'quickstart',
+    'getting-started',
+    'development',
+    'operations',
+    'upstream-identity',
+    'client',
+    'troubleshooting',
+    'security',
+  ],
+  reference: ['spec', 'api', 'configuration'],
+  internals: ['internals', 'decisions'],
+}
+
+/** The labels of the documents whose name says what they are. */
+const LABELS: Record<string, string> = {
+  README: 'Overview',
+  spec: 'Specification',
+  api: 'API',
+  configuration: 'Configuration',
+  internals: 'Internals',
+  decisions: 'Decision log',
+  quickstart: 'Quickstart',
+  'getting-started': 'Getting started',
+  development: 'Development',
+  operations: 'Operations',
+  'upstream-identity': 'Upstream identity',
+  client: 'Client',
+  troubleshooting: 'Troubleshooting',
+  security: 'Security',
+}
+
 /** A group of documents: the documents of one directory. */
 export interface Group {
   /** The name of the directory the group is. */
   readonly name: string
   /** The title of the group, as the documentation names it. */
   readonly title: string
-  /**
-   * The index of the group: the document that names the documents of
-   * the group and what they hold.
-   */
+  /** The overview of the group: its README. */
   readonly index: Document | null
-  /** The documents of the group, and not its index. */
+  /** The guides of the group, in reading order. */
+  readonly guides: readonly Document[]
+  /** The reference pages of the group, in reading order. */
+  readonly reference: readonly Document[]
+  /** The pages for maintainers, in reading order. */
+  readonly internals: readonly Document[]
+  /** Every document of the group but its index: guides, reference, internals. */
   readonly documents: readonly Document[]
 }
 
@@ -195,33 +246,6 @@ const TITLES: Record<string, string> = {
 
 /** The order of the groups: the directories of `TITLES`, then any other, by name. */
 const GROUP_ORDER = Object.keys(TITLES)
-
-/**
- * The order of the documents of a group, by file name. The README is the
- * group's overview and comes first; a file this list does not name comes
- * after the named ones, by name.
- */
-const DOCUMENT_ORDER = [
-  'README',
-  'spec',
-  'api',
-  'getting-started',
-  'architecture',
-  'configuration',
-  'client',
-  'operations',
-  'recovery',
-  'troubleshooting',
-  'backup-restore',
-  'capacity',
-  'runtime',
-  'upstream-identity',
-  'security',
-  'release',
-  'compatibility',
-  'development',
-  'decisions',
-]
 
 /** The title of a group of documents. */
 export function titleOf(directory: string): string {
@@ -239,13 +263,28 @@ function nameOf(document: Document): string {
   return document.path.slice(document.path.lastIndexOf('/') + 1)
 }
 
-/** Sorts documents in reading order. */
-function sortDocuments(documents: readonly Document[]): Document[] {
-  return [...documents].sort(
-    (left, right) =>
-      rankOf(DOCUMENT_ORDER, nameOf(left)) - rankOf(DOCUMENT_ORDER, nameOf(right)) ||
-      left.path.localeCompare(right.path)
-  )
+/** The tier of a document, from its file name. */
+export function tierOf(document: Document): Tier {
+  const name = nameOf(document)
+  if (name === 'README') return 'overview'
+  if (TIERS.reference.includes(name)) return 'reference'
+  if (TIERS.internals.includes(name)) return 'internals'
+  return 'guides'
+}
+
+/** The documents of one tier, in reading order. */
+function tierDocuments(
+  documents: readonly Document[],
+  tier: Exclude<Tier, 'overview'>
+): Document[] {
+  const order = TIERS[tier]
+  return documents
+    .filter((document) => tierOf(document) === tier)
+    .sort(
+      (left, right) =>
+        rankOf(order, nameOf(left)) - rankOf(order, nameOf(right)) ||
+        left.path.localeCompare(right.path)
+    )
 }
 
 /**
@@ -271,8 +310,8 @@ export function textOf(inlines: readonly Inline[]): string {
 
 /**
  * The groups of the documentation: one per directory, in reading order.
- * The index of a group is its README, and it is not listed among the
- * group's other documents.
+ * The index of a group is its README; its other documents are split by
+ * tier.
  */
 export function groupsOf(tree: Tree): Group[] {
   const groups = new Map<string, Document[]>()
@@ -287,41 +326,73 @@ export function groupsOf(tree: Tree): Group[] {
         rankOf(GROUP_ORDER, left) - rankOf(GROUP_ORDER, right) || left.localeCompare(right)
     )
     .map(([name, documents]) => {
-      const sorted = sortDocuments(documents)
-      const index = sorted.find((document) => nameOf(document) === 'README') ?? null
+      const guides = tierDocuments(documents, 'guides')
+      const reference = tierDocuments(documents, 'reference')
+      const internals = tierDocuments(documents, 'internals')
       return {
         name,
         title: titleOf(name),
-        index,
-        documents: index ? sorted.filter((document) => document !== index) : sorted,
+        index: documents.find((document) => tierOf(document) === 'overview') ?? null,
+        guides,
+        reference,
+        internals,
+        documents: [...guides, ...reference, ...internals],
       }
     })
 }
 
-/** Every document of the documentation, in the order the sidebar shows them. */
+/**
+ * The documents a reader walks through, in the order the navigation
+ * shows them: each group's overview, guides and reference. The internals
+ * are not part of it.
+ */
 export function readingOrderOf(tree: Tree): Document[] {
-  return groupsOf(tree).flatMap((group) =>
-    group.index ? [group.index, ...group.documents] : [...group.documents]
-  )
+  return groupsOf(tree).flatMap((group) => [
+    ...(group.index ? [group.index] : []),
+    ...group.guides,
+    ...group.reference,
+  ])
 }
 
-/** The documents before and after a document, in reading order. */
+/**
+ * The documents before and after a document. A page of the reading
+ * order is followed by the next page of it, and never by a page for
+ * maintainers; a page for maintainers is walked among the internals of
+ * its group, and leads back to the group's overview.
+ */
 export function neighboursOf(
   tree: Tree,
   path: string
 ): { previous: Document | null; next: Document | null } {
+  const document = tree.documents.find((item) => item.path === path)
+  if (!document) return { previous: null, next: null }
+  if (tierOf(document) === 'internals') {
+    const group = groupsOf(tree).find((item) => item.name === document.directory)
+    const internals = group?.internals ?? []
+    const index = internals.indexOf(document)
+    return {
+      previous: internals[index - 1] ?? group?.index ?? null,
+      next: internals[index + 1] ?? null,
+    }
+  }
   const order = readingOrderOf(tree)
-  const index = order.findIndex((document) => document.path === path)
-  if (index === -1) return { previous: null, next: null }
+  const index = order.indexOf(document)
   return { previous: order[index - 1] ?? null, next: order[index + 1] ?? null }
 }
 
 /**
- * The label of a document in the navigation: a group's README is its
- * "Overview", any other document is named by its title.
+ * The label of a document in the navigation. A document whose file name
+ * says what it is carries that name ("Overview", "Specification", "API");
+ * another one is named by its title when the title is short, and by its
+ * file name otherwise.
  */
 export function labelOf(document: Document): string {
-  return nameOf(document) === 'README' ? 'Overview' : document.title
+  const name = nameOf(document)
+  const known = LABELS[name]
+  if (known) return known
+  if (document.title.trim().split(/\s+/).length <= 3) return document.title
+  const words = name.split('-').join(' ')
+  return words.charAt(0).toUpperCase() + words.slice(1)
 }
 
 /** An entry of the outline of a page. */

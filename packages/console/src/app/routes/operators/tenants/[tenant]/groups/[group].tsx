@@ -116,7 +116,7 @@ export default createRoute(async (c) => {
             ) : null}
           </section>
           <section class="card">
-            <h2>Rights of the group</h2>
+            <h2>Group rights</h2>
             {rights.length === 0 ? (
               <Empty>The group holds no right.</Empty>
             ) : (
@@ -129,7 +129,7 @@ export default createRoute(async (c) => {
           </section>
         </div>
         <aside class="card">
-          <h2>The group</h2>
+          <h2>Group</h2>
           <KeyValues
             rows={[
               ['Key', <code>{group.key}</code>],

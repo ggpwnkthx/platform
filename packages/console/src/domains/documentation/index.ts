@@ -15,6 +15,7 @@ export type { Block, Inline } from '../../../../../tooling/markdown'
 export {
   type Asset,
   type Document,
+  type Group,
   groupsOf,
   headOf,
   labelOf,
@@ -27,6 +28,7 @@ export {
   renderOf,
   type Rendered,
   textOf,
+  tierOf,
   titleOf,
   type Tree,
 } from './tree'

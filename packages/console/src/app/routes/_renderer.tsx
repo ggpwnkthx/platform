@@ -83,7 +83,8 @@ async function Masthead(props: { section?: Section }) {
 }
 
 function Crumbs(props: { crumbs: readonly Crumb[] }) {
-  if (props.crumbs.length === 0) return null
+  // A single crumb names the page the title already names.
+  if (props.crumbs.length < 2) return null
   return (
     <nav aria-label="Breadcrumbs">
       <ol class="crumbs">
@@ -134,10 +135,15 @@ export default jsxRenderer(({ children, title, section, crumbs, wide }) => {
         </main>
         <footer class="foot">
           <div>
-            <span>The console of the platform · {VERSION}</span>
-            <span>
-              A client of the gateway, the access service and the data service. It decides nothing.
-            </span>
+            <span>Console {VERSION}</span>
+            <nav aria-label="Footer">
+              <a class="foot-link" href="/status">
+                Status
+              </a>
+              <a class="foot-link" href="/docs">
+                Documentation
+              </a>
+            </nav>
           </div>
         </footer>
       </body>

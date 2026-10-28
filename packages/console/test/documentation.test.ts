@@ -7,6 +7,7 @@ import {
   navigatesItself,
   resolveOf,
   textOf,
+  tierOf,
   labelOf,
   ledeOf,
   neighboursOf,
@@ -293,31 +294,103 @@ describe('the tree of the documentation', () => {
     expect(titleOf('')).toBe('Overview')
   })
 
-  test('the documents of a group are in reading order, not alphabetical', () => {
-    const tree: Tree = {
-      documents: ['decisions', 'README', 'operations', 'zeta', 'spec', 'alpha'].map((name) => ({
-        path: `gateway/${name}`,
-        source: `docs/gateway/${name}.md`,
-        directory: 'gateway',
+  /** A tree of documents of one directory, named by their file names. */
+  function treeOf(names: readonly string[], directory = 'gateway'): Tree {
+    return {
+      documents: names.map((name) => ({
+        path: `${directory}/${name}`,
+        source: `docs/${directory}/${name}.md`,
+        directory,
         content: `# ${name}\n`,
         title: name,
         summary: '',
       })),
       assets: [],
     }
-    expect(readingOrderOf(tree).map((document) => document.path)).toEqual([
-      'gateway/README',
-      'gateway/spec',
+  }
+
+  test('the documents of a group are split by tier, in reading order', () => {
+    const tree = treeOf([
+      'decisions',
+      'README',
+      'internals',
+      'operations',
+      'zeta',
+      'spec',
+      'configuration',
+      'quickstart',
+      'api',
+    ])
+    const [group] = groupsOf(tree)
+    expect(group?.index?.path).toBe('gateway/README')
+    expect(group?.guides.map((document) => document.path)).toEqual([
+      'gateway/quickstart',
       'gateway/operations',
-      'gateway/decisions',
-      'gateway/alpha',
       'gateway/zeta',
     ])
-    expect(neighboursOf(tree, 'gateway/spec').previous?.path).toBe('gateway/README')
-    expect(neighboursOf(tree, 'gateway/spec').next?.path).toBe('gateway/operations')
+    expect(group?.reference.map((document) => document.path)).toEqual([
+      'gateway/spec',
+      'gateway/api',
+      'gateway/configuration',
+    ])
+    expect(group?.internals.map((document) => document.path)).toEqual([
+      'gateway/internals',
+      'gateway/decisions',
+    ])
+  })
+
+  test('a document is classified by its file name', () => {
+    const tiers = Object.fromEntries(
+      treeOf([
+        'README',
+        'operations',
+        'security',
+        'spec',
+        'api',
+        'internals',
+        'decisions',
+        'x',
+      ]).documents.map((document) => [document.path.split('/')[1], tierOf(document)])
+    )
+    expect(tiers).toEqual({
+      README: 'overview',
+      operations: 'guides',
+      security: 'guides',
+      spec: 'reference',
+      api: 'reference',
+      internals: 'internals',
+      decisions: 'internals',
+      x: 'guides',
+    })
+  })
+
+  test('the reading order leaves the internals out', () => {
+    const tree = treeOf(['README', 'operations', 'spec', 'internals', 'decisions'])
+    expect(readingOrderOf(tree).map((document) => document.path)).toEqual([
+      'gateway/README',
+      'gateway/operations',
+      'gateway/spec',
+    ])
     expect(neighboursOf(tree, 'gateway/README').previous).toBeNull()
-    expect(labelOf(tree.documents[1]!)).toBe('Overview')
-    expect(labelOf(tree.documents[0]!)).toBe('decisions')
+    expect(neighboursOf(tree, 'gateway/operations').next?.path).toBe('gateway/spec')
+    // The last page of the reading order does not lead into the internals.
+    expect(neighboursOf(tree, 'gateway/spec').next).toBeNull()
+    // A page for maintainers walks the internals and leads back to the overview.
+    expect(neighboursOf(tree, 'gateway/internals').previous?.path).toBe('gateway/README')
+    expect(neighboursOf(tree, 'gateway/internals').next?.path).toBe('gateway/decisions')
+    expect(neighboursOf(tree, 'gateway/decisions').next).toBeNull()
+  })
+
+  test('a page is labelled by what it is, or by its short title', () => {
+    const label = (name: string, title = name): string =>
+      labelOf({ ...treeOf([name]).documents[0]!, title })
+    expect(label('README')).toBe('Overview')
+    expect(label('spec', 'Specification of the gateway')).toBe('Specification')
+    expect(label('api')).toBe('API')
+    expect(label('decisions')).toBe('Decision log')
+    expect(label('getting-started')).toBe('Getting started')
+    expect(label('backup', 'Backup and restore')).toBe('Backup and restore')
+    expect(label('the-long-one', 'A title that is much too long')).toBe('The long one')
   })
 
   test('the text of a text is the text without its marks', () => {

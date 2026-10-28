@@ -58,7 +58,7 @@ export default createRoute(async (c) => {
       <TenantHead
         slug={slug}
         title="Groups"
-        lede="A right of a group is a right of every member of it."
+        lede="A right granted to a group is held by every member."
       />
       <TenantTabs slug={slug} current="groups" />
       {refusal ? <Refusal refusal={refusal} /> : null}

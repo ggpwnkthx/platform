@@ -27,7 +27,7 @@
   --violet: #7044c4;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --measure: 76rem;
+  --measure: 90rem;
   --radius: 8px;
   --shadow: 0 1px 2px rgb(20 22 30 / 6%), 0 4px 16px rgb(20 22 30 / 4%);
   color-scheme: light;
@@ -137,18 +137,21 @@ a:hover {
 h1,
 h2,
 h3 {
-  font-weight: 500;
-  letter-spacing: -0.01em;
+  font-weight: 600;
+  letter-spacing: -0.015em;
   line-height: 1.25;
   margin: 0;
 }
 
 h1 {
-  font-size: 1.6rem;
+  font-size: 2rem;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
 }
 
 h2 {
-  font-size: 1.15rem;
+  font-size: 1.25rem;
 }
 
 h3 {
@@ -296,7 +299,7 @@ main {
 .page-head {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.5rem;
 }
 
 .page-head-row {
@@ -309,7 +312,25 @@ main {
 
 .lede {
   color: var(--graphite);
-  max-width: 48rem;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  max-width: 68ch;
+}
+
+/* A small label above a title: the kind of thing the page or the card is. */
+.eyebrow {
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+/* The head of a section of a page: a title and a line about it. */
+.section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
 }
 
 .crumbs {
@@ -342,11 +363,16 @@ footer.foot {
 footer.foot div {
   max-width: var(--measure);
   margin: 0 auto;
-  padding: 0.9rem 1.5rem;
+  padding: 1rem 1.5rem;
   display: flex;
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
+}
+
+footer.foot nav {
+  display: flex;
+  gap: 1.25rem;
 }
 
 /* ------------------------------------------------------------ the blocks */
@@ -355,8 +381,7 @@ footer.foot div {
   background: var(--card);
   border: 1px solid var(--rule);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 1.1rem 1.2rem;
+  padding: 1.1rem 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -366,7 +391,7 @@ footer.foot div {
 .card > header {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
 }
@@ -374,11 +399,30 @@ footer.foot div {
 .card-link {
   color: inherit;
   text-decoration: none;
-  transition: border-color 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .card-link:hover {
   border-color: var(--accent);
+  box-shadow: var(--shadow);
+}
+
+.card h2 {
+  font-size: 1.02rem;
+}
+
+.card h3 {
+  font-size: 1rem;
+}
+
+/* The arrow of a card that leads somewhere. */
+.card-go {
+  margin-top: auto;
+  color: var(--accent);
+  font-size: 0.86rem;
+  font-weight: 500;
 }
 
 .grid {
@@ -430,6 +474,7 @@ footer.foot div {
 
 .kv dt {
   color: var(--graphite);
+  font-size: 0.88rem;
 }
 
 .kv dd {
@@ -439,8 +484,8 @@ footer.foot div {
 }
 
 .metric {
-  font-size: 1.8rem;
-  font-weight: 500;
+  font-size: 1.9rem;
+  font-weight: 650;
   letter-spacing: -0.02em;
   line-height: 1.1;
 }
@@ -545,20 +590,22 @@ footer.foot div {
 table {
   width: 100%;
   border-collapse: collapse;
+  font-size: 0.89rem;
+  line-height: 1.5;
 }
 
 th,
 td {
   text-align: left;
-  padding: 0.55rem 0.8rem;
+  padding: 0.55rem 0.85rem;
   border-bottom: 1px solid var(--rule);
   vertical-align: top;
 }
 
 th {
-  font-weight: 500;
-  color: var(--graphite);
-  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink);
+  font-size: 0.8rem;
   background: var(--sunk);
   white-space: nowrap;
 }
@@ -577,7 +624,20 @@ tbody tr:last-child td {
 }
 
 tbody tr:hover td {
-  background: color-mix(in srgb, var(--accent-soft) 35%, transparent);
+  background: color-mix(in srgb, var(--accent-soft) 30%, transparent);
+}
+
+/* Inline code reads the same on every page: a quiet chip. */
+main :not(pre) > code {
+  background: var(--sunk);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.05em 0.35em;
+  font-size: 0.84em;
+}
+
+main a code {
+  color: inherit;
 }
 
 td.num,
@@ -622,7 +682,7 @@ form {
 .field > span:first-child,
 .field legend {
   font-size: 0.85rem;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .field .hint {
@@ -705,6 +765,7 @@ textarea[aria-invalid="true"] {
 details.disclosure > summary {
   cursor: pointer;
   color: var(--accent);
+  font-weight: 500;
   user-select: none;
 }
 
@@ -783,28 +844,31 @@ button.button {
 /* ------------------------------------------------------------ the notices */
 
 .notice {
+  --tone: var(--accent);
   border-radius: var(--radius);
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--rule);
-  background: var(--card);
+  padding: 0.75rem 1rem 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--tone) 30%, var(--rule));
+  border-left: 3px solid var(--tone);
+  background: color-mix(in srgb, var(--tone) 7%, var(--card));
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
 }
 
+.notice > strong {
+  font-weight: 600;
+}
+
 .notice.ok {
-  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
-  background: var(--ok-soft);
+  --tone: var(--ok);
 }
 
 .notice.error {
-  border-color: color-mix(in srgb, var(--error) 40%, transparent);
-  background: var(--error-soft);
+  --tone: var(--error);
 }
 
 .notice.warn {
-  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
-  background: var(--warn-soft);
+  --tone: var(--warn);
 }
 
 .refusal {
@@ -838,6 +902,7 @@ button.button {
 
 .tabs a[aria-current="page"] {
   color: var(--ink);
+  font-weight: 600;
   border-bottom-color: var(--accent);
 }
 
@@ -1027,8 +1092,41 @@ button.button {
     padding-right: 1rem;
   }
 
+  /* The brand and the tools on one line, the places on a line that scrolls. */
+  .masthead-inner {
+    gap: 0.5rem 0.75rem;
+    padding-top: 0.5rem;
+    padding-bottom: 0.4rem;
+  }
+
+  .masthead-tools {
+    gap: 0.5rem;
+  }
+
+  .nav {
+    order: 3;
+    flex-basis: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin: 0 -0.35rem;
+  }
+
+  .nav a {
+    white-space: nowrap;
+  }
+
   .who {
     display: none;
+  }
+
+  /* The clock of the data access only shows itself when it runs low. */
+  .masthead-tools .badge.ok {
+    display: none;
+  }
+
+  h1 {
+    font-size: 1.7rem;
   }
 
   .filter-row {
@@ -1090,16 +1188,6 @@ body.wide {
   gap: 1px;
 }
 
-.docs-nav h2 {
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--graphite);
-  margin: 0 0 0.35rem;
-  padding: 0 0.65rem;
-}
-
 .docs-nav ul {
   list-style: none;
   margin: 0;
@@ -1152,6 +1240,114 @@ body.wide {
 
 .docs-drawer .docs-nav {
   padding: 0.9rem 0.4rem 1rem;
+}
+
+/* The areas of the navigation, their reference label and their internals. */
+
+.docs-nav-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--graphite);
+  margin: 0.9rem 0 0.3rem;
+  padding: 0 0.65rem;
+}
+
+/* An area of the documentation: folded, unless the page is in it. */
+
+.docs-nav > .docs-nav-area {
+  margin-top: 0.15rem;
+}
+
+.docs-nav > .docs-nav-home + .docs-nav-area {
+  margin-top: 1.1rem;
+}
+
+.docs-nav-area-summary,
+.docs-nav-internals-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 6px;
+}
+
+.docs-nav-area-summary::-webkit-details-marker,
+.docs-nav-internals-summary::-webkit-details-marker {
+  display: none;
+}
+
+.docs-nav-area-summary::before,
+.docs-nav-internals-summary::before {
+  content: "";
+  width: 0.38rem;
+  height: 0.38rem;
+  flex: none;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 120ms ease;
+  opacity: 0.6;
+}
+
+.docs-nav-area[open] > .docs-nav-area-summary::before,
+.docs-nav-internals[open] > .docs-nav-internals-summary::before {
+  transform: rotate(45deg);
+}
+
+.docs-nav-area-summary {
+  padding: 0.4rem 0.65rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.docs-nav-area-summary:hover,
+.docs-nav-internals-summary:hover {
+  background: var(--sunk);
+}
+
+.docs-nav-area[open] {
+  padding-bottom: 0.6rem;
+}
+
+.docs-nav-area > ul,
+.docs-nav-area > .docs-nav-label,
+.docs-nav-area > .docs-nav-internals {
+  margin-left: 0.55rem;
+  padding-left: 0.45rem;
+  border-left: 1px solid var(--rule);
+}
+
+.docs-nav-area > .docs-nav-label {
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-top: 0.75rem;
+  padding-bottom: 0.3rem;
+  padding-left: 1.1rem;
+}
+
+.docs-nav-area > .docs-nav-internals {
+  padding-top: 0.6rem;
+}
+
+.docs-nav-internals-summary {
+  padding: 0.3rem 0.65rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--graphite);
+}
+
+.docs-nav .docs-nav-areas {
+  margin-top: 0;
+}
+
+.docs-nav-areas a {
+  color: var(--ink);
 }
 
 /* The outline of the page. */
@@ -1253,6 +1449,16 @@ body.wide {
   line-height: 1.6;
   color: var(--graphite);
   max-width: 68ch;
+}
+
+.doc-banner {
+  align-self: flex-start;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--violet) 35%, var(--rule));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--violet) 8%, var(--card));
+  color: var(--graphite);
+  font-size: 0.85rem;
 }
 
 .doc-lede code {
@@ -1595,31 +1801,11 @@ body.wide {
 .docs-home {
   display: flex;
   flex-direction: column;
-  gap: 2.75rem;
+  gap: 2.5rem;
 }
 
 .docs-home .doc-head {
   margin-bottom: 0;
-}
-
-.doc-filter {
-  margin-top: 0.5rem;
-}
-
-.docs-home .doc-filter input[type="search"] {
-  width: 100%;
-  max-width: 26rem;
-  font: inherit;
-  padding: 0.55rem 0.85rem;
-  color: var(--ink);
-  background: var(--card);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-}
-
-.docs-home .doc-filter input[type="search"]:focus {
-  outline: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  border-color: var(--accent);
 }
 
 .doc-section {
@@ -1632,53 +1818,134 @@ body.wide {
   font-weight: 600;
 }
 
-.docs-home .doc-section h2 a {
-  color: var(--ink);
-  text-decoration: none;
+/* The reading path: numbered steps on a line. */
+
+.doc-path {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  max-width: 52rem;
 }
 
-.docs-home .doc-section h2 a:hover {
+.doc-path > li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: 1rem;
+  padding-bottom: 1.5rem;
+}
+
+.doc-path > li:last-child {
+  padding-bottom: 0;
+}
+
+.doc-path > li:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: calc(1rem - 0.5px);
+  top: 2.1rem;
+  bottom: 0.3rem;
+  border-left: 1px solid var(--rule);
+}
+
+.doc-path-number {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--accent-soft);
   color: var(--accent);
+  font-weight: 650;
+  font-size: 0.9rem;
 }
 
-.docs-home .doc-section-head p {
-  margin-top: 0.3rem;
+.doc-path-body {
+  display: grid;
+  gap: 0.2rem;
+  padding-top: 0.2rem;
+}
+
+.doc-path-title {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.doc-path-text {
   color: var(--graphite);
-  max-width: 72ch;
   font-size: 0.92rem;
 }
 
-.doc-cards {
-  display: grid;
-  gap: 0.75rem;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15.5rem), 1fr));
+.doc-path-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.45rem;
 }
 
-.doc-card {
+.doc-path-primary {
+  font-weight: 550;
+  font-size: 0.9rem;
+  color: var(--accent);
+  text-decoration: none;
+  margin-right: 0.35rem;
+}
+
+.doc-path-primary:hover {
+  text-decoration: underline;
+}
+
+.doc-chip {
+  display: inline-block;
+  padding: 0.18rem 0.6rem;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--graphite);
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+
+.doc-chip:hover {
+  color: var(--ink);
+  border-color: var(--rule-strong);
+}
+
+/* The areas: one compact card each. */
+
+.doc-areas {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+}
+
+.doc-area {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  padding: 0.9rem 1.05rem;
+  gap: 0.45rem;
+  padding: 1rem 1.1rem;
   border: 1px solid var(--rule);
   border-radius: var(--radius);
   background: var(--card);
-  color: var(--ink);
-  text-decoration: none;
-  transition:
-    border-color 120ms ease,
-    box-shadow 120ms ease;
 }
 
-.doc-card:hover {
-  border-color: var(--accent);
-  box-shadow: var(--shadow);
-}
-
-.doc-card strong {
+.doc-area-title {
+  font-size: 1rem;
   font-weight: 600;
 }
 
-.doc-card-summary {
+.doc-area-title-link {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.doc-area-title-link:hover {
+  color: var(--accent);
+}
+
+.doc-area-summary {
   color: var(--graphite);
   font-size: 0.86rem;
   line-height: 1.5;
@@ -1688,23 +1955,23 @@ body.wide {
   overflow: hidden;
 }
 
-.doc-card-group {
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+.doc-area-links {
+  list-style: none;
+  margin: 0.2rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.9rem;
+  font-size: 0.86rem;
+}
+
+.doc-area-link {
   color: var(--accent);
+  text-decoration: none;
 }
 
-.doc-cards.featured .doc-card {
-  background: linear-gradient(180deg, var(--accent-soft), var(--card) 75%);
-}
-
-.doc-card[hidden],
-.doc-section[hidden],
-.doc-filter[hidden],
-.docs-home [data-doc-empty][hidden] {
-  display: none;
+.doc-area-link:hover {
+  text-decoration: underline;
 }
 
 /* Narrower windows: the outline moves above the article, then the sidebar folds. */
@@ -1755,4 +2022,29 @@ body.wide {
   .doc-pager-link.next {
     grid-column: 1;
   }
+}
+
+/* ------------------------------------------------------------ refinements */
+
+/* Placed last: they refine the general rules above for one context. */
+
+.page-head-row .row {
+  padding-bottom: 0.15rem;
+}
+
+.section-head .lede {
+  font-size: 0.95rem;
+}
+
+.foot-link {
+  color: var(--graphite);
+  text-decoration: none;
+}
+
+.foot-link:hover {
+  color: var(--ink);
+}
+
+.card-link:hover h2 {
+  color: var(--accent);
 }

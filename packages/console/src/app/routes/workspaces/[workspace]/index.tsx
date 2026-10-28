@@ -35,15 +35,13 @@ export default createRoute(async (c) => {
       <PageHead
         title={workspaceName(me, id)}
         eyebrow="Workspace"
-        lede={`${schema.collections.length} collections are open to you in this workspace.`}
+        lede={`${schema.collections.length} ${schema.collections.length === 1 ? 'collection is' : 'collections are'} open to you.`}
       />
       <WorkspaceTabs id={id} current="collections" />
       <div class="split">
         <section class="stack">
           {schema.collections.length === 0 ? (
-            <Empty>
-              The policies of the deployment open no collection of this workspace to you.
-            </Empty>
+            <Empty>No collection in this workspace is open to you.</Empty>
           ) : (
             <div class="grid">
               {schema.collections.map((collection) => (

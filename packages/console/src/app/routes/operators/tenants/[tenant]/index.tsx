@@ -89,7 +89,7 @@ export default createRoute(async (c) => {
       </div>
       <div class="split">
         <section class="card">
-          <h2>The latest changes</h2>
+          <h2>Recent changes</h2>
           {refusal ? <Refusal refusal={refusal} /> : null}
           {audit && audit.rows.length === 0 ? <p class="muted">Nothing changed yet.</p> : null}
           {audit && audit.rows.length > 0 ? (
@@ -111,10 +111,10 @@ export default createRoute(async (c) => {
               </table>
             </div>
           ) : null}
-          <a href={`${base}/audit`}>The whole audit</a>
+          <a href={`${base}/audit`}>Full audit →</a>
         </section>
         <aside class="card">
-          <h2>The tenant</h2>
+          <h2>Tenant</h2>
           <KeyValues
             rows={[
               ['Slug', <code>{tenant.slug}</code>],
@@ -149,7 +149,7 @@ export default createRoute(async (c) => {
         </aside>
       </div>
       <details class="card disclosure">
-        <summary>Change the tenant</summary>
+        <summary>Edit tenant</summary>
         <TenantForm
           tenant={tenant}
           platform={ability.can(CONSOLE_ACTIONS.platform, CONSOLE_SUBJECT)}

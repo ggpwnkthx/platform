@@ -205,7 +205,7 @@ function CollectionModel(props: {
       {collection.description ? <p class="muted">{collection.description}</p> : null}
       {writable ? (
         <details class="disclosure">
-          <summary>Change the label and the description</summary>
+          <summary>Edit label and description</summary>
           <form method="post" class="toolbar">
             <input type="hidden" name="_action" value="describe" />
             <input type="hidden" name="collection" value={collection.key} />
@@ -336,7 +336,7 @@ function CollectionModel(props: {
       </div>
       {writable ? (
         <details class="disclosure">
-          <summary>Serve another column of the table</summary>
+          <summary>Serve another column</summary>
           <form method="post" class="toolbar">
             <input type="hidden" name="_action" value="add-field" />
             <input type="hidden" name="collection" value={collection.key} />
@@ -569,7 +569,7 @@ export default createRoute(async (c) => {
       <PageHead
         title={workspaceName(me, workspace)}
         eyebrow="Workspace"
-        lede="The logical model of the workspace, above the tables of the deployment: what it serves, how it labels it and which rules hold. A change applies to every request that follows it."
+        lede="What the workspace serves from the deployment's tables, how it labels it, and which rules hold. Changes apply to the next request."
       />
       <WorkspaceTabs id={workspace} current="model" />
       {refused ? (

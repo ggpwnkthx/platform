@@ -68,7 +68,7 @@ export default createRoute(async (c) => {
     <>
       <PageHead
         title={collection.label}
-        eyebrow={<code>{collection.key}</code>}
+        eyebrow="Collection"
         lede={collection.description}
         actions={
           <>

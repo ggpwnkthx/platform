@@ -44,7 +44,7 @@ export default createRoute(async (c) => {
       <PageHead
         title={workspaceName(me, workspace)}
         eyebrow="Workspace"
-        lede="The mutations committed in the workspace, the latest first. The audit names the fields that changed, never their values."
+        lede="Committed changes, newest first. Entries name the fields that changed, never their values."
       />
       <WorkspaceTabs id={workspace} current="audit" />
       {refusal ? (

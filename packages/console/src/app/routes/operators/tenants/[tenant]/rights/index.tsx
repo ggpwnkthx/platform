@@ -113,7 +113,7 @@ export default createRoute(async (c) => {
       <TenantHead
         slug={slug}
         title="Rights"
-        lede="A right is a permission on a workspace and a route, held by a user or by a group. The access service decides with them; the console only shows and changes them."
+        lede="A right is a permission or role on a workspace and route, held by a user or a group. The access service decides with them."
       />
       <TenantTabs slug={slug} current="rights" />
       <nav class="segmented" aria-label="The state of the rights">

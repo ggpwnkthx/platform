@@ -58,8 +58,8 @@ function render(
     <>
       <PageHead
         title={`New ${collection.label.replace(/s$/, '').toLowerCase()}`}
-        eyebrow={<code>{collection.key}</code>}
-        lede="The fields you leave empty are left to the data service: its default, or its refusal."
+        eyebrow={collection.label}
+        lede="Fields you leave empty get the data service's default, or are refused if required."
       />
       {options.refusal ? <Refusal refusal={options.refusal} /> : null}
       {options.problems && options.problems.length > 0 ? (

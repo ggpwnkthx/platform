@@ -34,11 +34,11 @@ const handler: ErrorHandler = (error, c) => {
   c.status(status)
   return c.render(
     <section class="refusal">
-      <PageHead title={refusal.title} />
+      <PageHead eyebrow={`Error ${status}`} title={refusal.title} />
       <Refusal refusal={refusal} />
       <p class="row">
         <a class="button quiet" href="/">
-          The overview
+          Go to the overview
         </a>
       </p>
     </section>,

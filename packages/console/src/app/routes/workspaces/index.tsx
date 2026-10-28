@@ -52,24 +52,23 @@ export default createRoute(async (c) => {
   return c.render(
     <>
       <PageHead
+        eyebrow="Data"
         title="Workspaces"
-        lede="The workspaces your rights name, and the ones you opened. The data service decides what you see in each of them."
+        lede="Workspaces your rights name, plus any you opened. The data service decides what you can see in each."
       />
       {!known.rightsRead ? (
         <Notice tone="warn" title="Your rights could not be read">
-          The console holds no credential of the administration for your tenant, or the access
-          service did not answer: it lists the workspaces you opened, and you open another one by
-          its identifier.
+          The console has no admin credential for your tenant, or the access service did not answer.
+          Only workspaces you opened are listed; open another by its ID below.
         </Notice>
       ) : null}
       {known.everyWorkspace ? (
-        <Notice tone="warn" title="A right of yours holds for every workspace of your tenant">
-          The console cannot list what a right does not name: open such a workspace by its
-          identifier.
+        <Notice tone="warn" title="One of your rights covers every workspace in your tenant">
+          The console can't list workspaces a right doesn't name. Open one by its ID below.
         </Notice>
       ) : null}
       {probes.length === 0 ? (
-        <Empty>No workspace is known to the console for you yet.</Empty>
+        <Empty>No workspaces yet. Open one by its ID below.</Empty>
       ) : (
         <div class="grid grid-wide">
           {probes.map((probe) =>
@@ -90,7 +89,7 @@ export default createRoute(async (c) => {
                   <h2 class="mono small">{probe.id}</h2>
                   <Badge tone="error">{probe.refusal ?? 'refused'}</Badge>
                 </header>
-                <p class="small muted">The data service does not open this workspace to you.</p>
+                <p class="small muted">The data service doesn't open this workspace to you.</p>
                 <CopyText text={probe.id} />
               </article>
             )
@@ -98,10 +97,13 @@ export default createRoute(async (c) => {
         </div>
       )}
       <section class="card" style="max-width: 36rem">
-        <h2>Open a workspace</h2>
+        <div class="stack" style="gap: 0.2rem">
+          <h2>Open a workspace</h2>
+          <p class="small muted">Paste a workspace ID to open it directly.</p>
+        </div>
         <form method="post" class="toolbar">
           <label class="field">
-            <span>The identifier of the workspace</span>
+            <span>Workspace ID</span>
             <input
               name="workspace"
               class="mono"

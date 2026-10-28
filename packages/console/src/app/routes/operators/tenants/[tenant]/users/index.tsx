@@ -121,7 +121,7 @@ export default createRoute(async (c) => {
       <TenantHead
         slug={slug}
         title="Users"
-        lede="The people of the tenant, as the access service knows them."
+        lede="People in this tenant, as the access service knows them."
       />
       <TenantTabs slug={slug} current="users" />
       <form method="get" class="toolbar">

@@ -77,8 +77,9 @@ export default createRoute(async (c) => {
   return c.render(
     <>
       <PageHead
+        eyebrow="Operators"
         title="Tenants"
-        lede="Every tenant of the platform: its provider, its client, its users and its rights. You administer the platform."
+        lede="Every tenant on the platform, with its identity provider, client, users and rights."
       />
       {refusal ? <Refusal refusal={refusal} /> : null}
       {tenants.length === 0 && !refusal ? <Empty>The platform has no tenant yet.</Empty> : null}

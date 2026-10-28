@@ -1,10 +1,10 @@
 /**
  * The behaviour of the documentation pages that needs the browser:
- * the copy buttons of the code blocks, the highlighted entry of the
- * outline as the reader scrolls, and the filter of the index.
+ * the copy buttons of the code blocks and the highlighted entry of the
+ * outline as the reader scrolls.
  *
  * It renders nothing. The page is complete without it: the buttons stay
- * hidden, the outline plain and the filter absent.
+ * hidden and the outline plain.
  */
 
 import { useEffect } from 'hono/jsx'
@@ -67,35 +67,9 @@ function enableScrollSpy(): () => void {
   return () => observer.disconnect()
 }
 
-/** Filters the cards of the index by the words typed in its search box. */
-function enableFilter(): () => void {
-  const input = document.querySelector<HTMLInputElement>('[data-doc-filter]')
-  if (!input) return () => {}
-  input.closest<HTMLElement>('[hidden]')?.removeAttribute('hidden')
-  const cards = [...document.querySelectorAll<HTMLElement>('[data-doc-card]')]
-  const sections = [...document.querySelectorAll<HTMLElement>('[data-doc-section]')]
-  const empty = document.querySelector<HTMLElement>('[data-doc-empty]')
-  const onInput = () => {
-    const words = input.value.toLowerCase().split(/\s+/).filter(Boolean)
-    let shown = 0
-    for (const card of cards) {
-      const text = (card.dataset.docCard ?? '').toLowerCase()
-      const match = words.every((word) => text.includes(word))
-      card.hidden = !match
-      if (match) shown += 1
-    }
-    for (const section of sections) {
-      section.hidden = !section.querySelector('[data-doc-card]:not([hidden])')
-    }
-    if (empty) empty.hidden = shown > 0
-  }
-  input.addEventListener('input', onInput)
-  return () => input.removeEventListener('input', onInput)
-}
-
 export default function DocEnhancer() {
   useEffect(() => {
-    const stops = [enableCopy(), enableScrollSpy(), enableFilter()]
+    const stops = [enableCopy(), enableScrollSpy()]
     return () => {
       for (const stop of stops) stop()
     }

@@ -21,12 +21,13 @@ export default createRoute(requireSession, async (c) => {
   return c.render(
     <>
       <PageHead
+        eyebrow="Account"
         title="You"
-        lede="Your identity is the one the access service issued when you signed in. Your keys on the console are read from the access service on every page, never remembered."
+        lede="Your identity comes from your sign-in. Your console keys are read from the access service on every page, never cached."
       />
       <div class="grid grid-wide">
         <section class="card">
-          <h2>Your identity</h2>
+          <h2>Identity</h2>
           <KeyValues
             rows={[
               ['Name', session.principal.name ?? '—'],
@@ -42,10 +43,10 @@ export default createRoute(requireSession, async (c) => {
           />
         </section>
         <section class="card">
-          <h2>Your keys on the console</h2>
+          <h2>Console keys</h2>
           <p class="small muted">
-            Read from the access context of the route <code>{services.config.routeId}</code>, for
-            the workspace <code>{session.principal.tenant}</code>.
+            From the access context of route <code>{services.config.routeId}</code>, tenant{' '}
+            <code>{session.principal.tenant}</code>.
           </p>
           <div class="stack" style="gap: 0.4rem">
             {keys.map((key) => (
@@ -57,18 +58,18 @@ export default createRoute(requireSession, async (c) => {
           </div>
           <p class="small">
             {ability.can(CONSOLE_ACTIONS.platform, CONSOLE_SUBJECT)
-              ? 'You administer every tenant of the platform.'
+              ? 'You administer every tenant.'
               : ability.can(CONSOLE_ACTIONS.admin, CONSOLE_SUBJECT)
                 ? `You administer the tenant ${scope.tenant}.`
                 : services.context
                   ? 'You administer nothing.'
-                  : 'The console holds no credential of the access context: it opens the administration to nobody.'}
+                  : 'The console has no access-context credential, so administration is closed to everyone.'}
           </p>
         </section>
         <section class="card">
-          <h2>Your rights when you signed in</h2>
+          <h2>Roles at sign-in</h2>
           <p class="small muted">
-            The keys of the token of your login: a snapshot of that moment, never the policy.
+            The roles in your sign-in token: a snapshot of that moment, not the live policy.
           </p>
           {session.principal.roles.length === 0 ? (
             <p class="muted">None.</p>

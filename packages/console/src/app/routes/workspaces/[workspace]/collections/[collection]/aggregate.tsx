@@ -74,9 +74,9 @@ export default createRoute(async (c) => {
   return c.render(
     <>
       <PageHead
-        title={`${collection.label}: aggregate`}
-        eyebrow={<code>{collection.key}</code>}
-        lede="Group the records you may read by up to three fields, count them, and measure their numbers."
+        title={`Aggregate ${collection.label.toLowerCase()}`}
+        eyebrow={collection.label}
+        lede="Group the records you can read by up to three fields, then count and summarize them."
       />
       <form method="get" class="card form">
         <input type="hidden" name="run" value="1" />

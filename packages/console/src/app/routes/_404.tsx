@@ -6,12 +6,16 @@ const handler: NotFoundHandler = (c) => {
   return c.render(
     <section class="refusal">
       <PageHead
-        title="There is no such page"
-        lede="The console has no page at this address. The address may be mistyped, or the thing it named may be gone."
+        eyebrow="404"
+        title="Page not found"
+        lede="Nothing lives at this address. It may be mistyped, or what it pointed to may be gone."
       />
-      <p>
-        <a class="button quiet" href="/">
-          The overview
+      <p class="row">
+        <a class="button" href="/">
+          Go to the overview
+        </a>
+        <a class="button quiet" href="/docs">
+          Documentation
         </a>
       </p>
     </section>,
