@@ -55,7 +55,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
@@ -121,7 +121,7 @@ jobs:
           cd packages/data/packages/client
           npm publish --access public --provenance
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: data-client
           path: ${{ runner.temp }}/client/*.tgz
@@ -150,7 +150,7 @@ jobs:
           - 'windows-x64'
           - 'windows-arm64'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.version.outputs.tag }}
 
@@ -244,7 +244,7 @@ jobs:
           (cd dist && tar -czf "${service}-${version}-${platform}.tar.gz" "${service}-${version}-${platform}")
           tar -tzf "dist/${service}-${version}-${platform}.tar.gz"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.service }}-${{ matrix.platform }}
           path: dist/${{ matrix.service }}-*.tar.gz
@@ -288,7 +288,7 @@ jobs:
           --health-timeout 3s
           --health-retries 10
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: '*-linux-x64'
           path: dist
@@ -427,7 +427,7 @@ jobs:
       # The release of the tag is created here.
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           pattern: '*-*'

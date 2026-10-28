@@ -52,7 +52,7 @@ jobs:
           - workspace: ui
             path: packages/ui
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -92,7 +92,7 @@ jobs:
     name: the style, the dead code and the versions of the platform
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -203,7 +203,7 @@ jobs:
           --health-timeout 3s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -255,7 +255,7 @@ jobs:
     name: the compatibility of the platform
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # The whole history: the reference of the suite is the revision
           # that is tested, and the check of the drift reads the tags.
@@ -337,7 +337,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: the build of the image
         run: docker build -f ${{ matrix.path }}/Dockerfile -t ${{ matrix.workspace }}:ci .
@@ -565,7 +565,7 @@ jobs:
         # cannot read it is a runtime the platform cannot be built with.
         bun: ['1.4.3', '1.4.4', 'latest']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -593,7 +593,7 @@ jobs:
     name: the gateway refuses an old runtime
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -639,7 +639,7 @@ jobs:
     name: the browser behaviour of the gateway
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -662,7 +662,7 @@ jobs:
     # flow against a real provider is a change that breaks the deployment
     # of every user of the gateway.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -703,7 +703,7 @@ jobs:
     name: the capacity of the gateway
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -736,7 +736,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:

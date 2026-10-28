@@ -63,7 +63,7 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       sha: ${{ steps.revision.outputs.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # The tag of the release: the ref of a push, the input of a
           # dispatch. The release is the tag, and the tag is the commit
@@ -115,7 +115,7 @@ jobs:
       matrix:
         service: [gateway, access, data]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.version.outputs.tag }}
 
@@ -173,7 +173,7 @@ jobs:
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
           echo "the image of the release is ${{ env.REGISTRY }}/${{ matrix.service }}@${digest}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: digest-${{ matrix.service }}
           path: digest-${{ matrix.service }}.txt
@@ -218,7 +218,7 @@ jobs:
           --health-retries 10
     steps:
       - name: the digest of the image is read
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: digest-${{ matrix.service }}
 
@@ -459,7 +459,7 @@ jobs:
           # The digest of the image: it is what a deployment pins.
           docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}'
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: image-${{ matrix.service }}-${{ needs.version.outputs.tag }}
           path: ${{ matrix.service }}-${{ needs.version.outputs.tag }}.tar.gz
@@ -489,7 +489,7 @@ jobs:
 
       - name: the digest of the image is read
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: digest-${{ matrix.service }}
 
@@ -518,7 +518,7 @@ jobs:
       # The release of the tag is created here.
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           pattern: 'image-*'
