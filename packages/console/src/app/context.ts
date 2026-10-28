@@ -21,6 +21,8 @@ export interface PageProps {
   readonly title: string
   readonly section?: Section
   readonly crumbs?: readonly Crumb[]
+  /** Whether the page uses the full width of the window (the documentation). */
+  readonly wide?: boolean
 }
 
 declare module 'hono' {

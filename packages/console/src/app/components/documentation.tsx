@@ -1,23 +1,20 @@
 /**
- * The documentation of the platform, as the console shows it.
+ * Renders the blocks of a documentation page.
  *
- * The console shows the documents of the documentation as they are
- * written: the headings, the paragraphs, the lists, the tables and the
- * code of a document. Every link of a document is rewritten to the
- * address of its target, so that the reader walks the documentation
- * the way the reader of the repository walks it.
- *
- * A quote that opens with a GitHub-style marker (`> [!NOTE]`) is a
- * callout: it carries its kind and the label of it.
+ * Every link is rewritten to its target's console url (see
+ * `resolveOf`), headings get permalinks, quotes that open with a
+ * GitHub-style marker (`> [!NOTE]`) become callouts, and code blocks get
+ * a header with their language and a copy button.
  */
 
 import type { Block, Inline } from '../../domains/documentation'
 import { resolveOf, type Tree } from '../../domains/documentation'
-/** What a rendering needs to know. */
+
+/** What rendering a block needs to know. */
 interface RenderProps {
-  /** The tree of the documentation. */
+  /** The documentation tree, to resolve links. */
   readonly tree: Tree
-  /** The path of the repository of the document the text is in. */
+  /** The repository path of the document being rendered. */
   readonly from: string
 }
 
@@ -30,7 +27,7 @@ const ALERTS: Record<string, string> = {
   caution: 'Caution',
 }
 
-/** The blocks of a document, as the console shows them. */
+/** The blocks of a document. */
 export function DocumentBlocks(props: { blocks: readonly Block[] } & RenderProps) {
   return (
     <>
@@ -41,21 +38,21 @@ export function DocumentBlocks(props: { blocks: readonly Block[] } & RenderProps
   )
 }
 
-/** A block of a document, as the console shows it. */
+/** One block of a document. */
 function BlockOf(props: { block: Block } & RenderProps) {
   const { block } = props
   switch (block.kind) {
     case 'heading': {
-      const Tag = `h${Math.min(Math.max(block.level, 1), 6)}` as
-        | 'h1'
-        | 'h2'
-        | 'h3'
-        | 'h4'
-        | 'h5'
-        | 'h6'
+      const level = Math.min(Math.max(block.level, 1), 6)
+      const Tag = `h${level}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6'
       return (
         <Tag id={block.id}>
           <Inlines inlines={block.inline} tree={props.tree} from={props.from} />
+          {level >= 2 && level <= 4 ? (
+            <a class="anchor" href={`#${block.id}`} aria-label="Link to this section">
+              #
+            </a>
+          ) : null}
         </Tag>
       )
     }
@@ -65,35 +62,30 @@ function BlockOf(props: { block: Block } & RenderProps) {
           <Inlines inlines={block.inline} tree={props.tree} from={props.from} />
         </p>
       )
-    case 'list':
-      return block.ordered ? (
-        <ol>
-          {block.items.map((item) => (
-            <li class={item.task === null ? undefined : 'task'}>
-              {item.task === null ? null : (
-                <input type="checkbox" checked={item.task} disabled readOnly />
-              )}
-              <Inlines inlines={item.inline} tree={props.tree} from={props.from} />
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <ul>
-          {block.items.map((item) => (
-            <li class={item.task === null ? undefined : 'task'}>
-              {item.task === null ? null : (
-                <input type="checkbox" checked={item.task} disabled readOnly />
-              )}
-              <Inlines inlines={item.inline} tree={props.tree} from={props.from} />
-            </li>
-          ))}
-        </ul>
-      )
+    case 'list': {
+      const items = block.items.map((item) => (
+        <li class={item.task === null ? undefined : 'task'}>
+          {item.task === null ? null : (
+            <input type="checkbox" checked={item.task} disabled readOnly />
+          )}
+          <Inlines inlines={item.inline} tree={props.tree} from={props.from} />
+        </li>
+      ))
+      return block.ordered ? <ol>{items}</ol> : <ul>{items}</ul>
+    }
     case 'code':
       return (
-        <pre>
-          <code>{block.text}</code>
-        </pre>
+        <figure class="code-block">
+          <figcaption>
+            <span>{block.language ?? 'text'}</span>
+            <button type="button" class="code-copy" data-copy hidden>
+              Copy
+            </button>
+          </figcaption>
+          <pre>
+            <code>{block.text}</code>
+          </pre>
+        </figure>
       )
     case 'table':
       return (
@@ -143,8 +135,8 @@ function BlockOf(props: { block: Block } & RenderProps) {
   }
 }
 
-/** The marks of a text, as the console shows them. */
-function Inlines(props: { inlines: readonly Inline[] } & RenderProps) {
+/** Inline text with its marks. */
+export function Inlines(props: { inlines: readonly Inline[] } & RenderProps) {
   return (
     <>
       {props.inlines.map((inline) => {

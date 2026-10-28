@@ -27,6 +27,11 @@ export function urlOf(path: string): string {
   return `${PLACE}/${path}`
 }
 
+/** The url of a file of the repository, at the tag of this version. */
+export function sourceUrlOf(source: string): string {
+  return `${REPOSITORY}/blob/v${VERSION}/${source}`
+}
+
 /**
  * The url of a link of a document.
  *
@@ -49,7 +54,7 @@ export function resolveOf(tree: Tree, from: string, href: string): string {
   if (document) return `${urlOf(document.path)}${anchor}`
   const asset = tree.assets.find((item) => item.source === resolved)
   if (asset) return `${urlOf(asset.path)}${anchor}`
-  return `${REPOSITORY}/blob/v${VERSION}/${resolved}${anchor}`
+  return `${sourceUrlOf(resolved)}${anchor}`
 }
 
 /**

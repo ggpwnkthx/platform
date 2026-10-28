@@ -7,6 +7,11 @@ import {
   navigatesItself,
   resolveOf,
   textOf,
+  labelOf,
+  ledeOf,
+  neighboursOf,
+  outlineOf,
+  readingOrderOf,
   titleOf,
   type Tree,
 } from '../src/domains/documentation'
@@ -192,7 +197,7 @@ describe('a document that navigates itself', () => {
     const rendered = {
       document: {
         path: 'data/specification',
-        source: 'docs/data/specification.md',
+        source: 'docs/data/spec.md',
         directory: 'data',
         content: '',
         title: 'The specification',
@@ -245,10 +250,74 @@ describe('the tree of the documentation', () => {
     expect(groupsOf(tree).map((group) => group.name)).toEqual(['', 'gateway', 'console'])
   })
 
-  test('the access service is not named by its directory', () => {
-    expect(titleOf('access')).toBe('The access service')
-    expect(titleOf('data')).toBe('The data service')
-    expect(titleOf('')).toBe('The documentation')
+  test('the index of a group is its README, and it is not listed twice', () => {
+    const tree: Tree = {
+      documents: [
+        {
+          path: 'README',
+          source: 'docs/README.md',
+          directory: '',
+          content: '# r\n',
+          title: 'r',
+          summary: '',
+        },
+        {
+          path: 'gateway/README',
+          source: 'docs/gateway/README.md',
+          directory: 'gateway',
+          content: '# g\n',
+          title: 'g',
+          summary: '',
+        },
+        {
+          path: 'gateway/spec',
+          source: 'docs/gateway/spec.md',
+          directory: 'gateway',
+          content: '# s\n',
+          title: 's',
+          summary: '',
+        },
+      ],
+      assets: [],
+    }
+    const groups = groupsOf(tree)
+    expect(groups[0]?.index?.path).toBe('README')
+    expect(groups[0]?.documents).toEqual([])
+    expect(groups[1]?.index?.path).toBe('gateway/README')
+    expect(groups[1]?.documents.map((document) => document.path)).toEqual(['gateway/spec'])
+  })
+
+  test('a group is named by its area, not its directory', () => {
+    expect(titleOf('access')).toBe('Access service')
+    expect(titleOf('data')).toBe('Data service')
+    expect(titleOf('')).toBe('Overview')
+  })
+
+  test('the documents of a group are in reading order, not alphabetical', () => {
+    const tree: Tree = {
+      documents: ['decisions', 'README', 'operations', 'zeta', 'spec', 'alpha'].map((name) => ({
+        path: `gateway/${name}`,
+        source: `docs/gateway/${name}.md`,
+        directory: 'gateway',
+        content: `# ${name}\n`,
+        title: name,
+        summary: '',
+      })),
+      assets: [],
+    }
+    expect(readingOrderOf(tree).map((document) => document.path)).toEqual([
+      'gateway/README',
+      'gateway/spec',
+      'gateway/operations',
+      'gateway/decisions',
+      'gateway/alpha',
+      'gateway/zeta',
+    ])
+    expect(neighboursOf(tree, 'gateway/spec').previous?.path).toBe('gateway/README')
+    expect(neighboursOf(tree, 'gateway/spec').next?.path).toBe('gateway/operations')
+    expect(neighboursOf(tree, 'gateway/README').previous).toBeNull()
+    expect(labelOf(tree.documents[1]!)).toBe('Overview')
+    expect(labelOf(tree.documents[0]!)).toBe('decisions')
   })
 
   test('the text of a text is the text without its marks', () => {
@@ -274,7 +343,29 @@ describe('the tree of the documentation', () => {
   })
 })
 
-describe('a callout of a document', () => {
+describe('a page of the documentation', () => {
+  test('the paragraph after the title is the lede, and the body does not repeat it', () => {
+    const { lede, body } = ledeOf(
+      parseMarkdown('# Operations\n\nHow to run it.\n\n## Probes\n\nText.\n')
+    )
+    expect(lede).toEqual([{ kind: 'text', text: 'How to run it.' }])
+    expect(body.map((block) => block.kind)).toEqual(['heading', 'paragraph'])
+  })
+
+  test('a page that opens with something else has no lede', () => {
+    const { lede, body } = ledeOf(parseMarkdown('# Operations\n\n- a list\n'))
+    expect(lede).toBeNull()
+    expect(body.map((block) => block.kind)).toEqual(['list'])
+  })
+
+  test('the outline holds the headings of the second and third level', () => {
+    const outline = outlineOf(parseMarkdown('# T\n\n## A `b`\n\n### C\n\n#### D\n'))
+    expect(outline).toEqual([
+      { id: 'a-b', text: 'A b', level: 2 },
+      { id: 'c', text: 'C', level: 3 },
+    ])
+  })
+
   test('a quote that opens with a marker is a callout', () => {
     const [warning, plain] = parseMarkdown('> [!WARNING]\n> Mind it.\n\n> Just a quote.\n')
     expect(warning).toMatchObject({ kind: 'quote', alert: 'warning' })

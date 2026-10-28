@@ -17,11 +17,17 @@ export {
   type Document,
   groupsOf,
   headOf,
+  labelOf,
+  ledeOf,
   navigatesItself,
+  neighboursOf,
+  type OutlineItem,
+  outlineOf,
+  readingOrderOf,
   renderOf,
   type Rendered,
   textOf,
   titleOf,
   type Tree,
 } from './tree'
-export { resolveOf, urlOf } from './url'
+export { resolveOf, sourceUrlOf, urlOf } from './url'

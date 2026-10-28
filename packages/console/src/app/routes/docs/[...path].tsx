@@ -1,58 +1,101 @@
 /**
- * A document of the documentation of the platform.
+ * A page of the documentation.
  *
- * The console shows the document as it is written, and every link of
- * it is rewritten to the address of its target: the reader walks the
- * documentation in the console the way the reader of the repository
- * walks it.
+ * The document is shown as it is written, inside the documentation
+ * frame: the sidebar, the outline, and links to the previous and next
+ * pages. Files of the documentation that are not markdown (the atlas)
+ * are served as they are.
  */
 
 import { createRoute } from 'honox/factory'
-import { DocumentBlocks } from '../../components/documentation'
-import { PageHead } from '../../components/page'
-import { navigatesItself, textOf } from '../../../domains/documentation'
+import { DocsShell } from '../../components/docs-shell'
+import { DocumentBlocks, Inlines } from '../../components/documentation'
+import {
+  type Document,
+  labelOf,
+  ledeOf,
+  navigatesItself,
+  neighboursOf,
+  outlineOf,
+  sourceUrlOf,
+  titleOf,
+  urlOf,
+} from '../../../domains/documentation'
 import { DOCUMENTATION, renderedOf } from '../../documentation'
+
+/** A link to the previous or next page. */
+function PagerLink(props: { document: Document | null; direction: 'previous' | 'next' }) {
+  if (!props.document) return <span />
+  return (
+    <a class={`doc-pager-link ${props.direction}`} href={urlOf(props.document.path)}>
+      <span class="doc-pager-label">
+        {props.direction === 'previous' ? '← Previous' : 'Next →'}
+      </span>
+      <span class="doc-pager-title">{labelOf(props.document)}</span>
+      <span class="doc-pager-group">{titleOf(props.document.directory)}</span>
+    </a>
+  )
+}
 
 export default createRoute(async (c) => {
   const path = c.req.param('path') ?? ''
-  // The files of the documentation that are not documents are served as
-  // they are: the atlas of the platform is a page of its own.
   const asset = DOCUMENTATION.assets.find((item) => item.path === path)
   if (asset) return c.html(asset.content)
   const rendered = renderedOf(path)
   if (!rendered) return c.notFound()
   const { document, title, blocks } = rendered
-  // The title of the document is the title of the page: the document
-  // says it once, and the page does not say it again.
-  const body = blocks.filter((block) => !(block.kind === 'heading' && block.level === 1))
-  const headings = body.filter(
-    (block) => block.kind === 'heading' && block.level >= 2 && block.level <= 3
+  const { lede, body } = ledeOf(blocks)
+  const group = titleOf(document.directory)
+  const groupIndex = DOCUMENTATION.documents.find(
+    (item) => item.directory === document.directory && item.path.endsWith('README')
   )
+  const { previous, next } = neighboursOf(DOCUMENTATION, document.path)
+  const tree = DOCUMENTATION
   return c.render(
-    <div class="doc-page">
-      <PageHead title={title} />
-      {headings.length > 1 && !navigatesItself(rendered) ? (
-        <details class="disclosure outline">
-          <summary>On this page</summary>
-          <ol>
-            {headings.map((heading) =>
-              heading.kind === 'heading' ? (
-                <li class={`level-${heading.level}`}>
-                  <a href={`#${heading.id}`}>{textOf(heading.inline)}</a>
-                </li>
-              ) : null
-            )}
-          </ol>
-        </details>
-      ) : null}
-      <article class="doc">
-        <DocumentBlocks blocks={body} tree={DOCUMENTATION} from={document.source} />
+    <DocsShell
+      tree={tree}
+      current={document.path}
+      outline={outlineOf(body)}
+      inlineOutline={!navigatesItself(rendered)}
+    >
+      <article class="doc-article">
+        <header class="doc-head">
+          <nav aria-label="Breadcrumbs">
+            <ol class="crumbs">
+              <li>
+                <a href="/docs">Documentation</a>
+              </li>
+              <li>
+                {groupIndex && groupIndex.path !== document.path ? (
+                  <a href={urlOf(groupIndex.path)}>{group}</a>
+                ) : (
+                  <span>{group}</span>
+                )}
+              </li>
+            </ol>
+          </nav>
+          <h1>{title}</h1>
+          {lede ? (
+            <p class="doc-lede">
+              <Inlines inlines={lede} tree={tree} from={document.source} />
+            </p>
+          ) : null}
+        </header>
+        <div class="doc">
+          <DocumentBlocks blocks={body} tree={tree} from={document.source} />
+        </div>
+        <footer class="doc-foot">
+          <nav class="doc-pager" aria-label="Previous and next pages">
+            <PagerLink document={previous} direction="previous" />
+            <PagerLink document={next} direction="next" />
+          </nav>
+          <p class="doc-source">
+            <a href={sourceUrlOf(document.source)}>View source on GitHub</a>
+            <span class="muted"> · {document.source}</span>
+          </p>
+        </footer>
       </article>
-    </div>,
-    {
-      title,
-      section: 'docs',
-      crumbs: [{ label: 'The documentation', href: '/docs' }, { label: title }],
-    }
+    </DocsShell>,
+    { title: `${title} · ${group}`, section: 'docs', wide: true }
   )
 })

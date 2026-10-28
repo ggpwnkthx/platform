@@ -184,6 +184,10 @@ Links are rewritten to their targets' addresses:
 
 A heading's anchor is its text lowercased, punctuation removed, spaces replaced by hyphens: the same anchor a rendered Markdown file uses and the docs check resolves.
 
+A quote that opens with a marker (`> [!NOTE]`, `> [!WARNING]`) is a callout: it carries its kind, the label of the kind and the tone of it. A quote without a marker stays a quote.
+
+The page of a document is a frame around the document: the sidebar names every page of every group, the outline follows the reader down the document, and the previous page and the next page are at the foot of it. The index of the documentation opens with the pages to start with, and shows every page of every group as a card of its own. The frame needs no script: the copy button of a code block, the entry of the outline that is being read and the filter of the index are added by the browser, and the page is complete without them.
+
 The place reads only the docs, no service. Anyone can read it; a missing doc is a console "not found", like any other missing page.
 
 ---

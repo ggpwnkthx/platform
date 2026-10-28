@@ -22,4 +22,18 @@ describe('the rendering of a documentation page', () => {
   test('a plain quote stays a quote', async () => {
     expect(await render('> Just a quote.\n')).toContain('<blockquote>')
   })
+
+  test('a code block names its language and offers a copy button', async () => {
+    const html = await render('```bash\nbun run dev\n```\n')
+    expect(html).toContain('<figure class="code-block">')
+    expect(html).toContain('<span>bash</span>')
+    expect(html).toContain('data-copy')
+    expect(html).toContain('<code>bun run dev</code>')
+  })
+
+  test('a heading carries a permalink to itself', async () => {
+    const html = await render('## 6.2 The places\n')
+    expect(html).toContain('id="62-the-places"')
+    expect(html).toContain('href="#62-the-places"')
+  })
 })

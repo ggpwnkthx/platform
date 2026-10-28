@@ -174,29 +174,78 @@ export interface Group {
   readonly name: string
   /** The title of the group, as the documentation names it. */
   readonly title: string
-  /** The documents of the group. */
+  /**
+   * The index of the group: the document that names the documents of
+   * the group and what they hold.
+   */
+  readonly index: Document | null
+  /** The documents of the group, and not its index. */
   readonly documents: readonly Document[]
 }
 
-/**
- * The names of the directories of the documentation.
- *
- * The access service and the data service are not named by their
- * directory: the directory of the access service is `access`, and the
- * service is the access service.
- */
+/** The title of each directory of the documentation, in the order they are shown. */
 const TITLES: Record<string, string> = {
-  platform: 'The platform',
-  gateway: 'The gateway',
-  access: 'The access service',
-  data: 'The data service',
-  console: 'The console',
-  '': 'The documentation',
+  '': 'Overview',
+  platform: 'Platform',
+  gateway: 'Gateway',
+  access: 'Access service',
+  data: 'Data service',
+  console: 'Console',
 }
+
+/** The order of the groups: the directories of `TITLES`, then any other, by name. */
+const GROUP_ORDER = Object.keys(TITLES)
+
+/**
+ * The order of the documents of a group, by file name. The README is the
+ * group's overview and comes first; a file this list does not name comes
+ * after the named ones, by name.
+ */
+const DOCUMENT_ORDER = [
+  'README',
+  'spec',
+  'api',
+  'getting-started',
+  'architecture',
+  'configuration',
+  'client',
+  'operations',
+  'recovery',
+  'troubleshooting',
+  'backup-restore',
+  'capacity',
+  'runtime',
+  'upstream-identity',
+  'security',
+  'release',
+  'compatibility',
+  'development',
+  'decisions',
+]
 
 /** The title of a group of documents. */
 export function titleOf(directory: string): string {
   return TITLES[directory] ?? directory
+}
+
+/** The rank of a name in an order: its position, or after every named one. */
+function rankOf(order: readonly string[], name: string): number {
+  const index = order.indexOf(name)
+  return index === -1 ? order.length : index
+}
+
+/** The file name of a document, without its directory. */
+function nameOf(document: Document): string {
+  return document.path.slice(document.path.lastIndexOf('/') + 1)
+}
+
+/** Sorts documents in reading order. */
+function sortDocuments(documents: readonly Document[]): Document[] {
+  return [...documents].sort(
+    (left, right) =>
+      rankOf(DOCUMENT_ORDER, nameOf(left)) - rankOf(DOCUMENT_ORDER, nameOf(right)) ||
+      left.path.localeCompare(right.path)
+  )
 }
 
 /**
@@ -221,10 +270,9 @@ export function textOf(inlines: readonly Inline[]): string {
 }
 
 /**
- * The groups of the documentation.
- *
- * The documents of the documentation of the platform come first, and
- * the documents of a contract follow the contract.
+ * The groups of the documentation: one per directory, in reading order.
+ * The index of a group is its README, and it is not listed among the
+ * group's other documents.
  */
 export function groupsOf(tree: Tree): Group[] {
   const groups = new Map<string, Document[]>()
@@ -233,18 +281,78 @@ export function groupsOf(tree: Tree): Group[] {
     group.push(document)
     groups.set(document.directory, group)
   }
-  const order = ['', 'platform', 'gateway', 'access', 'data', 'console']
   return [...groups.entries()]
-    .sort(([left], [right]) => {
-      const rank = (name: string): number => {
-        const index = order.indexOf(name)
-        return index === -1 ? order.length : index
+    .sort(
+      ([left], [right]) =>
+        rankOf(GROUP_ORDER, left) - rankOf(GROUP_ORDER, right) || left.localeCompare(right)
+    )
+    .map(([name, documents]) => {
+      const sorted = sortDocuments(documents)
+      const index = sorted.find((document) => nameOf(document) === 'README') ?? null
+      return {
+        name,
+        title: titleOf(name),
+        index,
+        documents: index ? sorted.filter((document) => document !== index) : sorted,
       }
-      return rank(left) - rank(right)
     })
-    .map(([name, documents]) => ({
-      name,
-      title: titleOf(name),
-      documents: [...documents].sort((left, right) => left.path.localeCompare(right.path)),
-    }))
+}
+
+/** Every document of the documentation, in the order the sidebar shows them. */
+export function readingOrderOf(tree: Tree): Document[] {
+  return groupsOf(tree).flatMap((group) =>
+    group.index ? [group.index, ...group.documents] : [...group.documents]
+  )
+}
+
+/** The documents before and after a document, in reading order. */
+export function neighboursOf(
+  tree: Tree,
+  path: string
+): { previous: Document | null; next: Document | null } {
+  const order = readingOrderOf(tree)
+  const index = order.findIndex((document) => document.path === path)
+  if (index === -1) return { previous: null, next: null }
+  return { previous: order[index - 1] ?? null, next: order[index + 1] ?? null }
+}
+
+/**
+ * The label of a document in the navigation: a group's README is its
+ * "Overview", any other document is named by its title.
+ */
+export function labelOf(document: Document): string {
+  return nameOf(document) === 'README' ? 'Overview' : document.title
+}
+
+/** An entry of the outline of a page. */
+export interface OutlineItem {
+  readonly id: string
+  readonly text: string
+  readonly level: number
+}
+
+/** The outline of a document: its headings of the second and third level. */
+export function outlineOf(blocks: readonly Block[]): OutlineItem[] {
+  const items: OutlineItem[] = []
+  for (const block of blocks) {
+    if (block.kind !== 'heading' || block.level < 2 || block.level > 3) continue
+    items.push({ id: block.id, text: textOf(block.inline), level: block.level })
+  }
+  return items
+}
+
+/**
+ * The lede of a document, and the blocks that follow it.
+ *
+ * The first-level heading names the page and is dropped: the page header
+ * says it. The paragraph that follows it is the document's summary: the
+ * page header shows it as the lede, so the body does not repeat it.
+ */
+export function ledeOf(blocks: readonly Block[]): { lede: Inline[] | null; body: Block[] } {
+  const body = blocks.filter((block) => !(block.kind === 'heading' && block.level === 1))
+  const first = body[0]
+  if (first?.kind === 'paragraph') {
+    return { lede: first.inline, body: body.slice(1) }
+  }
+  return { lede: null, body }
 }

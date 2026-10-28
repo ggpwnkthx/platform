@@ -109,7 +109,7 @@ function Message() {
   )
 }
 
-export default jsxRenderer(({ children, title, section, crumbs }) => {
+export default jsxRenderer(({ children, title, section, crumbs, wide }) => {
   const c = useRequestContext()
   const theme = getCookie(c, 'console_theme')
   return (
@@ -122,7 +122,7 @@ export default jsxRenderer(({ children, title, section, crumbs }) => {
         <Link href="/src/app/style.css" rel="stylesheet" prod={import.meta.env.CONSOLE_BUILD} />
         <Script src="/src/app/client.ts" async prod={import.meta.env.CONSOLE_BUILD} />
       </head>
-      <body>
+      <body class={wide ? 'wide' : undefined}>
         <a class="skip" href="#main">
           Skip to the content
         </a>
