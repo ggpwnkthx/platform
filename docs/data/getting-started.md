@@ -1,78 +1,137 @@
 # Getting started
 
-Take a checkout to a running service on your development machine. This is the shortest path that
-exercises the whole trust chain: a signed request, a real PostgreSQL, the real roles and the real
-migrations.
+Go from an empty checkout to a record created through the gateway, then run the data service on its
+own. Tools, run modes and test commands for the whole repository are in
+[Platform development](../platform/development.md).
 
 ## Requirements
 
 | Tool | Version |
 | --- | --- |
 | [Bun](https://bun.sh) | 1.4.3 or later |
-| PostgreSQL | 18, with the server binaries on the `PATH` |
-| Docker or Podman | For the local stack, and for tests on a machine without PostgreSQL binaries |
+| PostgreSQL | 18, server binaries on the `PATH` |
+| Docker or Podman | For the compose stack, or when PostgreSQL binaries are missing |
 
-Integration tests start their own PostgreSQL server in `.pg/tests/data` at the repository root, so
-they don't need a local server. It is separate from your development server: the tests empty the
-tables and create the separation roles with test passwords. Without PostgreSQL binaries, the tests
-run that server in a container. The compatibility harness starts its own server in a temporary
-directory.
+Local development and the test suites use PostgreSQL 18; deployments may run 15 or later.
 
-The suites prove version 18. A deployment may run PostgreSQL 15 or later; that requirement is in
-[the docs index](../README.md) and doesn't apply to local development.
-
-## Steps
+## 1. Run the platform
 
 ```bash
 bun install
-cp .env.example .env                      # and change the secrets
-bun run scripts/cli/provision.ts               # the roles and the database
-bun run migrate                            # the schema
+bun run dev
+```
+
+This starts PostgreSQL, the identity provider, all three services and the console, applies the data
+service's migrations, registers workspace `11111111-1111-4111-8111-111111111111`, and seeds a tenant
+where `alice@gateway.test` (password `alice-password`) is an editor. Details:
+[Platform development](../platform/development.md#platform).
+
+## 2. Sign in
+
+Open the printed sign-in URL in a browser:
+
+```
+http://localhost:8080/auth/login?redirect=/ws/11111111-1111-4111-8111-111111111111/v1/me
+```
+
+After the login you land on `/me`, which shows your principal, tenant, workspace and route. Copy the
+`gateway_session` cookie from the browser's developer tools.
+
+## 3. Create a record
+
+The gateway signs your identity and forwards the request; the data service asks the access service
+for your capabilities and applies the workspace's policies.
+
+```bash
+WS=http://localhost:8080/ws/11111111-1111-4111-8111-111111111111/v1
+SESSION='gateway_session=<value from the browser>'
+
+curl -s -X POST "$WS/items/articles" \
+  -H "cookie: $SESSION" \
+  -H 'content-type: application/json' \
+  -H 'idempotency-key: first-article' \
+  -d '{"title":"Hello"}'
+```
+
+The answer is `201` with a receipt, `{ "data": { "id": "…", "version": 1 } }`. Read the record back:
+
+```bash
+curl -s -i "$WS/items/articles/<id>" -H "cookie: $SESSION"
+```
+
+The `etag` header is the validator a later `PATCH` or `DELETE` must send. From code, use the
+[typed client](client.md). Paths, envelopes and error codes: [API](api.md).
+
+## Run the service alone
+
+To work on the data service against your own PostgreSQL, from `packages/data`:
+
+```bash
+cp .env.example .env                       # then change the secrets
+bun run scripts/cli/provision.ts           # roles and database
+bun run migrate                            # schema
 bun run workspace -- create --id 22222222-2222-4222-8222-222222222222 \
   --tenant aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa --slug acme
 bun run start
 ```
 
-The service listens on `127.0.0.1:8082` by default:
+It listens on `127.0.0.1:8082`:
 
 ```bash
-curl -s http://127.0.0.1:8082/healthz
-curl -s http://127.0.0.1:8082/readyz
+curl -s http://127.0.0.1:8082/healthz   # alive
+curl -s http://127.0.0.1:8082/readyz    # 200 once schema, roles and access service are in order
 ```
 
-`/healthz` answers while the process is alive; `/readyz` answers `200` only when configuration,
-schema, role privileges and access service discovery are all in order (see
-[Operations](operations.md#probes)).
+A plain `curl` of a `/ws/…` path answers `401 UNAUTHENTICATED`: data paths accept only requests the
+gateway signed. The probes are described in [Operations](operations.md#probes); every variable in
+`.env.example` is in [Configuration](configuration.md).
 
-Data paths need a signed request, so a plain `curl` of `/ws/…` answers `401 UNAUTHENTICATED`. The
-gateway signs the identity and the backend verifies it; the API client goes through the gateway too.
+A workspace that registered no collections serves every collection in the deployment. To restrict it
+and publish policies, see [Operations](operations.md#workspace-catalog).
 
-## Environment
+## Run with a worker
 
-`.env.example` lists the variables; [Configuration](configuration.md) describes them. Its values are
-for local development and are not secrets.
+`deploy/compose/data.compose.yaml` builds the image, starts PostgreSQL, provisions roles, migrates and
+runs the API on port `8082`. The gateway and access service are not in it; point it at an access
+service with `DATA_ACCESS_URL` (default `http://host.docker.internal:8081`).
 
-Secrets are files, read when the process starts. The committed local fixtures are in
-`deploy/fixtures/secrets/`; the `./secrets/…` paths in `.env.example` are the ones a deployment
-mounts:
+```bash
+docker compose -f deploy/compose/data.compose.yaml up --build
+```
+
+The compose file runs only the API. A worker claims event deliveries and needs a principal the access
+service knows:
+
+```
+DATA_PROCESS_ROLE=all
+DATA_WORKER_PRINCIPAL_ID=<the worker principal's uuid>
+DATA_WORKER_ROUTE_ID=data-worker
+```
+
+## Local secrets
+
+Secrets are files read at startup. The committed fixtures in `deploy/fixtures/` are local values,
+not secrets; `.env.example` points at the `./secrets/…` paths a deployment mounts instead.
 
 | File | Contents |
 | --- | --- |
-| `access-context.token` | Credential for the access context at the access service. |
-| `cursor.key` | Key that signs page cursors. At least 32 bytes; not a gateway key. |
-| `identity.public.pem` | The local gateway's **public** key. |
-| `identity.key` | The gateway's **legacy** derived key. |
+| `bindings.json` | Local routes and how each verifies identity. |
+| `secrets/identity.public.pem` | The local gateway's **public** key. |
+| `secrets/identity.key` | The gateway's **legacy** derived key. It can sign, so it belongs inside the gateway's trust boundary. |
+| `secrets/access-context.token` | Credential for the access context contract. |
+| `secrets/cursor.key` | Page cursor signing key, at least 32 bytes, not a gateway key. |
 
-The metrics token is not committed: without its file, the metrics endpoint is absent and answers
-`404`.
+> [!WARNING]
+> Anyone who reads the repository knows these values. A deployment mounts credentials from its
+> secret manager and never bakes them into an image.
 
-The gateway's private key is **not** in the repository. The local gateway holds it; generate it with
-the gateway's `bun run identity:key`.
+The metrics token is not committed, so `/metrics` answers `404` locally. The gateway's private key is
+never in the repository; the gateway generates it with `bun run identity:key`.
 
 ## Gateway bindings
 
-`DATA_GATEWAY_BINDINGS_FILE` lists the routes the deployment accepts and how each route verifies
-identity: signature version, algorithm and key file.
+`DATA_GATEWAY_BINDINGS_FILE` lists accepted routes and how each verifies identity. Field reference:
+[Configuration](configuration.md#bindings-file).
 
 ```json
 {
@@ -93,98 +152,28 @@ identity: signature version, algorithm and key file.
 }
 ```
 
-A route's key is the gateway's **public** P-256 key, in PEM. The gateway signs with the private key;
-the backend verifies with the public one, so a backend that can verify an identity cannot mint one.
-
-A binding may also set `expectedTenantId` to restrict the route to one access service tenant.
+The key is the gateway's public P-256 key in PEM, so a backend that can verify an identity cannot
+mint one.
 
 ## Migrating from the shared key
 
-The previous format, `v4`, is symmetric: the backend held a key derived from the gateway's session
-secret (`HMAC-SHA256(GATEWAY_SESSION_SECRET, "gateway-identity-signature-v1")`), so any upstream that
-could verify an identity could also mint one.
+The legacy `v4` format is symmetric: the backend holds
+`HMAC-SHA256(GATEWAY_SESSION_SECRET, "gateway-identity-signature-v1")` and could mint identities with
+it. Move off it in this order:
 
-Migrate the gateway and backend deployments in this order:
+1. Give the gateway a new key pair's private key and have it sign with it. The derived key keeps
+   working for upstreams not yet moved.
+2. Give the backend the public key in a version 2 binding. That route then refuses `v4`; a route
+   verifies exactly one version, with no fallback.
+3. Deployments still sharing the derived key stay on a version 1 bindings file (legacy mode). On
+   leaving it, delete the derived key from the secret store.
 
-1. Give the gateway the private key of a new pair and have it sign with it. The old derived key
-   still works for upstreams that haven't changed yet.
-2. Give the backend the pair's public key in a version 2 binding. From then on it refuses `v4`: a
-   route verifies exactly one version and never falls back.
-3. Deployments that still share the derived key stay on a version 1 bindings file, which is read as
-   legacy mode. When a deployment leaves legacy mode, delete the derived key from its secret store.
-
-A legacy binding names the version, algorithm and key file explicitly:
+A legacy binding names its format explicitly, and `DATA_LEGACY_IDENTITY` must permit it:
 
 ```json
-{
-  "version": 2,
-  "bindings": [
-    {
-      "id": "data-api",
-      "host": "api.gateway.test",
-      "upstreamPathPattern": "/ws/{workspaceId}/v1/*",
-      "routeId": "data-api",
-      "identity": {
-        "version": "v4",
-        "algorithm": "HS256",
-        "identityKeyFile": "./secrets/identity.key"
-      }
-    }
-  ]
+"identity": {
+  "version": "v4",
+  "algorithm": "HS256",
+  "identityKeyFile": "./secrets/identity.key"
 }
 ```
-
-## Local stack
-
-```bash
-docker compose -f deploy/compose/platform.compose.yaml up --build
-```
-
-The compose file starts the database, provisions the roles, applies the migrations and runs the API.
-It doesn't include the gateway or the access service; the compatibility harness runs all three
-services together at pinned revisions (see [Compatibility](compatibility.md)).
-
-The compose file runs only the API. The worker needs a principal the access service knows:
-
-```
-DATA_PROCESS_ROLE=all
-DATA_WORKER_PRINCIPAL_ID=<the uuid of the principal of the worker>
-DATA_WORKER_ROUTE_ID=data-worker
-```
-
-## Files in `deploy/`
-
-These are local development fixtures, committed on purpose:
-
-| File | Contents |
-| --- | --- |
-| `fixtures/bindings.json` | Local routes and how their identities are verified. |
-| `fixtures/secrets/identity.public.pem` | The local gateway's public key. |
-| `fixtures/secrets/identity.key` | The gateway's **legacy** derived key. It can sign, so it belongs inside the gateway's trust boundary. |
-| `fixtures/secrets/access-context.token` | The deployment's credential for the access context contract. |
-| `fixtures/secrets/cursor.key` | Key that signs page cursors. |
-
-> [!WARNING]
-> These values are not secrets: anyone who reads the repository knows them. A deployment mounts
-> credentials from its secret manager and never writes them into an image.
-
-## First record
-
-With the service running and a workspace created, register the collections the workspace serves and
-publish a policy bundle:
-
-```bash
-export DATA_OWNER_DATABASE_URL=postgres://data_owner:...@127.0.0.1:5432/data
-
-bun run collection -- register \
-  --workspace 22222222-2222-4222-8222-222222222222 --collection articles
-
-bun run policy -- publish \
-  --workspace 22222222-2222-4222-8222-222222222222 \
-  --file manifests/policies.json
-```
-
-Operator commands run with the schema owner's credentials, never inside the API.
-
-Both commands are optional if you only want the service to answer: a workspace that registered
-nothing serves every collection of the deployment ([Specification](spec.md) §7.5).

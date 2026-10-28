@@ -1,32 +1,28 @@
 # Operations
 
-How to deploy, configure, monitor and repair the access service. The contract is in [spec.md](spec.md); endpoints are in [api.md](api.md).
-
-Terms used here: **deployment** means the access service replicas behind the ingress; **database** is the PostgreSQL holding the eight tables; **store** is the Redis holding authorization codes; a **tenant's provider** is that tenant's external identity provider; the **operator** runs the deployment.
+Deploy, configure, monitor, repair and cut tenants over to the access service. Behavior is in [spec.md](spec.md), endpoints in [api.md](api.md), and procedures shared by all services in [platform operations](../platform/operations.md).
 
 ## Requirements
 
-| What | Why | Variable |
-| --- | --- | --- |
-| PostgreSQL | The platform's eight tables. | `ACCESS_DATABASE_URL` |
-| Redis | Login authorization codes, shared across replicas. | `ACCESS_REDIS_URL` |
-| Issuer | The URL browsers and the gateway use to reach the service. | `ACCESS_ISSUER` |
-| Signing key | PEM key for the service's tokens. | `ACCESS_SIGNING_KEY`, `ACCESS_SIGNING_KID` |
-| State secret | Signs and encrypts login state. | `ACCESS_STATE_SECRET` |
-| Secret encryption key | Encrypts tenant client secrets at rest. | `ACCESS_SECRET_ENCRYPTION_KEY` |
-| Admin token | It guards the twelve administrative endpoints. | `ACCESS_ADMIN_TOKEN` |
-| Tenant gateway credentials | Presented by the gateway on decisions; scoped to the tenant. | The tenant registration, §3.1 |
-| Decision token | Shared deployment bearer token. **Optional and deprecated**: not scoped to a tenant. | `ACCESS_DECISION_TOKEN` |
+| What | Variable |
+| --- | --- |
+| PostgreSQL for the eight tables | `ACCESS_DATABASE_URL` |
+| Redis for login codes, shared by all replicas | `ACCESS_REDIS_URL` |
+| URL browsers and the gateway use | `ACCESS_ISSUER` |
+| PEM key that signs the service's tokens | `ACCESS_SIGNING_KEY`, `ACCESS_SIGNING_KID` |
+| Secret that signs and encrypts login state | `ACCESS_STATE_SECRET` |
+| Key that encrypts tenant client secrets at rest | `ACCESS_SECRET_ENCRYPTION_KEY` |
+| Token that guards the twelve administrative endpoints | `ACCESS_ADMIN_TOKEN` |
+| Tenant gateway credentials, scoped to the tenant | Tenant registration (§3.1) |
+| Shared decision token: **optional, deprecated**, unscoped | `ACCESS_DECISION_TOKEN` |
 
-All variables are listed in §4; `.env.example` has the same list with local development values.
+All variables are in §4 and, with local values, in `.env.example`. With `ACCESS_ENVIRONMENT=production` the service refuses to start if any of the eight required variables is missing, and names every problem at once.
 
-In **production** (`ACCESS_ENVIRONMENT=production`) the service refuses to start if any of the eight required variables is missing, and reports every problem at once by variable name.
-
-The shared decision token is not required: once every gateway uses its tenant's credentials, leave it unset and the service refuses the bearer scheme (§8.8). Setting `ACCESS_PREVIOUS_DECISION_TOKEN` without `ACCESS_DECISION_TOKEN` is refused, because the shared secret would still be accepted after you meant to remove it.
+Once every gateway presents tenant credentials, leave `ACCESS_DECISION_TOKEN` unset and the bearer scheme is refused (§8.8). `ACCESS_PREVIOUS_DECISION_TOKEN` without `ACCESS_DECISION_TOKEN` is refused, since the old shared secret would stay valid.
 
 ### Database role
 
-Tenant isolation is enforced by table policies, which only bind roles subject to them. Production refuses to start with a superuser or a role with `BYPASSRLS` (§3.10). Use a non-superuser role that owns the tables:
+Table policies only bind roles subject to them, so production refuses a superuser or a `BYPASSRLS` role (§3.10). Use a non-superuser role that owns the tables; migrations run as it:
 
 ```sql
 create role access_app login password '…';
@@ -34,13 +30,7 @@ alter database platform owner to access_app;
 grant usage, create on schema public to access_app;
 ```
 
-Migrations run as that role, so it owns the tables it creates.
-
-### Database version
-
-The repository is developed and tested against **PostgreSQL 18**: local compose, CI jobs and release gates run it, and the embedded `pglite` is PostgreSQL 18.6. One version everywhere means a migration the tests accept is one CI accepts.
-
-A deployment names its server in `ACCESS_DATABASE_URL`, and the service **does not read its version** (§3.9). The schema uses nothing newer than PostgreSQL 13 (row level security, `coalesce` in a unique index, constraint triggers, `set_config` for the scope), so it does not constrain the deployment's database version.
+The repository is tested on PostgreSQL 18 (embedded `pglite` is 18.6). The service never reads the server version (§3.9), and the schema needs nothing newer than PostgreSQL 13.
 
 ### Replica environment
 
@@ -62,30 +52,29 @@ ACCESS_SIGNING_KID=access-1
 ACCESS_LOG_LEVEL=info
 ```
 
-**Secrets may come from files.** Any secret can be given as `ACCESS_<NAME>_FILE` instead of `ACCESS_<NAME>`; the file's trailing newline is stripped. Setting both is an error, and an unreadable file stops the service (§4.5).
-
-```
-ACCESS_SIGNING_KEY_FILE=/run/secrets/access-signing-key.pem
-ACCESS_ADMIN_TOKEN_FILE=/run/secrets/access-admin-token
-```
-
-This is how secrets reach containers: a secret manager writes the file, and a private key never passes through a shell that could mangle it.
+Give secrets as files, for example `ACCESS_SIGNING_KEY_FILE=/run/secrets/access-signing-key.pem`, so a private key never passes through a shell. The trailing newline is stripped; setting both forms is an error, and an unreadable file stops the service (§4.5).
 
 ### Image
 
-The image runs as non-`root` and writes nothing, so the container file system can be read-only apart from the runtime's temporary directory. Logs go to standard output.
+The image runs as non-`root` with no shell, writes nothing (mount it read-only apart from the runtime's temporary directory) and logs to standard output. Build from the repository root; labels carry version and revision:
 
 ```bash
-docker build -f Dockerfile -t access:$(git rev-parse --short HEAD) \
+docker build -f packages/access/Dockerfile -t access:$(git rev-parse --short HEAD) \
   --build-arg REVISION=$(git rev-parse HEAD) \
-  --build-arg VERSION=$(node -p "require('./package.json').version") .
+  --build-arg VERSION=$(node -p "require('./packages/access/package.json').version") .
+docker image inspect access:<tag> --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
 ```
 
-The base image is pinned by digest. For image delivery, see [release.md](release.md#5-delivery).
+Promote one **digest** from development to staging to production, by rolling replacement gated on readiness. A replica drains on `SIGTERM` (§12.4): give it a 10 s grace period and let the rollout wait for the pod to be gone. To roll back, redeploy the previous digest; migrations are backward compatible for one release. Rehearse it:
 
-### First tenant
+```bash
+kubectl -n platform rollout undo deployment/platform-access
+kubectl -n platform rollout status deployment/platform-access
+```
 
-1. **Register the tenant** with its provider and gateway:
+## First tenant
+
+1. **Register the tenant** with its provider and gateway (upsert by slug):
    ```bash
    export ACCESS=https://access.example.com
    curl -sS -X POST $ACCESS/v1/admin/tenants \
@@ -96,22 +85,9 @@ The base image is pinned by digest. For image delivery, see [release.md](release
           "idpRedirectUri":"https://access.example.com/oauth/tenant/callback",
           "emailDomain":"acme.example","clientId":"gateway-acme","clientSecret":"…","clientRedirectUris":["https://gateway-acme.example.com/auth/callback"]}'
    ```
-2. **Register principals**, one call per external identity:
-   ```bash
-   curl -sS -X POST $ACCESS/v1/admin/users \
-     -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" \
-     -H "content-type: application/json" \
-     -d '{"tenant":"acme","externalSubject":"00u1a2b3c4d5","email":"alice@acme.example"}'
-   ```
-3. **Create grants**, one call per permission on a workspace and route:
-   ```bash
-   curl -sS -X PUT $ACCESS/v1/admin/grants \
-     -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" \
-     -H "content-type: application/json" \
-     -d '{"tenant":"acme","userId":"b1c2…","permission":"workspace.read",
-          "workspaceId":"11111111-1111-4111-8111-111111111111","routeId":"workspace-api"}'
-   ```
-4. **Configure the gateway deployment:**
+2. **Register principals**, one per external identity ([`POST /v1/admin/users`](api.md#post-v1adminusers)).
+3. **Create grants**, one per permission on a workspace and route ([`PUT /v1/admin/grants`](api.md#put-v1admingrants)).
+4. **Configure the gateway**; values must match character for character (§13.2):
    ```
    GATEWAY_OIDC_ISSUER=https://access.example.com
    GATEWAY_OIDC_CLIENT_ID=gateway-acme
@@ -122,311 +98,140 @@ The base image is pinned by digest. For image delivery, see [release.md](release
    GATEWAY_SESSION_SECRET=the-secret-of-the-sessions
    GATEWAY_IDENTITY_SIGNING_KEY=the-private-key-of-the-deployment
    ```
-   Both sides must match character for character (§13.2). The last two belong to the gateway, not the access service: gateway `1.0.0` and later refuse to start in production without the browser session secret and the private key that signs request identities (upstreams verify with the deployment's public key).
+   The last two are the gateway's own; gateway `1.0.0` and later refuse to start in production without them.
 5. **Check** with the twelve calls of the session:
    ```bash
    ACCESS_URL=https://access.example.com ACCESS_ADMIN_TOKEN=… bun run scripts/cli/admin-smoke.ts
    ```
 
-## Probes
+## Monitoring
 
-| Probe | Purpose |
-| --- | --- |
-| `GET /healthz` | Liveness: `200` while the process is alive. |
-| `GET /readyz` | Readiness: the database answers and migrations are applied. `503 {"status":"draining"}` during a drain, which gates rolling replacement. |
-
-## Metrics
-
-Served at `/metrics`; requires `ACCESS_METRICS_TOKEN`.
-
-| Metric | Type | Labels |
-| --- | --- | --- |
-| `access_decisions_total` | counter | `result` (`allow`, `deny`), `tenant` |
-| `access_decision_duration_seconds` | histogram | `tenant` |
-| `access_logins_total` | counter | `result` (`success`, `refused`, `error`), `tenant` |
-| `access_admin_requests_total` | counter | `endpoint`, `status` |
-| `access_store_errors_total` | counter | `store` (`redis`, `postgres`) |
-
-The `tenant` label is bounded at a hundred values, then `overflow`, so neither callers nor providers can grow series without limit.
-
-## Alerts
-
-Each alert is backed by a service metric.
+`GET /readyz` gates rolling replacement: `503` when the database is down or migrations are missing, `503 {"status":"draining"}` during a drain. `GET /healthz` is liveness. Metrics are at `/metrics` behind `ACCESS_METRICS_TOKEN` (§12.2).
 
 | # | Alert | Expression | For | Meaning |
 | --- | --- | --- | --- | --- |
-| 1 | **Denial rate** | `rate(access_decisions_total{result="deny"}[5m]) / rate(access_decisions_total[5m]) > 0.2` | 10 min | A fifth of requests are denied: a tenant that grants nothing, or an attack. The reason is in the decision log. |
-| 2 | **Decision latency** | `histogram_quantile(0.99, rate(access_decision_duration_seconds_bucket[5m])) > 0.02` | 5 min | The decision is on every gateway request's path. Target: 20 ms at `p99`. |
-| 3 | **Login failures** | `rate(access_logins_total{result!="success"}[10m]) > 0.1` | 10 min | Tenant logins fail: a provider is down, a tenant is disabled, or login state is refused. |
-| 4 | **Store failures** | `rate(access_store_errors_total[5m]) > 0` | 5 min | Database or store unreachable. Readiness turns `503` and the deployment leaves rotation. |
-| 5 | **Pool saturation** | `pg_stat_activity_count{application_name='access'} > 7` | 5 min | The database pool is at 70 % (10 connections per replica). |
-| 6 | **Schema older than code** | New replicas stay `503 not-ready` and the start log names a migration the code does not know | 5 min | The service refuses to start against a schema it does not understand (§3.8); migrations are applied before the listener accepts. Schema age is not a metric: readiness is the signal. |
-| 7 | **Admin refusals** | `rate(access_admin_requests_total{status="401"}[5m]) > 0` | 5 min | Someone is guessing the admin token. The limiter refuses the address after five failures (`429`). |
-| 8 | **Readiness** | `probe_success{job="access"} == 0` | 2 min | Replicas fail readiness: the database does not answer, or the deployment is draining. |
+| 1 | Denial rate | `rate(access_decisions_total{result="deny"}[5m]) / rate(access_decisions_total[5m]) > 0.2` | 10 min | A tenant grants nothing, or an attack; reasons are in the decision log. |
+| 2 | Decision latency | `histogram_quantile(0.99, rate(access_decision_duration_seconds_bucket[5m])) > 0.02` | 5 min | Target is 20 ms at `p99`. |
+| 3 | Login failures | `rate(access_logins_total{result!="success"}[10m]) > 0.1` | 10 min | Provider down, tenant disabled, or state refused. |
+| 4 | Store failures | `rate(access_store_errors_total[5m]) > 0` | 5 min | Database or store unreachable. |
+| 5 | Pool saturation | `pg_stat_activity_count{application_name='access'} > 7` | 5 min | Pool at 70 % of 10. |
+| 6 | Schema older than code | New replicas stay `503 not-ready`; the start log names an unknown migration | 5 min | Refused schema (§3.8); not a metric. |
+| 7 | Admin refusals | `rate(access_admin_requests_total{status="401"}[5m]) > 0` | 5 min | Token guessing; five failures get `429`. |
+| 8 | Readiness | `probe_success{job="access"} == 0` | 2 min | Database down, or draining. |
 
-Four more need platform metrics: replicas not ready (the `/readyz` probe), pod memory (200 MB), the ingress certificate, and the age of the last database dump.
+Platform metrics cover four more: replicas not ready, pod memory (200 MB), the ingress certificate, and the last dump's age.
 
 > [!IMPORTANT]
-> Alerts never restart replicas automatically. A replica that cannot reach the database restarts and fails again, and restarts hide the cause. A person reads the alert and follows the runbook.
+> Alerts never restart replicas: a replica that cannot reach the database fails again, and restarts hide the cause. A person follows the runbook.
 
 ## Runbooks
 
-### A tenant's provider is down
-
-**Symptoms.** That tenant's logins get `502 upstream_unavailable` and `access_logins_total{result="refused"}` grows. Other tenants keep working, since providers are called per tenant.
-
-1. Check the provider answers:
-   ```bash
-   curl -sS -o /dev/null -w '%{http_code}\n' https://login.acme.example/.well-known/openid-configuration
-   ```
-2. Repeat the call from a replica's pod to check the deployment can reach it.
-3. If the provider is down, there is nothing to do: that tenant's logins fail and other tenants are unaffected.
-4. Logins resume on their own once the provider is back; discovery and keys are cached for ten minutes.
-
-**Don't** raise the provider timeout: a slow provider must not hold logins (`ACCESS_IDP_TIMEOUT_MS`, default 5 s).
-
-### Database is down
-
-**Symptoms.** Readiness answers `503 not-ready` and the deployment leaves rotation. Decisions answer `503 service_unavailable` and the gateway denies requests (fails closed).
-
-1. Check the database:
-   ```bash
-   pg_isready -h "$ACCESS_DATABASE_HOST" -p 5432 -U access_app -d platform
-   ```
-2. Check the replicas' pools: `access_store_errors_total{store="postgres"}` grows and readiness is `503`.
-3. **Replicas do not start** against an unreachable database, because migrations run before the listener accepts. This is deliberate: the service never starts against a schema it does not understand.
-4. Once the database answers, replicas start and readiness recovers on its own.
-
-Decisions are not cached, so none can be served while the database is down: a decision that cannot be computed is a denial.
-
-### Store is down
-
-**Symptoms.** Logins that reach the exchange fail because the code cannot be stored; `access_store_errors_total{store="redis"}` grows. Decisions keep working: they do not use the store.
-
-1. Check the store:
-   ```bash
-   redis-cli -u "$ACCESS_REDIS_URL" ping
-   ```
-2. **A down store is an error, never a silent allow**: no login succeeds without its code. Callers retry the login.
-3. A single-node deployment can start with `ACCESS_ALLOW_MEMORY_STATE=true`: codes then live in the process and are lost on restart. Multi-replica deployments cannot, because one replica's codes are unknown to the others.
-
-### Startup refused: database role bypasses isolation
-
-**Symptoms.** The process stops with `the role "<role>" of the database bypasses the isolation of the tenants` and never accepts a request.
-
-**Cause.** Tenant isolation relies on the eight tables' policies, which only bind roles subject to them (§3.10).
-
-1. Inspect the deployment's role:
-   ```bash
-   psql "$ACCESS_DATABASE_URL" -c "select rolname, rolsuper, rolbypassrls from pg_roles where rolname = current_user"
-   ```
-2. Create a non-superuser role that owns the tables (see [Database role](#database-role)).
-3. Point `ACCESS_DATABASE_URL` at that role and roll the deployment.
-
-**Don't** add `BYPASSRLS` to the role to get the service running: tenant isolation would become a promise rather than a rule.
-
-### Tenant misconfigured
-
-A tenant registered with the wrong issuer, client id or redirect URI fails its own logins; other tenants are unaffected.
-
-1. Find the tenant:
-   ```bash
-   curl -sS https://access.example.com/v1/admin/tenants \
-     -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
-   ```
-2. Fix it with the same create call: the slug is the key and the call is an upsert (see [`POST /v1/admin/tenants`](api.md#post-v1admintenants)).
-3. Provider discovery and keys are cached for ten minutes, so a corrected tenant that still fails is hitting the cache. Wait ten minutes or roll the deployment.
-
-A tenant that uses another tenant's client id gets `409 conflict`: a gateway client id belongs to one tenant (§3.1).
-
-### Signing key missing
-
-**Symptoms.** The service starts with the warning `the service cannot issue a token: it has no signing key`. Logins fail at the exchange and the JWKS is empty.
-
-**Fix.** Set `ACCESS_SIGNING_KEY` and `ACCESS_SIGNING_KID` and roll the deployment. In production the service refuses to start without them.
-
-### Service is slow
-
-1. Readiness: `503 not-ready` means the database is not answering.
-2. Metrics: `access_decision_duration_seconds` gives decision latency per tenant; `access_store_errors_total` gives store failures.
-3. Statement log: statements slower than 50 ms log a warning (`the statement is slow`).
-4. Pool: the service's database connections are visible in `pg_stat_activity`.
+| Symptom | Check | Fix |
+| --- | --- | --- |
+| One tenant's logins get `502 upstream_unavailable` | `curl -sS -o /dev/null -w '%{http_code}\n' https://login.acme.example/.well-known/openid-configuration`, also from a pod | Wait: other tenants work, and logins resume once the provider is back (caches last ten minutes). Don't raise `ACCESS_IDP_TIMEOUT_MS` (5 s). |
+| Readiness `503 not-ready`; decisions `503 service_unavailable` and the gateway denies | `pg_isready -h "$ACCESS_DATABASE_HOST" -p 5432 -U access_app -d platform` | Restore the database. Replicas start only once it answers. Decisions are never cached. |
+| Logins fail at the exchange; decisions work | `redis-cli -u "$ACCESS_REDIS_URL" ping` | Restore the store; callers retry. Only a single node may set `ACCESS_ALLOW_MEMORY_STATE=true` (codes die with the process). |
+| Start stops: `the role "<role>" of the database bypasses the isolation of the tenants` | `psql "$ACCESS_DATABASE_URL" -c "select rolname, rolsuper, rolbypassrls from pg_roles where rolname = current_user"` | Point `ACCESS_DATABASE_URL` at a [non-superuser owner role](#database-role) and roll. Never add `BYPASSRLS`. |
+| One tenant's logins fail after registration | `curl -sS $ACCESS/v1/admin/tenants -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"` | Repeat the [create call](api.md#post-v1admintenants) with the right issuer, client id or redirect URI; wait ten minutes or roll for the cache. A client id owned by another tenant gets `409 conflict`. |
+| Warning `the service cannot issue a token: it has no signing key`; JWKS empty | Environment | Set `ACCESS_SIGNING_KEY` and `ACCESS_SIGNING_KID`, roll. |
+| Slow | `access_decision_duration_seconds`; `access_store_errors_total`; log `the statement is slow` (over 50 ms); `pg_stat_activity` | Fix the slow dependency. |
 
 ## Rotating secrets
 
-Each secret rotates differently.
+**Secret encryption key.** Generate one (`openssl rand -base64 32`) and re-encrypt in one transaction; the script prints a tenant count, never a secret, and changes nothing on failure. Then set the new key, roll, and run `scripts/cli/admin-smoke.ts`.
 
-### Secret encryption key (`ACCESS_SECRET_ENCRYPTION_KEY`)
+```bash
+ACCESS_DATABASE_URL=postgres://… ACCESS_SECRET_ENCRYPTION_KEY=the-old-key \
+ACCESS_NEW_SECRET_ENCRYPTION_KEY=the-new-key bun run scripts/cli/rotate-secrets.ts
+```
 
-1. Generate a key: `openssl rand -base64 32`.
-2. Re-encrypt stored secrets in one transaction:
-   ```bash
-   ACCESS_DATABASE_URL=postgres://… \
-   ACCESS_SECRET_ENCRYPTION_KEY=the-old-key \
-   ACCESS_NEW_SECRET_ENCRYPTION_KEY=the-new-key \
-   bun run scripts/cli/rotate-secrets.ts
-   ```
-   The script prints how many tenants it re-encrypted, never a secret. On failure, stored secrets are left exactly as they were.
-3. Set the new `ACCESS_SECRET_ENCRYPTION_KEY` and roll the deployment.
-4. Check tenant logins still work by running `scripts/cli/admin-smoke.ts` against the deployment.
+**Signing key.** Generate one (`openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048`). Move the old key to `ACCESS_PREVIOUS_SIGNING_KEY` and `ACCESS_PREVIOUS_SIGNING_KID`, set the new one, and roll; the JWKS publishes both. After five minutes, remove the previous key and roll.
 
-### Signing key (`ACCESS_SIGNING_KEY`)
+**State secret.** Change it and roll; in-flight logins restart.
 
-1. Generate a key: `openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048`.
-2. Move the **old** key to `ACCESS_PREVIOUS_SIGNING_KEY` (with `ACCESS_PREVIOUS_SIGNING_KID`) and put the **new** one in `ACCESS_SIGNING_KEY`.
-3. Roll the deployment. The JWKS publishes both keys, so tokens signed with the old key stay valid.
-4. Once the last old-key token has expired (five minutes), remove `ACCESS_PREVIOUS_SIGNING_KEY` and roll again.
+**Admin and decision tokens** rotate rolling (§4.3.1):
 
-### State secret (`ACCESS_STATE_SECRET`)
+1. Copy the current values to `ACCESS_PREVIOUS_ADMIN_TOKEN` and `ACCESS_PREVIOUS_DECISION_TOKEN`; roll.
+2. Change the gateway's copy, then `ACCESS_ADMIN_TOKEN` and `ACCESS_DECISION_TOKEN`; roll.
+3. Once every gateway is updated, remove both `ACCESS_PREVIOUS_*` variables; roll. Nothing is refused before this step.
 
-Change the value and roll the deployment. In-flight logins are lost and the browser must start again.
-
-### Service tokens (`ACCESS_ADMIN_TOKEN`, `ACCESS_DECISION_TOKEN`)
-
-Rotation is **rolling**: the current value and the one it replaces are both accepted until the old one is removed (§4.3.1).
-
-1. Copy the current values to `ACCESS_PREVIOUS_ADMIN_TOKEN` and `ACCESS_PREVIOUS_DECISION_TOKEN` and roll the deployment. Nothing changes yet.
-2. Change `ACCESS_ADMIN_TOKEN` and `ACCESS_DECISION_TOKEN` and roll. **The gateway uses the same value (§13.2): change it on the gateway first.**
-3. Remove both `ACCESS_PREVIOUS_*` variables and roll again. Old values are refused from then on.
-
-The window between steps 2 and 3 is how long it takes to update every gateway; no call is refused during it.
-
-**Retiring the shared token.** Once every gateway presents its tenant's credentials, remove `ACCESS_DECISION_TOKEN` and `ACCESS_PREVIOUS_DECISION_TOKEN` together and roll. The bearer scheme is refused from then on, and the platform-wide secret is gone.
+To retire the shared token, remove `ACCESS_DECISION_TOKEN` and `ACCESS_PREVIOUS_DECISION_TOKEN` together.
 
 ## Backup and restore
 
-The eight tables are the service's only data. Everything else is derived: login state is in the browser cookie, login codes live in the store for sixty seconds, and tokens are signed. **Backing up the database backs up the service.** The code store is not backed up; a lost code only means the login restarts.
-
-### Dump
+The eight tables are the only data; login state lives in the cookie, codes for sixty seconds in the store, and tokens are signed. Back up the database only.
 
 ```bash
 pg_dump --format=custom --compress=9 --no-owner --no-privileges \
-  --file "access-$(date -u +%Y%m%dT%H%M%SZ).dump" \
-  "$ACCESS_DATABASE_URL"
-```
-
-Write the dump outside the pod and keep it with the platform's other backups.
-
-### Restore
-
-```bash
+  --file "access-$(date -u +%Y%m%dT%H%M%SZ).dump" "$ACCESS_DATABASE_URL"
 createdb --owner=access_app access_restore
 pg_restore --dbname=access_restore --no-owner --no-privileges \
   --exit-on-error access-20260108T100000Z.dump
 ```
 
-Rehearse the restore outside production once a quarter and before any change to the backup process. The rehearsal checks:
+Store dumps outside the pod. Each quarter, and before changing the backup process, rehearse a restore outside production: no error; tables and the `grants` indexes present (`select indexname from pg_indexes where tablename = 'grants'`); the current release starts on it with `ACCESS_ENVIRONMENT=development` and applies no migration. Targets: recovery point 24 h, recovery time 2 h. An older dump restores with its schema, and the runner applies the missing migrations (tracked in `access_schema_migrations`).
 
-1. The dump restores without error (`pg_restore --exit-on-error`).
-2. The eight tables are present with their constraints and indexes:
-   ```sql
-   select count(*) from tenants;
-   select count(*) from users;
-   select count(*) from permissions;
-   select count(*) from grants;
-   select count(*) from groups;
-   select indexname from pg_indexes where tablename = 'grants';
-   ```
-3. The current release runs against it: start the service with `ACCESS_ENVIRONMENT=development` and check the probes. Migrations run against an up-to-date database and change nothing.
-
-| Measurement | Target |
-| --- | --- |
-| Recovery point objective | 24 h |
-| Recovery time objective | 2 h |
-| Rehearsal | Once a quarter, in the rehearsal environment |
-
-**Migrations and backups.** Migrations are backward compatible for one release, so rolling back the image never requires rolling back the schema. A column is dropped two releases after the code stops using it. A dump taken before a migration restores with the old schema, and the runner applies the missing migrations; migration bookkeeping lives in the database (`access_schema_migrations`).
-
-## Capacity
-
-These numbers are **measured**, not estimated, each by a repository script on the named environment. Unmeasured numbers are not published.
-
-```
-ACCESS_DATABASE_URL=postgres://… bun run scripts/ops/load.ts --requests 20000 --concurrency 100
-```
-
-The script measures the **production statement**: it calls the service's decision repository with the deployment's deadline. It runs on every CI build against the job's PostgreSQL, and the numbers are in the build log.
-
-**The measurement is a gate.** With thresholds, a measurement outside them fails the run:
-
-```
-ACCESS_DATABASE_URL=postgres://… bun run scripts/ops/load.ts --requests 20000 --concurrency 100 \
-  --max-p50-ms=25 --max-p95-ms=50 --max-p99-ms=100 --min-per-second=100
-```
-
-| Option | Fails when |
-| --- | --- |
-| `--max-p50-ms` | `p50` is above the value. |
-| `--max-p95-ms` | `p95` is above the value. |
-| `--max-p99-ms` | `p99` is above the value. |
-| `--min-per-second` | Throughput is below the value. |
-
-CI thresholds are far above the targets below because CI runners are shared machines. The gate catches a decision that got slower (a changed plan, a dropped index, a statement scanning the policy table) without failing on a busy runner. Without thresholds, the script only measures and reports, and exits with the measurement's status.
-
-### Targets
-
-| Measurement | Target | Shape |
-| --- | --- | --- |
-| Decision, `p50` | ≤ 3 ms | One principal, a hundred grants. |
-| Decision, `p99` | ≤ 20 ms | Same. |
-| Decision under load | ≤ 50 ms at `p99` | 500 decisions per second, two replicas. |
-| Database pool | ≤ 70 % used at peak | 10 connections per replica. |
-| Login, broker overhead | ≤ 150 ms | Time spent in the access service around the provider round trip. |
-| Process memory | ≤ 200 MB | 1 000 concurrent logins. |
-| Decisions per second per replica | ≥ 500 | The shape above. |
-
-### Measured
-
-**PostgreSQL server.** PostgreSQL 18 over loopback on a 16-core development machine (load average one), five thousand requests, twenty in flight, one principal with a hundred grants. Median of three runs:
-
-| Measurement | Platform decision | Tenant decision |
-| --- | --- | --- |
-| `p50` | 1.44 ms | 1.95 ms |
-| `p95` | 1.85 ms | 2.81 ms |
-| `p99` | 2.49 ms | 3.87 ms |
-| Decisions per second | 13 639 | 9 765 |
-
-The columns are the two §8.8 paths. A **platform decision** uses the deployment bearer token (the reference gateway's scheme). A **tenant decision** uses tenant credentials, whose scope needs a transaction because statement scope is transaction-local; that costs about a third more time.
-
-The targets are met on this machine. Deployment numbers are measured with the same script against the deployment's server and published here once measured.
-
-**Embedded PostgreSQL** (one connection, so requests are serialized), 1 000 requests, one principal with a hundred grants:
-
-| Measurement | Value |
-| --- | --- |
-| `p50` | 0.45 ms |
-| `p95` | 0.57 ms |
-| `p99` | 0.64 ms |
-| Maximum | 0.71 ms |
-| Decisions per second | 2 146 |
-
-With twenty requests in flight, `p50` is 42.7 ms and `p99` is 48.9 ms at the same throughput: the single connection's queue is the limit. That is a property of the **measurement environment**, not of the query.
-
-Query plan with 1 000 principals and 1 000 000 grants, for a principal holding a thousand:
-
-| Measurement | Value |
-| --- | --- |
-| Plan | `Bitmap Index Scan on grants_user_live`, `Index Cond: (user_id = u.id)` |
-| Execution time | 1.5 ms |
-
-The planner uses the index from the spec; the decision never scans the policy table.
-
-### Not measured here
-
-These are **not** deployment numbers: the embedded database is not a PostgreSQL server, and a CI runner is not deployment hardware. Pool saturation, process memory under a thousand logins and broker overhead need deployment hardware; they are measured during the first tenant's cutover ([release.md](release.md#4-tenant-cutover)).
-
-### Tuning
+## Tuning
 
 | Knob | Effect | Limit |
 | --- | --- | --- |
 | `ACCESS_DECISION_TIMEOUT_MS` | Decision ceiling and pool statement deadline | 2 000 ms |
-| `ACCESS_PREVIOUS_ADMIN_TOKEN` | The replaced token, during a rotation | — |
-| `ACCESS_PREVIOUS_DECISION_TOKEN` | The replaced token, during a rotation | — |
 | Pool size | Database concurrency | 10 per replica |
-| Provider JWKS cache | Calls to a tenant's provider | 10 minutes |
-| Provider discovery cache | Calls to a tenant's discovery | 10 minutes |
+| Provider JWKS and discovery caches | Calls to a tenant's provider | 10 minutes |
 | Code lifetime | Replay window | 60 s |
 
-## Compatibility suite offline
+Capacity targets and measurements: [Internals](internals.md#capacity).
 
-The compatibility suite clones the reference gateway, which needs network access. Offline, give the runner a mirror (`COMPAT_MIRROR`), a local repository (`GATEWAY_REPOSITORY=/path/to/platform bun run test:compat`), or an already-prepared checkout, which is checked before the run (`ACCESS_GATEWAY_PATH=/path/to/platform bun run test:compat`). An unusable override is an error; the runner never falls back. See [Compatibility](compatibility.md#reference-sources) for setup and precedence.
+## Hardening
+
+- Move gateways to tenant credentials, then unset `ACCESS_DECISION_TOKEN` ([open finding 2](internals.md#open-findings)).
+- Register tenants with `https` issuers; over `http` the provider secret and id token travel in clear (finding 3).
+- Give operators per-tenant credentials in `ACCESS_ADMIN_TOKENS` (§4.6), so the audit names them.
+- Production refuses provider issuers that resolve to private addresses.
+
+Platform-wide model: [platform security](../platform/security.md). Review: [Internals](internals.md#security-review).
+
+## Rollout
+
+| Phase | State | Rollback |
+| --- | --- | --- |
+| 0. Dark | Deployed with probes, metrics and alerts; nobody calls it. | Stop it. |
+| 1. Shadow | Answers decisions alongside the old service; daily [comparison](#shadow-comparison). | Stop the shadow. |
+| 2. First tenant, staging | One tenant lives here. | Point its gateway back; data stays. |
+| 3. First tenant, production | Real traffic for a week, then the second tenant. | Same. |
+| 4. Last tenant | Decommission the old service. | Its data is kept for the audit retention period. |
+
+Switching a tenant changes four gateway settings: issuer, client id, client secret, access URL. Callers log in again; there is no other interruption.
+
+## Shadow comparison
+
+```
+OLD_ACCESS_URL=https://old-access.example.com OLD_ACCESS_TOKEN=… \
+ACCESS_URL=https://access.example.com ACCESS_DECISION_TOKEN=… \
+bun run scripts/compat/shadow.ts --requests decisions.jsonl
+```
+
+Each line of `decisions.jsonl` is `{"subject":"…","workspaceId":"…","routeId":"…","roles":[]}`. The tool asks both services, reports differences per subject and workspace with a fingerprint that makes a recurring set recognisable, and **exits non-zero while any difference remains**. Only the old service's hard-coded decisions may differ; anything else is a bug here. It never writes to either service.
+
+## Tenant cutover
+
+Gates for every phase: `bun run test:compat` green, [alerts](#monitoring) silent, zero shadow differences.
+
+**Staging.**
+
+1. Register the tenant ([First tenant](#first-tenant)).
+2. Register principals, keyed by the provider's `sub` (§6.2), in one batch (§10.4).
+3. Create grants in one batch (§10.6), copying the first ones from the old service.
+4. Run the shadow for a day.
+5. Point the staging gateway at this service.
+6. A browser logs in and reaches a staging upstream; gateway metrics count this service's decisions.
+
+**Production.** Record the gateway's configuration and apply it once on staging to prove the rollback. Repeat the steps, switch, and watch login refusals, latency and denials for a day. Roll back by restoring the gateway configuration; this service keeps its data.
+
+Never during cutover: gateway code changes, data migration from the old service, gateway session changes, schema changes.
+
+- [ ] Tenant, principals and grants registered.
+- [ ] A day at zero shadow differences; compatibility suite green.
+- [ ] The twelve calls of the session answer (`scripts/cli/admin-smoke.ts`).
+- [ ] Signing key is the environment's; the gateway uses the same issuer.
+- [ ] Gateway rollback written down; dashboards watched the first day.

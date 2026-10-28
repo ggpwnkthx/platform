@@ -1,15 +1,13 @@
 # Configuration
 
-Environment variables and deployment files of the data service: the process variables, the gateway
+Environment variables and deployment files of the data service: process variables, the gateway
 bindings file, the collection manifest and the policy bundle.
 
-The environment is read once at startup and validated as a whole: every problem is reported together,
-and any value that cannot be understood stops the service (a setting that looks active but is not is a
-security hole). Variable names stay inside the configuration module; the rest of the service receives
-typed settings.
+The service reads the environment once at startup and validates it as a whole: it reports every
+problem together, and any value it cannot understand stops it. Rules: [spec §14](spec.md#14-configuration).
 
 > [!IMPORTANT]
-> **A secret is a file, never an environment value**: process lists are visible and logs are not
+> A secret is always a file, never an environment value: process lists are visible and logs are not
 > private.
 
 ## Process
@@ -26,34 +24,33 @@ typed settings.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `DATA_DATABASE_URL` | required | Credentials of the scoped data role: rows in the transaction's scope, nothing else. |
+| `DATA_DATABASE_URL` | required | Scoped data role: rows in the transaction's scope, nothing else. |
 | `DATA_REGISTRY_DATABASE_URL` | required | Narrow reader of the workspace registry. |
 | `DATA_DELIVERY_DATABASE_URL` | the data URL | Delivery metadata. Required when workers run. |
 
 - In production, a remote database URL must request a protected transport (`sslmode=require`).
-- Pools are bounded: `DATA_DB_POOL_MAX` data-role connections per process, and five each for the
-  registry and delivery pools.
+- Pools are bounded: `DATA_DB_POOL_MAX` data-role connections per process, five each for the registry
+  and delivery pools.
 
 ## Deployment artifacts
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `DATA_GATEWAY_BINDINGS_FILE` | required for `api` | Accepted routes and how their identities are verified. See [Bindings file](#bindings-file). |
-| `DATA_LEGACY_IDENTITY` | `refuse` | Handling of the legacy identity format: `refuse`, `warn` or `allow`. The legacy format is symmetric (the backend holds the gateway's derived secret and could sign an identity with it). `1.0.0` refuses it; `2.0.0` removes it. |
+| `DATA_LEGACY_IDENTITY` | `refuse` | Legacy identity format: `refuse`, `warn` or `allow`. The format is symmetric: the backend holds the gateway's derived secret and could sign an identity with it. `1.0.0` refuses it; `2.0.0` removes it. |
 | `DATA_SCHEMA_BUNDLE_FILE` | required | Collection manifests. See [Collection manifest](#collection-manifest). |
 | `DATA_POLICY_BUNDLE_FILE` | required | Policy bundle. See [Policy bundle](#policy-bundle). |
 | `DATA_CURSOR_KEY_FILE` | required | Key that signs page cursors. At least 32 bytes; not a gateway key. |
 
-Manifests and policies are immutable for the life of a process; their version is the digest of their
-content.
+Manifests and policies are immutable for the life of a process; their version is their content digest.
 
 ## Access service
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `DATA_ACCESS_URL` | required | Access service base URL. Must be `https` in production, since the context credential travels with it. |
-| `DATA_ACCESS_CONTEXT_TOKEN_FILE` | required | File holding the service credential for the access context contract. |
-| `DATA_CONTEXT_CACHE_TTL_MS` | `0` | Read-only context cache lifetime, 0 to 5000. Default is no cache; mutations and worker commands always fetch a fresh context. |
+| `DATA_ACCESS_URL` | required | Access service base URL. `https` in production: the context credential travels with it. |
+| `DATA_ACCESS_CONTEXT_TOKEN_FILE` | required | Service credential for the access context contract. |
+| `DATA_CONTEXT_CACHE_TTL_MS` | `0` | Read-only context cache lifetime, 0 to 5000. Default: no cache. Mutations and worker commands always fetch a fresh context. |
 | `DATA_CONTEXT_CACHE_MAX_ENTRIES` | `4096` | Context cache size. When full, the least recently used entry is evicted; expired entries are dropped on write. |
 | `DATA_ACCESS_TIMEOUT_MS` | `1000` | Bound on one access-service call. |
 
@@ -63,17 +60,16 @@ content.
 | --- | --- | --- |
 | `DATA_REQUEST_TIMEOUT_MS` | `10000` | All work for a request. |
 | `DATA_DB_STATEMENT_TIMEOUT_MS` | `3000` | One statement; the server cancels it. |
-| `DATA_DB_TRANSACTION_TIMEOUT_MS` | `5000` | One transaction; the connection is destroyed when the budget is spent. |
+| `DATA_DB_TRANSACTION_TIMEOUT_MS` | `5000` | One transaction; the connection is destroyed when the budget is spent, so the server rolls back. |
 | `DATA_DB_ACQUIRE_TIMEOUT_MS` | `1000` | Waiting for a connection. |
 | `DATA_MAX_BODY_BYTES` | `1048576` | Request body. A record body is limited to 256 KiB. |
-| `DATA_MAX_IN_FLIGHT_REQUESTS` | `200` | Concurrent requests. Excess is refused, not queued. |
-| `DATA_MAX_IN_FLIGHT_REQUESTS_PER_TENANT` | value of `DATA_MAX_IN_FLIGHT_REQUESTS` | Concurrent requests per tenant. The default gives a single tenant the whole process; a multi-tenant deployment sets each tenant's room. Excess is `429 TOO_MANY_REQUESTS`, not `503 OVERLOADED`. |
+| `DATA_MAX_IN_FLIGHT_REQUESTS` | `200` | Concurrent requests. Excess is refused with `503 OVERLOADED`, not queued. |
+| `DATA_MAX_IN_FLIGHT_REQUESTS_PER_TENANT` | value of `DATA_MAX_IN_FLIGHT_REQUESTS` | Concurrent requests per tenant. The default gives one tenant the whole process; a multi-tenant deployment sets each tenant's room. Excess is `429 TOO_MANY_REQUESTS`. |
 | `DATA_DRAIN_MS` | `30000` | Drain budget. |
 | `DATA_DB_POOL_MAX` | `20` | Data-role connections per process. |
 
-A request's effective timeout is the smallest applicable budget. A timer that leaves a statement
-running is not a cancellation: the statement timeout cancels on the server, and the transaction
-timeout destroys the connection so the server rolls back.
+A request's effective timeout is the smallest applicable budget. A local timer alone never cancels a
+statement; the statement and transaction timeouts do.
 
 ## Worker
 
@@ -87,8 +83,9 @@ timeout destroys the connection so the server rolls back.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `DATA_METRICS_TOKEN_FILE` | absent | Token guarding the metrics endpoint. Without it, the endpoint is absent and answers `404`. |
-| `DATA_LOG_LEVEL` | `info` | Log level. |
+| `DATA_METRICS_TOKEN_FILE` | absent | Token guarding the metrics endpoint. Without it, the endpoint answers `404`. |
+
+The log level is `DATA_LOG_LEVEL` ([Process](#process)).
 
 ## Operator commands
 
@@ -108,8 +105,7 @@ Operator credentials are never in the API's environment; each command reads only
 
 ## Bindings file
 
-Names the routes the deployment accepts and how each route's identity is verified. Shape:
-`{"version": 2, "bindings": [...]}`, at most 100 bindings.
+Shape: `{"version": 2, "bindings": [...]}`, at most 100 bindings.
 
 | Field | Meaning |
 | --- | --- |
@@ -123,17 +119,16 @@ Names the routes the deployment accepts and how each route's identity is verifie
 | `identity.publicKeyFile` | Gateway public key file, P-256, PEM. |
 | `identity.identityKeyFile` | Derived key file for the legacy format. |
 
-- Version, algorithm and key file must agree: an algorithm that does not belong to the version, or a
-  key file of the wrong kind, is refused.
-- A `v5` route refuses `v4`, and a legacy route never accepts a public key as its secret. There is no
-  fallback after a failed verification.
-- Bindings must be unambiguous over signed host, received path and verifying key. Any ambiguity stops
+- Version, algorithm and key file must agree; a mismatched algorithm or key file kind is refused.
+- A `v5` route refuses `v4`, and a legacy route never accepts a public key as its secret. Nothing
+  falls back after a failed verification.
+- Bindings must be unambiguous over signed host, received path and verifying key; ambiguity stops
   startup.
 
 ## Collection manifest
 
-`DATA_SCHEMA_BUNDLE_FILE` is UTF-8 JSON, at most 1 MiB, validated against a strict schema; unknown
-properties are refused.
+`DATA_SCHEMA_BUNDLE_FILE` is UTF-8 JSON, at most 1 MiB, validated against a strict schema that refuses
+unknown properties.
 
 ```json
 {
@@ -173,10 +168,8 @@ properties are refused.
 | `search.fields` | Fields of the collection's text search, plus the database text-search configuration. |
 | `relations` | Registered relations. Version 0.1 supports many-to-one references and derived one-to-many reads. |
 | `label`, `description` | Semantic metadata. No studio presentation here. |
-
-The manifest never holds executable scripts, widget identifiers or page layouts. The service adds the
-runtime fields `id`, `tenant_id`, `workspace_id`, `created_by`, `created_at`, `updated_by`,
-`updated_at` and `version`; clients may never write them.
+| Never | Executable scripts, widget identifiers, page layouts. |
+| Added by the service | `id`, `tenant_id`, `workspace_id`, `created_by`, `created_at`, `updated_by`, `updated_at`, `version`. Clients never write them. |
 
 ## Policy bundle
 
@@ -209,4 +202,5 @@ runtime fields `id`, `tenant_id`, `workspace_id`, `created_by`, `created_at`, `u
 | `check` | Predicate on the resulting row of a create or update. |
 | `fields` | Fields the policy grants. |
 
-Predicates may use `$principalId`, `$tenantId` and `$workspaceId`; see [spec](spec.md) §8 for the policy rules.
+Predicates may use `$principalId`, `$tenantId` and `$workspaceId`. Policy rules:
+[spec §8](spec.md#8-data-authorization).

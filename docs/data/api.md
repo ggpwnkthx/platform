@@ -1,8 +1,7 @@
 # API contract
 
-The stable v1 surface of the data service: what a client may rely on, what may change, and what a
-change costs. The [specification](spec.md) is normative and may change between releases; this page
-is the subset clients depend on, and it changes only with a major client version.
+The stable v1 HTTP surface of the data service: what clients may rely on and what a change costs. The
+[specification](spec.md#9-http-api) is normative; this page changes only with a major client version.
 
 ## Endpoints
 
@@ -29,14 +28,13 @@ is the subset clients depend on, and it changes only with a major client version
 | `/ws/{workspaceId}/v1/openapi.json` | `GET` | The API description. |
 | `/healthz`, `/readyz`, `/metrics` | `GET` | Deployment probes. Not routed through workspace authorization. |
 
-- The gateway preserves the request path and the backend expects all of it; it does not assume the
-  gateway strips `/ws/{workspaceId}` or an upstream base path.
-- `/me` answers the principal, tenant, workspace and route. `workspace` is
-  `{ "id", "slug", "displayName" }`; slug and name are `null` when the registry holds none.
-- **A path not in this table does not exist.** A deferred capability answers `404 NOT_FOUND`, never a
-  successful placeholder. An unknown method on a known path answers `405` with an `Allow` header.
-- Every data path needs the gateway's verified identity. The backend has no login endpoint, token
-  endpoint or session: callers authenticate at the gateway, which forwards a signed identity.
+- The backend receives the whole request path ([spec §3](spec.md#3-topology)).
+- A path not listed does not exist: a deferred capability answers `404 NOT_FOUND`, never a placeholder.
+  An unknown method on a listed path answers `405` with `Allow`.
+- Every data path needs the gateway's signed identity. There is no login endpoint, token endpoint or
+  session.
+- `/me` answers the principal, tenant, route and `workspace` as `{ "id", "slug", "displayName" }`;
+  `slug` and `displayName` are `null` when the registry holds none.
 
 ## Envelopes
 
@@ -47,14 +45,13 @@ is the subset clients depend on, and it changes only with a major client version
 | Creation | `201`, `{ "data": { "id", "version" } }`, with the record's location in the `location` header |
 | Aggregate | `{ "data": [...], "meta": { "limit", "groups", "truncated" } }` |
 | Error | `{ "error": { "code", "message", "details"? }, "requestId" }` |
-
-The `x-request-id` header carries the request correlation and equals an error's `requestId`.
-Responses with sensitive or permission-dependent data use `Cache-Control: no-store`.
+| Every answer | `x-request-id` header, equal to an error's `requestId` |
+| Sensitive or permission-dependent answer | `Cache-Control: no-store` |
 
 ## Error codes
 
-Switch on the code, never the message. A code's status is fixed within a major version, and the
-codes are published in the OpenAPI document.
+Switch on the code, never the message. A code's status is fixed within a major version; the OpenAPI
+document publishes every code.
 
 | Status | Codes |
 | --- | --- |
@@ -72,18 +69,19 @@ codes are published in the OpenAPI document.
 | `503` | `AUTHORIZATION_UNAVAILABLE`, `DATABASE_UNAVAILABLE`, `OVERLOADED`, `DRAINING` |
 | `504` | `DEADLINE_EXCEEDED` |
 
-- The message is a safe, human-readable summary. Details name only fields the caller may write or
-  query. Stack traces, SQL text, database constraint names, raw access-service reasons and other
-  tenants' identifiers are never returned.
-- A refusal says nothing more: the service never names the refusing policy and never distinguishes an
-  unknown principal from an unknown grant.
-- Database failures map to contract codes: lock not granted in time → `409 CONFLICT`; constraint
-  violated → `409 CONFLICT` or `422 VALIDATION_FAILED`; statement over budget →
-  `504 DEADLINE_EXCEEDED`; database unreachable → `503 DATABASE_UNAVAILABLE`. A
-  `500 INTERNAL_ERROR` is always a service defect.
-- `429 TOO_MANY_REQUESTS` means the tenant holds all of its room; it carries `Retry-After`. A
-  tenant's room is the whole process unless the deployment sets
-  `DATA_MAX_IN_FLIGHT_REQUESTS_PER_TENANT` (multi-tenant deployments do).
+| Cause | Answer |
+| --- | --- |
+| Lock not granted in time | `409 CONFLICT` |
+| Constraint violated | `409 CONFLICT` or `422 VALIDATION_FAILED` |
+| Statement over budget | `504 DEADLINE_EXCEEDED` |
+| Database unreachable | `503 DATABASE_UNAVAILABLE` |
+| Tenant holds all of its room | `429 TOO_MANY_REQUESTS` with `Retry-After`. The room is the whole process unless `DATA_MAX_IN_FLIGHT_REQUESTS_PER_TENANT` is set (multi-tenant deployments set it). |
+| Refusal by policy | `403 FORBIDDEN` only: never the refusing policy, never whether the principal or the grant was unknown |
+| Anything else | `500 INTERNAL_ERROR`, always a service defect |
+
+The message is a safe summary, and `details` name only fields the caller may write or query. Answers
+never carry stack traces, SQL text, constraint names, raw access-service reasons or other tenants'
+identifiers.
 
 ## Query parameters
 
@@ -101,13 +99,9 @@ codes are published in the OpenAPI document.
 | `metrics` | aggregate | `sum:field`, `avg:field`, `min:field`, `max:field`, at most 10. The row count is always returned. |
 | `limit` | aggregate | Max groups: default 100, max 1000. |
 
-Unknown and repeated parameters are refused, so the answer never depends on which value a parser
-picked. The raw query string is at most 16 KiB.
+Unknown and repeated parameters are refused. The raw query string is at most 16 KiB.
 
 ## Filter grammar
-
-Operators: `_and`, `_or`, `_not`, `_eq`, `_neq`, `_in`, `_nin`, `_lt`, `_lte`, `_gt`, `_gte`,
-`_is_null`.
 
 ```json
 {
@@ -118,55 +112,43 @@ Operators: `_and`, `_or`, `_not`, `_eq`, `_neq`, `_in`, `_nin`, `_lt`, `_lte`, `
 }
 ```
 
-- `_and` and `_or` take non-empty arrays of filter objects.
-- `_not` takes one filter object and negates it.
-- Depth at most 5, at most 50 leaf predicates.
-- `_in` and `_nin` take 1 to 100 values of the field's type.
-- An empty filter object adds no caller predicate.
-- Compare null with `_is_null`. Equality and ordering operands cannot be null.
-- Operators are checked against the field type. Not supported: dotted relation filters, JSON path
-  expressions, arbitrary functions, SQL wildcards. Values are bound parameters; identifiers come from
-  the validated manifest.
-- **Negation keeps the database's three-valued logic.** Negating unknown gives unknown, so a negated
-  comparison never matches a row whose value is null.
-- Filtering or sorting by a field the caller may not use is `400 INVALID_QUERY`. Usable fields are the
-  intersection of the collection's read policies, so a field one policy hides cannot be used to infer
-  what it hides.
+| Operator | Takes |
+| --- | --- |
+| `_and`, `_or` | A non-empty array of filter objects. |
+| `_not` | One filter object, which it negates. |
+| `_eq`, `_neq`, `_lt`, `_lte`, `_gt`, `_gte` | One non-null value of the field's type. |
+| `_in`, `_nin` | 1 to 100 values of the field's type. |
+| `_is_null` | The only way to compare with null. |
 
-## Lists
+| Rule | Detail |
+| --- | --- |
+| Size | Depth at most 5, at most 50 leaf predicates. `{}` adds no caller predicate. |
+| Types | Operators are checked against the field type. Values are bound parameters; identifiers come from the validated manifest. |
+| Not supported | Dotted relation filters, JSON path expressions, arbitrary functions, SQL wildcards. |
+| Negation | Three-valued logic: negating unknown gives unknown, so a negated comparison never matches a null value. |
+| Usable fields | The intersection of the collection's read policies. Filtering or sorting by another field is `400 INVALID_QUERY`. |
 
-Lists are bounded, filtered and permission-aware. Rows and count are evaluated in one read-only
-snapshot with the same predicates and filter.
+## Lists and cursors
 
-- The whole encoded response, expansions included, is at most 4 MiB. Exceeding it answers
-  `422 RESULT_TOO_LARGE` with no partial page: no success byte is sent before the bounded answer is
-  complete.
-- Expansions: depth 1, 100 related rows per root record, 1000 related rows per answer.
-
-## Cursors
-
-A cursor is an opaque signed token. It binds the principal, tenant, workspace, collection, route,
-filter, fields, sort, expansions, count option, limit, position, schema version, policy bundle version
-and the caller's permission fingerprint.
-
-- Lifetime: 15 minutes.
-- Tampered, or from another request: `400 INVALID_CURSOR`.
-- Expired, or issued under a schema, bundle or permission set that has since changed:
-  `409 CURSOR_STALE`.
-- A cursor is never an authorization credential.
-
-Each page gets a fresh context and the current policies. Pages are not a database snapshot:
-concurrent inserts, updates and deletes change later pages.
+| Rule | Detail |
+| --- | --- |
+| Consistency | Rows and count are read in one read-only snapshot, with the same predicates and filter. |
+| Answer size | At most 4 MiB encoded, expansions included. Over it: `422 RESULT_TOO_LARGE` and no partial page; no success byte is sent before the answer is complete. |
+| Expansions | Depth 1; 100 related rows per root record; 1000 per answer. |
+| Cursor binding | Opaque and signed. Binds principal, tenant, workspace, collection, route, filter, fields, sort, expansions, count option, limit, position, schema version, policy bundle version and the caller's permission fingerprint. Never an authorization credential. |
+| Cursor lifetime | 15 minutes. |
+| Tampered cursor, or one from another request | `400 INVALID_CURSOR` |
+| Expired cursor, or schema, bundle or permissions changed since issue | `409 CURSOR_STALE` |
+| Later pages | Each page gets a fresh context and the current policies. Pages are not a snapshot: concurrent inserts, updates and deletes change later pages. |
 
 ## Reads and validators
 
-Reading one record returns every field readable for that row, plus `id` and `version`. The endpoint
-takes no query parameters: `fields`, `include` and any unknown parameter are `400 INVALID_QUERY`. Use
-the list for a projection.
+A record read returns every field readable for that row, plus `id` and `version`. It takes no query
+parameters (`fields`, `include` or any other is `400 INVALID_QUERY`); use the list for a projection.
 
-The canonical representation is serialized deterministically (keys sorted recursively, array order
-kept, no insignificant whitespace), and the strong `ETag` is `"sha256:<lowercase hex digest>"` over
-exactly those bytes. The bytes include the record version, so any change invalidates the validator.
+The strong `ETag` is `"sha256:<lowercase hex digest>"` over the canonical bytes: keys sorted
+recursively, array order kept, no insignificant whitespace. The bytes include the version, so any
+change invalidates the validator.
 
 `PATCH` and `DELETE` require a current validator:
 
@@ -176,19 +158,17 @@ exactly those bytes. The bytes include the record version, so any change invalid
 | Weak, wildcard, malformed or multiple validator | `400 INVALID_PRECONDITION` |
 | Current authorized representation differs | `412 PRECONDITION_FAILED` |
 | Record missing or no longer readable | `404 NOT_FOUND` |
+| Success, `PATCH` | The new canonical representation and its `ETag`. |
+| Success, `DELETE` | `204`, no body. |
 
-An update also needs a read policy and the action's complete write policy. A successful `PATCH`
-returns the new canonical representation and its `ETag`; `DELETE` returns `204` with no body. Every
-update increments the version, even when no value changes. An empty `PATCH` is invalid.
+An update needs a read policy and the action's complete write policy. Every update increments the
+version, even when no value changes; an empty `PATCH` is invalid.
 
 ## Record versions
 
-History is optional per collection: the collection manifest declares the versions table, and the
-deployment creates it in a reviewed migration. History holds the versions that are **not** current
-(the record itself is current); a deleted record keeps a tombstone, the image of its last version. See
-[spec](spec.md) §11.
-
-Version list:
+History is optional per collection ([spec §11.6](spec.md#116-record-version-history)): the manifest
+declares the versions table and a reviewed migration creates it. It holds the non-current versions; a
+deleted record keeps a tombstone, the image of its last version.
 
 ```json
 {
@@ -204,21 +184,16 @@ Version list:
 }
 ```
 
-Versions are newest first, at most 200; older ones are omitted.
+| Request | Behavior |
+| --- | --- |
+| Version list | Newest first, at most 200; older versions are omitted. Unreadable versions are absent. |
+| One version | Canonical representation with a strong `ETag`. The database applies the read predicates to the version image as to the record; ungranted fields are omitted; an unreadable version is `404 NOT_FOUND`. |
+| Rollback body | Exactly `{ "version": 2 }`: one property, a positive integer. Anything else is `400 INVALID_REQUEST`. |
+| Rollback effect | An ordinary write under the same policies as any update: it restores the differing fields, and the record gets the next version number, never an earlier one. |
+| Rollback validator | `If-Match` names the current state: the record's validator, or its tombstone's if deleted. A deleted record is restored from the image, with the version after the tombstone's. |
+| Collection without history | All three version paths answer `404 NOT_FOUND`. |
 
-Reading one version returns its canonical representation with a strong `ETag`, like a record read.
-The database evaluates the read policy predicates over the version image exactly as over the record.
-A version the caller may not read answers `404 NOT_FOUND` and is absent from the list; ungranted
-fields are omitted.
-
-Rollback body:
-
-```json
-{ "version": 2 }
-```
-
-The body holds exactly one property, a positive integer `version`; anything else is
-`400 INVALID_REQUEST`.
+Rollback answers:
 
 | Condition | Answer |
 | --- | --- |
@@ -229,49 +204,28 @@ The body holds exactly one property, a positive integer `version`; anything else
 | Record already holds that version | `409 CONFLICT` |
 | Deployment policies forbid the write | `403 FORBIDDEN` |
 
-- Rollback is an ordinary write, not a privileged command: it restores the fields that differ and is
-  authorized by the same policies as any update.
-- The version number never goes back: the record gets the next version.
-- The validator is that of the current state: the record's, or its tombstone's if deleted. A deleted
-  record is restored from the version image, with the version after the tombstone's.
-- On a collection without history, all three version paths answer `404 NOT_FOUND`, never a successful
-  placeholder.
-
 ## Creation and idempotency
 
-`POST` requires an `Idempotency-Key`: 1 to 128 ASCII letters, digits, periods, underscores or hyphens.
-The key is opaque input, not an authority.
+| Rule | Detail |
+| --- | --- |
+| Key | `POST` requires `Idempotency-Key`: 1 to 128 ASCII letters, digits, periods, underscores or hyphens. Opaque input, not an authority. |
+| Key scope | Principal, tenant, workspace, route and endpoint. |
+| Fingerprint | Method, path and validated body, stored with the key. |
+| Atomicity | Key claim, insert, audit entry, event, deliveries and receipt commit together. A rolled-back transaction leaves no receipt and no effect. |
+| Same key, same body | The original receipt with `Idempotency-Replayed: true`; nothing is created. The replay authenticates again, needs a currently applicable create capability, and never replays field values. |
+| Same key, different body | `409 IDEMPOTENCY_CONFLICT` |
+| Concurrent duplicate | Waits within the request budget; unresolved after two seconds, `409 OPERATION_IN_PROGRESS` with `Retry-After: 1`. |
+| Retention | Receipts last at least 24 hours. After that, the key starts a new operation: deduplication is not permanent. |
+| Later change | Deleting or changing the record neither changes its receipt nor recreates it. |
 
-1. The key is scoped to the principal, tenant, workspace, route and endpoint.
-2. A request fingerprint (method, path, validated body) is stored with it.
-3. Key claim, insert, audit entry, event, deliveries and receipt commit atomically.
-4. Same key, same body: the original receipt with `Idempotency-Replayed: true`; nothing is created.
-5. A replay authenticates again and needs a currently applicable create capability; it never replays
-   business field values.
-6. Same key, different body: `409 IDEMPOTENCY_CONFLICT`.
-7. A concurrent duplicate waits within the request budget. Still unresolved after two seconds:
-   `409 OPERATION_IN_PROGRESS` with `Retry-After: 1`.
-8. A rolled-back transaction leaves no receipt and no effect.
-9. Receipts are kept at least 24 hours. After that, reusing the key is a new operation:
-   deduplication is not permanent.
-10. Later deletion or change of the record neither changes its creation receipt nor recreates it.
-
-A creation answers a receipt, not the record:
+A creation answers a receipt, not the record. Fetch the record separately if authorized; a receipt
+never grants a read.
 
 ```json
 { "data": { "id": "44444444-4444-4444-8444-444444444444", "version": 1 } }
 ```
 
-Fetch the record separately if authorized. A receipt never grants a read.
-
-## Aggregates
-
-`GET /ws/{workspaceId}/v1/aggregate/{collection}` groups a collection's records. It reads the same rows
-as the matching list (same scope, same disjunction of read predicates, same caller filter); it is not a
-privileged query path.
-
-Group and metric fields must be fields the caller may filter and sort by. A function undefined for the
-field's type is `400 INVALID_QUERY`. See [spec](spec.md) §9.
+## Aggregates and search
 
 ```json
 {
@@ -282,76 +236,44 @@ field's type is `400 INVALID_QUERY`. See [spec](spec.md) §9.
 }
 ```
 
-Integer sums and averages are decimals, exactly as the database returns them. Groups are ordered by
-the group fields, so answers are stable; `truncated` says not all groups were returned.
+| Rule | Detail |
+| --- | --- |
+| Aggregate rows | The rows the matching list reads: same scope, read predicates and caller filter. Not a privileged query path ([spec §9](spec.md#9-http-api)). |
+| Group and metric fields | Must be fields the caller may filter and sort by. A function undefined for the field's type is `400 INVALID_QUERY`. |
+| Integer sums and averages | Decimals, exactly as the database returns them. |
+| Group order | By the group fields; `truncated` says some groups were not returned. |
+| `search` | Database text search over the manifest's searchable fields and search configuration; the caller supplies only the text. Combines with the filter, and a list's count counts the results. |
+| Hidden field in search | `403 FORBIDDEN` |
+| Search in policies | Never: search is not a filter operator ([decision 23](decisions.md#23-search-is-a-query-parameter-not-a-filter-operator)). |
 
-## Search
+## Metadata, model and audit
 
-`search` is a database text search over the fields the manifest declares searchable. The caller
-supplies the text; the deployment supplies the fields and search configuration, never the caller.
+| Path | Returns | Requires |
+| --- | --- | --- |
+| `/schema` | Collections where the caller holds an applicable action policy; a collection may be write-only, its records unreadable. Each carries key, label, schema version, supported actions, readable and writable fields with bounds, filterable and sortable fields, visible relations, policy bundle version and API limits. Never SQL identifiers, row predicates, secrets, subscriber configuration, access-service grants or studio instructions. | At least one applicable action policy |
+| `/model` | Model version, content digest, served schema version, served collections with fields and relations, and deployment collections not served yet. | `data.model.read` or `data.model.write` |
+| `/audit` | Metadata of committed mutations, paged with `limit` and a cursor: identifiers and changed field names, never values. Not a revision history. | `data.audit.read`, granted on its own, not implied by editing records |
 
-- Search combines with the caller's filter, and a list's count counts the search results.
-- Searching a field a policy hides is `403 FORBIDDEN`.
-- Search is not a filter operator: the write path evaluates policy predicates in memory, where text
-  search has no meaning.
+The deployment holds the **physical** model; a workspace model is a **logical** overlay on it, applied
+in realtime whenever the workspace's catalog is resolved. Model rules and the version a model write
+carries: [spec §7.6](spec.md#76-workspace-model).
 
-## Metadata
+## Stability
 
-`/schema` lists collections where the caller holds at least one applicable action policy. A
-collection may be described as write-only; its records stay unreadable.
+| Not stable | Instead |
+| --- | --- |
+| Deployment artifacts: manifest, policy bundle, tables and column identifiers | Read schema metadata. |
+| Metadata content: fields, labels, relations, permissions | Only the metadata shape is stable. |
+| Metrics, logs, refusal reasons | A refusal is `403 FORBIDDEN` and nothing else. |
 
-The answer carries the key, label, schema version, the caller's supported actions, readable and
-writable fields with bounds, filterable and sortable fields, visible relations, the policy bundle
-version and the API limits. It never carries SQL identifiers, internal row predicates, secrets,
-subscriber configuration, access-service grants or studio instructions.
+Change rules:
 
-## Workspace model
-
-The deployment holds the **physical** model; each workspace holds a **logical** model, an overlay
-describing how deployment collections look in that workspace. See [spec](spec.md) §7.6.
-
-`GET /ws/{workspaceId}/v1/model` returns the model's version, content digest, served schema version,
-the collections it serves (with fields and relations) and the deployment collections it does not
-serve yet. It requires `data.model.read` or `data.model.write`: the model names the workspace's
-collection fields, while every other caller reads the schema metadata.
-
-The model is applied to the deployment manifest when a workspace's catalog is resolved, **in
-realtime**. Model rules and the version a model write carries: [spec](spec.md) §7.
-
-## Audit
-
-`GET /ws/{workspaceId}/v1/audit` returns metadata of the workspace's committed mutations, with `limit`
-and a cursor. It requires `data.audit.read`, granted on its own, not as a side effect of editing
-records.
-
-The audit returns identifiers and the names of changed fields. It never holds field values and is
-not a revision history.
-
-## Not stable
-
-- **Deployment artifacts.** The collection manifest, policy bundle, database tables and column
-  identifiers belong to the deployment. Clients read them through schema metadata, never the
-  database.
-- **Metadata content.** Collection fields, labels, relations and caller permissions change with the
-  deployment. The metadata *shape* is stable; its content is not.
-- **Tables and statements.** Internal to the service; clients never reach them.
-- **Metrics and logs.** For the operator.
-- **Refusal reasons.** A refusal answers `403 FORBIDDEN` and nothing else.
-
-## Change rules
-
-1. A change clients depend on is **major**: a new path version or a new client major. The path
-   version is bumped only when the old one cannot be kept, and the old version is kept for at least
-   one release.
+1. A change clients depend on is **major**: a new path version or a new client major. The path version
+   is bumped only when the old one cannot be kept, and the old one stays for at least one release.
 2. Changes are announced in the [changelog](../../CHANGELOG.md).
-3. A contract change amends the specification, names a check that proves it, and lands with that
-   check.
-4. Error codes are never removed and never change meaning. An unused code is kept and answers
-   nothing.
-5. Bounds may only grow, and never for a request a client already sends: a client asking for a page
-   of 50 records keeps getting 50.
-
-## Versions
+3. A contract change amends the specification and lands with a check that proves it.
+4. Error codes are never removed and never change meaning; an unused code stays and answers nothing.
+5. Bounds may only grow, and never for a request a client already sends: a page of 50 stays 50.
 
 | Item | Version | Where |
 | --- | --- | --- |
@@ -363,6 +285,6 @@ not a revision history.
 | Manifest format | `1` | The manifest's `version`. |
 | Policy bundle format | `1` | The bundle's `version`. |
 
-The access-service and gateway contracts are platform contracts, and the integration baseline is the
-repository revision. [`compatibility.json`](../../compatibility.json) owns the three service
-workspaces; `bun run check:compatibility` proves the docs and workflows agree with it.
+Access-service and gateway contracts are platform contracts; the integration baseline is the
+repository revision in [`compatibility.json`](../../compatibility.json), and
+`bun run check:compatibility` proves docs and workflows agree with it.

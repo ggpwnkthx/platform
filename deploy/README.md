@@ -1,6 +1,6 @@
 # Deployment
 
-Every deployment file lives here. Each service (gateway, access service, data service) can be deployed alone or as part of the full platform composition.
+Every deployment file lives here. Each service (gateway, access service, data service) can be deployed alone or as part of the full platform composition. The first-deployment procedure is in [Operations](../docs/platform/operations.md).
 
 ```
 deploy/

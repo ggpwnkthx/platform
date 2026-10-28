@@ -1,47 +1,48 @@
 # Data service
 
-The data service is the platform's headless data backend: it serves permission-aware data APIs to
-applications behind [the gateway](../../packages/gateway/) and takes each caller's identity and
-capabilities from [the access service](../../packages/access/).
+The data service is the platform's headless data backend: a permission-aware API for workspace
+records behind the [gateway](../gateway/README.md), taking each caller's capabilities from the
+[access service](../access/README.md).
 
-Platform-wide topics shared by all three services are in [Platform](../platform/).
+## How it fits
 
-## Start here
+```
+client ──▶ gateway ──▶ data service ──▶ PostgreSQL
+                            └──▶ access service (access context)
+```
 
-| You are | Read |
+The gateway authenticates the caller and signs its identity. The data service verifies the signature,
+looks up the workspace, asks the access service for the principal's current capabilities, and applies
+the deployment's policies to every record. Without the access service it fails closed.
+Platform-wide topics are in [Platform](../platform/README.md).
+
+## Concepts
+
+| Concept | Meaning |
 | --- | --- |
-| An API consumer | [API](api.md), then [Client](client.md) |
-| An operator | [Configuration](configuration.md), [Operations](operations.md) |
-| A reviewer | [Specification](spec.md), [Security](security.md), [Decisions](decisions.md) |
-| A contributor | [Development](development.md), [Architecture](architecture.md) |
+| Workspace | The unit of isolation, owned by one tenant. PostgreSQL row-level security keeps workspaces apart. |
+| Collection | A table the deployment declares in its manifest. A workspace serves all of them, or only those it registers. |
+| Policy bundle | What each permission grants per collection: rows, fields, actions. Grants themselves live in the access service. |
+| Validator | A record's `ETag`; every update and delete must send the current one. |
+| Receipt | A creation's answer, keyed by `Idempotency-Key`, so a retried `POST` creates one record. |
+| Event | Committed with each change and delivered to trusted subscribers by the worker. |
 
-## Pages
+## Next
 
-| Page | What it's for |
+| If you want to | Read |
 | --- | --- |
-| [Architecture](architecture.md) | What the service is, how a request flows, code boundaries. |
-| [Getting started](getting-started.md) | From an empty checkout to a running service on your machine. |
-| [Configuration](configuration.md) | Environment variables, bindings file, manifests, policy bundles. |
-| [API](api.md) | The stable v1 surface: paths, envelopes, errors, filters, change rules. |
-| [Client](client.md) | The typed client `@data-backend/client` and collection types. |
-| [Specification](spec.md) | The release's normative contract. |
-| [Security](security.md) | Security model, review, open findings. |
-| [Operations](operations.md) | Probes, metrics, logs, drain, catalog, secrets, alarms, migrations, retention. |
-| [Compatibility](compatibility.md) | Integration baseline with the gateway and access service, and its harness. |
-| [Backup and restore](backup-restore.md) | Backup, restore, and restore rehearsals. |
-| [Troubleshooting](troubleshooting.md) | Errors by symptom, with cause and fix. |
-| [Capacity](capacity.md) | The release's capacity report and what a deployment declares. |
-| [Decisions](decisions.md) | Contract decisions with evidence, and implementation choices. |
-| [Development](development.md) | Test suites, release gates, repository scripts. |
-| [Release readiness](release.md) | Each `1.0.0` gate, including those outside the repository. |
-| [Changelog](../../CHANGELOG.md) | Changes, newest first (one changelog for the platform). |
+| Run it and create a first record | [Getting started](getting-started.md) |
+| Call it from code | [Client](client.md), [API](api.md) |
+| Deploy and run it | [Configuration](configuration.md), [Operations](operations.md), [Troubleshooting](troubleshooting.md) |
+| Know the exact rules | [Specification](spec.md) |
+| Change the service | [Internals](internals.md), [Decisions](decisions.md) |
+
+Changes: [Changelog](../../CHANGELOG.md).
 
 ## Release status
 
-**Version 1.0.0 is published as a pre-production release.** It is implemented, passes its own
-gates, and the compatibility harness runs it against the real gateway and access service, but it has
-never run outside that harness: no production history, no external users, and no review by anyone
-other than the code's author. Open findings are in [Security](security.md).
-
-**The next platform release is a release candidate.** Repository gates are green; the two gates
-outside the repository are listed in [Release readiness](release.md).
+Version `1.0.0` is a **pre-production** release. It is implemented, passes its gates, and the
+compatibility harness runs it against the real gateway and access service, but it has never run
+outside that harness: no production history, no external users, no review by anyone but its author.
+The next platform release is a release candidate; open findings and the gates outside the repository
+are in [Internals](internals.md).

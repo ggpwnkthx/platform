@@ -32,4 +32,4 @@ A finding that is already public is handled at the pace of the disclosure: the f
 
 ## Security model
 
-Trust boundaries, secret handling and least privilege: [platform security](docs/platform/security.md). Each service's model is in its own docs.
+Trust boundaries, secret handling and least privilege: [platform security](docs/platform/security.md), which links to each service's own rules.

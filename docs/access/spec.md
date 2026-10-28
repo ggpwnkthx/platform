@@ -10,7 +10,7 @@ tenant identity providers and gateways. The gateway keeps its single provider, i
 service and its whole configuration, and gains **zero** new features; a gateway deployment simply
 points at the access service.
 
-Request and response bodies are in [API](api.md), the design in [Architecture](architecture.md),
+Request and response bodies are in [API](api.md), the design in [Internals](internals.md),
 the code in `src/`. A behavior change updates this document first, in the same commit as the code.
 
 Status: 1.0.0. Runtime: Bun ≥ 1.4.3. Listener: HTTP on
@@ -1544,7 +1544,7 @@ the model (§3.5).
 
 ## 15. Verification
 
-The rule that every rule needs a test is in [platform architecture](../platform/architecture.md).
+The rule that every rule needs a test is in [platform internals](../platform/internals.md#working-rules).
 
 | Kind | Where | What it proves |
 | --- | --- | --- |
@@ -1576,7 +1576,7 @@ The suite asserts that:
 4. a revoked grant is refused within the gateway's cache TTL;
 5. the gateway's metrics count the denial as `missing_role`.
 
-A second file **rehearses a tenant cutover** ([release.md](release.md) §4), playing the runbook
+A second file **rehearses a tenant cutover** ([Operations](operations.md#tenant-cutover)), playing the runbook
 phases against the reference gateway: register the tenant, its principal and its grant; a browser
 logs in and reaches an upstream; revoke the grant and access ends; switch the tenant again without
 registering anything.
@@ -1605,11 +1605,11 @@ be tested twice. The runner clones it at that revision.
 
 A developer-prepared reference (`ACCESS_GATEWAY_PATH`) is checked and never written to; one that
 carries changes is refused with the reason. The runner never falls back to another source: a suite
-run against another revision proves nothing. Manual: [compatibility.md](compatibility.md).
+run against another revision proves nothing. Manual: [Internals](internals.md#compatibility-suite).
 
 ## 16. Code layout
 
-Layers and boundaries: [Architecture](architecture.md). Summary:
+Layers and boundaries: [Internals](internals.md#code-layout). Summary:
 
 | Path | Owns |
 | --- | --- |

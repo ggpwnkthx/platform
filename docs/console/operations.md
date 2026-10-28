@@ -1,6 +1,6 @@
 # Operations
 
-Configure, build, deploy and run the console: environment, access service setup, probes, replicas and secret rotation.
+Configure, build, deploy and run the console: environment, access service setup, the credentials it holds, probes, replicas and secret rotation. Behavior rules are in the [specification](spec.md).
 
 ## Environment
 
@@ -42,6 +42,25 @@ Administration credentials must be at least 16 characters, per the access servic
    ```
 3. **Credentials.** Configure the access context credential (`ACCESS_CONTEXT_TOKENS`) and administration credentials (`ACCESS_ADMIN_TOKENS`) that the console holds.
 
+## Credentials it holds
+
+| Credential | Used for | Allows |
+| --- | --- | --- |
+| `CONSOLE_CLIENT_SECRET` | Exchanging a login code at the access service | Signing a caller in as the tenant's client |
+| `CONSOLE_ACCESS_CONTEXT_TOKEN` | Reading an operator's scope through the access context contract | Reading a principal's keys (read-only) |
+| `CONSOLE_TENANT_ADMIN_TOKENS` | Tenant administration, for that tenant's operators | Changing the tenant's users, groups and rights |
+| `CONSOLE_ADMIN_TOKEN` | Platform administration, for operators holding `console.platform` | Changing every tenant |
+| `CONSOLE_SESSION_SECRET` | Signing console cookies | Nothing outside the console |
+| Callers' access tokens | Data calls through the gateway | Whatever the data service's policies allow that caller, for five minutes |
+
+It never holds:
+
+- **the gateway's identity-signing private key**: every data request carries the caller's token, and the key would let the console act as the gateway toward every upstream;
+- **a database connection**: it reaches no platform store;
+- **a decision**: every refusal it shows comes from a service, which refuses even what the console fails to hide.
+
+Sessions, login and cookie rules: [spec §3](spec.md#3-sessions). Request origin and content security policy: [spec §2](spec.md#2-requests). Operator scope and revocation: [spec §4](spec.md#4-operator-scope).
+
 ## Build and run
 
 ```bash
@@ -60,9 +79,11 @@ The image builds from `packages/console/Dockerfile`: the build stage runs `vite 
 
 Logs are one JSON object per line on stdout, one per request, including the request ID (`x-request-id`).
 
-## Replicas
+## Replicas and limits
 
-Sessions and pending logins live in process memory. Run one replica, or pin each browser to one. A restart signs everyone out; while they are still signed in at the tenant's provider, it signs them back in without prompting.
+- Sessions and pending logins live in process memory. Run one replica, or pin each browser to one.
+- A restart signs everyone out; callers still signed in at the tenant's provider are signed back in without a prompt.
+- The workspace list comes from the caller's grants, read with the tenant's credential. A right covering every workspace of a tenant names none, so the caller opens such a workspace by ID.
 
 ## Rotating secrets
 

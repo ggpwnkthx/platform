@@ -1,20 +1,14 @@
 # Development
 
-Run, test and release the platform on your development machine. This page is the reference for root commands and run modes.
+Run modes, root commands and tests for working on the platform. To get it running for the first time, follow the [Quickstart](quickstart.md).
 
 ## Prerequisites
 
-- **Bun 1.4.3 or later.** The specs rely on boundaries only observable on this line; see [gateway runtime](../gateway/runtime.md).
+- **Bun 1.4.3 or later.** The specs rely on boundaries only observable on this line; see [gateway internals](../gateway/internals.md).
 - **Docker or Podman**, for the PostgreSQL and Redis servers that integration tests need, and for the dev runner's PostgreSQL when the machine has no PostgreSQL binaries.
 - **Git**, for the tagger and the compatibility suite's references.
 
-## Install
-
-```bash
-bun install
-```
-
-One install covers every workspace, against the root lockfile. Where each dependency is declared: [Architecture](architecture.md#dependencies).
+Run `bun install` once at the root; it covers every workspace. Where each dependency is declared: [Internals](internals.md#dependencies).
 
 ## Run modes
 
@@ -27,43 +21,21 @@ One install covers every workspace, against the root lockfile. Where each depend
 
 ### Platform
 
-```bash
-bun run dev
-bun run dev --fresh   # wipe the PostgreSQL data first
-```
+`bun run dev` (add `--fresh` to wipe the PostgreSQL data first) is what the [Quickstart](quickstart.md) runs. Ports:
 
-Starts:
+| Process | Port |
+| --- | --- |
+| Identity provider (gateway fixture) | `5556` |
+| Gateway | `8080` |
+| Access service | `8081` |
+| Data service | `8082` |
+| Console | `8083` |
 
-- PostgreSQL, data in `.pg/`
-- identity provider (gateway fixture) on `:5556`
-- access service on `:8081`
-- data service on `:8082`
-- gateway on `:8080`
-- console on `:8083`
+There is **one** PostgreSQL server, with a database per service (`data`, `access`). The runner creates the access service's role and database, and the access service applies its own migrations. The runner applies the data service's migrations, registers the dev workspace, and seeds the access service with a tenant, principal, group, permission roles, and grants for the dev route and the console. The seed is idempotent: a rerun updates the existing dev tenant.
 
-There is **one** PostgreSQL server; each service has its own database (`data`, `access`). The runner creates the access service's role and database; the access service applies its own migrations. The runner applies the data service's migrations, registers the dev workspace, and seeds the access service with a tenant, principal, group, permission roles, and grants for the dev route and the console. The seed is idempotent: a rerun updates the existing dev tenant.
+The identity-signing key is generated per run; the runner prints its public half for upstreams that verify identities.
 
-It then prints addresses and credentials, for example:
-
-```
-  gateway         http://localhost:8080
-  access service  http://127.0.0.1:8081
-  data service    http://127.0.0.1:8082
-  console         http://localhost:8083
-  identity        http://127.0.0.1:5556
-  postgres        postgres://data:data@127.0.0.1:41693/postgres
-  databases       data, access
-
-  sign in with    alice@gateway.test / alice-password
-  sign in at      http://localhost:8080/auth/login?redirect=/ws/11111111-1111-4111-8111-111111111111/v1/me
-  workspace       11111111-1111-4111-8111-111111111111
-  workspace API   http://localhost:8080/ws/11111111-1111-4111-8111-111111111111/v1/
-  the console     http://localhost:8083/
-```
-
-A login crosses all three services: the gateway redirects to the access service, which redirects to the identity provider; the access service's decision lets the gateway forward to the data service.
-
-Ctrl-C stops everything. Without local PostgreSQL binaries, the runner starts the official PostgreSQL 18 image instead, keeps its data in a runtime volume, and stops it with everything else. It uses the first of `docker` or `podman` it finds; to choose:
+Without local PostgreSQL binaries, the runner starts the official PostgreSQL 18 image, keeps its data in a runtime volume, and stops it with everything else. It uses the first of `docker` or `podman` it finds; to choose:
 
 ```bash
 PLATFORM_CONTAINER_RUNTIME=podman bun run dev
@@ -108,16 +80,9 @@ export GATEWAY_IDENTITY_SIGNING_KEY="$(cat deploy/secrets/identity-signing.pem)"
 docker compose -f deploy/compose/platform.compose.yaml up --build
 ```
 
-Services answer on `8080`, `8081` and `8082`. The stack provisions database roles, applies migrations and starts the services, alongside PostgreSQL and Redis. Use it to prove the images and for any platform contract change. Its passwords are development values, not deployment secrets. Per-service stacks and Kubernetes manifests: [deploy/README.md](../../deploy/README.md).
+Services answer on `8080`, `8081` and `8082`. The stack provisions database roles, applies migrations and starts the services alongside PostgreSQL and Redis. Use it to prove the images and for any platform contract change; its passwords are development values. Per-service stacks and Kubernetes manifests: [deploy/README.md](../../deploy/README.md).
 
-Production stacks read variables from the shell. [`.env.min`](../../.env.min) lists the minimum set a stack refuses to start without, with example development values:
-
-```bash
-docker compose --env-file .env.min \
-  -f deploy/compose/production/platform.compose.yaml up -d
-```
-
-Those values are examples, not secrets; a deployment replaces every one. Its two private keys are placeholders; `bun run scripts/dev-keys.ts` writes the gateway's key pair.
+To run the production stack locally, use [`.env.min`](../../.env.min) as in [Operations](operations.md#first-deployment) step 7. Its values are examples, not secrets, and its two private keys are placeholders; `bun run scripts/dev-keys.ts` writes the gateway's key pair.
 
 ### Services from source
 
@@ -209,9 +174,7 @@ Root commands cover every workspace:
 | `bun run repositories:check` | Check the platform names only its own repository and three images |
 | `bun run deploy:check` | Check `deploy/` is consistent |
 | `bun run test` | Platform tests, then every workspace's tests |
-| `bun run compatibility` | Run the three services together ([Compatibility](compatibility.md)) |
-| `bun run dev` | Platform: three services, console, dev PostgreSQL and identity provider |
-| `bun run dev:gateway` | Gateway with local fixtures |
+| `bun run compatibility` | Run the three services together ([Compatibility](internals.md#compatibility)) |
 | `bun run atlas` | Open the [atlas](atlas.html) |
 
 `bun run dead --fix` removes exports nothing imports. Run `bun run typecheck` afterwards: a removal can leave behind an import that existed only for that export.
@@ -254,7 +217,7 @@ Suites with extra needs:
 | `bun run --cwd packages/gateway test:load` | Nothing; measures the gateway against the fixtures |
 | `bun run --cwd packages/data test:mutation` | Nothing; breaks code on purpose and checks the suites notice |
 
-`bun run compatibility` starts the gateway, access and data services from `packages/` against a real PostgreSQL server and runs the acceptance scenario through the gateway. Details: [Compatibility](compatibility.md).
+`bun run compatibility` starts the gateway, access and data services from `packages/` against a real PostgreSQL server and runs the acceptance scenario through the gateway. Details: [Compatibility](internals.md#compatibility).
 
 ## Releasing
 
@@ -263,4 +226,4 @@ bun run release:tag:dry-run   # show what the tagger would do
 bun run release:tag           # cut and push the tag
 ```
 
-The tagger refuses when versions disagree or a version goes down. See [Release](release.md).
+Steps and gates: [Release](internals.md#release).

@@ -10,33 +10,6 @@ in the same commit as the code.
 
 ## Unreleased
 
-### The documentation of the console is a frame around the document
-
-The page of a document showed the document and nothing else: a reader
-who wanted to know where the document stands — what the group holds,
-what comes before it, what comes after it — had to go back to the index
-and find the page again.
-
-The page of a document is a frame now. The sidebar names every page of
-every group, the outline follows the reader down the document, the
-previous page and the next page are at the foot of it, and the index
-opens with the pages to start with and shows every page of every group
-as a card of its own. The frame needs no script: the copy button of a
-code block, the entry of the outline that is being read and the filter
-of the index are added by the browser, and the page is complete without
-them.
-
-### A quote may open with a callout
-
-The documents of the platform use the callouts of GitHub — `> [!NOTE]`,
-`> [!WARNING]` — and the console read them as plain quotes: the marker
-was shown to the reader as text, and the note looked like a quotation
-of nobody.
-
-The parser reads the marker now, and the console shows the quote it
-opens as a callout: it carries its kind, the label of the kind and the
-tone of it. A quote without a marker stays a quote.
-
 ### The titles of the documents are short, and no sentence is said twice
 
 The titles of the documents named their service and their subject at

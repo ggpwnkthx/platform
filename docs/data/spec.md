@@ -15,26 +15,6 @@ deferred is outside the release and MUST NOT be advertised as available.
 The examples are illustrative configuration and protocol fixtures. They do not describe features
 that already exist in the gateway or the access service.
 
-## Contents
-
-1. [Purpose and authority](#1-purpose-and-authority)
-2. [Scope and invariants](#2-scope-and-invariants)
-3. [Topology](#3-topology)
-4. [Gateway trust contract](#4-gateway-trust-contract)
-5. [Access context contract](#5-access-context-contract)
-6. [Workspaces, context and isolation](#6-workspaces-context-and-isolation)
-7. [Schema and collections](#7-schema-and-collections)
-8. [Data authorization](#8-data-authorization)
-9. [HTTP API](#9-http-api)
-10. [Mutations and transactions](#10-mutations-and-transactions)
-11. [Persistence, audit and events](#11-persistence-audit-and-events)
-12. [Typed client](#12-typed-client)
-13. [Architecture](#13-architecture)
-14. [Configuration](#14-configuration)
-15. [Operations and data lifecycle](#15-operations-and-data-lifecycle)
-16. [Verification and release acceptance](#16-verification-and-release-acceptance)
-17. [Decisions](#17-decisions)
-
 ## 1. Purpose and authority
 
 The backend provides reusable, permission-aware data APIs for applications behind the gateway.
@@ -1091,7 +1071,7 @@ more services is not required.
 | `test/` | Contract, compatibility, database, load and architecture suites. |
 
 Required domains: `gateway-context`, `workspaces`, `schema`, `authorization`, `catalog`, `records`,
-`audit` and `events`. Their allowed import matrix is in [Architecture](architecture.md), and the
+`audit` and `events`. Their allowed import matrix is in [Internals](internals.md#code-boundaries), and the
 architecture check enforces it: it refuses any cycle, including a type-only cycle, and any catch-all
 directory of shared implementations.
 

@@ -41,9 +41,9 @@ export GATEWAY_CONTROL_TOKENS='{"a-token-of-at-least-16-characters":{"operator":
 bun run control        # http://127.0.0.1:9090
 ```
 
-Configuration: the route table format is in [spec §3](../../docs/gateway/spec.md#3-configuration-file), every environment
-variable and its default is in [.env.example](.env.example), and deployment settings are in
-[Operations](../../docs/gateway/operations.md).
+Configuration: the route table format is in [spec §3](../../docs/gateway/spec.md#3-configuration-file),
+every environment variable is in [Configuration](../../docs/gateway/configuration.md) (and
+[.env.example](.env.example)), and deployment is in [Operations](../../docs/gateway/operations.md).
 
 ## Checks
 
@@ -82,4 +82,4 @@ scripts/dev/postgres-dev.sh stop 5432
 ```
 
 `postgres-dev.sh` downloads and extracts **PostgreSQL 18** (nothing is installed), the version CI tests
-against. The full check list and CI jobs are in [Operations](../../docs/gateway/operations.md#project-checks).
+against. The full check list is in [Internals](../../docs/gateway/internals.md#verification).

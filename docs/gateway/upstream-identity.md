@@ -1,7 +1,7 @@
 # Upstream identity
 
-How an upstream verifies the caller identity the gateway writes and signs into forwarded request headers,
-with code. The normative rules are [spec §7.1 and §7.4](spec.md).
+How an upstream verifies the caller identity the gateway signs into forwarded headers, with code. The
+normative rules are [spec §7.1](spec.md#7-header-policy) and [§7.4](spec.md#74-identity-signature).
 
 ## Headers
 
@@ -13,8 +13,8 @@ with code. The normative rules are [spec §7.1 and §7.4](spec.md).
 | `x-gateway-workspace` | The caller's workspace, when the route has one. |
 | `x-gateway-signature` | The identity signature: `v5=<the compact JWS>`. |
 
-Only the gateway writes these headers; it removes them from client requests. An upstream that trusts them
-without verifying the signature is trusting the network.
+The gateway strips these headers from client requests and writes its own. Trusting them without verifying
+the signature means trusting the network.
 
 ## Key
 
@@ -25,11 +25,8 @@ bun run identity:key              # a new pair
 bun run identity:key --public     # the public key of the key in the environment
 ```
 
-The public key is a PEM P-256 elliptic-curve key, and signatures are `ES256`. Holding the public key lets
-an upstream verify an identity but not mint one.
-
-Upstreams never receive the private key or the session secret. There is no other key: the earlier
-symmetric format is removed, so the public key is all an upstream holds.
+The public key is a PEM P-256 key and signatures are `ES256`, so an upstream can verify an identity but not
+mint one. Upstreams never get the private key or the session secret, and need no other key.
 
 ## Verification
 
@@ -78,9 +75,9 @@ The payload is a canonical JSON object with fields in this order:
 The roles are those in `x-gateway-roles`. The gateway drops any role that would make the comma-separated
 list ambiguous, so the signature covers exactly the header's roles.
 
-Verification is one standard-library call. The reference implementation,
+The reference implementation,
 [examples/upstream-identity/verify.ts](../../packages/gateway/examples/upstream-identity/verify.ts), is
-**standalone**: it imports only the `jose` package, nothing from the gateway.
+standalone: it imports only `jose`.
 
 ## Code
 
@@ -111,9 +108,8 @@ if (!result.ok) {
 const identity = result.identity
 ```
 
-The reference verifier refuses any signature it does not understand and returns the reason as text, so
-logging it shows what was refused. `v5` is the only format the gateway signs, and the verifier checks it
-with the deployment's public key.
+The reference verifier refuses any signature it does not understand and returns the reason as text; log
+it.
 
 ### Go
 
@@ -167,12 +163,10 @@ if header.Algorithm != "ES256" || header.Type != "gateway-identity" { return err
 
 ## Failed verification
 
-The request did not come through the gateway, or was tampered with. Refuse it with `403`: the identity
-cannot be trusted.
+Refuse the request with `403`: it did not come through the gateway, or was tampered with.
 
-The gateway signs every request that carries an identity, so an upstream that requires one never gets an
-unsigned request from it. An unauthenticated request is forwarded with neither identity nor signature; the
-route decides whether one is required.
+The gateway signs every request that carries an identity. An unauthenticated request (a `mode: none` route)
+arrives with neither identity nor signature; decide per route whether you require one.
 
 ## Versions
 
@@ -181,27 +175,16 @@ route decides whether one is required.
 | `v5` | JWS with detached payload, `ES256`. | The deployment's private key; upstreams hold the public key. | **The only format in `1.0`.** |
 | `v4` | Same format, `HS256`. | Derived from the session secret and held by upstreams, so a verifying upstream could also mint identities. | **Removed** in `1.0`. |
 
-The gateway signs only `v5`. Change any upstream that verifies `v4` to read the value's version and verify
-with the deployment's public key. The reference verifier does this and refuses `v4` like any other unknown
-version.
-
-The gateway's own symmetric support lived in
-[src/domains/forwarding/identity.ts](../../packages/gateway/src/domains/forwarding/identity.ts):
-`symmetricIdentityKey` and `deriveIdentityKey` built the derived key and signed `v4`. Both were removed with
-the format.
+Change any upstream that verifies `v4` to read the version and verify `v5` with the public key; the
+reference verifier refuses `v4` like any unknown version. The gateway's `symmetricIdentityKey` and
+`deriveIdentityKey` in [src/domains/forwarding/identity.ts](../../packages/gateway/src/domains/forwarding/identity.ts)
+were removed with the format.
 
 ## Compatibility
 
-The identity contract is [spec §7.4](spec.md#74-identity-signature). An upstream that implements it works with every gateway
-revision that keeps that section. For **evidence**, pin a revision and test your implementation against it.
-
-Stable links follow the release tag (`v1.0.0`); links on `main` describe the next release:
-
-- Specification: [spec.md §7.4](spec.md#74-identity-signature)
-- Guide: [upstream-identity.md](upstream-identity.md)
-- Reference verifier: [examples/upstream-identity/verify.ts](../../packages/gateway/examples/upstream-identity/verify.ts)
-
-Evidence for a tested baseline uses the **full commit sha**, so links resolve to the tested bytes:
+An upstream that implements [spec §7.4](spec.md#74-identity-signature) works with every gateway revision
+that keeps that section. Pin a revision and test against it: links on the release tag (`v1.0.0`) are
+stable, links on `main` describe the next release, and evidence uses the full commit sha:
 
 ```
 https://github.com/ggpwnkthx/platform/blob/<commit-sha>/docs/gateway/spec.md#74-identity-signature
@@ -209,15 +192,11 @@ https://github.com/ggpwnkthx/platform/blob/<commit-sha>/packages/gateway/example
 https://github.com/ggpwnkthx/platform/blob/<commit-sha>/packages/gateway/examples/upstream-identity/verify.test.ts
 ```
 
-The verifier's tests are the format's contract test: they sign with the gateway's real signer and verify
-with the reference implementation, so any change to payload, version or algorithm fails the gateway build.
-Run the same check against your implementation with your own fixtures.
+The verifier's tests sign with the gateway's real signer and verify with the reference implementation, so
+any change to payload, version or algorithm fails the gateway build. Run the same check against your
+implementation with your own fixtures. This guide was tested at revision
+`39ece6a6682e41eee114b2cd7560728d438d564a`.
 
-This guide was tested at revision `39ece6a6682e41eee114b2cd7560728d438d564a`: spec, guide, reference
-verifier and tests are those of that commit.
-
-The access-service protocol, the other contract between the gateway and its neighbours, has its own
-conformance suite:
-[test/support/access-conformance.ts](../../packages/gateway/test/support/access-conformance.ts). It is
-parameterized by a profile naming the subjects and workspaces an implementation knows, so an access service
-can run it against itself. It is integration guidance, not a gateway runtime dependency.
+The access-service protocol has its own conformance suite,
+[test/support/access-conformance.ts](../../packages/gateway/test/support/access-conformance.ts),
+parameterized by the subjects and workspaces an implementation knows.

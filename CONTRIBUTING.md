@@ -1,13 +1,13 @@
 # Contributing
 
-Each service's behavior is defined by its specification. A behavior change updates the spec in the same commit as the code; a pull request that changes behavior without changing the spec changes a customer-facing contract unannounced.
+Each service's spec defines its behavior. A behavior change updates the spec in the same commit as the code; otherwise it changes a customer-facing contract unannounced.
 
 ## Order of a change
 
 1. **Spec.** Update the workspace's spec first; it is normative.
 2. **Code.** Rules go in domains (`src/domains/`), thin handlers in `src/app/`, storage adapters in `src/platform/`, wiring in the composition root (`src/runtime/`). `bun run architecture` checks the boundaries.
 3. **Docs.** Update the rest of [`docs/`](docs/README.md): `docs/platform/` for shared material, the service's own directory for its contract.
-4. **Tests.** A rule without a test is not implemented ([Architecture](docs/platform/architecture.md#working-rules)).
+4. **Tests.** A rule without a test is not implemented ([Working rules](docs/platform/internals.md#working-rules)).
 
 | Test kind | Location | Proves |
 | --- | --- | --- |
@@ -22,10 +22,10 @@ Each service's behavior is defined by its specification. A behavior change updat
 
 - Spec, docs and changelog updated for any behavior change
 - `bun run typecheck`, `bun run lint`, `bun run format:check` pass
-- `bun run architecture`, `bun run dead`, `bun run versions`, `bun run repositories:check` pass
+- `bun run architecture`, `bun run dead`, `bun run versions`, `bun run repositories:check`, `bun run deploy:check` pass
 - `bun run test` and `bun run compatibility` pass
 
-All commands, integration test setup and run modes: [Development](docs/platform/development.md). The compatibility suite needs no network; it is described in [Compatibility](docs/platform/compatibility.md).
+All commands, integration test setup and run modes: [Development](docs/platform/development.md). The compatibility suite needs no network: [Compatibility](docs/platform/internals.md#compatibility).
 
 ## Writing style
 

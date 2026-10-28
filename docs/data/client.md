@@ -1,85 +1,68 @@
 # Typed client
 
-`@data-backend/client` speaks the v1 [API contract](api.md) through the gateway. It hides nothing:
-authorization and concurrency refusals reach the caller as typed errors.
+`@data-backend/client` calls the v1 [API](api.md) through the gateway. Authorization and concurrency
+refusals reach you as typed errors; nothing is hidden.
 
-## Installation
-
-The client is published to a package registry and also ships as the release tarball; the tarball
-version is the client version.
+## Install
 
 ```bash
 npm install @data-backend/client
-# or, with bun:
 bun add @data-backend/client
-```
-
-To pin a version by URL, install the release tarball (same package):
-
-```bash
+# or pin the release tarball (same package; its version is the client version):
 bun add https://github.com/ggpwnkthx/platform/releases/download/v1.0.0/data-backend-client-1.0.0.tgz
 ```
 
 > [!NOTE]
-> The repository root is the **service**, a different package. `bun add github:ggpwnkthx/platform`
-> installs the root package, not the client.
+> `bun add github:ggpwnkthx/platform` installs the repository root, which is the **service**, not the
+> client.
+
+The client runs on Bun and Node and has no dependencies. Client `1.x` works with any deployment
+`1.y` where `y >= x`: within a major, a deployment never removes a path or changes an answer's
+meaning.
+
+## Construct
 
 ```ts
 import { DataClient } from '@data-backend/client'
-```
 
-- Runs on **bun** and **node**, ships its own files and has no dependencies. The packaging check
-  installs the tarball in a consumer outside the repository and calls the API with it under both
-  runtimes.
-- A client talks to a deployment of the same major: client `1.x` works with deployment `1.y` for
-  every `y >= x`. A deployment never removes a path or changes an answer's meaning within a major.
-
-## Construction
-
-```ts
 const client = new DataClient({
   baseUrl: 'https://api.gateway.test',
   workspaceId: '22222222-2222-4222-8222-222222222222',
-  headers: { cookie: sessionCookie },   // the caller's credentials
-  // fetch: myFetch,                    // the caller's transport
-  // signal: controller.signal,         // cancellation
+  headers: { cookie: sessionCookie },
 })
 ```
 
 | Option | Meaning |
 | --- | --- |
-| `baseUrl` | The deployment's base URL, through the gateway. |
-| `workspaceId` | Workspace for all calls. |
-| `fetch` | Transport. Defaults to the global `fetch`. |
-| `headers` | Headers sent on every call, such as the session cookie. |
-| `signal` | Cancels the calls. |
+| `baseUrl` | Deployment URL, through the gateway. |
+| `workspaceId` | Workspace for every call. |
+| `headers` | Sent on every call, such as the session cookie. |
+| `fetch` | Transport; defaults to global `fetch`. |
+| `signal` | Cancels calls. |
 
-The client never signs requests, stores access-service credentials or runs a login flow. Caller
-credentials travel in the transport; the gateway turns them into a signed identity.
+The client never signs requests, stores access service credentials or logs in. Your credentials
+travel in the transport, and the gateway turns them into a signed identity.
 
 ## Methods
 
-| Method | Does |
+| Method | Returns |
 | --- | --- |
-| `me()` | Principal, tenant, workspace, route and API version. |
-| `schema()` | Metadata of the collections the caller may use. |
-| `collection(key)` | Metadata of one collection. |
-| `list(key, options)` | One page of a collection. |
-| `listAll(key, options)` | Every page of a collection, in sequence. |
-| `get(key, id)` | One record. |
-| `getWithValidator(key, id)` | One record and its `ETag`. |
-| `create(key, body, { idempotencyKey })` | Creates a record; returns the receipt. |
-| `update(key, id, body, { etag })` | Updates a record; returns the record and its new `ETag`. |
-| `remove(key, id, { etag })` | Deletes a record. |
-| `versions(key, id)` | A record's version history. |
-| `version(key, id, version)` | One version of a record. |
-| `rollback(key, id, version, { etag })` | Rolls a record back to a version; returns the record and its new `ETag`. |
+| `me()` | Principal, tenant, workspace, route, API version. |
+| `schema()`, `collection(key)` | Metadata of the collections you may use, or of one. |
+| `list(key, options)` | One page. |
+| `listAll(key, options)` | Every page, in sequence. |
+| `get(key, id)`, `getWithValidator(key, id)` | One record; the second adds its `ETag`. |
+| `create(key, body, { idempotencyKey })` | The creation receipt. |
+| `update(key, id, body, { etag })` | The record and its new `ETag`. |
+| `remove(key, id, { etag })` | Nothing; deletes the record. |
+| `versions(key, id)`, `version(key, id, version)` | A record's history, or one version. |
+| `rollback(key, id, version, { etag })` | The record and its new `ETag`. |
 | `aggregate(key, options)` | Aggregate groups. |
-| `audit({ limit, cursor })` | A page of audit log metadata. |
+| `audit({ limit, cursor })` | A page of audit metadata. |
 
-### Writing
+## Write
 
-Creation needs an idempotency key; update and delete need the record's current validator.
+Creation needs an idempotency key; update and delete need the current validator.
 
 ```ts
 const created = await client.create(
@@ -87,84 +70,63 @@ const created = await client.create(
   { title: 'Launch notes', body: 'Initial content.' },
   { idempotencyKey: crypto.randomUUID() }
 )
-// created.id, created.version
 
 const { record, etag } = await client.getWithValidator('articles', created.id)
-const updated = await client.update(
-  'articles',
-  created.id,
-  { title: 'Launch notes, revised' },
-  { etag }
-)
-// updated.etag is the validator of the new version
+const updated = await client.update('articles', created.id, { title: 'Revised' }, { etag })
+// updated.etag validates the new version
 ```
 
-On `412 PRECONDITION_FAILED` the record changed after the validator was issued: read it again and
-reapply your change. See [Reads and validators](api.md#reads-and-validators).
+On `412 PRECONDITION_FAILED`, read the record again and reapply your change
+([Reads and validators](api.md#reads-and-validators)).
 
-### Versions
+## Versions
 
-Read history like a record. Rollback is a write and needs the validator of the record's current
-state.
+Rollback is a write: it needs the current validator, policies authorize it like an update, and the
+record moves to the next version number ([Record versions](api.md#record-versions)).
 
 ```ts
 const versions = await client.versions('articles', created.id)
-// versions[0].version, versions[0].operation, versions[0].supersededAt
-
+// versions[0].version, .operation, .supersededAt
 const previous = await client.version('articles', created.id, versions[0].version)
-const { record, etag } = await client.rollback(
-  'articles',
-  created.id,
-  versions[0].version,
-  { etag }
-)
+await client.rollback('articles', created.id, versions[0].version, { etag })
 ```
 
-Deployment policies authorize a rollback like any update, and the record moves to the next version
-number, never back. See [Record versions](api.md#record-versions).
-
-### Paging
+## Page
 
 ```ts
 for await (const rows of client.listAll('articles', { limit: 100 })) {
-  for (const row of rows) {
-    console.log(row.title)
-  }
+  for (const row of rows) console.log(row.title)
 }
 ```
 
-The caller bounds the traversal by stopping it. Pages are not a snapshot: concurrent changes alter
-later pages.
+Stop the loop to bound the traversal. Pages are not a snapshot: concurrent changes alter later pages.
 
 ## Collection types
 
-The client is generic and knows nothing of a deployment's collections. To get typed collections,
-generate them and pass the map as a type parameter:
+The client knows no deployment's collections. Generate a type map and pass it as a type parameter:
 
 ```ts
-import { DataClient } from '@data-backend/client'
 import type { Collections } from './generated/collections'
 
 const client = new DataClient<Collections>({ baseUrl, workspaceId })
 const page = await client.list('articles')   // typed article rows
 ```
 
-Without a map, rows are `RecordValue` and collection keys are plain strings. Collection names and
-field types are not part of the package: they follow the deployment manifest, which is outside the
-client's major version.
+Without a map, rows are `RecordValue` and keys are plain strings. Collection names and field types
+follow the deployment manifest, outside the client's major version.
 
-The generator writes `packages/client/src/deployment.ts` in this repository; another deployment
-writes a file of the same shape in its own repository.
+In this repository the generator writes `packages/client/src/deployment.ts`; another deployment writes
+a file of the same shape in its own repository:
 
 ```bash
-bun run scripts/dev/generate-client.ts          # writes the file
-bun run scripts/dev/generate-client.ts --check  # refuses a stale file
+bun run scripts/dev/generate-client.ts          # write the file
+bun run scripts/dev/generate-client.ts --check  # fail on a stale file
 ```
 
 ## Errors
 
-Every failure throws an `ApiError` carrying the service code, status, message, field details and
-request id:
+Every failure throws `ApiError` with the service code, status, message, field details and request
+ID. Switch on the code ([Error codes](api.md#error-codes)):
 
 ```ts
 import { ApiError } from '@data-backend/client'
@@ -178,22 +140,13 @@ try {
 }
 ```
 
-The client never swallows an authorization refusal or a concurrency conflict. For the stable codes see
-[Error codes](api.md#error-codes).
-
 ## Package versioning
 
-Semantic versioning:
+| Bump | Means |
+| --- | --- |
+| patch | Nothing clients depend on changes. |
+| minor | A new method or option; existing code keeps working. |
+| major | An answer's shape, a method name or an option's meaning changes. |
 
-- **patch**: changes nothing clients depend on;
-- **minor**: adds a method or option; existing code keeps working;
-- **major**: changes an answer's shape, a method name or an option's meaning.
-
-Prove the release artifact works outside this repository:
-
-```bash
-bun run check:client-package
-```
-
-It packs the client with the release command, installs the tarball in an external consumer, imports
-the client by its public name and calls the API.
+`bun run check:client-package` packs the client with the release command, installs the tarball in a
+consumer outside the repository, imports it by its public name and calls the API under Bun and Node.

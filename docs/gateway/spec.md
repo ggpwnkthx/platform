@@ -9,7 +9,7 @@ Status: 1.0.0. Runtime: Bun ≥ 1.4.3 ([decisions.md](decisions.md), decision 36
 the gateway **refuses to start** on an older runtime (§4). Listener: HTTP and
 WebSocket on `GATEWAY_HOST:GATEWAY_PORT` (default `0.0.0.0:8080`).
 
-Code layout and file ownership: [architecture.md](architecture.md). Decisions
+Code layout and file ownership: [internals.md](internals.md#code-layout). Decisions
 behind the contract: [decisions.md](decisions.md). A recommendation in an
 implementation guide is not a requirement until it is recorded here.
 
@@ -277,7 +277,7 @@ The **runtime** is validated first. The gateway needs Bun ≥ 1.4.3 (decision 36
 and stops on an older version, where these behaviors are not observable: an
 upstream's early response during an upload, cancelling the body producer,
 refusing an upstream WebSocket handshake, and upgrading the caller with
-gateway headers. Measurements: [runtime.md](runtime.md).
+gateway headers. Measurements: [internals.md](internals.md#runtime).
 
 Variable names never leave `src/runtime/env/`. The rest of the gateway receives
 the settings it needs, not the environment.
@@ -978,7 +978,7 @@ Why two of the scopes exist:
 **The three budgets of §2.3 step 6 are checked together.** They are
 independent windows and none changes another's answer, but checking them
 together asks the shared state **once** instead of three times. That round trip
-is on every request; [capacity.md](capacity.md) attributes the shared state's
+is on every request; [internals.md](internals.md#shared-state-backends) attributes the shared state's
 cost to the number of round trips.
 
 The reported refusal is the first in table order: deployment, then caller
@@ -1168,7 +1168,7 @@ An upstream that rejects the certificate refuses the connection; the gateway
 answers `502 bad_gateway` and logs the reason.
 
 **WebSocket upstreams use plain HTTP.** The runtime's WebSocket client cannot
-speak TLS (measurements: [runtime.md](runtime.md)), so a handshake with a
+speak TLS (measurements: [internals.md](internals.md#runtime)), so a handshake with a
 `wss` upstream is refused with reason `tls` instead of failing with an error
 that hides the cause. Workaround: a proxy in front of the upstream that speaks
 `wss` and forwards `ws`.
@@ -1482,7 +1482,7 @@ append-only file.
 ### 12.6 Backend comparison
 
 The two backends are interchangeable and measured side by side in
-[capacity.md](capacity.md).
+[internals.md](internals.md#shared-state-backends).
 
 | | Redis | Postgres |
 | --- | --- | --- |
@@ -1673,7 +1673,7 @@ The gateway does not:
 ### 14.3 Dependency rules
 
 The dependency rules, the domain matrix and the gate that checks them are in
-[architecture.md](architecture.md). In short: a domain is imported through its
+[internals.md](internals.md#code-layout). In short: a domain is imported through its
 public entry point, a domain's core imports nothing from the framework, and the
 application uses the domains' public entry points.
 

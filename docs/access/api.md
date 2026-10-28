@@ -1,19 +1,18 @@
 # HTTP API
 
-Every endpoint of the access service with its request, response and errors. For the rules behind them, see [spec.md](spec.md).
+Every access service endpoint with its request, response, errors and a `curl` example. The rules behind them are in [spec.md](spec.md), cited as `§N`.
 
 ## Conventions
 
 - Bodies are JSON. Errors are `{"error": "<code>", "message": "<text>"}`, except the token endpoint, which uses the OAuth shape `{"error": "<code>", "error_description": "<text>"}`.
-- Every response carries `x-request-id`, the request's identifier in the service logs. A client that sends a valid `x-request-id` gets its own value back.
-- Every response carries `x-content-type-options: nosniff`, `x-frame-options: DENY` and `referrer-policy: no-referrer` (§5).
+- Every response carries `x-request-id` (the client's own value if it sent a valid one), `x-content-type-options: nosniff`, `x-frame-options: DENY` and `referrer-policy: no-referrer` (§5).
 
 ## Probes
 
 | Endpoint | Response |
 | --- | --- |
-| `GET /healthz` | `200 {"status":"ok","service":"access","version":"<version>"}` while the process is alive. `version` is the platform release. |
-| `GET /readyz` | `200 {"status":"ready"}` when the database answers and migrations are applied; `503 {"status":"draining"}` during a drain; `503 {"status":"not-ready"}` otherwise. |
+| `GET /healthz` | `200 {"status":"ok","service":"access","version":"<version>"}` (§12.1). |
+| `GET /readyz` | `200 {"status":"ready"}`, `503 {"status":"draining"}` or `503 {"status":"not-ready"}` (§12.1). |
 | `GET /metrics` | Prometheus text. `404` when `ACCESS_METRICS_TOKEN` is unset, `401` when the bearer token does not match. |
 
 ```bash
@@ -26,18 +25,16 @@ curl -sS https://access.example.com/metrics -H "authorization: Bearer $ACCESS_ME
 
 ### `GET /openapi.json`
 
-The service's OpenAPI description: the paths it serves and their response shapes. The API check compares it with the service's routes.
+The OpenAPI description of the served paths and response shapes; the API check compares it with the routes.
 
 ## OpenID Connect provider
 
 ### `GET /oauth/authorize`
 
-The authorization endpoint. The gateway sends the browser here.
-
 | Parameter | Rule |
 | --- | --- |
 | `client_id` | Required. Names the tenant (§5.2). |
-| `redirect_uri` | Required. One of the tenant's registered `clientRedirectUris`. An unregistered URL gets `400 invalid_request` and the browser is not sent to it. |
+| `redirect_uri` | Required. One of the tenant's `clientRedirectUris`; otherwise `400 invalid_request`. |
 | `response_type` | Required. `code`. |
 | `scope` | Optional. `openid profile email groups`. |
 | `state` | Optional. Returned to the gateway. |
@@ -50,13 +47,11 @@ Response: `302` to the tenant's provider, or `400 invalid_request` (no tenant, b
 
 ### `GET /oauth/tenant/callback`
 
-The access service's callback at a tenant's provider. The provider sends the browser here with `code` and `state`.
-
-Response: `302` to the request's `redirect_uri` with the access service's code and the gateway's `state`. Refusals (§5.6): `400 login_state_invalid`, `400 invalid_request`, `403 identity_rejected`, `403 identity_unknown`, `403 principal_disabled`, `403 provider_error`, `403 tenant_disabled`, `502 upstream_unavailable`. An unexpected failure is `500 internal_error` and never carries a dependency's error.
+Where the tenant's provider returns the browser with `code` and `state`. Response: `302` to the request's `redirect_uri` with the access service's code and the gateway's `state`. Refusals (§5.6): `400 login_state_invalid`, `400 invalid_request`, `403 identity_rejected`, `403 identity_unknown`, `403 principal_disabled`, `403 provider_error`, `403 tenant_disabled`, `502 upstream_unavailable`. An unexpected failure is `500 internal_error` and never carries a dependency's error.
 
 ### `POST /oauth/token`
 
-Exchanges the code for tokens. The client authenticates with `client_secret_basic`.
+Exchanges the code for tokens; the client authenticates with `client_secret_basic`.
 
 ```
 POST /oauth/token
@@ -82,7 +77,7 @@ grant_type=authorization_code&code=…&redirect_uri=…&code_verifier=…
 }
 ```
 
-No refresh token is issued (§7.2). The response is never cached.
+No refresh token (§7.2); `cache-control: no-store`.
 
 | Error | When |
 | --- | --- |
@@ -96,7 +91,7 @@ The discovery document. Fields: §7.5.
 
 ### `GET /oauth/jwks`
 
-The service's public keys (JWKS). During a rotation it carries the current and the previous key until the last token signed with the previous key has expired.
+The service's public keys; during a rotation, the current and previous key (§4.2).
 
 ### `GET /oauth/userinfo`
 
@@ -111,8 +106,6 @@ curl -sS https://access.example.com/oauth/userinfo -H "authorization: Bearer $AC
 ## Decision contract
 
 ### `POST /v1/decisions`
-
-The contract the gateway already speaks; the access service does not change it.
 
 ```
 POST /v1/decisions
@@ -134,9 +127,7 @@ Content-Type: application/json
 {"allow": false, "reason": "the principal does not have the role of the workspace", "reasonCode": "missing_role"}
 ```
 
-A denial carries a reason code; an allow does not. The codes are the gateway's vocabulary (`missing_role`, `access_denied`). The gateway counts the code when present and falls back to the reason text otherwise; code and text always agree (§8.2, §8.7).
-
-Status codes: §8.2. Refusals, all of which the gateway treats as denials (it fails closed):
+Only a denial carries `reasonCode` (`missing_role` or `access_denied`), which always agrees with the text (§8.2, §8.7). The gateway treats every refusal as a denial:
 
 | Error | When |
 | --- | --- |
@@ -144,18 +135,18 @@ Status codes: §8.2. Refusals, all of which the gateway treats as denials (it fa
 | `400 bad_request` | Body is not JSON, or the subject is not a string or not a principal id. |
 | `503 service_unavailable` | Database down, or the decision took longer than `ACCESS_DECISION_TIMEOUT_MS`. |
 
-Credentials are either scheme of §8.8: the deployment's bearer token (any principal on the platform) or a tenant's credentials (that tenant's principals only).
+Credentials (§8.8): the deployment's bearer token (any principal) or a tenant's credentials (its principals only).
 
 ## Access context contract
 
 > [!NOTE]
 > Extension: a required integration change for the data backend. The decision contract is unchanged.
 
-A data-owning service uses this contract to learn the **complete** set of a principal's capabilities for a workspace and route. The credential is neither the gateway's nor an administration credential: it is a dedicated read-only credential, scoped to an explicit set of tenants by `ACCESS_CONTEXT_TOKENS`.
+A data-owning service reads a principal's complete capabilities for a workspace and route (§9). The credential is a dedicated read-only one from `ACCESS_CONTEXT_TOKENS`, scoped to listed tenants.
 
 ### `GET /v1/access-context`
 
-Contract discovery; consumers use it as their readiness check.
+Contract discovery, used by consumers as a readiness check.
 
 ```
 GET /v1/access-context
@@ -166,7 +157,7 @@ Authorization: Bearer {access context credential}
 {"versions":[1],"maxPermissionKeys":4096,"maxLifetimeMs":5000}
 ```
 
-`401 unauthorized` when the credential is missing or wrong. Discovery reveals nothing about principals or grants.
+`401 unauthorized` when the credential is missing or wrong.
 
 ### `POST /v1/access-context`
 
@@ -188,7 +179,7 @@ Content-Type: application/json
 | `workspaceId` | Required. The request's workspace. |
 | `routeId` | Required. The request's route. |
 
-Unknown fields and fields of the wrong type are refused. The body is at most 64 KiB.
+Unknown or mistyped fields are refused; the body is at most 64 KiB.
 
 ```json
 {
@@ -204,9 +195,7 @@ Unknown fields and fields of the wrong type are refused. The body is at most 64 
 }
 ```
 
-`permissionKeys` is the complete, sorted, deduplicated set of keys of the grants that apply. The response is never partial: more than 4096 keys is `503 service_unavailable`, never an allow with fewer keys.
-
-A denial is `200` with `allow: false`, empty `permissionKeys` and no `validUntil`; it does not reveal the cause.
+`permissionKeys` is complete, sorted and deduplicated; more than 4096 keys is `503 service_unavailable` (§9.3). A denial is `200` with `allow: false`, empty `permissionKeys` and no `validUntil`.
 
 | Error | When |
 | --- | --- |
@@ -217,19 +206,11 @@ A denial is `200` with `allow: false`, empty `permissionKeys` and no `validUntil
 
 ## Administration
 
-Twelve endpoints under `/v1/admin`, plus `GET /v1/admin/audit`. All require `Authorization: Bearer <credential>`. Shared rules (limits, pagination, error codes, audit): §10.1.
-
-A deployment may define per-tenant credentials in `ACCESS_ADMIN_TOKENS` (§4.6). A tenant credential may act only for its tenant: naming another tenant is `403 forbidden`, and its lists only show its tenant. The audit records the credential's operator.
-
-| Credential | May act for |
-| --- | --- |
-| `ACCESS_ADMIN_TOKEN` | Every tenant. |
-| A tenant credential in `ACCESS_ADMIN_TOKENS` | Its own tenant only. |
-| A platform credential in `ACCESS_ADMIN_TOKENS` | Every tenant. |
+Twelve endpoints under `/v1/admin`, plus `GET /v1/admin/audit`, all with `Authorization: Bearer <credential>`. The credential is `ACCESS_ADMIN_TOKEN` or one from `ACCESS_ADMIN_TOKENS` (§4.6); a tenant credential acts only for its tenant, and naming another is `403 forbidden`. Limits, pagination, error codes and auditing: §10.1.
 
 ### `POST /v1/admin/tenants`
 
-Creates a tenant, or updates the tenant with that slug (upsert).
+Upsert by slug (§10.2).
 
 ```bash
 curl -sS -X POST https://access.example.com/v1/admin/tenants \
@@ -266,13 +247,13 @@ curl -sS -X POST https://access.example.com/v1/admin/tenants \
 | `emailDomain` | Optional. Unique when set. |
 | `clientId` | Required. The client id of the tenant's gateway at the access service. Unique across tenants. |
 | `clientSecret` | Required. Encrypted at rest, never returned. On replacement, the old secret stays valid for 24 hours alongside the new one. |
-| `clientRedirectUris` | Optional. Default `[]`. The gateway's registered callback URLs; the browser returns to one of them with the login code. Any other URL is `400 invalid_request`. A tenant with none refuses every login. |
+| `clientRedirectUris` | Optional. Default `[]`. The gateway's callback URLs; a tenant with none refuses every login. |
 | `autoProvision` | Optional. Default `false`. |
-| `sharedClient` | Optional. Default `false`. Platform operators only: a tenant credential that sends a value different from the stored one gets `403 forbidden`. |
-| `default` | Optional. Default `false`. At most one tenant is the default. Platform operators only, as for `sharedClient`. |
+| `sharedClient` | Optional. Default `false`. Platform operators only (§10.1). |
+| `default` | Optional. Default `false`. At most one tenant. Platform operators only. |
 | `enabled` | Optional. Default `true`. |
 
-Status codes: §10.2. `409 conflict` when the client id belongs to another tenant or a second tenant would become the default. `403 forbidden` when a tenant credential changes `sharedClient` or `default`.
+`409 conflict` when the client id belongs to another tenant or a second default would appear; `403 forbidden` when a tenant credential changes `sharedClient` or `default`.
 
 ```json
 {
@@ -288,7 +269,7 @@ Status codes: §10.2. `409 conflict` when the client id belongs to another tenan
 
 ### `GET /v1/admin/tenants`
 
-Lists tenants with their principal and grant counts.
+Tenants with principal and grant counts.
 
 ```bash
 curl -sS https://access.example.com/v1/admin/tenants \
@@ -312,7 +293,7 @@ curl -sS https://access.example.com/v1/admin/tenants \
 
 ### `POST /v1/admin/users`
 
-Creates a principal, or updates the principal with that `(tenant, externalSubject)` pair (upsert). Rules: §10.4.
+Upsert by `(tenant, externalSubject)` (§10.4).
 
 ```bash
 curl -sS -X POST https://access.example.com/v1/admin/users \
@@ -347,7 +328,7 @@ curl -sS -X POST https://access.example.com/v1/admin/users \
 
 #### Batch of principals
 
-The body may carry a list of principals instead of one.
+Send `principals` instead of one principal:
 
 ```bash
 curl -sS -X POST https://access.example.com/v1/admin/users \
@@ -361,7 +342,7 @@ curl -sS -X POST https://access.example.com/v1/admin/users \
       }'
 ```
 
-At most 1 000 principals per batch. **Each item is written separately**: a written item is audited, a failed item leaves nothing behind and does not stop the others. The response reports every item's outcome. The call is idempotent (§10.4).
+At most 1 000 per batch. Items are written separately, and a failed item does not stop the others (§10.4).
 
 ```json
 {
@@ -374,8 +355,6 @@ At most 1 000 principals per batch. **Each item is written separately**: a writt
 ```
 
 ### `GET /v1/admin/users`
-
-Lists principals.
 
 ```bash
 curl -sS "https://access.example.com/v1/admin/users?tenant=acme&limit=50" \
@@ -404,11 +383,11 @@ curl -sS "https://access.example.com/v1/admin/users?tenant=acme&limit=50" \
 }
 ```
 
-Ordering and paging: §10.5. The list never carries a secret.
+Ordering and paging: §10.5.
 
 ### `PUT /v1/admin/grants`
 
-Creates a grant, or updates the grant with the body's `(tenant, user, permission, workspace, route)` tuple. Rules: §10.6.
+Upsert by `(tenant, user, permission, workspace, route)` (§10.6).
 
 ```bash
 curl -sS -X PUT https://access.example.com/v1/admin/grants \
@@ -429,7 +408,7 @@ curl -sS -X PUT https://access.example.com/v1/admin/grants \
 | `tenant` | Required. The tenant slug. |
 | `userId` | The principal id. Exactly one of `userId` and `group` is required. |
 | `group` | The group key. Exactly one of `userId` and `group` is required. |
-| `permission` | The permission key. Exactly one of `permission` and `role` is required. A missing permission row is **created on demand** in the tenant's scope; keys are per tenant, so two tenants may each have a permission with the same key. |
+| `permission` | The permission key, created in the tenant's scope if missing. Exactly one of `permission` and `role` is required. |
 | `role` | The role key. The grant holds the role's permissions. An unknown role is `404 not_found`. |
 | `workspaceId` | Optional. `null` (default) means every workspace of the tenant. |
 | `routeId` | Optional. `null` (default) means every route. |
@@ -448,7 +427,7 @@ curl -sS -X PUT https://access.example.com/v1/admin/grants \
 
 #### Batch of grants
 
-The body may carry a list instead of one grant: `{"grants": [ … ]}`.
+Send `{"grants": [ … ]}` instead of one grant; the response reports each item:
 
 ```json
 {
@@ -462,7 +441,7 @@ The body may carry a list instead of one grant: `{"grants": [ … ]}`.
 
 ### `DELETE /v1/admin/grants/{id}`
 
-Revokes a grant. The row is kept and stamped with `revoked_at`.
+Revokes a grant; the row is kept with `revoked_at` set.
 
 ```bash
 curl -sS -X DELETE https://access.example.com/v1/admin/grants/d3e4… \
@@ -473,11 +452,9 @@ curl -sS -X DELETE https://access.example.com/v1/admin/grants/d3e4… \
 HTTP/1.1 204 No Content
 ```
 
-Idempotent (§10.7). `404 not_found` when the id does not exist.
+Idempotent; `404 not_found` for an unknown id (§10.7).
 
 ### `GET /v1/admin/grants`
-
-Lists grants.
 
 ```bash
 curl -sS "https://access.example.com/v1/admin/grants?tenant=acme&live=true" \
@@ -510,7 +487,7 @@ curl -sS "https://access.example.com/v1/admin/grants?tenant=acme&live=true" \
 
 ### `POST /v1/admin/groups`
 
-Creates a group, or changes the group with that key (upsert). Rules, including membership: §10.9.
+Upsert by key; membership rules in §10.9.
 
 ```bash
 curl -sS -X POST https://access.example.com/v1/admin/groups \
@@ -542,7 +519,7 @@ curl -sS -X POST https://access.example.com/v1/admin/groups \
 
 ### `GET /v1/admin/groups`
 
-Lists groups, newest first. Read-only.
+Groups, newest first.
 
 ```bash
 curl -sS "https://access.example.com/v1/admin/groups?tenant=acme&limit=20" \
@@ -555,8 +532,6 @@ curl -sS "https://access.example.com/v1/admin/groups?tenant=acme&limit=20" \
 | `key` | Optional. A group key. |
 | `limit` | Optional. Default `50`, maximum `200`. |
 | `offset` | Optional. Default `0`. |
-
-Members are listed by external subject, as in the create response.
 
 ```json
 {
@@ -576,7 +551,7 @@ Members are listed by external subject, as in the create response.
 
 ### `PUT /v1/admin/roles`
 
-Creates a role, or changes the role with that key (upsert). The call **replaces** the role's memberships: the permissions it holds and the roles it names.
+Upsert by key; **replaces** the role's permissions and nested roles (§10.11).
 
 ```bash
 curl -sS -X PUT https://access.example.com/v1/admin/roles \
@@ -601,7 +576,7 @@ curl -sS -X PUT https://access.example.com/v1/admin/roles \
 | `permissions` | Optional. Permission keys the role holds. Missing keys are created in the tenant's scope. |
 | `roles` | Optional. Role keys the role names. An unknown key is `404 not_found`. |
 
-A role that names itself, directly or through other roles, is `409 conflict`: the nesting would never end.
+A role that names itself, directly or through others, is `409 conflict`.
 
 ```json
 {
@@ -616,7 +591,7 @@ A role that names itself, directly or through other roles, is `409 conflict`: th
 
 ### `GET /v1/admin/roles`
 
-Lists roles, newest first. Read-only.
+Roles, newest first.
 
 ```bash
 curl -sS "https://access.example.com/v1/admin/roles?tenant=acme&limit=20" \
@@ -629,8 +604,6 @@ curl -sS "https://access.example.com/v1/admin/roles?tenant=acme&limit=20" \
 | `key` | Optional. A role key. |
 | `limit` | Optional. Default `50`, maximum `200`. |
 | `offset` | Optional. Default `0`. |
-
-Each role lists its permission keys and the role keys it names, as in the create response.
 
 ```json
 {
@@ -651,7 +624,7 @@ Each role lists its permission keys and the role keys it names, as in the create
 
 ### `DELETE /v1/admin/roles/{id}`
 
-Removes a role that no grant names. Rules: §10.13.
+Removes a role that no grant names (§10.13).
 
 ```bash
 curl -sS -X DELETE https://access.example.com/v1/admin/roles/a1b2c3d4-… \
@@ -660,7 +633,7 @@ curl -sS -X DELETE https://access.example.com/v1/admin/roles/a1b2c3d4-… \
 
 ### `GET /v1/admin/audit`
 
-Reads the change audit. Read-only. Rules: §10.15.
+Reads the change audit (§10.15).
 
 ```bash
 curl -sS "https://access.example.com/v1/admin/audit?tenant=acme&limit=20" \
@@ -676,8 +649,6 @@ curl -sS "https://access.example.com/v1/admin/audit?tenant=acme&limit=20" \
 | `format` | Optional. `json` (default), or `csv` / `jsonl` for an export. Anything else: `400 invalid_request`. |
 
 Actions: `tenant.created`, `tenant.updated`, `principal.created`, `principal.updated`, `group.created`, `group.updated`, `grant.created`, `grant.updated`, `grant.revoked`, `role.created`, `role.updated`, `role.removed`.
-
-The same statement writes the change and its audit row, so both commit or neither does. A failed call leaves no change; repeating it writes the same audit row.
 
 ```json
 {
@@ -699,11 +670,11 @@ The same statement writes the change and its audit row, so both commit or neithe
 }
 ```
 
-`operator` is the fingerprint of the calling credential: the first twelve hex characters of the token's digest. It identifies the operator without exposing the token.
+`operator` is the credential's name, or the first twelve hex characters of its digest (§10.1).
 
 #### Exporting the audit
 
-To hand the history to someone as a file, call the same endpoint with a `format`:
+Add `format` to get a file:
 
 ```bash
 # CSV, for a spreadsheet
@@ -715,7 +686,7 @@ curl -sS "https://access.example.com/v1/admin/audit?format=jsonl&tenant=acme" \
   -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" -o acme-audit.jsonl
 ```
 
-List filters apply to the export. An export carries at most 10 000 rows; page through a larger audit with `limit` and `offset`.
+Filters apply. An export holds at most 10 000 rows; page with `limit` and `offset` beyond that.
 
 ```csv
 id,at,action,targetId,tenant,operator,address,requestId
@@ -724,7 +695,7 @@ id,at,action,targetId,tenant,operator,address,requestId
 
 ## Session in twelve calls
 
-A tenant's full lifecycle, from registration to revocation, using each administration endpoint once. Requires `curl` and `jq`.
+The twelve calls of the session take a tenant from registration to revocation, using each administration endpoint once. Requires `curl` and `jq`.
 
 ```bash
 export ACCESS=https://access.example.com
@@ -787,9 +758,7 @@ curl -sS -X DELETE $ACCESS/v1/admin/roles/$ROLE_ID -H "authorization: Bearer $AC
 curl -sS -X DELETE $ACCESS/v1/admin/grants/$GRANT_ID -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
 ```
 
-To grant a role instead of a permission, send `"role":"role-editor"` in place of `"permission"` in step 5.
-
-`scripts/cli/admin-smoke.ts` runs the same sequence against a deployment:
+To grant a role, send `"role":"role-editor"` instead of `"permission"` in step 5. `scripts/cli/admin-smoke.ts` runs the same sequence against a deployment:
 
 ```bash
 ACCESS_URL=$ACCESS ACCESS_ADMIN_TOKEN=$ACCESS_ADMIN_TOKEN bun run scripts/cli/admin-smoke.ts
