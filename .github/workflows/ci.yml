@@ -1,0 +1,764 @@
+name: ci
+
+# The continuous integration of the platform.
+#
+# There were three workflows before the merge, one per repository. There
+# is one now, and the jobs of the three services are the jobs that
+# existed: the types, the style, the dead code, the boundaries, the tests
+# of the domains, the tests against a real PostgreSQL and a real Redis,
+# the compatibility of the platform and the image of each service.
+#
+# A gate that exists for one service and not for another is a gate that
+# was forgotten. The matrix below holds the jobs that are the same for
+# the three, and the jobs that are not are named after the service they
+# belong to.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # The version of the runtime the platform is built and released with.
+  BUN_VERSION: '1.4.3'
+
+jobs:
+  checks:
+    name: the types, the boundaries and the tests of ${{ matrix.workspace }}
+    runs-on: ubuntu-latest
+    strategy:
+      # One workspace that fails does not hide the state of the others.
+      fail-fast: false
+      matrix:
+        include:
+          - workspace: gateway
+            path: packages/gateway
+          - workspace: access
+            path: packages/access
+          - workspace: data
+            path: packages/data
+          - workspace: console
+            path: packages/console
+          - workspace: admin
+            path: packages/admin
+          - workspace: operators
+            path: packages/operators
+          - workspace: status
+            path: packages/status
+          - workspace: ui
+            path: packages/ui
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: install
+        run: bun install --frozen-lockfile
+
+      - name: the dependencies have no known vulnerability
+        # The dependencies are pinned to an exact version, and a pinned
+        # version does not move by itself: the scan of the tree is what
+        # says that the version that is pinned is not a known one.
+        run: bun audit --audit-level=high
+
+      - name: the types
+        run: bun run --cwd ${{ matrix.path }} typecheck
+
+      - name: the import boundaries
+        run: bun run --cwd ${{ matrix.path }} architecture
+
+      - name: the tests of the domains and of the contracts
+        run: bun run --cwd ${{ matrix.path }} test
+
+      - name: the network boundaries, the parsers and the soak of the gateway
+        # The gateway is the only service that speaks to a socket it does
+        # not own, and the suites of the network are the ones that hold
+        # the boundaries of the transport: the early answer of an upstream
+        # while the upload runs, the cancellation of the producer of the
+        # body, the refusal of the handshake of an upstream websocket and
+        # the upgrade of the caller with the headers of the gateway
+        # (docs/gateway/runtime.md). They are run here, and not only by
+        # the developer: a suite that is never run is not a suite.
+        if: matrix.workspace == 'gateway'
+        run: bun test --cwd packages/gateway test/network test/fuzz test/load
+
+  style:
+    name: the style, the dead code and the versions of the platform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: install
+        run: bun install --frozen-lockfile
+
+      - name: the lint
+        run: bun run lint
+
+      - name: the format
+        run: bun run format:check
+
+      - name: the dead code
+        # The files and the exports that nothing uses: a symbol that no
+        # program of the repository reaches is code that never runs, and
+        # it is a place where a defect can hide.
+        run: bun run dead
+
+      - name: the versions of the platform agree
+        # The version of the platform is the same in every file that
+        # holds it: the package, the image, the service and the status
+        # of the specification.
+        run: bun run versions
+
+      - name: the platform names one repository
+        # The platform is one repository, and it names one: the one it
+        # lives in, the three images it publishes and the mirrors of the
+        # compatibility suite. A file that names another repository sends
+        # a reader to a dead end, and the check refuses it.
+        run: bun run repositories:check
+
+      - name: the services are named by their role
+        # The services are named by their role, and the identifiers of a
+        # service carry the name of that role: the prefixes of its
+        # environment, the names of its metrics and the name it answers
+        # with. An identifier that carries a name that is gone is an
+        # identifier that nothing reads.
+        run: bun run vocabulary:check
+
+      - name: the links of the documentation resolve
+        # The documentation is one tree, and a link that points at
+        # nothing is a dead end for the reader.
+        run: bun run docs:check
+
+      - name: the deployment of the platform holds what it should hold
+        # Every file of a deployment is in the directory of the
+        # deployment, and every service of the platform is deployed on
+        # its own and in the composition of the three.
+        run: bun run deploy:check
+
+      - name: the tools reach every file of the platform
+        run: bun run test:platform
+
+      - name: the evidence of the decisions is real
+        # A decision that cites a test is a decision that says "this is
+        # checked here", and a test that no job of the continuous
+        # integration runs is a decision that is checked nowhere. The
+        # check reads the citations of the decisions and it proves that
+        # the paths are there and that the tests are run.
+        run: bun run evidence:check
+
+  integration:
+    name: the shared state of ${{ matrix.workspace }}
+    runs-on: ubuntu-latest
+    strategy:
+      # One workspace that fails does not hide the state of the others.
+      fail-fast: false
+      matrix:
+        include:
+          - workspace: gateway
+            path: packages/gateway
+          - workspace: access
+            path: packages/access
+          - workspace: data
+            path: packages/data
+    services:
+      # The engine of a deployment is the engine of the tests.
+      postgres:
+        image: postgres:18-alpine
+        ports:
+          - '5432:5432'
+        env:
+          POSTGRES_USER: platform
+          POSTGRES_PASSWORD: platform
+          POSTGRES_DB: platform
+        options: >-
+          --health-cmd "pg_isready -U platform"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      # The store of the shared state of a deployment.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - '6379:6379'
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: install
+        run: bun install --frozen-lockfile
+
+      - name: the atomic operations of the shared state
+        if: matrix.workspace == 'gateway'
+        run: bun test --cwd packages/gateway test/integration
+        env:
+          GATEWAY_TEST_REDIS_URL: redis://127.0.0.1:6379/0
+          GATEWAY_TEST_POSTGRES_URL: postgres://platform:platform@127.0.0.1:5432/gateway
+
+      - name: the migration of the schema of the gateway
+        if: matrix.workspace == 'gateway'
+        run: bun run --cwd packages/gateway postgres:migrate -- postgres://platform:platform@127.0.0.1:5432/gateway
+        env:
+          GATEWAY_TEST_POSTGRES_URL: postgres://platform:platform@127.0.0.1:5432/gateway
+
+      - name: the tests of the access service
+        if: matrix.workspace == 'access'
+        run: bun test --cwd packages/access test/integration
+        env:
+          ACCESS_TEST_DATABASE_URL: postgres://platform:platform@127.0.0.1:5432/access
+          ACCESS_TEST_REDIS_URL: redis://127.0.0.1:6379/0
+
+      - name: the capacity of the decision, against the server of the tests
+        if: matrix.workspace == 'access'
+        # The thresholds are the gate of the build: they are far above
+        # the targets of the documentation, because the runner of the
+        # continuous integration is a shared machine.
+        run: |
+          bun run --cwd packages/access load --requests 5000 --concurrency 20 \
+            --max-p50-ms=25 --max-p95-ms=50 --max-p99-ms=100 --min-per-second=100
+          bun run --cwd packages/access load --requests 5000 --concurrency 20 --scoped \
+            --max-p50-ms=25 --max-p95-ms=50 --max-p99-ms=100 --min-per-second=100
+        env:
+          ACCESS_DATABASE_URL: postgres://platform:platform@127.0.0.1:5432/access
+
+      - name: the database, the transactions and the worker
+        if: matrix.workspace == 'data'
+        run: bun test --cwd packages/data test/integration
+        env:
+          TEST_DATABASE_URL: postgres://platform:platform@127.0.0.1:5432/platform
+
+  compatibility:
+    name: the compatibility of the platform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The whole history: the reference of the suite is the revision
+          # that is tested, and the check of the drift reads the tags.
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: install
+        run: bun install --frozen-lockfile
+
+      - name: the gateway, the access service and the data service
+        # The references of the suite are the workspaces of this
+        # repository: the suite proves that the three still speak to each
+        # other the way their specifications say.
+        run: bun run compatibility
+
+      - name: the references were not modified
+        run: |
+          # The candidates are read-only: a change in the tree of a
+          # workspace fails the build. The paths are the ones of the
+          # manifest, so a suite that moves a workspace does not move
+          # the check with it.
+          dirty=""
+          for workspace in $(bun -e "const m = await Bun.file('compatibility.json').json(); console.log(Object.values(m.workspaces).map((w) => (typeof w === 'string' ? w : w.path)).join(' '))"); do
+            changes="$(git status --porcelain --untracked-files=no -- "${workspace}")"
+            if [ -n "${changes}" ]; then
+              dirty="${dirty}${workspace}: ${changes}"$'\n'
+            fi
+          done
+          if [ -n "${dirty}" ]; then
+            echo "the tree of a candidate was modified"
+            echo "${dirty}"
+            exit 1
+          fi
+          echo "the trees of the candidates are the ones of the revision that is tested"
+
+  images:
+    name: the image of ${{ matrix.workspace }}
+    runs-on: ubuntu-latest
+    strategy:
+      # One workspace that fails does not hide the state of the others.
+      fail-fast: false
+      matrix:
+        include:
+          - workspace: gateway
+            path: packages/gateway
+          - workspace: access
+            path: packages/access
+          - workspace: data
+            path: packages/data
+          - workspace: console
+            path: packages/console
+    services:
+      # The state of a production deployment is shared: the image is
+      # started against a real Redis and a real PostgreSQL, the way a
+      # deployment runs.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - '6379:6379'
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      postgres:
+        image: postgres:18-alpine
+        ports:
+          - '5432:5432'
+        env:
+          POSTGRES_USER: platform
+          POSTGRES_PASSWORD: platform
+          POSTGRES_DB: platform
+        options: >-
+          --health-cmd "pg_isready -U platform"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: the build of the image
+        run: docker build -f ${{ matrix.path }}/Dockerfile -t ${{ matrix.workspace }}:ci .
+
+      - name: the image runs as a user that is not root
+        run: |
+          user="$(docker image inspect ${{ matrix.workspace }}:ci --format '{{.Config.User}}')"
+          if [ -z "$user" ] || [ "$user" = "root" ] || [ "$user" = "0" ]; then
+            echo "the image runs as '$user'"
+            exit 1
+          fi
+
+      - name: the scan of the image
+        run: |
+          # A finding of a severity above high fails the build.
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD:/work" aquasec/trivy:latest \
+            image --severity HIGH,CRITICAL --exit-code 1 --no-progress ${{ matrix.workspace }}:ci
+
+      - name: the image of the gateway starts and answers its probes
+        if: matrix.workspace == 'gateway'
+        run: |
+          # The key of the identity signature: the private key that signs
+          # the identity of the requests. The upstreams are given the
+          # public key of it, and a production deployment has to set it.
+          openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 \
+            -out "$RUNNER_TEMP/identity-key.pem"
+          {
+            echo "GATEWAY_IDENTITY_SIGNING_KEY<<EOF"
+            cat "$RUNNER_TEMP/identity-key.pem"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+          # The state of the deployment is shared: the image reaches the
+          # Redis of the job through the host of the runner.
+          docker run -d --name gateway -p 8080:8080 \
+            --add-host host.docker.internal:host-gateway \
+            -e GATEWAY_SESSION_SECRET=ci-secret \
+            -e GATEWAY_IDENTITY_SIGNING_KEY \
+            -e GATEWAY_OIDC_ISSUER=https://dex.example.com/dex \
+            -e GATEWAY_OIDC_CLIENT_ID=platform \
+            -e GATEWAY_OIDC_CLIENT_SECRET=ci-client-secret \
+            -e GATEWAY_OIDC_REDIRECT_URI=https://platform.example.com/auth/callback \
+            -e GATEWAY_ACCESS_URL=https://access.example.com \
+            -e GATEWAY_ACCESS_TOKEN=ci-access-token \
+            -e GATEWAY_RATE_LIMIT_TOTAL_MAX=1000 \
+            -e GATEWAY_SESSION_URL=redis://host.docker.internal:6379/0 \
+            -e GATEWAY_SHARED_STATE_URL=redis://host.docker.internal:6379/1 \
+            -v "$PWD/deploy/config/routes.json:/etc/platform/routes.json:ro" \
+            ${{ matrix.workspace }}:ci
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/healthz > /dev/null; then
+              echo "the gateway is healthy"
+              break
+            fi
+            sleep 1
+          done
+          # The readiness of the gateway needs the shared state: the
+          # image is ready only when the sessions of the callers can be
+          # stored.
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/readyz > /dev/null; then
+              echo "the gateway is ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs gateway
+          exit 1
+
+      - name: the image of the gateway refuses to start without its secrets
+        if: matrix.workspace == 'gateway'
+        run: |
+          # The state is shared: the only thing missing here is the
+          # secret.
+          if docker run --rm \
+            -e GATEWAY_SESSION_URL=redis://127.0.0.1:6379/0 \
+            -e GATEWAY_SHARED_STATE_URL=redis://127.0.0.1:6379/1 \
+            ${{ matrix.workspace }}:ci; then
+            echo "the gateway started without a session secret"
+            exit 1
+          fi
+
+      - name: the fixtures are not part of the image
+        if: matrix.workspace == 'gateway'
+        run: |
+          if docker run --rm --entrypoint sh ${{ matrix.workspace }}:ci -c 'ls services'; then
+            echo "the fixtures are part of the production image"
+            exit 1
+          fi
+
+      - name: the stage of the fixtures builds
+        if: matrix.workspace == 'gateway'
+        run: |
+          # The fixtures need the development dependencies: the stage is
+          # built apart, so a mistake in it is a failing build and not a
+          # broken development stack.
+          docker build -f ${{ matrix.path }}/Dockerfile --target fixtures -t gateway-fixtures:ci .
+          docker run --rm --entrypoint sh gateway-fixtures:ci -c 'ls node_modules/oidc-provider'
+
+      - name: the image of the access service starts and answers its probes
+        if: matrix.workspace == 'access'
+        run: |
+          # The key that signs the tokens: it comes from the secret
+          # manager of the deployment and never from the image.
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/access-key.pem 2>/dev/null
+          docker run -d --name access -p 8081:8081 \
+            --add-host host.docker.internal:host-gateway \
+            -e ACCESS_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
+            -e ACCESS_REDIS_URL=redis://host.docker.internal:6379/0 \
+            -e ACCESS_ISSUER=https://access.example.com \
+            -e ACCESS_ADMIN_TOKEN=ci-admin-token-of-the-build \
+            -e ACCESS_DECISION_TOKEN=ci-access-token-of-the-build \
+            -e ACCESS_STATE_SECRET="$(printf '4f9a2c8e%.0s' {1..8})" \
+            -e ACCESS_SECRET_ENCRYPTION_KEY="$(printf 'b31e7d09%.0s' {1..8})" \
+            -e ACCESS_SIGNING_KEY="$(cat /tmp/access-key.pem)" \
+            -e ACCESS_SIGNING_KID=access-ci \
+            ${{ matrix.workspace }}:ci
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8081/healthz > /dev/null; then
+              echo "the service is healthy"
+              break
+            fi
+            sleep 1
+          done
+          # The logs of the container are always printed: a failure that
+          # does not say why is a failure that costs an afternoon.
+          docker logs access || true
+          if ! curl -fsS http://127.0.0.1:8081/healthz; then
+            echo "the service does not answer the probe of the health"
+            exit 1
+          fi
+          # The database answers and the migrations are applied: the
+          # service is ready.
+          status="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8081/readyz)"
+          if [ "$status" != "200" ]; then
+            echo "the readiness answered $status"
+            exit 1
+          fi
+
+      - name: the image of the access service refuses to start without its secrets
+        if: matrix.workspace == 'access'
+        run: |
+          # The environment of a production deployment is the one of the
+          # image: the service has to refuse to start and to name the
+          # secrets it misses.
+          if docker run --rm \
+            -e ACCESS_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
+            -e ACCESS_REDIS_URL=redis://host.docker.internal:6379/0 \
+            ${{ matrix.workspace }}:ci; then
+            echo "the service started without a secret"
+            exit 1
+          fi
+
+      - name: the image of the data service starts and answers its probes
+        if: matrix.workspace == 'data'
+        run: |
+          # The key that signs the cursors is a secret of the
+          # deployment: it is a file that the deployment mounts, and the
+          # service that starts without one cannot sign the pages of a
+          # collection.
+          docker run -d --name data -p 8082:8082 \
+            --add-host host.docker.internal:host-gateway \
+            -e DATA_ENVIRONMENT=development \
+            -e DATA_HOST=0.0.0.0 -e DATA_PORT=8082 \
+            -e DATA_PROCESS_ROLE=api \
+            -e DATA_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
+            -e DATA_REGISTRY_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
+            -e DATA_SCHEMA_BUNDLE_FILE=/app/packages/data/manifests/schema.json \
+            -e DATA_POLICY_BUNDLE_FILE=/app/packages/data/manifests/policies.json \
+            -e DATA_GATEWAY_BINDINGS_FILE=/etc/data/bindings.json \
+            -e DATA_ACCESS_URL=http://host.docker.internal:9 \
+            -e DATA_ACCESS_CONTEXT_TOKEN_FILE=/run/secrets/access-context.token \
+            -e DATA_CURSOR_KEY_FILE=/run/secrets/cursor.key \
+            -v "$PWD/deploy/fixtures/bindings.json:/etc/data/bindings.json:ro" \
+            -v "$PWD/deploy/fixtures/secrets:/run/secrets:ro" \
+            ${{ matrix.workspace }}:ci
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8082/healthz > /dev/null; then
+              echo 'the service of the image answers its probe'
+              exit 0
+            fi
+            sleep 1
+          done
+          echo 'the service of the image did not answer its probe'
+          docker logs data
+          exit 1
+
+      - name: the image of the data service refuses to start without the key of the cursors
+        if: matrix.workspace == 'data'
+        run: |
+          if docker run --rm \
+            --add-host host.docker.internal:host-gateway \
+            -e DATA_ENVIRONMENT=development \
+            -e DATA_HOST=0.0.0.0 -e DATA_PORT=8082 \
+            -e DATA_PROCESS_ROLE=api \
+            -e DATA_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
+            -e DATA_REGISTRY_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
+            -e DATA_SCHEMA_BUNDLE_FILE=/app/packages/data/manifests/schema.json \
+            -e DATA_POLICY_BUNDLE_FILE=/app/packages/data/manifests/policies.json \
+            -e DATA_GATEWAY_BINDINGS_FILE=/etc/data/bindings.json \
+            -e DATA_ACCESS_URL=http://host.docker.internal:9 \
+            -e DATA_ACCESS_CONTEXT_TOKEN_FILE=/run/secrets/access-context.token \
+            -v "$PWD/deploy/fixtures/bindings.json:/etc/data/bindings.json:ro" \
+            -v "$PWD/deploy/fixtures/secrets:/run/secrets:ro" \
+            ${{ matrix.workspace }}:ci; then
+            echo "the service started without the key that signs the cursors"
+            exit 1
+          fi
+
+  runtime:
+    name: the boundaries of the runtime ${{ matrix.bun }}
+    runs-on: ubuntu-latest
+    strategy:
+      # One version of the runtime does not hide the state of the others.
+      fail-fast: false
+      matrix:
+        # The contract states Bun >= 1.4.3: the oldest runtime that is
+        # supported, the patch that is released with the platform, and the
+        # newest one. A boundary that a version of the runtime changes is
+        # a boundary that the continuous integration has to notice before
+        # a deployment does.
+        #
+        # A version that cannot read the lockfile fails the job: the
+        # platform is built with a pinned lockfile, and a runtime that
+        # cannot read it is a runtime the platform cannot be built with.
+        bun: ['1.4.3', '1.4.4', 'latest']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ matrix.bun }}
+
+      - name: install
+        run: bun install --frozen-lockfile
+
+      - name: the version of the runtime
+        run: bun --version
+
+      - name: the types
+        run: bun run --cwd packages/gateway typecheck
+
+      - name: the network boundaries, the parsers and the soak of the gateway
+        # The boundaries of the transport are the ones that are not
+        # observable on the older lines of the runtime: they are the
+        # reason the gateway refuses to start on one (decision 36).
+        run: bun test --cwd packages/gateway test/network test/fuzz test/load
+
+      - name: the tests of the gateway
+        run: bun run --cwd packages/gateway test
+
+  runtime-refusal:
+    name: the gateway refuses an old runtime
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.3'
+
+      - name: install
+        run: bun install --frozen-lockfile
+
+      - name: the runtime that is refused
+        run: |
+          # The gateway refuses to start on a runtime that does not have
+          # the boundaries it relies on (decision 36), and the refusal
+          # names the boundaries that are missing. The measurements of
+          # docs/gateway/runtime.md were made on this runtime.
+          curl -fsSL -o "$RUNNER_TEMP/bun-old.zip" \
+            https://github.com/oven-sh/bun/releases/download/bun-v1.2.23/bun-linux-x64.zip
+          python3 - <<'PY'
+          import os, zipfile
+          root = os.environ['RUNNER_TEMP']
+          zipfile.ZipFile(f"{root}/bun-old.zip").extractall(f"{root}/bun-old")
+          PY
+          chmod +x "$RUNNER_TEMP/bun-old/bun-linux-x64/bun"
+          "$RUNNER_TEMP/bun-old/bun-linux-x64/bun" --version
+
+      - name: the gateway refuses to start
+        run: |
+          set +e
+          output="$("$RUNNER_TEMP/bun-old/bun-linux-x64/bun" run packages/gateway/src/main.ts 2>&1)"
+          status=$?
+          set -e
+          echo "${output}"
+          if [ "${status}" -eq 0 ]; then
+            echo "the gateway started on a runtime it refuses"
+            exit 1
+          fi
+          if ! echo "${output}" | grep -q "the gateway needs Bun 1.4.3 or later"; then
+            echo "the gateway refused the runtime for another reason"
+            exit 1
+          fi
+          echo "the gateway refuses the runtime and names the boundaries it needs"
+
+  browser:
+    name: the browser behaviour of the gateway
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: install
+        run: bun install --frozen-lockfile
+
+      - name: install the browser
+        run: bunx playwright install --with-deps chromium
+
+      - name: the cookies and the origins
+        run: bun test --cwd packages/gateway test/browser
+
+  interop:
+    name: the interoperability with a real identity provider
+    runs-on: ubuntu-latest
+    # The job gates the release: the gateway authenticates the callers
+    # against a provider of the deployment, and a change that breaks the
+    # flow against a real provider is a change that breaks the deployment
+    # of every user of the gateway.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: install
+        run: bun install --frozen-lockfile
+
+      - name: start the provider
+        run: |
+          # The version of the provider is pinned: a provider that changes
+          # the way it names the subject of a caller, or the shape of its
+          # login form, changes what the test proves.
+          docker run -d --rm --name dex -p 5556:5556 \
+            -v "$GITHUB_WORKSPACE/deploy/dex/config.ci.yaml:/etc/dex/config.yaml:ro" \
+            ghcr.io/dexidp/dex:v2.46.1 dex serve /etc/dex/config.yaml
+          for _ in $(seq 1 30); do
+            if wget -qO- http://127.0.0.1:5556/dex/.well-known/openid-configuration > /dev/null; then
+              echo "the provider is up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "the provider did not start"
+          docker logs dex
+          exit 1
+
+      - name: the flow against a real provider
+        run: bun test --cwd packages/gateway test/interop
+        env:
+          GATEWAY_TEST_DEX_ISSUER: http://localhost:5556/dex
+          GATEWAY_TEST_DEX_CLIENT_ID: platform-ci
+          GATEWAY_TEST_DEX_CLIENT_SECRET: platform-ci-secret
+          GATEWAY_TEST_DEX_EMAIL: alice@platform.test
+          GATEWAY_TEST_DEX_PASSWORD: alice-password
+
+  load:
+    name: the capacity of the gateway
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: install
+        run: bun install --frozen-lockfile
+
+      - name: measure
+        run: bun run --cwd packages/gateway load -- --requests 20000 --concurrency 100
+
+      - name: the websockets
+        run: bun run --cwd packages/gateway load -- --websockets 500
+
+  data-gates:
+    name: the gates of the data service
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        ports:
+          - '5432:5432'
+        env:
+          POSTGRES_USER: platform
+          POSTGRES_PASSWORD: platform
+          POSTGRES_DB: platform
+        options: >-
+          --health-cmd "pg_isready -U platform"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: install
+        run: bun install --frozen-lockfile
+
+      - name: the fuzzing of the trust boundary
+        run: |
+          for seed in 1 2 3 4 5 6 7 8; do
+            FUZZ_SEED=$seed FUZZ_CASES=5000 bun test --cwd packages/data test/unit/fuzz.test.ts
+            FILTER_PROPERTY_SEED=$seed FILTER_PROPERTY_CASES=1500 FILTER_PROPERTY_ROWS=40 bun test --cwd packages/data test/integration/filter.property.test.ts
+            WRITE_GUARD_SEED=$seed WRITE_GUARD_CASES=40 WRITE_GUARD_ROWS=6 bun test --cwd packages/data test/integration/write-guard.test.ts
+          done
+        env:
+          TEST_DATABASE_URL: postgres://platform:platform@127.0.0.1:5432/platform
+
+      - name: the power of the suites
+        # The gate breaks the code on purpose and checks that the suites
+        # notice. A mutation that survives is a behaviour that nothing in
+        # the repository proves.
+        run: bun run --cwd packages/data test:mutation
+
+      - name: the consumer of the client
+        run: bun test --cwd packages/data/packages/client test
+
+      - name: the client is built
+        run: bun run --cwd packages/data build:client
+
+      - name: the packed client works outside of the repository
+        run: bun run --cwd packages/data check:client-package
