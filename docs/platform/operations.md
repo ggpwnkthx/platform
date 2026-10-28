@@ -6,7 +6,7 @@ runbooks of each service are in the documentation of its contract:
 
 | Workspace | The operations |
 | --- | --- |
-| `packages/gateway/` | [docs/operations.md](../gateway/operations.md) |
+| `packages/gateway/` | [docs/operations.md](../gateway/operations.md), [docs/recovery.md](../gateway/recovery.md) |
 | `packages/access/` | [docs/operations.md](../access/operations.md) |
 | `packages/data/` | [docs/operations.md](../data/operations.md) |
 
