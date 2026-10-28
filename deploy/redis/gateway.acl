@@ -1,0 +1,2 @@
+user gateway on ~gateway:s:* ~gateway:u:* ~gateway:rl:* ~gateway:global:rl:* ~gateway:principal:rl:* ~gateway:total:rl:* ~gateway:login:rl:* ~gateway:dec:* %W~gateway:cfg:hb:* %R~gateway:cfg:active %R~gateway:cfg:rev:* %R~gateway:cfg:revs -@all +@read +set +del +sadd +srem +pexpire +incr +hincrby +hdel +eval +ping
+user gateway-control on ~gateway:* -@all +@read +@write +eval +ping

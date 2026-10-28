@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "bindings": [
+    {
+      "id": "data-api",
+      "host": "api.gateway.test",
+      "upstreamPathPattern": "/ws/{workspaceId}/v1/*",
+      "routeId": "data-api",
+      "identity": {
+        "version": "v5",
+        "algorithm": "ES256",
+        "publicKeyFile": "/run/secrets/identity-signing.public.pem"
+      }
+    }
+  ]
+}
