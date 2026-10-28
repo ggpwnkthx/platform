@@ -1,12 +1,15 @@
 # The decisions of the platform
 
 The decisions of the **contracts** are in the documentation of their
-workspace:
+workspace. Every workspace records its decisions in the same shape: the
+decisions that fix its contract are in a table whose column **Stated in**
+names the section of the specification that states each of them, and the
+decisions of the implementation follow.
 
 | Workspace | The decisions |
 | --- | --- |
 | `packages/gateway/` | [docs/decisions.md](../gateway/decisions.md) |
-| `packages/access/` | [docs/spec.md](../access/spec.md) — the decisions are in the specification |
+| `packages/access/` | [docs/decisions.md](../access/decisions.md) |
 | `packages/data/` | [docs/decisions.md](../data/decisions.md) |
 
 This document holds the decisions of the **shape of the repository**:

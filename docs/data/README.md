@@ -40,7 +40,7 @@ The parts of the platform that are common to the three services are in
 | [backup-restore.md](backup-restore.md) | The backup, the restore and the rehearsal of the restore. |
 | [troubleshooting.md](troubleshooting.md) | The failures of the service and what to do about them. |
 | [capacity.md](capacity.md) | The capacity report of the release, and what a deployment declares. |
-| [decisions.md](decisions.md) | The choices of the implementation and the reason of each one. |
+| [decisions.md](decisions.md) | The decisions that fix the contract, with their evidence, and the choices of the implementation. |
 | [development.md](development.md) | The suites of the tests, the gates of a release and the scripts of the repository. |
 | [../../CHANGELOG.md](../../CHANGELOG.md) | The changes of the service, from the newest to the oldest: the platform has one changelog. |
 | [release-readiness.md](release-readiness.md) | The gates of the version 1.0.0, one by one, and the ones that are outside the repository. |
@@ -55,8 +55,8 @@ external user, and no review that was written by somebody other than the
 author of the code. The findings that are still open are in
 [security.md](security.md).
 
-**The next release of the platform is a release candidate.** The
-gates of the repository are green, and the two gates that are outside
-the repository — a deployment with a real studio and a real tenant, and
-a review that was written by somebody else — are listed in [the
-readiness of the version 1.0.0](release-readiness.md).
+**The next release of the platform is a release candidate.** The gates
+of the repository are green, and the two gates that are outside the
+repository are listed in [the readiness of the version
+1.0.0](release-readiness.md). The state of the service is in
+[security.md](security.md).

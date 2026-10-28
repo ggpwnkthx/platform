@@ -1,9 +1,34 @@
-# The decisions of the implementation
+# The decisions of the data service
 
-The specification fixes the contract. This file records the choices the
-implementation made inside that contract, and the reason of each one.
+[specification.md](specification.md) is normative for the behavior. This
+file records the decisions behind it: what was decided, why, and where
+the evidence is. A decision that changes the contract is recorded in the
+specification and in the changelog, never only in the code.
 
-## 1. The domains own the statements, the adapters own the connections
+The decisions that shape the contract are in the table below; the column
+**Stated in** names the section of the specification that states each of
+them. The decisions of the implementation follow, in the prose that
+records the reason of each.
+
+| # | Question | Decision | Stated in | Status | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Is the service a studio? | The service is headless; Studio is a separate project. | §1.3 | resolved | `src/app/app.ts`, `test/contract/http.test.ts` |
+| 2 | Who owns the identity and the capabilities? | The access service remains the authority of the identity and of the assignment of the capabilities. | §5 | resolved | `src/domains/authorization/access-context.ts`, `test/contract/http.test.ts` |
+| 3 | Where is the boundary of the authentication? | The gateway remains the authenticated boundary; the integration uses its existing contract of signed identity. | §4 | resolved | `src/domains/gateway-context/verify.ts`, `test/contract/http.test.ts` |
+| 4 | What is the contract of the access context? | A new contract of the access context of the access service is required; the snapshots of the stale roles are not enough. | §5.2 | resolved | `src/domains/authorization/access-context.ts`, `test/integration/replicas.test.ts` |
+| 5 | Where do the workspaces and the policies live? | The workspaces and the semantics of the policies of the data belong to the backend. | §6 | resolved | `src/domains/workspaces/index.ts`, `test/contract/catalog.test.ts` |
+| 6 | What is the first supported model of the schema? | PostgreSQL, the reviewed migrations and the registered manifests are the first supported model of the schema. | §7.1 | resolved | `migrations/`, `src/platform/postgres/migrations.ts` |
+| 7 | What is the first transport? | REST is the first transport, with the metadata, the OpenAPI and a small typed client. | §9 | resolved | `src/app/openapi.ts`, `packages/client/` |
+| 8 | What is transactional? | The audit, the committed events and the receipts of the creations are the transactional parts of the correctness of a mutation. | §11 | resolved | `src/domains/audit/index.ts`, `test/integration/transactions.test.ts` |
+| 9 | How do the trusted subscribers receive? | The trusted subscribers use an explicit authority of a service principal and a delivery of at least once. | §11.4 | resolved | `src/domains/events/index.ts`, `test/integration/worker.test.ts` |
+| 10 | What is deferred? | The assets, the lifecycle of the content, the public realtime, the configuration of the workflows, GraphQL, the MCP and the AI, and the other database engines need subsequent specifications. | §2.2 | resolved | `docs/data/specification.md` §2.2 |
+
+---
+
+## The decisions of the implementation
+
+The specification fixes the contract. What follows records the choices
+the implementation made inside that contract, and the reason of each one.
 
 The records domain builds the SQL it runs: the identifiers come from the
 manifest and the values are bound parameters. The platform owns the

@@ -1601,26 +1601,9 @@ The adversarial cases are mandatory:
 
 ## 17. The decisions fixed by this contract
 
-1. The service is headless; Studio is a separate project.
-2. The access service remains the authority of the identity and of the assignment of
-   the capabilities.
-3. The gateway remains the authenticated boundary; the integration uses its
-   existing contract of signed identity.
-4. A new contract of the access context of the access service is required; the
-   snapshots of the stale roles are not enough.
-5. The workspaces and the semantics of the policies of the data belong
-   to the backend.
-6. PostgreSQL, the reviewed migrations and the registered manifests are
-   the first supported model of the schema.
-7. REST is the first transport, with the metadata, the OpenAPI and a
-   small typed client.
-8. The audit, the committed events and the receipts of the creations
-   are the transactional parts of the correctness of a mutation.
-9. The trusted subscribers use an explicit authority of a service
-   principal and a delivery of at least once.
-10. The assets, the lifecycle of the content, the public realtime, the
-    configuration of the workflows, GraphQL, the MCP and the AI, and
-    the other database engines need subsequent specifications.
+The decisions that shape this contract are in
+[decisions.md](decisions.md): the column **Stated in** of that table names
+the section of this document that states each of them. A change of one of
+them MUST amend this document and its criteria of acceptance before it
+changes the contract of the implementation.
 
-A change of these decisions MUST amend this document and its criteria
-of acceptance before it changes the contract of the implementation.
