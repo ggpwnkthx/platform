@@ -10,7 +10,7 @@ which file owns what; [decisions.md](decisions.md) records the decisions
 behind the contract. Recommendations in an implementation guide do not
 become requirements until they are recorded here.
 
-Status: 1.0.0. Runtime: Bun ≥ 1.4.3 (§15, decision 20). The gateway
+Status: 1.0.0. Runtime: Bun ≥ 1.4.3 ([decisions.md](decisions.md), decision 36). The gateway
 **refuses to start** on an older runtime: the boundaries it relies on
 are not observable there. Listener: HTTP and WebSocket on
 `GATEWAY_HOST:GATEWAY_PORT` (default `0.0.0.0:8080`).
@@ -315,7 +315,7 @@ because a setting that looks active but is not a security hole. The only
 exception is the level of the log, which falls back to `info`.
 
 The **runtime** is validated the same way and before the environment: the
-gateway needs Bun ≥ 1.4.3 (§15, decision 20) and stops on an older one,
+gateway needs Bun ≥ 1.4.3 (decision 36) and stops on an older one,
 because the boundaries it relies on — the early answer of an upstream while
 the upload runs, the cancellation of the producer of the body, the refusal
 of the handshake of an upstream websocket and the upgrade of the caller with
@@ -1765,7 +1765,7 @@ service to operate and one more connection to plan.
 ### 12.7 The control plane
 
 The gateway exposes **no administrative endpoint** and accepts **no
-administrative token** (§15, decision 55): a gateway that answers an
+administrative token** (decision 68): a gateway that answers an
 administrative request is a request an attacker reaches, and the
 administrative surface of a gateway is the surface that decides who reaches
 the applications.
@@ -2008,71 +2008,11 @@ The completion of a middleware is not the completion of an exchange.
 
 ## 15. The decision log
 
-The decisions that shape the contract. The decisions of the release, with
-the evidence that proves them, are in [decisions.md](decisions.md); the two
-lists are numbered independently.
-
-| # | Question | Decision |
-| --- | --- | --- |
-| 1 | A session cookie **and** a bearer token in the same request | The bearer token authenticates the request, but the request is guarded by the cross-site rules, because the cookie was attached by the browser (§5.1, §8). |
-| 2 | Cross-site requests refused, cross-site navigations allowed | They are different things. The state-changing requests from another site are refused; the safe navigations are allowed unless `GATEWAY_CSRF_STRICT` is set. `/auth/logout` is refused from another site whatever its method (§8). |
-| 3 | The order of the pipeline | The endpoints of the gateway are matched before the dispatcher. In the dispatcher the route is matched **before** the limiters, and a request that matches no route is counted by the limiters and then refused (§2.3). |
-| 4 | An upstream url with a base path | The base path of the upstream is prefixed to the path of the request; the query string of the request replaces the one of the upstream; fragments are dropped; an upstream that carries a query or a fragment is rejected at load time (§3.1, §11.1). |
-| 5 | A failure while the body streams | The status line is already sent: the body stream ends, the client sees a truncated answer, the outcome is recorded as `aborted`. No JSON error is invented for a response that already started (§11.3). |
-| 6 | The meaning of `bodyMs` | An **idle** budget, rearmed on every chunk. `responseMs` and `firstByteMs` are total budgets of their phase. The upload is governed by the idle `bodyMs` budget and is not part of `responseMs` (§11.2). |
-| 7 | The names of the budgets | `connectMs` → `responseMs` (the answer of the upstream), `headersMs` → `firstByteMs` (the first byte of its body). The old names described something else than they did and are refused by the configuration (§11.2). |
-| 8 | An upstream that answers before the upload is over | The answer of the upstream wins: the status line was already sent. The `413` is only for a failure that is discovered before the answer arrives (§11.3). |
-| 9 | The origin of a WebSocket handshake | A handshake that carries the session cookie has to name an allowed origin; one without an origin is refused. The check is not relaxed by `GATEWAY_CSRF_STRICT` and happens before the upstream is contacted (§8, §10). |
-| 10 | The cookie of the browser | It follows the session: every request that is authenticated by a session refreshes it, with a `Max-Age` of the smaller of the idle lifetime that is left and the maximum age that is left (§5.3). |
-| 11 | The request identifier | A middleware around the gateway endpoints and the dispatcher: the `x-request-id` of the request is reused when it is valid, a UUID is generated otherwise, and the answer carries it (§2.1). |
-| 12 | A maximum age of `0` | Unlimited: the cap does not exist (§5.3). |
-| 13 | An answer without a body | The `firstByteMs` budget is not armed for a `HEAD` request nor for the statuses of a final response that carry no body (§11.2). |
-| 14 | `103` and `101` | `103` is interim: the gateway waits for the final response and forwards it. `101` is a protocol switch: it belongs to the WebSocket upgrade, and the HTTP path refuses it (§11.2). |
-| 15 | The validation of an OIDC token | The nonce, the state, the PKCE verifier and the id token are required in the browser flow; the state is single use; the cookie attributes are fixed (§5.2, §5.4, §5.5). |
-| 16 | The maximum lifetime of a session | The idle lifetime and a maximum age counted from the creation, whatever the activity. The maximum age is the real bound (§5.3). |
-| 17 | The secret of the identity signature | `GATEWAY_SESSION_SECRET`, from which the key is derived; unset means a random per-process secret, which is refused in production (§7.4). |
-| 18 | The readiness after a failed reload | The gateway stays ready and keeps the last valid configuration; the failure is visible in `/readyz`, in the log and in the metrics (§12.3). |
-| 19 | The organization of the code | The policy, the use cases, the ports and the adapters live together; the app, the platform and the runtime are explicit boundaries. The public imports and the dependency directions are checked in CI (§14). |
-| 20 | The version of the runtime | The runtime is **Bun ≥ 1.4.3**. The boundaries the gateway relies on are not observable on the 1.2 line. The gateway **refuses to start** on an older runtime. The measurements are in [runtime.md](runtime.md). |
-| 21 | The forwarding headers of a client | The standard `forwarded` header is removed in both directions. The `Authorization` header of the caller is forwarded to the upstream as it is, unless the route says otherwise (§7.1). |
-| 22 | The host of a request | The effective host is the `x-forwarded-host` of a trusted proxy, and the `Host` header otherwise. It decides the route, the origin and the signature (§7.3). |
-| 23 | The limits | Four scopes: the deployment, the caller over all the routes, the caller on one route and the authenticated caller on one route. A scope keyed by an address cannot bound a flood that spreads over many addresses, and it cannot tell two tenants behind the same address apart (§9). |
-| 24 | The metrics of the requests | Every answer of the gateway is counted, the refusals included. The labels are bounded: `unmatched` for the requests that matched no route, `other` for a method or a status that is not tracked (§12.1). |
-| 25 | The revalidation of a WebSocket | An open connection is revalidated: the route, the session and the access are checked again, and the connection is closed with `1008` when one of them fails (§10). |
-| 26 | The number of exchanges at the same time | The exchanges are bounded by `GATEWAY_MAX_CONCURRENT_REQUESTS`, so a client that opens a request and never sends its body cannot hold the resources of the process (§11.2). |
-| 27 | The state of a deployment | The state of a production deployment is shared: `GATEWAY_SESSION_URL` and `GATEWAY_SHARED_STATE_URL` must name a Redis server or a Postgres server, or `GATEWAY_ALLOW_MEMORY_STATE=true` says explicitly that the deployment is a single node that accepts the in-process state (§4). |
-| 28 | The policy of the cross site requests | It is a property of the route: `crossSite` refuses the navigations from another site on the routes that declare it, and the policy of the deployment applies to the others (§8). |
-| 29 | The `Authorization` header of the caller | It is forwarded to the upstream by default, and a route that does not need it says so with `forwardAuthorization: false` (§7.1). |
-| 30 | The latency of a revocation | It is a property of the route: `accessCacheTtlMs` is the lifetime of the cached decisions of that route, and `0` makes the revocation on it immediate (§6). |
-| 31 | The handshake of a websocket | It follows the header policy of the http path: the cookies of the gateway never reach an upstream (§7.1, §10). |
-| 32 | The TLS of the connections to the upstreams | The gateway verifies the certificate of the upstream with the authority of the deployment and presents the certificate of the deployment when the upstream asks for one (§11.1.2). The upstream of a websocket is served over plain http: the websocket client of the runtime cannot speak TLS. |
-| 33 | The backend of the shared state | The sessions, the limits and the cached decisions live in a Redis server or in a Postgres server: the scheme of the url picks one of them, and the two hold the same three things with the same contract (§4, §12.5, §12.6). |
-| 34 | The protocol of the access service | It is published: the request, the answer and the statuses are in §6.1, and a conformance suite checks an implementation against it. A reference implementation ships with the project (§6.1). |
-| 35 | The policy that is running | The gateway writes the policy it is running in its log, once per generation, and it names the settings that are permissive (§12.2). |
-| 36 | The budget of an attempt to an upstream | An attempt that has another upstream behind it is abandoned after `upstreamAttemptMs`, and the next upstream is tried. The budget of the answer still bounds the whole exchange (§11.4). |
-| 37 | The body that may be sent again | A body that fits in `replayMaxBytes` is held in memory, so that the request may be sent to a second upstream. A request that changes the state of an upstream is never sent twice (§11.4). |
-| 38 | The methods of a route | A route may name the methods it accepts. A route that names the method of the request wins over one that names none, and the one that names none is the fallback of the others (§3.3). |
-| 39 | The grace of an outage of the access service | It is off by default, and a decision that is served while the service is down is served only when it allows the caller. A denial that is served instead of the outage would hide the outage from the operator (§6.2). |
-| 40 | A route that names no workspace | The access service is asked about it only when the route asks for it with `accessCheck`. A deployment without workspaces is served by the same protocol, and the workspace of the request is then absent (§6.3). |
-| 41 | The body of a request that is never sent again | It is not held in memory: it would be held for nothing, and the upstream would only be reached once the whole body arrived (§11.4). |
-| 42 | The compatibility of the release | The contracts of §16.1 are extended by a `MINOR` release and changed by a `MAJOR` one, and the changelog of the release says what changed (§16). |
-| 43 | The removal of the symmetric format of the identity | The format `v4` is removed in the `1.0` release: the key of that format was shared with the upstreams, so an upstream that verified an identity could mint one as well. The gateway signs `v5` only, and a deployment without a key signs with a key that is generated for its process (§7.4). |
-| 44 | The freeze of the contracts | The contracts of §16.1 are frozen in the `1.0` release: they were reviewed one by one, and the `1.0` release is the one that changes them. A `MINOR` release extends them and never changes one (§16.2). |
-| 45 | The number of requests inside the gateway | They are bounded by `GATEWAY_MAX_PENDING_REQUESTS`, apart from the exchanges, which are bounded by `GATEWAY_MAX_CONCURRENT_REQUESTS`. The admission covers the phase that waits for a dependency, which the cap of the exchanges never reaches (§2.4, §11.2). |
-| 46 | The health of the access service | The service is not called while it is failing: after `GATEWAY_ACCESS_BREAKER_FAILURES` failures the requests are answered at once with the unavailability of the service, instead of waiting for a call that is going to fail. The breaker only refuses (§6.4). |
-| 47 | The reason of a denial in the metrics | The **code** of the reason is counted when the service sends one. A service that sends no code is counted with the legacy rule, so a deployment written against the `1.0` keeps working (§6.5). |
-| 48 | The schedule of the revalidation of a WebSocket | It is jittered: the first check of a connection is spread over the interval and its period is drawn around it, so the connections of the deployment do not ask the access service at the same instant (§10). |
-| 49 | The lifetime of a bearer token | It is bounded by `GATEWAY_OIDC_MAX_TOKEN_AGE_MS`, and a bearer token has to carry an expiry whatever the bound is. The bound turns the removal of a caller from the provider into a delay that the deployment chooses (§5.4). |
-| 50 | The limits while the shared state is down | The deployment chooses: the request is counted in the window of the process (`local`, the default), every request is allowed (`open`), or every request is refused (`closed`). The degradation is published (§9). |
-| 51 | The caller in the log | The log of a request carries the subject of the caller and the workspace of the request: a gateway that decides who reaches what has to be able to say who reached what (§12.2). |
-| 52 | The administrative surface | It is a **separate process**, `gateway-control`, that acts on the shared state directly. The gateway exposes no administrative endpoint and accepts no administrative token: a gateway that answers an administrative request is a request an attacker reaches (§12.7). |
-| 53 | The source of the route table | The route table is a file, or it is a list of **immutable revisions** in the shared state with a pointer that names the active one. The writes are compare and swap, the pointer is watched at least once a second, and every table goes through the same validation as the file of a deployment (§3.4). |
-| 54 | The precedence of the routes | The **host** is decided before the method: a route of a more specific host is never shadowed by a route of a less specific one, not even when the less specific one names the method of the request. A catch-all that names `GET` does not answer the `GET` of a host that has a route of its own (§3.3). |
-| 55 | The address of the caller | The chain of `x-forwarded-for` is read from the right, and the number of the proxies (`GATEWAY_TRUSTED_PROXY_HOPS`) is what tells the entries the proxies wrote from the ones a client injected. The address of the caller is never an entry a client chose (§7.3). |
-| 56 | The subject of the caller | It is written **as it is**. A subject that cannot be written into a header is refused with a `500`, and it is never rewritten: a sanitization of the subject turns two callers into one (§7.1, §7.4). |
-| 57 | The ranges of the trusted proxies | The ranges of the environment **replace** the ones of the configuration file when the environment names them, and the file's ranges apply otherwise. A deployment that cannot narrow the ranges of its file is a deployment that trusts what it did not choose (§3.1, §7.3). |
-
----
+The decisions that shape the contract are in [decisions.md](decisions.md):
+the column **Stated in** of that table names the section of this document
+that states each of them. A decision that changes the contract is
+recorded in this document, in that table and in the changelog, never only
+in the code.
 
 ## 16. The compatibility of the release
 

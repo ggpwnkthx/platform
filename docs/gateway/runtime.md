@@ -46,4 +46,4 @@ ways its specification does not describe. The check is in
 The specification states `Bun ≥ 1.4.3`. The measurements above show that
 the boundaries the specification relies on are not observable on the 1.2
 line, so the version of the runtime is part of the contract and is pinned.
-The change is recorded in [spec.md](spec.md) (§15, decision 20) and in [decisions.md](decisions.md).
+The change is recorded in [decisions.md](decisions.md) (decision 36).
