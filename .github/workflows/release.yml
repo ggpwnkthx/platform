@@ -173,7 +173,7 @@ jobs:
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
           echo "the image of the release is ${{ env.REGISTRY }}/${{ matrix.service }}@${digest}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: digest-${{ matrix.service }}
           path: digest-${{ matrix.service }}.txt
@@ -459,7 +459,7 @@ jobs:
           # The digest of the image: it is what a deployment pins.
           docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}'
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: image-${{ matrix.service }}-${{ needs.version.outputs.tag }}
           path: ${{ matrix.service }}-${{ needs.version.outputs.tag }}.tar.gz

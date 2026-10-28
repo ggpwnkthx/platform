@@ -121,7 +121,7 @@ jobs:
           cd packages/data/packages/client
           npm publish --access public --provenance
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: data-client
           path: ${{ runner.temp }}/client/*.tgz
@@ -244,7 +244,7 @@ jobs:
           (cd dist && tar -czf "${service}-${version}-${platform}.tar.gz" "${service}-${version}-${platform}")
           tar -tzf "dist/${service}-${version}-${platform}.tar.gz"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.service }}-${{ matrix.platform }}
           path: dist/${{ matrix.service }}-*.tar.gz
