@@ -10,6 +10,29 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The titles of the documents are short, and no sentence is said twice
+
+The titles of the documents named their service and their subject at
+once — "The access service — Specification", "The data service — HTTP
+API" — and a reader of the index of the documentation read the name of
+the service four times in a row before reaching the subject of the
+document. The titles are the subject of the document now, and the group
+of the document says which service it belongs to: the console shows the
+group above the title of the document and in the breadcrumb of it.
+
+The documents also said each other twice. Forty-six sentences were
+carried by two documents at once: the rule of the decisions of the
+platform was in the decisions of the three services, the rules of the
+catalog of a workspace were in the architecture, the operations and the
+specification of the data service, and the rules of the work were in the
+architecture of the gateway and of the access service. Each of them now
+says it once and points at the document that holds it.
+
+The check of the documentation reads the sentences of the prose and
+refuses a sentence that two documents carry, or that one document
+carries twice. The changelog is not read by it: a release that repeats
+the words of an older release is a changelog that tells the truth.
+
 ### The documentation page of the console reads like a document
 
 The page of a document repeated its title twice — once in the frame of

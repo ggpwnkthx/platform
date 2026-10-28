@@ -35,7 +35,7 @@ export const MANIFEST_END = '<!-- compatibility-manifest:end -->'
  * the repository, and the directory of the data service is the one that
  * holds its own documents.
  */
-const SPECS_FILE = '../../docs/data/specification.md'
+const SPECS_FILE = '../../docs/data/spec.md'
 
 /** The guide of the compatibility with the platform. */
 const GUIDE_FILE = '../../docs/data/compatibility.md'

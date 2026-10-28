@@ -1,42 +1,30 @@
-# The console
+# Console
 
-The console is the interface of the platform: the one web application in
-which people read and change the data of their workspaces, operators
-administer the access to it, and anybody reads the state of the
-services. It is a **client** of the gateway, of the access service and of
-the data service: it speaks their contracts, it reaches none of their
-databases, and it decides nothing.
+The platform's web interface: people read and change workspace data, operators administer access, and anyone can check service status. It is a client of the gateway, access service and data service; it reaches no database and decides nothing.
 
-The workspace is [`packages/console/`](../../packages/console/). It is an
-application of [HonoX](https://github.com/honojs/honox), rendered on the
-server and built with Vite; the parts of a page that live in the browser
-are the islands of HonoX.
+The workspace is [`packages/console/`](../../packages/console/), a [HonoX](https://github.com/honojs/honox) app rendered on the server and built with Vite. Interactive parts of a page are HonoX islands.
 
-The console is one application with five places: the **overview**, the
-**workspaces**, the **operators**, the **status** and the
-**documentation**. Every place is a page rendered on the server; the
-islands of HonoX make some of them live in the browser.
+It has five places: **overview**, **workspaces**, **operators**, **status** and **documentation**.
 
-| If you are | Read |
+## Start here
+
+| You want to | Read |
 | --- | --- |
-| somebody who wants to know what the console shows | [the places of the console](spec.md#62-the-places) |
-| somebody who wants to read the documentation of the platform | [the documentation of the console](spec.md#64-the-documentation) |
-| a reviewer of the console | [the specification](spec.md), then [the security](security.md) |
-| an operator who deploys it | [the operations](operations.md) |
-| a developer of the console | [the README of the workspace](../../packages/console/README.md) |
+| See what each page shows | [Places](spec.md#62-places) |
+| Know how the docs are served | [Documentation](spec.md#64-documentation) |
+| Review the console | [Specification](spec.md), then [Security](security.md) |
+| Deploy it | [Operations](operations.md) |
+| Develop it | [Workspace README](../../packages/console/README.md) |
 
-## The documents
+## Pages
 
-| Document | What it holds |
+| Page | What it covers |
 | --- | --- |
-| [spec.md](spec.md) | **The normative contract.** The behaviour of the console: the requests, the sessions, the scope of an operator and the places it shows. A change of behaviour is a change of this document first. |
-| [security.md](security.md) | What the console holds, what it never holds and where the trust stops. |
-| [operations.md](operations.md) | The environment, the deployment, the probes and the rotation of the secrets. |
-| [../../CHANGELOG.md](../../CHANGELOG.md) | The releases of the platform, and the changes of the contract of each one. |
+| [spec.md](spec.md) | **Normative contract**: requests, sessions, operator scope, pages. Change this first when behavior changes. |
+| [security.md](security.md) | Credentials the console holds and never holds, and where trust stops |
+| [operations.md](operations.md) | Environment, deployment, probes, secret rotation |
+| [CHANGELOG.md](../../CHANGELOG.md) | Platform releases and each one's contract changes |
 
-A reference to `§N` in the code, in the tests or in these documents is a
-reference to a section of [spec.md](spec.md).
+A `§N` reference in code, tests or these pages points to a section of [spec.md](spec.md).
 
-The console has no contract that another program depends on: every answer
-it shows is the answer of a service, and the contract of that answer is
-the specification of that service.
+No other program depends on a console contract: every answer it shows comes from a service, under that service's spec.

@@ -1,47 +1,35 @@
 # Security
 
-The platform is three services, and the security policy of the platform
-is the policy of the three of them.
+How to report a vulnerability in the platform, and what happens next. One policy covers the gateway, the access service and the data service.
 
-## The supported versions
+## Supported versions
 
-| Workspace | The supported line |
+| Workspace | Supported |
 | --- | --- |
-| `packages/gateway/` | The release line of the platform |
-| `packages/access/` | The release line of the platform |
-| `packages/data/` | The release line of the platform |
+| `packages/gateway/` | The platform release line |
+| `packages/access/` | The platform release line |
+| `packages/data/` | The platform release line |
 
-A release of the platform carries the three services. A finding is
-fixed in the release line of the platform, and it reaches the three
-services at the same time.
+Each release carries all three services, so a fix in the platform release line reaches all of them at once.
 
-## The reporting of a finding
+## Reporting
 
-Report it privately, and not in a public issue:
+Report privately, never in a public issue:
 
-- open a **security advisory** of the repository, or
-- write to `security@ggpwnkthx.com`.
+- open a **security advisory** on the repository, or
+- email `security@ggpwnkthx.com`.
 
-Include the service, the version, the way to reproduce it and the impact
-you believe it has.
+Include the service, version, reproduction steps and the impact you expect.
 
 ## What happens next
 
-1. The finding is confirmed, or it is closed with the reason why it is
-   not one.
-2. A fix is prepared on a branch that is not published.
-3. A release is cut, and the release carries the fix and the changelog
-   of it.
-4. The advisory is published, and it names the versions that are
-   affected and the version that fixes it.
+1. We confirm the finding, or close it with the reason it isn't one.
+2. We prepare a fix on an unpublished branch.
+3. We cut a release containing the fix and its changelog entry.
+4. We publish the advisory, naming the affected versions and the fixed version.
 
-A finding that is already public is a disclosure that happened: it is
-handled at the speed of the disclosure, and the release that fixes it is
-cut as soon as the fix is proven.
+A finding that is already public is handled at the pace of the disclosure: the fix ships as soon as it is proven.
 
-## The model of the security of the platform
+## Security model
 
-The trust boundaries, the way a secret crosses them and the way the
-least privilege is held are in
-[the security of the platform](docs/platform/security.md). The model of each
-service is in the documentation of its contract.
+Trust boundaries, secret handling and least privilege: [platform security](docs/platform/security.md). Each service's model is in its own docs.

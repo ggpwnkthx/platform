@@ -1,127 +1,101 @@
-# The access service — Release
+# Release
 
-What has to be true before the access service carries a customer's
-traffic, how a tenant is moved onto it, how the image is delivered, and
-what this release does **not** do.
+What must be true before the access service carries customer traffic, how tenants move onto it, how the image is delivered, and what this release does **not** do. Platform-wide release mechanics (tag, three images, three binaries, release gates) are in [platform release](../platform/release.md).
 
-The **release of the platform** — the tag, the three images, the three
-binaries and the gates of the release — is described in
-[the release of the platform](../platform/release.md). This document is
-the release of the access service: what has to be true before it
-carries the traffic of a tenant.
+## 1. Readiness checklist
 
----
+Someone who did not write the service checks each item. Every answer is a fact (a test, a measurement, a document); "it should be fine" is not an answer.
 
-## 1. The readiness checklist
-
-It is checked, item by item, by a person who did not write the service.
-Every item is answered with a fact: a test, a measurement, a document. "It
-should be fine" is not an answer.
-
-### The correctness
+### Correctness
 
 | Item | Answer |
 | --- | --- |
-| Every rule of the specification has a test | The kinds of tests are in [architecture.md](architecture.md) §"The tests". `bun run test` runs the tests of this repository, and `bun run test:compat` runs the compatibility suite. |
-| The compatibility suite passes and the diff of the gateway is empty | `test/compatibility/gateway.test.ts` runs the gateway of the platform, unchanged, against the access service. The runner (`bun run test:compat`) uses the workspace of the gateway, and the CI checks that the tracked files of the reference are the ones of the revision that is tested. The release runs the suite **again**, against the published image of the release and not against the source. |
-| The migration applies on an empty database and on a database of the previous release | `test/integration/migrations.test.ts`: the migration applies on an empty database, it is idempotent and it refuses a database that holds a migration the code does not know. |
-| A failure of every dependency is a denial, and it was tested with the dependency really down | The database that is down (a contract test), the decision that does not answer in time, the provider that is not reachable, the store that is down. |
-| The reason of a denial reaches neither the caller nor a log line that a caller can read | The reason is in the log of the decision and in the answer of the contract; the gateway hides it from the caller. |
+| Every spec rule has a test | Test kinds: [architecture.md](architecture.md#tests). `bun run test` runs the repository tests; `bun run test:compat` runs the compatibility suite. |
+| The compatibility suite passes and the gateway diff is empty | `test/compatibility/gateway.test.ts` runs the platform gateway, unchanged, against the access service. The runner (`bun run test:compat`) uses the gateway workspace, and CI checks the reference's tracked files match the tested revision. The release reruns the suite against the published image, not the source. |
+| Migrations apply on an empty database and on the previous release's database | `test/integration/migrations.test.ts`: applies on an empty database, is idempotent, and refuses a database holding a migration the code does not know. |
+| Every dependency failure is a denial, tested with the dependency really down | Database down (contract test), decision timeout, unreachable provider, store down. |
+| Denial reasons reach neither the caller nor any caller-readable log | The reason is in the decision log and the contract response; the gateway hides it from the caller. |
 
-### The security
-
-| Item | Answer |
-| --- | --- |
-| The tokens are compared in constant time | `src/observability/secrets.ts` — the two values are hashed first. |
-| The client secrets are encrypted at rest and are never returned, never logged | `src/platform/postgres/secrets.ts`, `test/integration/tenants.test.ts`. |
-| The issuer of a tenant is an https url | The guard of the addresses: a production deployment refuses the private addresses and the addresses that are not http (`src/platform/bun/address.ts`). |
-| The `idp_issuer` cannot reach an internal address | The host is resolved before the call and every address it resolves to has to be a public one. |
-| The refusal pages escape what they show | `src/app/pages.ts`. |
-| The state of the login is encrypted, is single use and expires | `src/domains/identity/state.ts`, `test/contract/login.test.ts`. |
-| The authorization code is single use and is bound | `src/domains/provider/exchange.ts`, `test/contract/login.test.ts`. |
-| The password of the database is not in the image | The environment of the deployment; the image carries no secret. |
-| The image runs as a non-root user, has no shell and is scanned | `Dockerfile`, the job `image` of the CI. |
-| The security review has no open finding above "low" | [security.md](security.md). One finding is "medium" and its plan is a migration of the deployments, not a change of the service. |
-| The rotation of the keys of a provider does not lock the logins out | The keys are read again when a token names a key that the cache does not have (spec §6.6); the test is `test/contract/rotation.test.ts`. |
-
-### The data
+### Security
 
 | Item | Answer |
 | --- | --- |
-| The eight tables are the only domain tables, and the schema of the production is the schema of the migrations | The migrations of the platform; the bookkeeping of the migrations (`access_schema_migrations`) is a table of the infrastructure and not of the domain. |
-| The backup is automatic, the restore is rehearsed, and the time of the recovery is written down | [operations.md](operations.md) §"The backup and the restore". The rehearsal of the quarter is the moment where the times are measured. |
-| The migration that removes a column is two releases after the one that stops using it | No migration removes a column: the eight tables are the model (spec §14). |
-| The audit of the administration is durable and is not in the logs alone | The audit is the table `admin_audit`: every change writes a row that names the action, the thing that changed, the tenant, the operator, the address and the request. The row is written by the statement that writes the change, so the two are committed together and a change that is not audited does not exist. It is read with `GET /v1/admin/audit`. |
-| The tenants are isolated by the database, and not only by the application | The row level security of the eight tables, the scope of a statement (`src/platform/postgres/scope.ts`) and the refusal of a production deployment whose role bypasses the policies (spec §3.10). The test is `test/integration/isolation.test.ts`. |
-| The membership of a group never names a principal of another tenant | The foreign keys of the schema and the check of the domain: a member that is not a principal of the tenant is a `404` (spec §10.9). |
+| Tokens compared in constant time | `src/observability/secrets.ts`; both values are hashed first. |
+| Client secrets encrypted at rest, never returned or logged | `src/platform/postgres/secrets.ts`, `test/integration/tenants.test.ts`. |
+| A tenant issuer is an https URL | The address guard: production refuses private addresses and non-http addresses (`src/platform/bun/address.ts`). |
+| `idp_issuer` cannot reach an internal address | The host is resolved before the call and every resolved address must be public. |
+| Refusal pages escape their content | `src/app/pages.ts`. |
+| Login state is encrypted, single use and expiring | `src/domains/identity/state.ts`, `test/contract/login.test.ts`. |
+| The authorization code is single use and bound | `src/domains/provider/exchange.ts`, `test/contract/login.test.ts`. |
+| The database password is not in the image | It comes from the deployment environment; the image carries no secret. |
+| The image runs as non-root, has no shell and is scanned | `Dockerfile`, CI job `image`. |
+| No open security finding above "low" | [security.md](security.md#open-findings). One finding is "medium"; its plan is a deployment migration, not a service change. |
+| Rotating a provider's keys does not lock out logins | Keys are re-read when a token names a key not in the cache (§6.6); tested in `test/contract/rotation.test.ts`. |
 
-### The availability
-
-| Item | Answer |
-| --- | --- |
-| The service is stateless: two replicas, one image, one digest | The state of a login is in the cookie of the browser and the code of a login is in the store; the image is promoted by its digest. |
-| The drain of a replica does not break a login in flight | Five seconds of grace; the logins that are in flight finish (spec §12.4). |
-| The store of the codes is a shared one, or the deployment is a single node that says so | `ACCESS_ALLOW_MEMORY_STATE` is the switch: a production deployment without a Redis refuses to start. |
-| The provider of a tenant that is down degrades the tenant, not the service | The provider is called per tenant; the other tenants keep working. |
-| The alerts are wired to a channel somebody reads | [operations.md](operations.md) §"The alerts". The wiring is done with the platform of the deployment. |
-| The runbooks exist and were walked through once | [operations.md](operations.md) §"The runbooks". The rehearsal is the moment of the cutover of the first tenant. |
-
-### The observability
+### Data
 
 | Item | Answer |
 | --- | --- |
-| The logs are structured, carry the request id and redact the secrets | `src/observability/logging.ts`; the request id is in every line of a request and in the answer. |
-| The metrics of the specification are exposed, with the bounded labels | `src/observability/metrics.ts`; the label of the tenant is bounded at a hundred values. |
-| A dashboard shows the rate of the decisions, the latency, the rate of the refusals of the login and the failures by dependency | The metrics exist; the dashboard is made with the platform of the deployment. |
-| The log of a decision can be found from the request id of the gateway, through the subject and the workspace | The line of the decision carries the request id, the subject, the workspace and the route. |
+| The eight tables are the only domain tables, and the production schema is the migrations' schema | The platform migrations. Migration bookkeeping (`access_schema_migrations`) is infrastructure, not domain. |
+| Backups are automatic, restores rehearsed, recovery times written down | [operations.md](operations.md#backup-and-restore). Times are measured at the quarterly rehearsal. |
+| A column is dropped two releases after the code stops using it | No migration drops a column: the eight tables are the model (§14). |
+| The admin audit is durable, not only in logs | The `admin_audit` table: each change writes a row naming the action, target, tenant, operator, address and request, in the same statement as the change, so an unaudited change cannot exist. Read it with `GET /v1/admin/audit`. |
+| Tenants are isolated by the database, not only the application | Row level security on the eight tables, statement scope (`src/platform/postgres/scope.ts`), and production refusing a role that bypasses policies (§3.10). Tested in `test/integration/isolation.test.ts`. |
+| Group membership never names another tenant's principal | Schema foreign keys plus a domain check: a member that is not a principal of the tenant is `404` (§10.9). |
 
-### The delivery
+### Availability
 
 | Item | Answer |
 | --- | --- |
-| The image is built once and promoted by digest | §5 below. The workflow of the release builds it once, publishes it, and every gate of the release runs against its digest. |
-| The CI runs the type check, the lint, the tests, the architecture test, the compatibility test, the check of the version of the release and the scan | The jobs `check`, `compatibility` and `image` of `.github/workflows/ci.yml`. |
-| The rollback of the image is rehearsed | The rehearsal is the moment of the cutover. |
-| The version of the service is in the answer of `/healthz` and in the log of the start | `src/app/endpoints.ts` and the log `the listener started`. |
+| The service is stateless: two replicas, one image, one digest | Login state is in the browser cookie and login codes in the store; the image is promoted by digest. |
+| Draining a replica does not break in-flight logins | Five seconds of grace; in-flight logins finish (§12.4). |
+| The code store is shared, or the deployment is an explicit single node | `ACCESS_ALLOW_MEMORY_STATE` is the switch; production without Redis refuses to start. |
+| A tenant's provider outage degrades that tenant, not the service | Providers are called per tenant; other tenants keep working. |
+| Alerts reach a channel someone reads | [operations.md](operations.md#alerts). Wired with the deployment platform. |
+| Runbooks exist and were walked through once | [operations.md](operations.md#runbooks). Rehearsed at the first tenant's cutover. |
 
-### The items that need a deployment
+### Observability
 
-| Item | When it is checked |
+| Item | Answer |
 | --- | --- |
-| The capacity on the hardware of the production | During the cutover, with `scripts/ops/load.ts` against the server of the deployment. |
-| The saturation of the pool and the memory of the process | During the cutover, with the dashboard of the deployment. |
-| The rehearsal of the restore and the time of the recovery | Once a quarter, on the environment of the rehearsal. |
-| The wiring of the alerts and the rehearsal of the rollback | During the cutover of the first tenant, by a person who did not write the service. |
+| Logs are structured, carry the request id and redact secrets | `src/observability/logging.ts`; the request id is on every line of a request and in the response. |
+| Spec metrics are exposed with bounded labels | `src/observability/metrics.ts`; the tenant label is bounded at a hundred values. |
+| A dashboard shows decision rate, latency, login refusal rate and failures by dependency | The metrics exist; the dashboard is built on the deployment platform. |
+| A decision's log line can be found from the gateway's request id, via subject and workspace | The decision line carries request id, subject, workspace and route. |
 
----
+### Delivery
 
-## 2. The rollout
+| Item | Answer |
+| --- | --- |
+| The image is built once and promoted by digest | See [Delivery](#5-delivery): the release workflow builds and publishes once, and every gate runs against that digest. |
+| CI runs type check, lint, tests, architecture test, compatibility test, release version check and scan | Jobs `check`, `compatibility` and `image` in `.github/workflows/ci.yml`. |
+| Image rollback is rehearsed | Rehearsed at the cutover. |
+| The service version is in `/healthz` and the startup log | `src/app/endpoints.ts` and the log line `the listener started`. |
 
-| Phase | What is true | What is done | How it goes back |
+### Items needing a deployment
+
+| Item | When checked |
+| --- | --- |
+| Capacity on production hardware | During the cutover, with `scripts/ops/load.ts` against the deployment's server. |
+| Pool saturation and process memory | During the cutover, on the deployment's dashboard. |
+| Restore rehearsal and recovery times | Quarterly, in the rehearsal environment. |
+| Alert wiring and rollback rehearsal | During the first tenant's cutover, by someone who did not write the service. |
+
+## 2. Rollout
+
+| Phase | State | Work | Rollback |
 | --- | --- | --- | --- |
-| 0 — Dark | the access service runs, nobody calls it. | The deployment, the probes, the metrics, the alerts. | Stop the deployment. |
-| 1 — Shadow | the access service answers the decisions in parallel with the service in production. | The comparison of §3, every day. | Stop the shadow. |
-| 2 — The first tenant, in staging | A whole tenant lives on the access service. | The tenant is created, the principals are created, the grants are created, the gateway of the tenant is switched. | The gateway of the tenant goes back to the old access service. The data of the access service stays. |
-| 3 — The first tenant, in production | The same, with real traffic. | A week of monitoring, then the second tenant. | The same. |
-| 4 — The last tenant | The old access service is empty. | It is decommissioned. | The data is kept for the retention of the audit. |
+| 0 — Dark | The access service runs; nobody calls it. | Deployment, probes, metrics, alerts. | Stop the deployment. |
+| 1 — Shadow | The access service answers decisions in parallel with the production service. | The [shadow comparison](#3-shadow-comparison), daily. | Stop the shadow. |
+| 2 — First tenant, staging | A whole tenant lives on the access service. | Create the tenant, principals and grants; switch the tenant's gateway. | Point the tenant's gateway back at the old service. Access service data stays. |
+| 3 — First tenant, production | Same, with real traffic. | A week of monitoring, then the second tenant. | Same. |
+| 4 — Last tenant | The old access service is empty. | Decommission it. | Data is kept for the audit retention period. |
 
-The switch of a tenant is one change of the configuration of its
-gateway: the issuer, the client id, the client secret and the access
-url. The browser is redirected to the access service, the sessions of
-the gateway are new, and the callers log in again. That is the only
-interruption of the cutover, and it is a login, not an outage.
+Switching a tenant is one gateway configuration change: issuer, client id, client secret and access URL. Browsers are redirected to the access service, gateway sessions are new, and callers log in again. That login is the only interruption; it is not an outage.
 
-**The gate of every phase**: the compatibility suite is green, the
-alerts are silent, and the difference between the answers of the access
-service and the ones of the old service is empty.
+## 3. Shadow comparison
 
----
-
-## 3. The shadow comparison
-
-Before the cutover, the access service answers the decisions in parallel
-with the access service that is in production, and a tool compares the
-two answers on the same requests.
+Before cutover, the access service answers decisions in parallel with the production access service, and a tool compares both answers on the same requests.
 
 ```
 OLD_ACCESS_URL=https://old-access.example.com \
@@ -131,109 +105,69 @@ ACCESS_DECISION_TOKEN=… \
 bun run scripts/compat/shadow.ts --requests decisions.jsonl
 ```
 
-The requests are read from a file, one json per line:
+Requests are read from a file, one JSON object per line:
 
 ```
 {"subject":"…","workspaceId":"…","routeId":"…","roles":[]}
 ```
 
-The tool reports, per subject and per workspace, the answers that differ,
-and it prints a fingerprint of the set of the differences, so the same
-difference on every day is recognisable. **It exits non-zero while there
-is a difference**: the shadow period does not end before the difference is
-empty.
+The tool reports differing answers per subject and workspace and prints a fingerprint of the set of differences, so a recurring difference is recognisable day to day. **It exits non-zero while any difference remains**; the shadow period does not end until there are none.
 
-The expected difference is one: the decisions of the old service are the
-ones that are hard-coded in it, and they are replaced by the grants.
-Every other difference is a bug of the access service.
+One difference is expected: the old service's hard-coded decisions, which grants replace. Any other difference is an access service bug. The tool only reads from the old service and asks the access service; **it never writes to the access service**.
 
-The tool reads the decisions of the old service and asks the access
-service; **it never writes in the access service**.
+## 4. Tenant cutover
 
----
+The cutover is when a gateway deployment's tenant starts living in the access service.
 
-## 4. The cutover of a tenant
+### Phase gates
 
-The cutover is the moment where a tenant of a gateway deployment starts
-to live in the access service.
+Every phase must pass all three gates:
 
-### The gate of every phase
-
-| The gate | How it is checked |
+| Gate | Check |
 | --- | --- |
-| The compatibility suite is green | `bun run test:compat` — the gateway of the reference, unchanged, against the access service. |
-| The alerts are silent | The dashboards of [operations.md](operations.md) §"The alerts" show nothing for the period of the phase. |
-| The difference of the answers is empty | `bun run scripts/compat/shadow.ts --requests decisions.jsonl` answers zero difference. |
+| Compatibility suite green | `bun run test:compat`: the unchanged reference gateway against the access service. |
+| Alerts silent | The [alerts](operations.md#alerts) show nothing for the phase's period. |
+| No answer differences | `bun run scripts/compat/shadow.ts --requests decisions.jsonl` reports zero differences. |
 
-### Phase 2 — the first tenant, in the staging environment
+### Phase 2: first tenant in staging
 
-1. **The tenant is registered** in the environment of the staging: the
-   calls of [operations.md](operations.md) §"The first tenant".
-2. **The principals are registered**: one call per external identity of
-   the tenant. The external identity is the `sub` of the provider of the
-   tenant — it is the key of the mapping (spec §6.2). **One call carries
-   the whole list** (§10.4): the batch is the call that onboards a
-   tenant.
-3. **The grants are registered**: one call per permission, on a workspace,
-   on a route. The first ones are copied from the access service that is
-   in production, so the shadow comparison has something to compare.
-   **One call carries the whole list** (§10.6).
-4. **The shadow runs for a day**: the tool of the comparison asks the two
-   services the same decisions.
-5. **The gateway of the staging is switched**: the issuer, the client id,
-   the client secret and the access url become the ones of the access
-   service.
-6. **The check**: a browser logs in at the provider of the tenant and
-   reaches an upstream of the staging. The metrics of the gateway count
-   the decisions of the access service.
+1. **Register the tenant** in staging with the calls in [First tenant](operations.md#first-tenant).
+2. **Register principals**, one per external identity. The external identity is the tenant provider's `sub`, the mapping key (§6.2). **One batch call carries the whole list** (§10.4) and onboards the tenant.
+3. **Create grants**, one per permission on a workspace and route. Copy the first ones from the production access service so the shadow comparison has something to compare. **One batch call carries the whole list** (§10.6).
+4. **Run the shadow for a day**, sending both services the same decisions.
+5. **Switch the staging gateway**: issuer, client id, client secret and access URL point at the access service.
+6. **Verify**: a browser logs in at the tenant's provider and reaches a staging upstream. Gateway metrics count the access service's decisions.
 
-### Phase 3 — the first tenant, in production
+### Phase 3: first tenant in production
 
-1. The same sequence, with the production environment.
-2. The **rehearsal of the rollback** is done before the switch: the
-   previous configuration of the gateway is written down, and it is applied
-   once on a deployment of the staging to prove that it works.
-3. The switch of the gateway of the tenant.
-4. The monitoring of the first day: the rate of the refusals of the
-   login, the latency of the decision, the rate of the denials.
-5. **The way back**: the configuration of the gateway is put back and the
-   tenant is served by the old access service again. The data of the
-   access service stays: the principals and the grants are not lost, and
-   the tenant can be switched again without registering anything.
+1. Repeat the sequence in production.
+2. **Rehearse the rollback before switching**: record the gateway's previous configuration and apply it once on a staging deployment to prove it works.
+3. Switch the tenant's gateway.
+4. Monitor the first day: login refusal rate, decision latency, denial rate.
+5. **Rollback**: restore the gateway configuration and the old access service serves the tenant again. Access service data stays, so the tenant can be switched again without re-registering anything.
 
-### What is not done during the cutover
+### Not done during cutover
 
-- **No change in the gateway.** The gateway of the tenant is configured, it
-  is not modified. The compatibility suite is the proof.
-- **No migration of the data of the old service.** The old service has its
-  own data; the access service has its own. The principals are registered
-  one by one and the grants are created one by one.
-- **No change of the sessions of the gateway.** The callers log in again:
-  it is a login, not an outage.
-- **No change of the schema in the middle of the cutover.** The migrations
-  are backward compatible for one release: a rollback of the image does not
-  need a rollback of the schema.
+- **No gateway change.** The tenant's gateway is configured, not modified; the compatibility suite proves it.
+- **No data migration from the old service.** Each service keeps its own data. Principals and grants are registered one by one.
+- **No change to gateway sessions.** Callers log in again.
+- **No schema change mid-cutover.** Migrations are backward compatible for one release, so an image rollback never needs a schema rollback.
 
-### The checklist of the cutover
+### Cutover checklist
 
-- [ ] The tenant, its principals and its grants are registered in the
-      environment of the target.
-- [ ] The shadow comparison answers zero difference for a day.
+- [ ] The tenant, its principals and its grants are registered in the target environment.
+- [ ] The shadow comparison reports zero differences for a day.
 - [ ] The compatibility suite is green.
 - [ ] The twelve calls of the session answer (`scripts/cli/admin-smoke.ts`).
-- [ ] The signing key of the access service is the one of the environment of the target,
-      and the gateway is configured with the same issuer.
-- [ ] The rollback of the configuration of the gateway is written down.
-- [ ] The dashboards of the tenant are watched for the first day.
+- [ ] The access service's signing key is the target environment's, and the gateway uses the same issuer.
+- [ ] The gateway configuration rollback is written down.
+- [ ] The tenant's dashboards are watched for the first day.
 
----
+## 5. Delivery
 
-## 5. The delivery
-The image of the access service is built once and promoted by its
-digest. Nothing is rebuilt between the environments: the image that was
-tested is the image that runs.
+The image is built once and promoted by digest. Nothing is rebuilt between environments: the tested image is the image that runs.
 
-### The build
+### Build
 
 ```bash
 docker build -f packages/access/Dockerfile -t access:$(git rev-parse --short HEAD) \
@@ -241,222 +175,149 @@ docker build -f packages/access/Dockerfile -t access:$(git rev-parse --short HEA
   --build-arg VERSION=$(node -p "require('./packages/access/package.json').version") .
 ```
 
-The labels of the image carry the version and the revision, so an
-operator knows what is running without reading the logs:
+Image labels carry the version and revision, so operators can tell what is running without reading logs:
 
 ```bash
 docker image inspect access:<tag> --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
 ```
 
-The base image is pinned by digest (`oven/bun:1.4.3-alpine@sha256:…`): a
-tag is a name that moves, and the image of a release has to be the image
-that was built, scanned and promoted.
+The base image is pinned by digest (`oven/bun:1.4.3-alpine@sha256:…`): a tag moves, and a release image must be exactly the one built, scanned and promoted.
 
-### The release
+### Tagging
 
-A release is a tag. The tag names the version of the package, and the
-workflows refuse a tag that does not.
+A release is a tag naming the package version; workflows refuse a tag that does not.
 
-**The tag is cut by the workflow `tag.yml`.** It runs when the CI of a
-commit of the main branch is green: it reads the version of the package,
-it compares it with the highest version the tags of the repository name,
-and it creates and pushes the tag `v<version>` when the version went up.
-It is the tag of the commit that the CI proved, and not the head of the
-branch: two commits that land in the meantime do not change what is
-released.
+**`tag.yml` cuts the tag** after CI passes on a main-branch commit. It reads the package version, compares it with the highest tagged version, and pushes `v<version>` when the version went up. It tags the commit CI proved, not the branch head, so commits landing meanwhile do not change what is released.
 
-**The release is dispatched, and not triggered by the push.** The tag is
-pushed with the token of the workflow, and GitHub does not start a
-workflow on a push that carries it: a release that waits for the push
-never starts. The workflow of the tag therefore **dispatches** the
-workflows of the release with the tag it cut, and the dispatch is the
-exception to that rule. Both workflows of the release can be dispatched
-by hand as well, and they ask for the tag they release:
+**The release is dispatched, not triggered by the push.** The tag is pushed with the workflow token, and GitHub does not start workflows on such pushes. So `tag.yml` **dispatches** the release workflows with the tag it cut, and only when it cut the tag itself (an existing tag means the release already started). Both release workflows can also be dispatched by hand with the tag:
 
 ```bash
 gh workflow run release.yml --ref v1.0.0 -f tag=v1.0.0
 gh workflow run release-binaries.yml --ref v1.0.0 -f tag=v1.0.0
 ```
 
-The tagger refuses what the release would refuse:
+The tagger refuses whatever the release would refuse:
 
-| Situation | What the tagger does |
+| Situation | Tagger behavior |
 | --- | --- |
-| The versions of the project do not agree | It refuses, and it names the files that disagree (`bun run versions`). |
-| The version of the package is not the version of a release | It refuses: three numbers, and no pre-release. |
-| The version did not go up | Nothing: the release of that version is already cut. |
-| The version went down | It refuses: a release does not go backwards. |
+| Project versions disagree | Refuses and names the disagreeing files (`bun run versions`). |
+| Package version is not a release version | Refuses: three numbers, no pre-release. |
+| Version did not go up | Nothing: that release is already cut. |
+| Version went down | Refuses: releases do not go backwards. |
 
-The version of the release is written in **five** places, and
-`bun run versions` checks that they agree:
+The release version appears in **five** places, and `bun run versions` checks they agree:
 
-| The file | What it holds |
+| File | Holds |
 | --- | --- |
-| `packages/access/package.json` | The version of the package. |
-| `packages/access/Dockerfile` | The version of the image (`ARG VERSION`). |
-| `packages/access/src/runtime/version.ts` | The version of the service. |
-| `docs/access/spec.md` | The status of the specification. |
-| `docs/access/README.md` | The state of the release in the documentation. |
+| `packages/access/package.json` | Package version. |
+| `packages/access/Dockerfile` | Image version (`ARG VERSION`). |
+| `packages/access/src/runtime/version.ts` | Service version. |
+| `docs/access/spec.md` | Spec status. |
+| `docs/access/README.md` | Release state in the docs. |
 
-A version that goes up is a change of the five places in one commit, and
-the check names the files that disagree:
+Bump all five in one commit; `bun run versions` fails and names any file that disagrees.
 
-```bash
-bun run versions   # it fails and names the files that disagree
-```
-
-The tag can also be cut by hand, and the workflows of the release do not
-care who cut it:
+You can also tag by hand; the release workflows don't care who cut the tag. A tag pushed by a person starts the release directly, since it is not a workflow push:
 
 ```bash
 git tag -a v1.0.0 -m "platform v1.0.0" && git push origin v1.0.0
 ```
 
-A tag that a human pushes starts the release by itself: the push is not
-the push of a workflow, and the workflows of the release run on it. A
-tag that the workflow of the tag cut does not — the workflow dispatches
-the release instead, and it dispatches it only when it cut the tag
-itself: a tag that was already there means that the release was already
-started.
+### Release workflows
 
-Two workflows run on the tag, and both of them check that the version of
-the package, the version of the image, the version of the service and the
-status of the specification are the same (`bun run versions`):
+Both run on the tag and check that package, image, service and spec versions agree (`bun run versions`).
 
 | Workflow | What it does |
 | --- | --- |
-| `release.yml` | It **builds the image of the release once** and publishes it with its provenance and its SBOM. Every gate of the release then runs against the **digest** of that build: it starts it with the configuration of a deployment, proves that it answers the decisions of a gateway and that it refuses to start without a secret and with a role that bypasses the isolation, drains it, scans it, and runs the **gateway of the reference against it**. It exports the published image as an artifact of the run, and it withdraws the image from the registry when a gate fails. |
-| `release-binaries.yml` | It compiles the service for every supported platform, proves that the binary of the runner starts, applies the schema of the release and serves, and publishes the archives on the release of the tag. |
-The image of the release is published with two tags, the tag of the
-release (`v1.0.0`) and the version itself (`1.0.0`), and it is promoted
-by its digest.
+| `release.yml` | **Builds the release image once** and publishes it with provenance and SBOM. Every gate then runs against that build's **digest**: start it with a deployment configuration, prove it answers gateway decisions, refuses to start without a secret or with a role that bypasses isolation, drains, passes the scan, and passes the **reference gateway's suite**. Exports the image as a run artifact, and withdraws it from the registry if a gate fails. |
+| `release-binaries.yml` | Compiles the service for every supported platform, proves the runner's binary starts, applies the release schema and serves, and publishes the archives on the tag's release. |
 
-**The image is built once.** The build is published, and every gate of
-the release — the probes, the decisions, the refusals, the drain, the
-scan and the gateway of the reference — runs against the **digest** of
-that build, never against a tag and never against a second build. The
-image that was tested is the image that runs: the digest that the gates
-proved is the digest that the deployment pins.
+The image is published with two tags, the release tag (`v1.0.0`) and the bare version (`1.0.0`), and promoted by digest. No gate ever runs against a tag or a second build: the digest the gates proved is the digest deployments pin.
 
-The image is published **before** the gates run, because the gates have
-to run against the bytes that ship. A release whose gates failed does
-not ship: the job `withdraw` removes the image from the registry, and
-the tag of the release points at nothing.
+The image is published **before** the gates so they test the bytes that ship. If a gate fails, the `withdraw` job removes the image from the registry and the release tag points at nothing.
 
-The binaries are the service and nothing else: the runtime of the release
-is inside the binary. **The schema of the release travels with the
-binary**: the directory `migrations/` is deployed next to the executable,
-and the binary finds it there. An archive holds the two, and the archive
-of a platform is extracted in the directory of the deployment:
+Binaries contain only the service; the runtime is inside the binary. **The release schema travels with the binary**: `migrations/` sits next to the executable and the binary finds it there. Each platform archive holds both; extract it into the deployment directory:
 
 ```bash
 tar -xzf access-1.0.0-linux-x64.tar.gz -C /opt/access
 /opt/access/access-1.0.0-linux-x64
 ```
 
-The embedded PostgreSQL of a development machine is not part of a binary:
-it is a development dependency, and it is not in the image of a
-deployment either. A binary names a PostgreSQL server with
-`ACCESS_DATABASE_URL`, and a service that does not find the schema refuses
-to start and says where it looked: a service that starts against a
-schema it does not understand is worse than a service that does not
-start.
+Embedded PostgreSQL is a development dependency, in neither the binaries nor the deployment image. A binary names a PostgreSQL server with `ACCESS_DATABASE_URL`. If it cannot find the schema, it refuses to start and says where it looked: starting against a schema it does not understand would be worse than not starting.
 
-### The scan and the SBOM
+### Scan and SBOM
 
-The CI builds the image, scans it and writes its SBOM. A finding of a
-severity above "high" fails the build:
+CI builds the image, scans it and writes its SBOM. A finding above "high" fails the build:
 
 ```bash
 trivy image --severity HIGH,CRITICAL --exit-code 1 access:ci
 syft access:ci -o spdx-json > access.spdx.json
 ```
 
-The SBOM is published with the image: the deployment knows what it runs.
+The SBOM is published with the image so deployments know what they run.
 
-### The promotion
+### Promotion
 
 | Stage | What happens |
 | --- | --- |
-| The commit | The branch is merged when the CI is green and the specification is changed if the change moved a rule. |
-| The review | One reviewer other than the author. |
-| The image | The image is built once, tagged with the commit and pushed with its digest. **The digest is what is deployed.** |
-| The promotion | The same digest goes from the development environment to the staging one and from the staging one to the production one. Nothing is rebuilt in between. |
-| The deployment | A rolling replacement of the replicas, with the readiness probe as the gate. The drain of a replica takes the logins in flight with it. |
-| The rollback | The previous digest is deployed again. The service is stateless except for the database, and the migrations are backward compatible for one release. |
+| Commit | Merged when CI is green, with the spec updated if a rule changed. |
+| Review | One reviewer other than the author. |
+| Image | Built once, tagged with the commit, pushed with its digest. **The digest is what is deployed.** |
+| Promotion | The same digest moves from development to staging to production. Nothing is rebuilt. |
+| Deployment | Rolling replacement gated by the readiness probe. A draining replica finishes its in-flight logins. |
+| Rollback | Redeploy the previous digest. The service is stateless apart from the database, and migrations are backward compatible for one release. |
 
-### The drain
+### Drain
 
-On `SIGTERM` the replica answers `503 draining` to its readiness, stops
-accepting new work, gives the running logins five seconds and exits. The
-replacement of a replica waits for it: the deployment gives it the grace
-period of the drain (10 s) and the rollout waits for the pod to be gone.
+On `SIGTERM` a replica answers `503 draining` on readiness, stops accepting new work, gives running logins five seconds, and exits. The deployment gives it a 10 s drain grace period, and the rollout waits for the pod to be gone.
 
-### The rollback
+### Rollback
 
 ```bash
 kubectl -n platform rollout undo deployment/platform-access
 kubectl -n platform rollout status deployment/platform-access
 ```
 
-The rollback is rehearsed: a deployment that was never rolled back is a
-deployment that does not know how to roll back.
+Rehearse the rollback: a deployment never rolled back does not know how to roll back.
 
-### The CI
+### CI
 
-The CI of the repository runs, on every push:
+On every push:
 
-| Job | What it runs |
+| Job | Runs |
 | --- | --- |
-| `check` | The types, the lint, the format, the import boundaries, the version of the release, the tests of this repository (`bun run test`), and the integration tests on a PostgreSQL server. |
-| `compatibility` | `bun run test:compat`: the gateway of the platform, unchanged, against the access service, and the proof that the tracked files of the reference are the ones of the revision that is tested. |
-| `image` | The build of the image, the scan, the SBOM, the user it runs as, its size, its refusal to start without a secret, its refusal to start with a role that bypasses the isolation, its start with a deployment and its drain. |
+| `check` | Types, lint, format, import boundaries, release version, repository tests (`bun run test`), and integration tests on a PostgreSQL server. |
+| `compatibility` | `bun run test:compat`: the unchanged platform gateway against the access service, plus proof that the reference's tracked files match the tested revision. |
+| `image` | Image build, scan, SBOM, runtime user, size, refusal to start without a secret or with a role that bypasses isolation, startup with a deployment configuration, and drain. |
 
-The `compatibility` job is the one that may never be skipped: a red
-compatibility job is a red build, whatever the rest says.
+`compatibility` may never be skipped: a red compatibility job is a red build. `tag.yml` runs after CI and never cuts a tag before the commit's CI is green or one the release would refuse (see [Tagging](#tagging)).
 
-**The workflow `tag.yml` runs after the CI.** It cuts the tag of the
-release when the version of the package went up, and it dispatches the
-workflows of the release with that tag: the push of the tag carries the
-token of the workflow, and GitHub does not start a workflow on a push
-that carries it. It never cuts a tag before the CI of the commit is
-green, and it never cuts a tag that the release would refuse (§5).
+## 6. Release support
 
----
+A release is supported while current and for a window of **one release** after: a deployment on release `N` moves to `N+1`, and `N` is not patched after that.
 
-## 6. The support of a release
-
-A release is supported while it is the current one, and for the window
-that follows it. The window is **one release**: a deployment that is on
-the release `N` moves to the release `N+1`, and the release `N` is not
-patched after that.
-
-| Question | The answer |
+| Question | Answer |
 | --- | --- |
-| Which release is the current one? | The version of [`package.json`](../../packages/access/package.json), and the tag `v<version>` of the repository. `bun run versions` checks that the package, the image, the service, the specification and the documentation name the same release. |
-| Which gateway is a release tested against? | The revision of the repository, which is the workspace of the gateway. The compatibility suite of the release runs the real gateway of that revision, unchanged, against the published image of the release. |
-| What changes in a patch release? | The behaviour does not: the contract of the specification does not change in a patch. A change of behaviour is a change of the specification, in the same commit as the code, and it is a minor release. |
-| What happens to the migrations? | They are backward compatible for one release: a rollback of the image does not need a rollback of the schema. The migration that removes a column is two releases after the one that stops using it. |
-The changes of every release are in
-[`CHANGELOG.md`](../../CHANGELOG.md).
+| Which release is current? | The version in [`package.json`](../../packages/access/package.json) and the repository tag `v<version>`. `bun run versions` checks that package, image, service, spec and docs name the same release. |
+| Which gateway is a release tested against? | The repository's revision of the gateway workspace. The release's compatibility suite runs that gateway, unchanged, against the published image. |
+| What changes in a patch release? | Not behavior: the spec contract never changes in a patch. A behavior change updates the spec in the same commit as the code and is a minor release. |
+| What about migrations? | Backward compatible for one release, so an image rollback never needs a schema rollback. A column is dropped two releases after the code stops using it. |
 
----
+Each release's changes are in [`CHANGELOG.md`](../../CHANGELOG.md).
 
 ## 7. What this release does not do
-The deferred features are in [spec.md](spec.md) §14: SAML, the console,
-SCIM, the directory sync and the linking of the accounts. There is no
-column, no table, no flag and no endpoint for any of them, and a test
-asserts that they are absent.
 
-The limits that are **known** and that a deployment has to know about:
+Deferred features are listed in §14: SAML, the console, SCIM, directory sync and account linking. None has a column, table, flag or endpoint, and a test asserts their absence.
 
-| The limit | What it means |
+Known limits a deployment must be aware of:
+
+| Limit | Meaning |
 | --- | --- |
-| **One gateway per tenant.** | The deployment of the gateway holds one client id, so one deployment serves one tenant of the access service. The shared client (`shared_client`) is the escape hatch and it is refused by default (spec §1.4, §5.2). |
-| **The membership of a group is a list, not a table.** | `groups.members` is a `uuid[]`, so the membership is not paginated and a group holds its members in one row. The **database** checks the membership: a constraint trigger refuses a member that is not a principal of the tenant of the group (spec §3.5). The membership is **indexed** (a GIN index), so the decision does not walk the groups of the tenant; a tenant with a large number of groups still pays the price of the containment on every decision. |
-| **The deadline of a decision is the deadline of the pool.** | The `statement_timeout` of the connections of the pool is the tightest deadline of the service (`ACCESS_DECISION_TIMEOUT_MS`). A statement that takes too long is stopped by PostgreSQL and the connection is given back at once. The embedded database of a development machine does not interrupt a statement: on a development machine the deadline of the process is the only one, and the statement keeps the connection until the server answers it. |
-| **The bearer token of the decisions is platform-wide.** | It is the scheme of the gateway of the reference, and it is not scoped. The credentials of a tenant are scoped and can replace it gateway by gateway (spec §8.8, and the third open finding of [security.md](security.md)). The rotation of the token is a rolling change now (spec §4.3.1). |
-| **There is no refresh token.** | The tokens of the access service live five minutes and the gateway re-authenticates the caller after that (spec §7.2). |
-| **The audit of the administration is a table, not a report.** | The audit is durable and it is queryable (`GET /v1/admin/audit`), and it is **exported**: the endpoint answers `csv` and `jsonl` besides the paginated `json`, so the history of the platform leaves the platform in a file (spec §10.15). It has no summary and no retention policy: the table grows for as long as the deployment keeps it, and the operator reads it with `curl` and with SQL. |
-| **The capacity numbers are measured on a development machine.** | The numbers of [operations.md](operations.md) §"The capacity" are the numbers of a development machine, against a PostgreSQL server over the loopback. The numbers of a deployment are measured during the cutover. |
-| **The compatibility suite needs the reference.** | It clones the repository of the platform from the network. An environment without the network gives it a mirror (`COMPAT_MIRROR`) or a local repository (`GATEWAY_REPOSITORY`): the sources and the refusals are in [compatibility.md](compatibility.md). |
+| **One gateway per tenant.** | A gateway deployment holds one client id, so it serves one tenant. The shared client (`shared_client`) is the escape hatch and is refused by default (§1.4, §5.2). |
+| **Group membership is a list, not a table.** | `groups.members` is a `uuid[]`, so membership is not paginated and lives in one row. The **database** enforces it: a constraint trigger refuses a member that is not a principal of the group's tenant (§3.5). Membership has a GIN **index**, so decisions don't walk the tenant's groups, but a tenant with many groups still pays the containment cost on every decision. |
+| **The decision deadline is the pool's deadline.** | The pool connections' `statement_timeout` (`ACCESS_DECISION_TIMEOUT_MS`) is the service's tightest deadline: PostgreSQL stops a slow statement and the connection is returned at once. Embedded PostgreSQL does not interrupt statements, so locally the process deadline is the only one and the statement holds its connection until the server answers. |
+| **The decision bearer token is platform-wide.** | It is the reference gateway's scheme and is not scoped. Scoped tenant credentials can replace it gateway by gateway (§8.8; [open finding 2](security.md#open-findings)). Its rotation is rolling (§4.3.1). |
+| **No refresh token.** | Access service tokens live five minutes; then the gateway re-authenticates the caller (§7.2). |
+| **The admin audit is a table, not a report.** | It is durable, queryable (`GET /v1/admin/audit`) and **exportable** as `csv` or `jsonl` besides paginated `json`, so history can leave the platform as a file (§10.15). It has no summary and no retention policy: the table grows as long as the deployment keeps it, and operators read it with `curl` and SQL. |
+| **Capacity numbers come from a development machine.** | The [capacity numbers](operations.md#capacity) were measured on a development machine against a PostgreSQL server over loopback. Deployment numbers are measured during cutover. |
+| **The compatibility suite needs the reference.** | It clones the platform repository over the network. Offline, give it a mirror (`COMPAT_MIRROR`) or a local repository (`GATEWAY_REPOSITORY`); see [compatibility.md](compatibility.md). |

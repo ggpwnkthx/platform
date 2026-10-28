@@ -1,36 +1,30 @@
-# The architecture of the service
+# Architecture
 
-## What the service is
+The data service is a **headless, permission-aware data API**: versioned HTTP endpoints over a
+workspace's records, with every answer filtered by deployment policies and access-service grants.
 
-The data service is a **headless, permission aware data API**. It
-exposes versioned HTTP endpoints over the records of a workspace, and
-every answer it gives is filtered by the policies of the deployment and
-by the grants of the access service.
+It is a modular monolith with an optional worker process and no user interface. A studio, website,
+script or other service are all clients of the same API; none has a privileged database connection.
 
-It is a modular monolith with an optional worker process. It serves no
-user interface: a studio, a website, a script or another service are
-all clients of the same API, and none of them has a privileged
-connection to the database.
+## Platform
 
-## The platform
-
-| Project | What it owns |
+| Project | Owns |
 | --- | --- |
-| **The access service** | The identity of the principals, the tenants, the groups, the permission keys and the grants. |
-| **The gateway** | The sessions of the browser, the admission of a workspace, the limits of the gateway, and the signature of the identity of the caller. |
-| **The data service** | The workspaces, the registered collections, the data policies, the records, the audit history and the committed events. |
-| **Studio** | A separate project. It is a client of the API and nothing more. |
+| **Access service** | Principal identities, tenants, groups, permission keys and grants. |
+| **Gateway** | Browser sessions, workspace admission, gateway limits, and signing the caller's identity. |
+| **Data service** | Workspaces, registered collections, data policies, records, audit history and committed events. |
+| **Studio** | A separate project; just an API client. |
 
-The rules of the separation:
+Separation rules:
 
-- The backend never reads the tables of the access service, and it never keeps a second
-  directory of the identities or of the grants.
-- The backend never mints an identity: it verifies the signature of the
-  gateway with the **public** key of the gateway.
-- The backend never creates a session and never runs a login flow: the
-  forwarded credentials are not a source of data permissions.
+- The backend never reads access-service tables and never keeps a second directory of identities or
+  grants.
+- The backend never mints an identity: it verifies the gateway's signature with the gateway's
+  **public** key.
+- The backend never creates a session or runs a login flow; forwarded credentials are not a source of
+  data permissions.
 
-## The topology of a request
+## Request flow
 
 ```
 clients ──▶ the gateway ──▶ data backend ──▶ PostgreSQL
@@ -39,138 +33,86 @@ clients ──▶ the gateway ──▶ data backend ──▶ PostgreSQL
                 └─────────────────▶ the access service (the login and the decisions)
 ```
 
-The path of a data request:
+1. **Gateway forwards.** It signs the caller's identity and forwards the request with the
+   `x-gateway-signature` header.
+2. **Backend verifies the signature.** It rebuilds the gateway's canonical payload from method, path,
+   query, host and headers and verifies it with the route's public key. The transmitted payload never
+   feeds the decision.
+3. **Backend resolves the workspace.** A narrow reader reads the workspace registry and, in the same
+   statement, the workspace catalog (collections and policy bundle).
+4. **Backend asks the access service for the context.** The request carries the subject, the
+   workspace's tenant, the workspace and the route; the answer is the principal's permission keys or a
+   refusal.
+5. **Backend enforces policies.** The scope is set on the transaction, the statement projects only
+   policy-granted fields, and a write is authorized by one complete policy.
+6. **Backend commits.** Record, audit entry, domain event and creation receipt commit in one
+   transaction.
 
-1. **The gateway forwards.** the gateway signs the identity of the caller
-   and forwards the request to the backend with the header
-   `x-gateway-signature`.
-2. **The backend verifies the signature.** It rebuilds the canonical
-   payload of the gateway from the method, the path, the query, the
-   host and the headers, and it verifies it with the public key of the
-   route. The transmitted payload is never an input of the decision.
-3. **The backend resolves the workspace.** It reads the registry of the
-   workspaces with a narrow reader, and it reads the catalog of the
-   workspace — its collections and its bundle of policies — in the same
-   statement.
-4. **The backend asks the access service for the context.** The request carries the
-subject, the tenant of the workspace, the workspace and the route; the
-access service answers the permission keys of the principal, or a
-refusal.
-5. **The backend enforces the policies.** The scope is set on the
-   transaction, the statement projects only the fields that a policy
-   grants, and the write is authorized by one complete policy.
-6. **The backend commits.** The record, the audit entry, the domain
-event and the receipt of a creation commit in one transaction. The order
-of the steps is fixed. A business operation never starts without a
-verified principal and a resolved workspace, and the context of the
-access service is fetched outside of the transaction of the business
-data. of the access service is fetched outside of the transaction of the
-business data.
+The order is fixed. No business operation starts without a verified principal and a resolved
+workspace, and the access context is fetched outside the business-data transaction.
 
-## The storage
+## Storage
 
-PostgreSQL 15 or later in a deployment, with the row level security of
-the database as the isolation of the tenants and of the workspaces.
-The development machine, the tests and the continuous integration use
-PostgreSQL 18.
+Deployments run PostgreSQL 15 or later, with row-level security isolating tenants and workspaces.
+Local development, tests and CI use PostgreSQL 18.
 
-Every business table carries `tenant_id` and `workspace_id`, and the
-scope is set on the transaction with `set_config(…, true)`. A pooled
-connection never carries the scope of another request, and a statement
-that runs without a scope is refused by the policies of the tables.
+- Every business table carries `tenant_id` and `workspace_id`; the scope is set per transaction with
+  `set_config(…, true)`. A pooled connection never carries another request's scope, and table
+  policies refuse a statement run without a scope.
+- Privilege separation is the core of the design: migration owner, API runtime role, narrow registry
+  reader, delivery role and maintenance role are five roles, and the API never holds the other four's
+  credentials. Roles are described in [Operations](operations.md).
+- Tables come only from the repository's reviewed migrations. The running service never creates or
+  alters a table.
+- Collection history is optional. The versions table mirrors the collection table, and the statement
+  making a change also writes the version image, so both commit together and a write the guard
+  refuses writes no image. History is read under deployment policies like a record. The audit keeps
+  its own rule: changed field names, never values. See [spec](spec.md) §11.
 
-The separation of the privileges is the point of the design: the
-migration owner, the runtime role of the api, the narrow registry
-reader, the delivery role and the maintenance role are five different
-roles, and the api never holds the credentials of the other four. The
-roles are in [migrations.md](migrations.md).
+## Workspace catalog
 
-The tables are created by the reviewed migrations of the repository. The
-service never creates a table and never alters one while it runs.
+A workspace's **catalog** is what it serves: its registered collections and the policy bundle that
+applies to it ([spec](spec.md) §7.5). The catalog is a **logical registry**: the physical schema
+stays global and reviewed, the logical schema is per workspace. The registry is read in one
+statement and nothing from the database is cached, so a published bundle is visible on the next
+request.
 
-A collection may keep a history of its versions. The table of the
-versions is a mirror of the table of the collection, and the image of
-a version is written by the statement of the change itself: the image
-and the change commit together, and a change that the guard of the
-write refuses writes no image. The history is read with the policies
-of the deployment, exactly like a record, and the audit keeps its own
-rule: it holds the names of the fields that changed and never their
-values.
+## Workspace model
 
-## The catalog of a workspace
+A workspace's **model** is the logical shape of its collections: labels, constraints, relations and
+the fields it does not serve. It overlays the deployment manifest and is applied when the workspace
+catalog is resolved.
 
-The **catalog** of a workspace is what it serves: the collections it
-registered and the bundle of policies that applies to it. The
-deployment holds a default catalog, and a workspace may hold its own.
+The model applies in realtime: a model change is a workspace schema change for every later request,
+named by the schema version ([spec](spec.md) §7.6). The model domain owns the model rules and the
+ports it uses: the model store, the table column reader and the workspace collection registrar.
 
-The catalog is a **logical registry**: the rule of it is in the
-specification of the data service (§7.5). The physical schema stays
-global and reviewed, and the logical schema is per workspace.
+## Events and worker
 
-- A workspace that registered nothing serves every collection of the
-  deployment (the rule is in the specification of the data service,
-  §7.5).
-- A workspace that registered something serves exactly the registered
-  and enabled collections. The others answer `404 NOT_FOUND`.
-- The publication of a bundle is an operator command, never an HTTP
-  route: a bundle says what a permission grants, and the grants of a
-  principal are the business of the access service.
-- The registration of a collection is an operator command too, and the
-  administrator of the workspace may write it through the API with the
-  capability `data.model.write`. The route goes through the gateway and
-  the access service like every other route.
+Every committed mutation writes a domain event in the record's transaction. Events go to the
+subscribers registered in the composition root, at least once and possibly out of order.
 
-The catalog is read with the registry of the workspaces, in one
-statement, and nothing is cached from the database: a bundle that was
-published is visible in the next request.
+Workers claim deliveries with leases, so several can run at once. A subscriber needing current data
+reads it through an authorized domain read with a fresh context for the worker's service principal;
+the user who started the chain is an attribution, never a credential.
 
-## The model of a workspace
+## Code boundaries
 
-The **model** of a workspace is the logical shape of its collections:
-the labels, the constraints, the relations and the fields that the
-workspace does not serve. It is an overlay of the manifest of the
-deployment, and it is applied when the catalog of the workspace is
-resolved.
-
-The model is applied in realtime: a change of the model is the change
-of the schema of the workspace for every request that follows it, and
-the version of the schema names it. The rule of the model is in the
-specification of the data service (§7.6).
-
-The domain owns the rules of the model and the ports it reads and
-writes through: the store of the model, the reader of the columns of
-the tables and the registrar of the collections of a workspace.
-
-## The events and the worker
-
-Every committed mutation writes a domain event in the same transaction
-as the record. The events are delivered to the subscribers that the
-deployment registered in the composition root, at least once, and they
-may arrive out of order.
-
-The worker claims the deliveries with leases, so several workers can
-run at the same time. A subscriber that needs current data reads it
-through an authorized domain read, with the fresh context of the
-service principal of the worker: the identity of the user that started
-the chain is an attribution, never a credential.
-
-## The boundaries of the code
-
-| Layer | What it owns |
+| Layer | Owns |
 | --- | --- |
-| `src/main.ts` | The entry point of the process. |
-| `src/app/` | The routes, the parsing, the establishment of the context, the mapping of the failures. |
-| `src/domains/<domain>/` | The rules, the use cases, the ports and the public entry point of a domain. |
-| `src/domains/<domain>/adapters/` | The concrete implementations of the ports. |
-| `src/platform/bun/` | The listener and the transport. |
-| `src/platform/postgres/` | The connections, the scoped transactions, the statements, the migrations. |
-| `src/runtime/` | The configuration, the composition root, the subscribers, the readiness, the drain. |
-| `src/observability/` | The logs and the metrics. |
-| `test/` | The suites of the tests. |
+| `src/main.ts` | Process entry point. |
+| `src/app/` | Routes, parsing, context establishment, failure mapping. |
+| `src/domains/<domain>/` | A domain's rules, use cases, ports and public entry point. |
+| `src/domains/<domain>/adapters/` | Concrete port implementations. |
+| `src/platform/bun/` | Listener and transport. |
+| `src/platform/postgres/` | Connections, scoped transactions, statements, migrations. |
+| `src/runtime/` | Configuration, composition root, subscribers, readiness, drain. |
+| `src/observability/` | Logs and metrics. |
+| `test/` | Test suites. |
 
-The domains may only import each other along this matrix:
+Allowed domain imports:
 
-| Domain | It may import |
+| Domain | May import |
 | --- | --- |
 | `gateway-context`, `workspaces`, `schema`, `audit`, `events` | nothing |
 | `authorization` | `gateway-context`, `workspaces`, `schema` |
@@ -178,21 +120,18 @@ The domains may only import each other along this matrix:
 | `model` | `schema` |
 | `records` | `gateway-context`, `workspaces`, `schema`, `authorization`, `audit`, `events` |
 
-The core of a domain imports no framework, no runtime and no adapter.
-Only the composition root builds the concrete adapters. The check
-`bun run architecture` refuses a violation, and it refuses a cycle,
-even a cycle of types.
+A domain core imports no framework, runtime or adapter; only the composition root builds concrete
+adapters. `bun run architecture` refuses violations and cycles, including type-only cycles.
 
-## The process roles
+## Process roles
 
-One binary, three roles, chosen with `DATA_PROCESS_ROLE`:
+One binary with three roles, selected by `DATA_PROCESS_ROLE`:
 
-| Role | What it does |
+| Role | Does |
 | --- | --- |
-| `api` | The endpoints and the probes. |
-| `worker` | The claims of the deliveries. |
-| `all` | Both. The default of a development machine. |
+| `api` | Endpoints and probes. |
+| `worker` | Delivery claims. |
+| `all` | Both. Default for local development. |
 
-An api process needs the bindings of the gateway and the key of the
-cursors. A worker needs the credentials of the deliveries and the
-principal of the service principal.
+An `api` process needs the gateway bindings and the cursor key. A worker needs the delivery
+credentials and its service principal.

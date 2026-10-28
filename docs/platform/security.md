@@ -1,19 +1,10 @@
-# The security of the platform
+# Security
 
-The security model of each service is the one of its specification and
-of its own review:
+The platform-wide security model: trust boundaries, how secrets cross them, least privilege, and how to report a finding. Each service's own model is in its docs: [gateway spec](../gateway/spec.md) §7 and [upstream identity](../gateway/upstream-identity.md), [access service security](../access/security.md), [data service security](../data/security.md), [console security](../console/security.md).
 
-| Workspace | The security model |
-| --- | --- |
-| `packages/gateway/` | [spec.md](../gateway/spec.md) §7, [the upstream identity](../gateway/upstream-identity.md) |
-| `packages/access/` | [security.md](../access/security.md) |
-| `packages/data/` | [security.md](../data/security.md) |
+Every item in a service's security review is answered with a fact: a test, a measurement or code.
 
-This document holds what is **common** to the three: the trust
-boundaries of the platform, the way a secret crosses them, and the way
-a finding is reported.
-
-## The trust boundaries
+## Trust boundaries
 
 ```
    the caller          the gateway          the access service      the data service
@@ -26,54 +17,38 @@ a finding is reported.
                                                                    access context
 ```
 
-There are three boundaries, and each of them is a signature:
+Each of the three boundaries is a signature:
 
-| Boundary | What is signed | With what | Verified with what |
+| Boundary | Signed | Signed with | Verified with |
 | --- | --- | --- | --- |
-| The caller and the gateway | The token of the caller | The key of the provider of the tenant | The public key of the provider, discovered through OpenID Connect |
-| The gateway and the access service | The token of the gateway | The credential of the tenant, or the token of the platform | The public key of the access service |
-| The gateway and the data service | The identity of the caller, in the headers of the request | The private key of the deployment of the gateway | The public key of that deployment, in the bindings of the gateway |
+| Caller → gateway | Caller's token | Tenant provider's key | Provider's public key, discovered via OpenID Connect |
+| Gateway → access service | Gateway's token | Tenant credential, or platform token | Access service's public key |
+| Gateway → data service | Caller identity, in request headers | Gateway deployment's private key | That deployment's public key, in the gateway bindings |
 
-The third boundary is the one the merge touches the least and the one
-that matters the most: the data service **verifies** the signature of
-the identity, and it never trusts the identity because the request came
-from the gateway. A gateway that is compromised cannot mint an identity
-that the data service accepts, as long as the private key of the
-signature stays in the deployment of the gateway.
+The third boundary matters most: the data service **verifies** the identity signature and never trusts an identity just because the request came from the gateway. A compromised gateway cannot mint an identity the data service accepts, as long as the signing private key stays in the gateway's deployment.
 
-## The secrets
+## Secrets
 
-| Secret | The service that holds it | The service that reads it |
+| Secret | Held by | Read by |
 | --- | --- | --- |
-| The secret of the sessions | The gateway | Nobody: the gateway signs the state cookie with it |
-| The key of the identity | The gateway | The data service holds the **public** key of it |
-| The key of the tokens | The access service | The gateway verifies them with the public key, discovered through OpenID Connect |
-| The key of the encryption | The access service | Nobody: the access service encrypts the client secrets of the tenants with it |
-| The key of the cursors | The data service | Nobody: the data service signs the pages of a collection with it |
-| The token of the access context | The access service | The data service reads it from a file |
+| Session secret | Gateway | Nobody; the gateway signs the state cookie with it |
+| Identity key | Gateway | The data service holds its **public** key |
+| Token signing key | Access service | The gateway verifies tokens with its public key, discovered via OpenID Connect |
+| Encryption key | Access service | Nobody; encrypts tenants' client secrets |
+| Cursor key | Data service | Nobody; signs collection page cursors |
+| Access context token | Access service | The data service, from a file |
 
-The rule of the platform is the same for the three services: **a secret
-is a file, never a value of the environment**, whenever the service can
-read it from a file. A secret that is in the environment of a process
-is in the environment of everything that can read the environment of the
-process.
+> [!IMPORTANT]
+> A secret is a file, never an environment value, whenever the service can read it from a file. Anything that can read a process's environment can read a secret stored there.
 
-## The least privilege
+## Least privilege
 
-Each service connects to its database with a role that cannot do what
-another role can do:
+Each service connects to its database with a role that cannot do another role's work:
 
-- the gateway refuses to start when its role bypasses the isolation of
-  the tenants, and it names the role;
-- the access service refuses to start when its role bypasses the
-  isolation, and it names the role;
-- the data service separates the roles of the owner, of the api, of the
-  registry, of the delivery and of the maintenance, and the readiness of
-  the api is `503` when it is given the credentials of the
-  administrator.
+- the gateway refuses to start if its role bypasses tenant isolation, and names the role;
+- the access service refuses to start if its role bypasses isolation, and names the role;
+- the data service separates owner, API, registry, delivery and maintenance roles, and its API readiness is `503` when given administrator credentials.
 
-## The reporting of a finding
+## Reporting a finding
 
-The security policy of the platform is in [SECURITY.md](../../SECURITY.md).
-It names the versions that are supported, the way to report a finding,
-and what happens next.
+See [SECURITY.md](../../SECURITY.md) for supported versions, how to report, and what happens next.

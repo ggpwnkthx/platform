@@ -147,7 +147,7 @@ export const PLATFORM_VERSION_SOURCES: readonly VersionSource[] = [
     read: (content) => /^Status:\s*(\d+\.\d+\.\d+)/m.exec(content)?.[1] ?? null,
   },
   {
-    path: 'docs/data/specification.md',
+    path: 'docs/data/spec.md',
     read: (content) => /^Status:\s*(\d+\.\d+\.\d+)/m.exec(content)?.[1] ?? null,
   },
   {

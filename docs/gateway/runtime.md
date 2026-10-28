@@ -1,49 +1,41 @@
-# The transport capabilities of the runtime
+# Runtime
 
-The gateway is written against the runtime, not against a library that hides
-it. The rules of the specification ([spec.md](spec.md) §10, §11 and §4) are only as
-good as the observations that back them, so every boundary the gateway relies
-on is proved by a test of `test/network/` that runs against a real socket.
+The Bun capabilities the gateway relies on, and the tests that prove them. The gateway is written against
+the runtime directly, not a library that hides it, so each boundary behind [spec §4, §10 and §11](spec.md)
+is proved by a `test/network/` test against a real socket.
 
-**The runtime of this release is Bun 1.4.3.** The observations below were
-made with it; the ones of the older releases are recorded as well, because
-they explain why the version is pinned (see [decisions.md](decisions.md),
-decision 1).
+**This release runs on Bun 1.4.3.** Older releases' results are kept because they explain why the version
+is pinned ([decision 1](decisions.md)). Before reading its environment, the gateway checks the runtime
+version and **stops** if it is too old: these boundaries are not observable on the 1.2 line, so a gateway
+started there would behave in ways the spec does not describe. The check is `src/runtime/version.ts`,
+tested by `src/runtime/version.test.ts`.
 
-The gateway checks the version of its runtime before it reads its
-environment and **stops** when it is too old: the boundaries below are not
-observable on the 1.2 line, so a gateway that started there would answer in
-ways its specification does not describe. The check is in
-`src/runtime/version.ts` and it is covered by `src/runtime/version.test.ts`.
+## Proved capabilities
 
-## What was proved
-
-| Capability | How it was proved | What the runtime does |
+| Capability | Proof | Runtime behaviour |
 | --- | --- | --- |
-| Streaming upload | `test/network/transport.test.ts`: the upstream polls the chunks it received while the client is still producing the body | The bytes reach the upstream while the upload runs. An upload that was buffered would not be visible before the end of the body. |
-| The end of the upload | the same test, the `/upload` endpoint of the fixture | The end of the request stream is the end of the upload. It is the observable event the transport reports; the acceptance by the peer is a different observation and is not claimed. |
-| The phases of the answer | the raw server sends the head at once and the body a second later | The promise of the transport resolves when the **final headers** arrived (1 ms), the first body byte arrives later (1002 ms). The two budgets of the specification (`responseMs`, `firstByteMs`) are therefore observable apart. |
-| An interim answer | the raw server sends `103 Early Hints` and then the final answer | The runtime reports the final answer only. The gateway forwards the final response and never an interim one. |
-| A protocol switch | the raw server answers `101 Switching Protocols` | The runtime refuses it: the transport fails and the exchange answers `502`. The websocket upgrade owns the protocol switch. |
-| An early answer | the fixture answers `/early` without reading the body | The answer of the upstream is delivered while the upload runs, and the runtime drops the rest of the upload (the producer of the body is cancelled). The answer of the upstream wins, as the specification requires. |
-| The cancellation of a caller | the signal of the exchange is aborted | The request of the upstream is cancelled and the promise of the transport is rejected. |
-| A redirect | the fixture answers `302` with a location | The redirect is not followed: the answer of the upstream reaches the caller as it is. |
-| A compressed answer | the fixture answers with `content-encoding: gzip` | The runtime decompresses the answers **by default**. The transport therefore asks for `decompress: false`, so the bytes of the upstream and its `content-encoding` reach the caller as they are. |
-| The handshake with an upstream websocket | the fixture answers `403` instead of a handshake | The refusal is reported with its status, its headers and its body. It is not a network failure and the caller deserves to see it. |
-| The subprotocol of the upstream | the fixture selects the first offered subprotocol | The subprotocol the upstream selected is reported and is mirrored to the caller. |
-| The TLS of the handshake of a websocket | the websocket client of the runtime against a server of TLS | The client of the runtime cannot speak TLS: the handshake fails with an error that says nothing about the cause, against a server of the runtime and against a server of OpenSSL alike. The gateway refuses the handshake with the reason `tls` instead, and the operator reads it in the log. **An upstream of a websocket is served over plain http.** |
-| The upgrade of the caller | a raw client reads the `101` answer | The handshake answer carries the headers of the gateway (the request id, the refreshed cookie). Neither a browser nor the websocket client of the runtime exposes them, so a test has to read the socket. |
-| The TLS of the connections to the upstreams | `test/network/tls.test.ts`: the upstream asks for a certificate of the client | The gateway presents the certificate of the deployment and verifies the certificate of the upstream with the authority of the deployment. The upstream that does not accept the certificate refuses the connection, and the gateway answers `502`. |
+| Streaming upload | `test/network/transport.test.ts`: the upstream polls received chunks while the client is still producing the body | Bytes reach the upstream during the upload. A buffered upload would be invisible until the body ended. |
+| End of upload | Same test, the fixture's `/upload` endpoint | The end of the request stream is the end of the upload, and is the event the transport reports. Peer acceptance is a different observation and is not claimed. |
+| Response phases | The raw server sends the head at once and the body a second later | The transport promise resolves on the **final headers** (1 ms); the first body byte arrives later (1002 ms). So the spec's two budgets (`responseMs`, `firstByteMs`) are observable separately. |
+| Interim response | The raw server sends `103 Early Hints`, then the final response | The runtime reports only the final response. The gateway forwards the final response, never an interim one. |
+| Protocol switch | The raw server answers `101 Switching Protocols` | The runtime refuses it: the transport fails and the exchange answers `502`. Protocol switches belong to the WebSocket upgrade. |
+| Early response | The fixture answers `/early` without reading the body | The upstream's response arrives during the upload, and the runtime drops the rest of the upload (the body producer is cancelled). The upstream's response wins, as the spec requires. |
+| Caller cancellation | The exchange signal is aborted | The upstream request is cancelled and the transport promise rejects. |
+| Redirect | The fixture answers `302` with a location | Not followed: the upstream's response reaches the caller as is. |
+| Compressed response | The fixture answers with `content-encoding: gzip` | The runtime decompresses **by default**, so the transport sets `decompress: false` and the upstream's bytes and `content-encoding` reach the caller unchanged. |
+| Upstream WebSocket refusal | The fixture answers `403` instead of a handshake | The refusal is reported with its status, headers and body. It is not a network failure, and the caller should see it. |
+| Upstream subprotocol | The fixture selects the first offered subprotocol | The selected subprotocol is reported and mirrored to the caller. |
+| WebSocket handshake over TLS | The runtime's WebSocket client against a TLS server | The client cannot speak TLS: the handshake fails with an error that names no cause, against both Bun and OpenSSL servers. The gateway refuses the handshake with reason `tls` instead, visible in the log. **WebSocket upstreams are served over plain http.** |
+| Caller upgrade | A raw client reads the `101` response | The handshake response carries the gateway headers (request id, refreshed cookie). Neither browsers nor the runtime's WebSocket client expose them, so the test reads the socket. |
+| Upstream TLS | `test/network/tls.test.ts`: the upstream requests a client certificate | The gateway presents the deployment certificate and verifies the upstream's certificate against the deployment CA. If the upstream rejects the certificate, the connection fails and the gateway answers `502`. |
 
-## The versions that were measured
+## Measured versions
 
 | Version | Result |
 | --- | --- |
-| **1.4.3** | Every boundary above is observable. This is the version of the release. |
-| 1.2.23 | The early answer is delivered, but the runtime does not cancel the producer of the body; the `unexpected-response` event of the websocket client of the `ws` library is not implemented, so the refusal of an upstream is not observable; the upgrade of the caller with headers of the gateway is refused. |
-| 1.2.0 | The early answer is not delivered at all: the exchange waits for the end of the upload. |
+| **1.4.3** | Every boundary above is observable. The release version. |
+| 1.2.23 | The early response arrives, but the body producer is not cancelled; the `ws` library client's `unexpected-response` event is not implemented, so an upstream refusal is not observable; and the caller upgrade with gateway headers is refused. |
+| 1.2.0 | The early response never arrives: the exchange waits for the upload to end. |
 
-The specification states `Bun ≥ 1.4.3`. The measurements above show that
-the boundaries the specification relies on are not observable on the 1.2
-line, so the version of the runtime is part of the contract and is pinned.
-The change is recorded in [decisions.md](decisions.md) (decision 36).
+The spec requires `Bun ≥ 1.4.3`. Because the spec's boundaries are not observable on 1.2, the runtime
+version is part of the contract and pinned ([decision 36](decisions.md)).

@@ -1,49 +1,39 @@
-# The access service — Specification
+# Specification
 
-**The access service** is a Bun service that brokers the login of a caller against the
-OpenID Connect provider of a tenant, maps the external identity of the
-caller to a principal row, answers the decision requests of a gateway over
-a table of grants, and offers twelve `curl` endpoints for the administration
-of the whole thing, and one that reads the audit of the changes.
+Normative behavior of the access service: a Bun service that brokers logins against each tenant's
+OpenID Connect (OIDC) provider, maps external identities to principals, answers gateway decision
+requests from a table of grants, and is administered with twelve `curl` endpoints plus one that
+reads the audit.
 
-The access service is **not** a feature of the gateway. It is a separate deployable that sits
-between the browsers, the identity providers of the tenants and the
-gateways. The gateway is not changed: it keeps its single provider, its single
-access service and its whole configuration, and it gains **zero** new
-features. The access service is what a gateway deployment points at.
+The access service is a separate deployable, not a gateway feature. It sits between browsers,
+tenant identity providers and gateways. The gateway keeps its single provider, its single access
+service and its whole configuration, and gains **zero** new features; a gateway deployment simply
+points at the access service.
 
-This document is **normative** for the behavior of the access service. The bodies of the
-requests and of the answers are in [api.md](api.md); the code is in
-`src/`; the way it is built is in [architecture.md](architecture.md). A
-change of behavior is a change of this document first, in the same commit
-as the code.
+Request and response bodies are in [API](api.md), the design in [Architecture](architecture.md),
+the code in `src/`. A behavior change updates this document first, in the same commit as the code.
 
 Status: 1.0.0. Runtime: Bun ≥ 1.4.3. Listener: HTTP on
 `ACCESS_HOST:ACCESS_PORT` (default `0.0.0.0:8081`).
 
----
-
 ## 1. Scope
 
-### 1.1 What the access service does
+### 1.1 What it does
 
 | | |
 | --- | --- |
-| **Brokers the login** | The access service is the OpenID Connect client of the provider of a tenant *and* the OpenID Connect provider of the gateway. The browser logs in at the provider of the tenant; the gateway sees a provider it already knows how to talk to. |
-| **Maps the identity** | The `(tenant, subject)` pair of the provider is mapped to exactly one **principal row**. The row is the identity of the platform; the external identity is only the way in. |
-| **Answers the decisions** | The access service implements the decision contract the gateway already speaks: `POST /v1/decisions`. The decision is computed over a table of **grants**. |
-| **Is administered with twelve endpoints** | A tenant, a principal, a grant, a group and a role are created, revoked and **listed** with twelve `curl` calls, and the audit of the changes is read with a thirteenth. There is no console, no portal and no wizard. |
+| **Brokers the login** | It is an OIDC client of each tenant's provider *and* the OIDC provider of the gateway. The browser logs in at the tenant's provider; the gateway sees a provider it already knows how to talk to. |
+| **Maps the identity** | The provider's `(tenant, subject)` pair maps to exactly one **principal row**. The row is the platform identity; the external identity is only the way in. |
+| **Answers decisions** | It implements the decision contract the gateway already speaks, `POST /v1/decisions`, computed over a table of **grants**. |
+| **Is administered with twelve endpoints** | Tenants, principals, grants, groups and roles are created, revoked and **listed** with twelve `curl` calls; a thirteenth reads the audit. No console, portal or wizard. |
 
-### 1.2 What the access service does not do
+### 1.2 What it does not do
 
-- It does not proxy traffic. It is not in the path of a request that is
-  already authenticated; only the login and the decisions pass through it.
-- It does not decide access on its own policy language. The policy is the
-  table of grants and nothing else.
-- It does not manage the routes, the upstreams or the workspaces of a
-  deployment. The gateway keeps that part.
+- Proxy traffic. Only logins and decisions pass through it, never an already authenticated request.
+- Use a policy language of its own. The policy is the grants table and nothing else.
+- Manage routes, upstreams or workspaces. The gateway owns those.
 
-### 1.3 The relationship with the gateway
+### 1.3 Relationship with the gateway
 
 ```
    browser                     Access                    tenant IdP          Gateway
@@ -64,300 +54,239 @@ Status: 1.0.0. Runtime: Bun ≥ 1.4.3. Listener: HTTP on
       │                         │    {"allow":true}           │                  │
 ```
 
-The gateway sees **one** provider (the access service) and **one** access service (the same one).
-It cannot tell that the access service is a broker in front of several identity
-providers, and it must not have to: that is the whole point of the design.
+The gateway sees **one** provider and **one** access service, and they are the same service. It
+cannot tell that the access service brokers several identity providers, and it must not need to.
 
-### 1.4 The consequence that has to be said out loud
+### 1.4 One gateway client per tenant
 
-A gateway is configured with **one** client id and **one** redirect uri.
-The tenant of a login is therefore resolved from the client id of the
-authorization request (§5.2), and a client id belongs to exactly one
-tenant: the `client_id` of the tenants is unique (§3.1).
+A gateway is configured with **one** client id and **one** redirect uri. The login's tenant is
+resolved from the authorization request's client id (§5.2), and `tenants.client_id` is unique
+(§3.1), so a client id belongs to exactly one tenant. Supported topology:
 
-The supported topology is therefore:
+- **One gateway deployment per tenant**, each registered as that tenant's client.
+- **One gateway deployment for several tenants** under one client id is not allowed by the
+  schema: two tenants cannot hold the same `client_id`.
 
-- **one gateway deployment per tenant**, each registered at the access service as the
-  client of that tenant; or
-- **one gateway deployment for several tenants**, when the tenants are
-  registered under the client id of that one gateway. The schema does
-  not allow it: the `client_id` of a tenant is unique, and two tenants
-  cannot hold the same one.
+The access service is multi-tenant; the gateway is not. That is the price of "the gateway gains
+zero new features", paid on the access side, where tenancy belongs.
 
-The access service is multi-tenant; the gateway is not. That is not a gap in the design, it
-is the price of "the gateway gains zero new features", and it is paid on the
-side of the access service, which is where the tenancy belongs.
-
-**The escape hatch (§5.2).** A tenant registered with `shared_client =
-true` lets the gateway of that tenant log in the principals of the
-**other** tenants: the request names the tenant, or the hint of the
-e-mail names it. The client id is still the one of the gateway, and it
-is still unique: the gateway presents its own client id, and the tenant
-of the login is another one. It is a deliberate weakening — a hint that
-the caller controls may move a login to another tenant — and it is
-refused by default.
-
----
+**Escape hatch (§5.2).** A tenant with `shared_client = true` lets its gateway log in principals of
+**other** tenants, named by the request or by the e-mail hint. The gateway still presents its own,
+unique client id; only the login's tenant differs. This is a deliberate weakening (a hint the
+caller controls can move a login to another tenant) and is off by default.
 
 ## 2. Terms
 
 | Term | Meaning |
 | --- | --- |
-| **tenant** | A customer of the platform. It owns one identity provider, one principal population and one set of grants. |
-| **provider (of a tenant)** | The OpenID Connect provider of the tenant. Exactly one per tenant. |
-| **principal** | The row of `users` that carries the identity of a caller inside the platform. It is the `subject` of every token the access service issues and the `subject` of every decision request. |
-| **permission** | A named capability, e.g. `workspace.read`. It is a *role* of the platform: it travels in the `roles` claim and it is what a grant gives. |
-| **grant** | The permission a principal holds, on a workspace, on a route, until it is revoked or it expires. |
+| **tenant** | A customer of the platform. Owns one identity provider, one principal population and one set of grants. |
+| **provider (of a tenant)** | The tenant's OIDC provider. Exactly one per tenant. |
+| **principal** | The `users` row that carries a caller's platform identity. It is the `subject` of every token the access service issues and of every decision request. |
+| **permission** | A named capability, e.g. `workspace.read`. It is a platform *role*: it travels in the `roles` claim and is what a grant gives. |
+| **grant** | A permission a principal holds on a workspace and route, until revoked or expired. |
 | **decision** | The answer of `POST /v1/decisions`: may this principal use this workspace on this route? |
-| **gateway** | A gateway deployment. It is a client of the access service and a consumer of the decisions. |
+| **gateway** | A gateway deployment: a client of the access service and a consumer of its decisions. |
 | **operator** | The person who runs the access service and calls the twelve administrative endpoints. |
 
-### 2.1 The invariants
+### 2.1 Invariants
 
-None of them is configurable. Each of them is enforced in code and has a
-test.
+None is configurable. Each is enforced in code and has a test.
 
-1. **The access service never authenticates a caller against a provider that is not the
-   one of the tenant.** The issuer, the audience, the nonce and the
-   algorithm of the token of the provider are checked before the identity
-   is read.
-2. **An external identity is never mapped by its e-mail.** The mapping key
-   is `(tenant, subject)`. An e-mail is mutable and is not an identity.
-3. **A principal that has no grant is refused.** The existence of a
-   principal is not an access.
-4. **A decision is denied when it cannot be computed.** A database that
-   cannot be reached produces a denial, never an allowance.
-5. **The administrative endpoints are the whole administration surface.**
-   There is no second way to change a tenant, a principal or a grant.
-   Five of them change something, four read a list and one reads the
-   audit of the changes; nothing else writes.
-6. **Every change is audited, and the audit is durable.** The change and
-   the row of the audit are written by **one statement**, so they are
-   committed together or neither is: a change that is not audited does
-   not exist. The row names the operator by the fingerprint of its
-   credential. A log line is not the audit: the audit is a table (§10.1).
-7. **A secret is never returned, never logged and never travels in a
-   browser.** The client secret of a provider, the client secret of a
-   gateway and the tokens are write-only.
-8. **A gateway never learns a reason.** The reason of a decision is for
-   the operator; the gateway does not forward it to a caller, and neither
-   does the access service.
-9. **The contract of the gateway does not change.** The access service answers the
-   decision request the gateway already sends, with the body it already
-   sends (§8).
+1. **A caller is only authenticated against its tenant's provider.** The provider token's issuer,
+   audience, nonce and algorithm are checked before the identity is read.
+2. **An external identity is never mapped by e-mail.** The key is `(tenant, subject)`; an e-mail
+   is mutable and is not an identity.
+3. **A principal with no grant is refused.** Existing is not access.
+4. **A decision that cannot be computed is denied.** An unreachable database produces a denial,
+   never an allowance.
+5. **The administrative endpoints are the whole administration surface.** There is no second way to
+   change a tenant, principal or grant. Seven change something, five read a list and one reads the
+   audit; nothing else writes.
+6. **Every change is audited, durably.** The change and its audit row are written by **one
+   statement**, so both commit or neither does: an unaudited change does not exist. The row names
+   the operator, never the credential (§10.1). A log line is not the audit; the audit is a table.
+7. **A secret is never returned, logged or sent through a browser.** Provider client secrets,
+   gateway client secrets and tokens are write-only.
+8. **A gateway never learns a reason.** A decision's reason is for the operator; neither the
+   gateway nor the access service forwards it to a caller.
+9. **The gateway contract does not change.** The access service answers the decision request the
+   gateway already sends, with the body it already sends (§8).
 
----
+## 3. Tables
 
-## 3. The eight tables
+The domain model is eight tables, and only these. Protocol state that is not a domain concept (the
+authorization codes) lives in the shared store (§5.5), not in the database.
 
-The whole domain model of the access service is eight tables. They are read in one sitting
-and they are the only tables: the protocol state that is not a domain
-concept (the authorization codes) lives in the shared store (§5.5), not in
-the database.
+Two infrastructure tables share the database but are not part of the model: the migration ledger
+`access_schema_migrations` (§3.8) and the administration audit `admin_audit` (§10.1). The audit
+holds no tenant, principal or grant: only what changed, when, and who changed it.
 
-Two tables of the **infrastructure** live in the same database and are
-not part of the domain model: the table of the migrations
-(`access_schema_migrations`) and the table of the **audit** of the
-administration (`admin_audit`, §10.1). The audit holds no tenant, no
-principal and no grant: it holds what changed, when, and who changed it.
-
-The schema itself is in `src/platform/postgres/migrations/`.
+Schema: `src/platform/postgres/migrations/`.
 
 ### 3.1 `tenants`
 
-One row per customer. It carries the registration of the provider of the
-tenant and the registration of the gateway of the tenant.
+One row per customer, with the registration of the tenant's provider and of its gateway.
 
 | Column | Type | Rule |
 | --- | --- | --- |
 | `id` | `uuid` | Primary key. |
-| `slug` | `text` | The stable name of the tenant, `[a-z0-9-]{2,63}`. Unique. The key of the row. |
-| `display_name` | `text` | The name shown to a human. |
+| `slug` | `text` | Stable tenant name, `[a-z0-9-]{2,63}`. Unique; the row's key. |
+| `display_name` | `text` | Name shown to a human. |
 | `enabled` | `boolean` | Default `true`. A disabled tenant denies every decision and refuses every login. |
 | `is_default` | `boolean` | Default `false`. At most one tenant is the default (§5.2). |
-| `auto_provision` | `boolean` | Default `false`. Whether an unknown external identity creates a principal row on its first login (§6.4). |
-| `email_domain` | `text` | The domain of the tenant, `null` when it has none. Unique when it is set. A **hint**, never an authorization (§5.2, §6.3). |
-| `idp_issuer` | `text` | The issuer of the provider of the tenant. The `iss` of a token that does not match it exactly is refused. |
-| `idp_client_id` | `text` | The client id of the access service at the provider of the tenant. |
-| `idp_client_secret` | `bytea` | The client secret of the access service at the provider, encrypted at rest (§4.3). |
-| `idp_redirect_uri` | `text` | The url of the access service at the provider of the tenant. It must be the url of §5.1. |
-| `idp_scopes` | `text[]` | The scopes the access service asks the provider for. Default `['openid','email','profile']`. |
-| `idp_algorithms` | `text[]` | The algorithms a token of the provider may be signed with. Default `['RS256']`. |
-| `client_id` | `text` | The client id of the **gateway** of the tenant at the access service. Unique across the tenants. |
-| `client_redirect_uris` | `text[]` | The urls the gateway of the tenant is registered with. The browser is sent back to one of them with the code of the login; a url that is not in the list is never sent a code (§5.2). Default `[]`: a tenant that has registered no url refuses every login. |
-| `client_secret` | `bytea` | The secret of the gateway of the tenant, encrypted at rest (§4.3). |
-| `previous_client_secret` | `bytea` | The secret that the current one replaced, encrypted at rest. `null` when there was no rotation. |
-| `previous_client_secret_until` | `timestamptz` | The moment the previous secret stops being accepted. `null` when there was no rotation. |
-| `shared_client` | `boolean` | Default `false`. Whether the gateway of this tenant may log in principals of other tenants (§5.2). |
+| `auto_provision` | `boolean` | Default `false`. Whether an unknown external identity gets a principal row on its first login (§6.4). |
+| `email_domain` | `text` | The tenant's domain, or `null`. Unique when set. A **hint**, never an authorization (§5.2, §6.3). |
+| `idp_issuer` | `text` | The provider's issuer. A token whose `iss` does not match it exactly is refused. |
+| `idp_client_id` | `text` | The access service's client id at the provider. |
+| `idp_client_secret` | `bytea` | The access service's client secret at the provider, encrypted at rest (§4.3). |
+| `idp_redirect_uri` | `text` | The access service's callback url registered at the provider. Must be the url of §5.1. |
+| `idp_scopes` | `text[]` | Scopes requested from the provider. Default `['openid','email','profile']`. |
+| `idp_algorithms` | `text[]` | Algorithms a provider token may be signed with. Default `['RS256']`. |
+| `client_id` | `text` | The client id of the tenant's **gateway** at the access service. Unique across tenants. |
+| `client_redirect_uris` | `text[]` | The urls the tenant's gateway is registered with. The browser returns to one of them with the login code; an unlisted url never receives a code (§5.2). Default `[]`: a tenant with no url refuses every login. |
+| `client_secret` | `bytea` | The tenant gateway's secret, encrypted at rest (§4.3). |
+| `previous_client_secret` | `bytea` | The secret the current one replaced, encrypted at rest. `null` without a rotation. |
+| `previous_client_secret_until` | `timestamptz` | When the previous secret stops being accepted. `null` without a rotation. |
+| `shared_client` | `boolean` | Default `false`. Whether this tenant's gateway may log in principals of other tenants (§5.2). |
 | `created_at`, `updated_at` | `timestamptz` | |
 
 ### 3.2 `users`
 
-One row per principal. It is the identity of the platform.
+One row per principal: the platform identity.
 
 | Column | Type | Rule |
 | --- | --- | --- |
 | `id` | `uuid` | Primary key. The `sub` of every token the access service issues and the `subject` of every decision request. |
-| `tenant_id` | `uuid` | The tenant of the principal. Foreign key to `tenants`. |
-| `external_subject` | `text` | The `sub` of the provider of the tenant. |
-| `email` | `text` | The last e-mail seen at the provider. `null` when the provider does not publish one. A display value, never a key. |
-| `display_name` | `text` | The last name seen at the provider. |
-| `status` | `text` | `active` or `disabled`. Default `active`. A disabled principal is refused at the login and denied at every decision. |
-| `last_login_at` | `timestamptz` | The last successful login. `null` before the first one. |
+| `tenant_id` | `uuid` | The principal's tenant. Foreign key to `tenants`. |
+| `external_subject` | `text` | The provider's `sub`. |
+| `email` | `text` | Last e-mail seen at the provider; `null` when the provider publishes none. A display value, never a key. |
+| `display_name` | `text` | Last name seen at the provider. |
+| `status` | `text` | `active` or `disabled`. Default `active`. A disabled principal is refused at login and denied at every decision. |
+| `last_login_at` | `timestamptz` | Last successful login; `null` before the first. |
 | `created_at`, `updated_at` | `timestamptz` | |
 
-Unique: `(tenant_id, external_subject)`. The pair `(id, tenant_id)` is
-unique as well, so a grant can carry its tenant in a foreign key (§3.4).
+Unique: `(tenant_id, external_subject)`. `(id, tenant_id)` is also unique, so a grant can carry
+its tenant in a foreign key (§3.4).
 
 ### 3.3 `permissions`
 
-A named capability: it travels in the `roles` claim of a token and it is
-what a grant gives.
+A named capability: it travels in a token's `roles` claim and is what a grant gives.
 
 | Column | Type | Rule |
 | --- | --- | --- |
 | `id` | `uuid` | Primary key. |
-| `tenant_id` | `uuid` | The tenant that owns the permission, or `null` when it belongs to the catalogue of the platform. Foreign key to `tenants`. |
-| `key` | `text` | The name of the permission, `[a-z0-9][a-z0-9._-]{0,63}`. |
+| `tenant_id` | `uuid` | The owning tenant, or `null` for the platform catalogue. Foreign key to `tenants`. |
+| `key` | `text` | Permission name, `[a-z0-9][a-z0-9._-]{0,63}`. |
 | `description` | `text` | `null` when there is none. |
 | `enabled` | `boolean` | Default `true`. A disabled permission is never given by a grant. |
 
-Unique: `(coalesce(tenant_id, '000…0'::uuid), key)`. The `coalesce` is
-there because `null` is not equal to `null` in a unique index of
-PostgreSQL, and the catalogue of the platform would otherwise accept two
-rows with the same key.
+Unique: `(coalesce(tenant_id, '000…0'::uuid), key)`. The `coalesce` is needed because a
+PostgreSQL unique index treats `null`s as distinct; without it the catalogue could hold two rows
+with the same key.
 
-A permission of the catalogue (`tenant_id is null`) may be granted to every
-tenant. A permission of a tenant may only be granted inside that tenant.
+A catalogue permission (`tenant_id is null`) may be granted in every tenant; a tenant's permission
+only inside that tenant.
 
-**A key is a name inside a tenant.** Two tenants may hold a permission of
-the same key, and each one has its own row: the unique index is on
-`(coalesce(tenant_id, '000…0'::uuid), key)`, so the rows live side by
-side. The permission of another tenant is never the permission of this
-one, and a grant never names it: the row of the tenant is created on
+**A key is a name inside a tenant.** Two tenants may each hold a permission with the same key, as
+separate rows. A grant never names another tenant's permission: the tenant's own row is created on
 demand (§10.6).
 
 ### 3.4 `grants`
 
-The policy of the platform. A grant says: this principal — or this group
-of principals — holds this permission, on this workspace, on this route,
-until this date.
-
-A grant may hold a **role** instead of a permission (§3.6): the grant then
-holds the role for the subject, and the permissions of the role are the
-permissions the subject holds.
+The platform policy. A grant says: this principal (or this group) holds this permission on this
+workspace, on this route, until this date. A grant may hold a **role** instead of a permission
+(§3.6); the subject then holds the role's permissions.
 
 | Column | Type | Rule |
 | --- | --- | --- |
 | `id` | `uuid` | Primary key. |
-| `tenant_id` | `uuid` | The tenant of the grant. Foreign key to `tenants`. |
-| `user_id` | `uuid` | The principal of the grant, or `null` when the grant names a group. Foreign key to `(id, tenant_id)` of `users`: **a grant can never name a principal of another tenant**. |
-| `group_id` | `uuid` | The group of the grant, or `null` when the grant names a principal. Foreign key to `(id, tenant_id)` of `groups`: **a grant can never name a group of another tenant**. |
-| `permission_id` | `uuid` | The permission of the grant, or `null` when the grant names a role. Foreign key to `permissions`. |
-| `role_id` | `uuid` | The role of the grant, or `null` when the grant names a permission. Foreign key to `(id, tenant_id)` of `roles`: **a grant can never name a role of another tenant**. |
-| `workspace_id` | `text` | The workspace of the grant, or `null` for every workspace of the tenant. The access service keeps the value as it is given: a workspace that is not a UUID simply matches no workspace-scoped grant. |
-| `route_id` | `text` | The route of the grant, or `null` for every route. |
+| `tenant_id` | `uuid` | The grant's tenant. Foreign key to `tenants`. |
+| `user_id` | `uuid` | The principal, or `null` when the grant names a group. Foreign key to `(id, tenant_id)` of `users`: **a grant can never name a principal of another tenant**. |
+| `group_id` | `uuid` | The group, or `null` when the grant names a principal. Foreign key to `(id, tenant_id)` of `groups`: **a grant can never name a group of another tenant**. |
+| `permission_id` | `uuid` | The permission, or `null` when the grant names a role. Foreign key to `permissions`. |
+| `role_id` | `uuid` | The role, or `null` when the grant names a permission. Foreign key to `(id, tenant_id)` of `roles`: **a grant can never name a role of another tenant**. |
+| `workspace_id` | `text` | The workspace, or `null` for every workspace of the tenant. Stored as given: a workspace that is not a UUID matches no workspace-scoped grant. |
+| `route_id` | `text` | The route, or `null` for every route. |
 | `expires_at` | `timestamptz` | `null` when the grant does not expire. |
-| `revoked_at` | `timestamptz` | `null` while the grant is alive. A revoked grant is kept, it is not deleted. |
-| `granted_by` | `text` | Who granted it, for the audit log. `null` when it is not known. |
+| `revoked_at` | `timestamptz` | `null` while the grant is alive. A revoked grant is kept, not deleted. |
+| `granted_by` | `text` | Who granted it, for the audit log. `null` when unknown. |
 | `created_at` | `timestamptz` | |
 
-A grant names **exactly one** subject: a principal or a group. The check
-`(user_id is null) <> (group_id is null)` is in the schema, and it is not a
-rule of the application that can be forgotten.
+Two schema checks, so neither is an application rule that can be forgotten:
 
-A grant names **exactly one** kind: a permission or a role. The check
-`(permission_id is not null)::int + (role_id is not null)::int = 1` is in
-the schema too, and it is not a rule of the application that can be
-forgotten.
+- Exactly one subject, a principal or a group: `(user_id is null) <> (group_id is null)`.
+- Exactly one kind, a permission or a role: `(permission_id is not null)::int + (role_id is not null)::int = 1`.
 
-Unique among the live grants: `(tenant_id, user_id,
-coalesce(permission_id, zero), coalesce(role_id, zero),
-coalesce(workspace_id,''), coalesce(route_id,''))` for the grants that
-name a principal, and the same tuple on `group_id` for the grants that
-name a group. The `coalesce` is there for the same reason as in §3.3, and
-the two zeroed identifiers are the ones of a grant that holds a
-permission and of a grant that holds a role: they are two different
-grants, and they are two different rows.
+Unique among live grants:
+`(tenant_id, user_id, coalesce(permission_id, zero), coalesce(role_id, zero), coalesce(workspace_id,''), coalesce(route_id,''))`
+for grants that name a principal, and the same tuple on `group_id` for grants that name a group.
+The `coalesce` has the same purpose as in §3.3. A permission grant and a role grant are two
+different grants and two different rows.
 
 ### 3.5 `groups`
 
-A group is a set of principals of a tenant. A grant may name a group
-instead of a principal: the grant then holds for every principal of the
-group.
+A set of principals of one tenant. A grant that names a group holds for every member.
 
-A group of the access service is **not** the `groups` scope of the provider (§7.4): the
-scope asks the provider for the groups of the caller, a group of the access service is a
-set of principals of the tenant that the policy is written on.
+An access-service group is **not** the provider's `groups` scope (§7.4): that scope asks the
+provider for the caller's groups, while a group here is a set of the tenant's principals that
+policy is written on.
 
 | Column | Type | Rule |
 | --- | --- | --- |
 | `id` | `uuid` | Primary key. |
-| `tenant_id` | `uuid` | The tenant of the group. Foreign key to `tenants`. |
-| `key` | `text` | The name of the group, `[a-z0-9][a-z0-9._-]{0,63}`. |
+| `tenant_id` | `uuid` | The group's tenant. Foreign key to `tenants`. |
+| `key` | `text` | Group name, `[a-z0-9][a-z0-9._-]{0,63}`. |
 | `display_name` | `text` | `null` when there is none. |
-| `members` | `uuid[]` | The principals of the group: their ids. Every member is a principal of the tenant at the moment the membership is written. The administration speaks in external subjects (§10.9) and the adapter translates them. The database checks it: a constraint trigger refuses a member that is not a principal of the tenant of the group. |
+| `members` | `uuid[]` | Member principal ids, each a principal of the group's tenant when written (checked by a trigger, below). The administration speaks in external subjects (§10.9); the adapter translates them. |
 | `created_at`, `updated_at` | `timestamptz` | |
 
-Unique: `(tenant_id, key)`. The pair `(id, tenant_id)` is unique as well,
-so a grant can carry the tenant of its group in a foreign key (§3.4).
+Unique: `(tenant_id, key)`. `(id, tenant_id)` is also unique, so a grant can carry its group's
+tenant in a foreign key (§3.4).
 
-The membership is **replaced** by the call of the administration (§10.9):
-the members of the list are the members of the group, and the principals
-that are not in the list are not in the group any more.
+The administration call **replaces** the membership (§10.9): the listed principals are the
+members, and anyone not listed is removed.
 
-The membership is checked by the **database** and not only by the
-application: a list of ids has no foreign key, so a constraint trigger
-checks every member when the group is written, and refuses the one that
-is not a principal of the tenant of the group. The check is deferred to
-the end of the transaction, so a principal that is created in the same
-transaction is seen. The refusal of the database is the same `404` that
-the administration gives when it finds the member before the write
-(§10.9): the constraint is the backstop of the rule of the application,
-not its replacement.
+The **database** checks membership, not only the application. An id array has no foreign key, so
+a constraint trigger checks every member when the group is written and refuses one that is not a
+principal of the group's tenant. The trigger is deferred to the end of the transaction, so a
+principal created in the same transaction is seen. Its refusal is the same `404` the administration
+returns when it finds the member before the write (§10.9): a backstop, not a replacement.
 
-The membership is indexed: the question that the decision asks is "which
-groups hold this principal", and the predicate that answers it is a
-containment (`groups.members @> array[principal]`), which a **GIN index**
-serves. Without it, every decision that reads a grant of a group walks
-the groups of the tenant and reads every member list of them (§8.5).
+Membership has a **GIN index**. A decision asks "which groups hold this principal", answered by
+the containment `groups.members @> array[principal]`. Without the index, every decision that reads
+a group grant walks all the tenant's groups and their member lists (§8.5).
 
 ### 3.6 `roles`
 
-A role is a named set of permissions of a tenant. A grant may name a role
-instead of a permission (§3.4): the grant then holds the role for the
-subject, and the permissions of the role are the permissions the subject
-holds.
+A named set of a tenant's permissions. A grant may name a role instead of a permission (§3.4);
+the subject then holds the role's permissions.
 
-A role may name another role: the permissions of the named role are the
-permissions of the naming role, and the naming is transitive. A role that
-names itself, directly or through other roles, would hold itself forever,
-and the decision of a principal would never answer: the schema refuses the
-cycle, and the administration refuses it before the write (§10.11).
+A role may name other roles, transitively: a named role's permissions are the naming role's. A role
+that names itself, directly or through others, would make a decision never answer, so the schema
+refuses the cycle and the administration refuses it before the write (§10.11).
 
-The roles are three tables: the role, the permissions it names and the
-roles it names. The decision reads them in one statement, and the
-expansion of the nesting is a recursive statement of that same query.
+Roles are three tables: the role, the permissions it names and the roles it names. The decision
+reads them in one statement, expanding the nesting recursively within that query.
 
 #### 3.6.1 `roles`
 
 | Column | Type | Rule |
 | --- | --- | --- |
 | `id` | `uuid` | Primary key. |
-| `tenant_id` | `uuid` | The tenant of the role. Foreign key to `tenants`. |
-| `key` | `text` | The name of the role, `[a-z0-9][a-z0-9._-]{0,63}`. |
+| `tenant_id` | `uuid` | The role's tenant. Foreign key to `tenants`. |
+| `key` | `text` | Role name, `[a-z0-9][a-z0-9._-]{0,63}`. |
 | `display_name` | `text` | `null` when there is none. |
 | `description` | `text` | What the role is for. `null` when there is none. |
 | `created_at`, `updated_at` | `timestamptz` | |
 
-Unique: `(tenant_id, key)`. The pair `(id, tenant_id)` is unique as well,
-so a grant can carry the tenant of its role in a foreign key (§3.4).
+Unique: `(tenant_id, key)`. `(id, tenant_id)` is also unique, so a grant can carry its role's
+tenant in a foreign key (§3.4).
 
 #### 3.6.2 `role_permissions`
 
 | Column | Type | Rule |
 | --- | --- | --- |
-| `tenant_id` | `uuid` | The tenant of the membership. Foreign key to `tenants`. |
+| `tenant_id` | `uuid` | The membership's tenant. Foreign key to `tenants`. |
 | `role_id` | `uuid` | The role that holds the permission. Foreign key to `(id, tenant_id)` of `roles`. |
 | `permission_id` | `uuid` | The permission the role holds. Foreign key to `permissions`. |
 
@@ -367,23 +296,19 @@ Primary key: `(role_id, permission_id)`.
 
 | Column | Type | Rule |
 | --- | --- | --- |
-| `tenant_id` | `uuid` | The tenant of the membership. Foreign key to `tenants`. |
-| `role_id` | `uuid` | The role that names. Foreign key to `(id, tenant_id)` of `roles`. |
-| `child_role_id` | `uuid` | The role that is named: its permissions are the ones of the role that names it. Foreign key to `(id, tenant_id)` of `roles`. |
+| `tenant_id` | `uuid` | The membership's tenant. Foreign key to `tenants`. |
+| `role_id` | `uuid` | The naming role. Foreign key to `(id, tenant_id)` of `roles`. |
+| `child_role_id` | `uuid` | The named role; its permissions belong to the naming role. Foreign key to `(id, tenant_id)` of `roles`. |
 
-Primary key: `(role_id, child_role_id)`. A role does not name itself: the
-check `role_id <> child_role_id` is in the schema, and a constraint
-trigger refuses the cycle that the check does not see. The trigger is
-deferred to the end of the transaction, and the refusal of the database is
-the `409` that the administration gives when it finds the cycle before the
-write (§10.11).
+Primary key: `(role_id, child_role_id)`. The schema check `role_id <> child_role_id` stops a role
+naming itself, and a constraint trigger, deferred to the end of the transaction, refuses longer
+cycles. The database refusal is the same `409` the administration returns when it finds the cycle
+before the write (§10.11).
 
-The memberships are **replaced** by the call of the administration
-(§10.11): the permissions and the roles of the lists are the memberships
-of the role, and the ones that are not in the lists are not held by the
-role any more.
+The administration call **replaces** the memberships (§10.11): the listed permissions and roles are
+the role's memberships, and anything not listed is removed.
 
-### 3.7 The diagram
+### 3.7 Diagram
 
 ```
   tenants ────< users ────< grants >──── permissions
@@ -398,319 +323,236 @@ role any more.
      └── the registration of the provider and of the gateway
 ```
 
-### 3.8 The migrations
+### 3.8 Migrations
 
-The schema is created by plain SQL files, applied in the order of their
-names, by one runner that takes an advisory lock so two replicas that
-start at the same time do not apply the same migration twice. A migration
-that fails stops the process: the access service does not start against a schema it does
-not understand.
+The schema is plain SQL files applied in name order by one runner that takes an advisory lock, so
+two replicas starting together never apply a migration twice. A failed migration stops the
+process: the service never starts against a schema it does not understand.
 
-There is no table "for later": a feature that needs one is a feature that
-is deferred until a customer pays for it (§14).
+No table exists "for later": a feature that needs one is deferred until a customer pays for it
+(§14).
 
-The bookkeeping of the migrations lives in a table of the infrastructure,
-`access_schema_migrations`. It holds the name of the migrations that were
-applied and nothing else. It exists because the runner has to know what
-the schema of the database is: a database that holds a migration this
-version of the access service does not know is a schema the access service does not understand, and the
-process refuses to start against it.
+`access_schema_migrations` records the names of applied migrations and nothing else. A database
+holding a migration this version does not know is a schema the service does not understand, and
+the process refuses to start.
 
-The runner reads the schema from the directory of the migrations of the
-tree (`src/platform/postgres/migrations/`), and, when that directory is
-not there, from the directory `migrations/` next to the executable: a
-compiled binary carries no directory, and the schema of the release is
-deployed with it. A service that does not find the schema refuses to
-start and names the directory it looked in.
+The runner reads `src/platform/postgres/migrations/` and, when that directory is absent,
+`migrations/` next to the executable: a compiled binary carries no directory, so the release
+ships the schema beside it. A service that finds no schema refuses to start and names the
+directory it looked in.
 
-### 3.9 The database of a development machine
+### 3.9 Development database
 
-The database of the access service is PostgreSQL. The driver is named by
-`ACCESS_DATABASE_URL`:
+The database is PostgreSQL, selected by `ACCESS_DATABASE_URL`:
 
-| The value | The database |
+| Value | Database |
 | --- | --- |
 | `postgres://…` or `postgresql://…` | A PostgreSQL server. |
-| `pglite://<path>` | The embedded PostgreSQL of the process, in `<path>`. |
-| Nothing, in a development environment | The embedded PostgreSQL of the process, in `./.access/pglite`. |
+| `pglite://<path>` | The process's embedded PostgreSQL, in `<path>`. |
+| Unset, in a development environment | The process's embedded PostgreSQL, in `./.access/pglite`. |
 
-The embedded PostgreSQL is `pglite`: PostgreSQL compiled to WebAssembly,
-running in the process of the access service. It is the same PostgreSQL as the one of a
-deployment, so a development machine applies the migrations of the
-production and nothing has to be translated between the two.
+The embedded PostgreSQL is `pglite`: PostgreSQL compiled to WebAssembly, running in the access
+service's process. It is the same PostgreSQL as a deployment's, so development applies the
+production migrations with nothing to translate.
 
-The development machine of the repository (`bun run dev`) names the
-**server of the machine**: the machine has one PostgreSQL, and every
-service has its own database on it. The embedded database is the
-fallback of a service that is run alone.
+Local development (`bun run dev`) uses the machine's PostgreSQL **server**, with one database per
+service. The embedded database is the fallback for a service run alone.
 
-The repository is developed and tested against **PostgreSQL 18**: the
-compose file of a development machine, the jobs of the CI and the gates
-of the release run it, and the embedded PostgreSQL is that version. A
-deployment names the server it uses in `ACCESS_DATABASE_URL`, and the
-service does not read the version of that server: the version of the
-database of a deployment is the choice of the operator.
+The repository is developed and tested against **PostgreSQL 18**: the development compose file,
+the CI jobs and the release gates run it, and the embedded PostgreSQL is that version. The service
+does not read the server version; a deployment's PostgreSQL version is the operator's choice.
 
-A **production** environment must name a PostgreSQL server: the embedded
-database lives in one process and the replicas of a deployment share their
-tables. A production environment that names the embedded database is
-refused at the start.
+A **production** environment must name a PostgreSQL server, because the embedded database lives in
+one process and a deployment's replicas share their tables. Production naming the embedded database
+is refused at start.
 
-The tests run on the embedded database by default. A workflow that has a
-server names it in `ACCESS_TEST_DATABASE_URL` and the same tests run against
-it.
+Tests run on the embedded database by default. A workflow with a server sets
+`ACCESS_TEST_DATABASE_URL`, and the same tests run against it.
 
-### 3.10 The isolation of the tenants
+### 3.10 Tenant isolation
 
-The tenants are isolated by the application: the keys of the eight tables
-carry the tenant, the foreign key of a grant refuses a principal of
-another tenant, and every statement that reads a tenant reads it by its
-id.
+The application isolates tenants: the keys of the eight tables carry the tenant, a grant's foreign
+key refuses another tenant's principal, and every statement reads a tenant by its id.
 
-The database is the **backstop** of that isolation. The eight tables have
-the row level security of PostgreSQL, and their policy is the tenant of the
-statement:
+The database is the **backstop**. The eight tables have PostgreSQL row level security, with the
+statement's tenant as the policy:
 
-- A statement that is **not** scoped to a tenant (the administration, the
-  decision of the bearer token of the deployment) sees the whole platform.
-- A statement that is **scoped** to a tenant runs in the scope of that
-  tenant, and it sees the rows of that tenant and nothing else. The scope
-  is the setting `access.tenant_id`, and it is local to the transaction: a
-  pooled connection never carries the scope of another request.
+- A statement **not** scoped to a tenant (the administration, decisions made with the deployment
+  bearer token) sees the whole platform.
+- A statement **scoped** to a tenant sees that tenant's rows and nothing else. The scope is the
+  setting `access.tenant_id`, local to the transaction, so a pooled connection never carries
+  another request's scope.
 
-The **empty** scope is the scope of the platform. PostgreSQL reverts a
-local setting when its transaction ends, and it leaves the placeholder of
-the setting on the session: `access.tenant_id` is empty, and not unset, on
-every connection that has run a scoped statement. A connection of a pool
-is a connection that is reused, so the empty scope is the normal state of
-a connection of a deployment, and the statements of the platform see the
-platform on it.
+The **empty** scope is the platform scope. PostgreSQL reverts a local setting when its transaction
+ends but leaves the setting's placeholder on the session, so `access.tenant_id` is empty, not
+unset, on every connection that ran a scoped statement. Pooled connections are reused, so empty is
+their normal state, and platform statements see the platform on them.
 
-A statement that forgets the tenant in its text is therefore refused by
-PostgreSQL itself, and not only by the review of the code.
+A statement that forgets the tenant in its text is therefore refused by PostgreSQL itself, not only
+by code review.
 
-The policies are only policies for a role that is **subject** to them: a
-superuser and a role with `BYPASSRLS` are not. A **production**
-deployment therefore refuses to start with such a role: the isolation
-would be a promise and not a rule. The role of the deployment is a role
-that owns the tables of the platform and that is not a superuser.
+Policies only bind a role that is **subject** to them; a superuser or a role with `BYPASSRLS` is
+not. A **production** deployment therefore refuses to start with such a role, since isolation
+would be a promise and not a rule. The deployment's role owns the platform tables and is not a
+superuser.
 
----
+## 4. Environment
 
-## 4. The environment
+The environment is read once at start and validated as a whole: a value that cannot be understood
+stops the service. Log-level rules are in [platform operations](../platform/operations.md);
+development values are in `.env.example`.
 
-The environment is read once, at the start of the process, and validated as
-a whole: a value that cannot be understood stops the service. The only
-exception is the level of the log, which falls back to `info`. The
-readable list with the values of a development machine is in `.env.example`.
-
-| Variable | Why |
+| Variable | Purpose |
 | --- | --- |
-| `ACCESS_HOST` | The address of the listener. Default `0.0.0.0`. |
-| `ACCESS_PORT` | The port of the listener. Default `8081`. |
-| `ACCESS_ISSUER` | The public issuer url of the access service. It is the `iss` of every token it issues and the issuer the gateway is configured with. It must be the url the browser and the gateway use. |
-| `ACCESS_PUBLIC_URL` | The public url of the access service, when it differs from the issuer. Default: the issuer. |
-| `ACCESS_DATABASE_URL` | The PostgreSQL of the eight tables. A server in a deployment, the embedded one on a development machine (§3.9). |
-| `ACCESS_REDIS_URL` | The shared store of the authorization codes. Required when more than one replica runs. |
-| `ACCESS_ALLOW_MEMORY_STATE` | Replaces the shared store with the memory of the process. A single-node deployment only. |
+| `ACCESS_HOST` | Listener address. Default `0.0.0.0`. |
+| `ACCESS_PORT` | Listener port. Default `8081`. |
+| `ACCESS_ISSUER` | Public issuer url: the `iss` of every issued token and the issuer the gateway is configured with. Must be the url the browser and the gateway use. |
+| `ACCESS_PUBLIC_URL` | Public url, when it differs from the issuer. Default: the issuer. |
+| `ACCESS_DATABASE_URL` | PostgreSQL holding the eight tables: a server in a deployment, embedded in development (§3.9). |
+| `ACCESS_REDIS_URL` | Shared store for authorization codes. Required when more than one replica runs. |
+| `ACCESS_ALLOW_MEMORY_STATE` | Replaces the shared store with process memory. Single-node deployments only. |
 | `ACCESS_ADMIN_TOKEN` | The bearer token of the twelve administrative endpoints. |
-| `ACCESS_ADMIN_TOKENS` | The credentials of the administration: a json object of bearer tokens and of their scopes (§4.6). |
-| `ACCESS_PREVIOUS_ADMIN_TOKEN` | The token that the current one replaced. It is accepted until the deployment removes it (§4.3.1). |
-| `ACCESS_DECISION_TOKEN` | The bearer token the gateway presents on `POST /v1/decisions`. Optional, and deprecated: without it, only the credentials of a tenant are accepted (§8.8). |
-| `ACCESS_PREVIOUS_DECISION_TOKEN` | The token that the current one replaced. It is accepted until the deployment removes it (§4.3.1). It is refused when the token it replaced is not set. |
-| `ACCESS_CONTEXT_TOKENS` | The credentials of the access context contract (§9): a JSON object whose keys are bearer tokens and whose values are the tenants every token may ask about. A `null` value is a credential of the platform. |
-| `ACCESS_STATE_SECRET` | Signs and encrypts the state of a login (§5.3). 32 bytes at least. The same value on every replica. |
-| `ACCESS_SECRET_ENCRYPTION_KEY` | Encrypts the client secrets at rest (§4.3). 32 bytes at least. |
-| `ACCESS_SIGNING_KEY` | The private key of the access service, in PEM. The public part is published at `/oauth/jwks`. |
-| `ACCESS_SIGNING_KID` | The identifier of the key in the JWKS. |
-| `ACCESS_PREVIOUS_SIGNING_KEY` | The private key of the previous rotation, in PEM. It stays published in the JWKS until the last token it signed has expired (§4.2). |
-| `ACCESS_PREVIOUS_SIGNING_KID` | The identifier of the previous key in the JWKS. |
-| `ACCESS_IDP_TIMEOUT_MS` | How long the access service waits for the provider of a tenant. Default `5000`. |
-| `ACCESS_DECISION_TIMEOUT_MS` | How long a decision may take before it is a denial. Default `2000`. It is also the deadline of the statements of the pool (§8.3). |
-| `ACCESS_CLOCK_SKEW_SECONDS` | The tolerance of the clock on the tokens of a provider. Default `60`. |
-| `ACCESS_METRICS_TOKEN` | The bearer token of the metrics endpoint. Without it the endpoint is not served. |
+| `ACCESS_ADMIN_TOKENS` | Administration credentials: a JSON object of bearer tokens and their scopes (§4.6). |
+| `ACCESS_PREVIOUS_ADMIN_TOKEN` | The token the current one replaced. Accepted until the deployment removes it (§4.3.1). |
+| `ACCESS_DECISION_TOKEN` | Bearer token the gateway presents on `POST /v1/decisions`. Optional and deprecated: without it, only tenant credentials are accepted (§8.8). |
+| `ACCESS_PREVIOUS_DECISION_TOKEN` | The token the current one replaced. Accepted until the deployment removes it (§4.3.1); refused when the token it replaced is not set. |
+| `ACCESS_CONTEXT_TOKENS` | Access context credentials (§9): a JSON object whose keys are bearer tokens and whose values are the tenants each token may ask about. A `null` value is a platform credential. |
+| `ACCESS_STATE_SECRET` | Signs and encrypts the login state (§5.3). At least 32 bytes. Same value on every replica. |
+| `ACCESS_SECRET_ENCRYPTION_KEY` | Encrypts client secrets at rest (§4.3). At least 32 bytes. |
+| `ACCESS_SIGNING_KEY` | The service's private key, in PEM. The public part is published at `/oauth/jwks`. |
+| `ACCESS_SIGNING_KID` | The key's identifier in the JWKS. |
+| `ACCESS_PREVIOUS_SIGNING_KEY` | The previous rotation's private key, in PEM. Stays published in the JWKS until the last token it signed has expired (§4.2). |
+| `ACCESS_PREVIOUS_SIGNING_KID` | The previous key's identifier in the JWKS. |
+| `ACCESS_IDP_TIMEOUT_MS` | How long to wait for a tenant's provider. Default `5000`. |
+| `ACCESS_DECISION_TIMEOUT_MS` | How long a decision may take before it is a denial. Default `2000`. Also the pool's statement deadline (§8.3). |
+| `ACCESS_CLOCK_SKEW_SECONDS` | Clock tolerance on provider tokens. Default `60`. |
+| `ACCESS_METRICS_TOKEN` | Bearer token for the metrics endpoint. Without it the endpoint is not served. |
 | `ACCESS_LOG_LEVEL` | `debug`, `info`, `warn` or `error`. Default `info`. |
 | `ACCESS_ENVIRONMENT` | `development` or `production`. The fixtures refuse to run in production. |
-| `ACCESS_<NAME>_FILE` | The file that holds the value of `ACCESS_<NAME>`, for every secret of the environment (§4.5). |
+| `ACCESS_<NAME>_FILE` | File holding the value of `ACCESS_<NAME>`, for every secret (§4.5). |
 
-### 4.1 The secrets
+### 4.1 Secrets
 
-The two tokens of the service are compared in constant time. They are read
-from the environment and never written to a log.
+Tokens are compared in constant time, read from the environment and never logged.
 
-**A bearer token is at least 16 bytes long.** Every token of the
-environment — `ACCESS_ADMIN_TOKEN`, `ACCESS_PREVIOUS_ADMIN_TOKEN`,
-`ACCESS_DECISION_TOKEN`, `ACCESS_PREVIOUS_DECISION_TOKEN` and `ACCESS_METRICS_TOKEN` —
-is measured in the bytes it is compared in: a token of one character
-protects the administration of the platform as well as a token of thirty
-two characters protects it, because the length of a secret is the first
-thing that is tried. A production deployment refuses to start when one of
-its tokens is shorter (§4.4). The length of the two secrets of the
-signing and of the encryption is 32 bytes (§4.4).
+**A bearer token is at least 16 bytes.** `ACCESS_ADMIN_TOKEN`, `ACCESS_PREVIOUS_ADMIN_TOKEN`,
+`ACCESS_DECISION_TOKEN`, `ACCESS_PREVIOUS_DECISION_TOKEN` and `ACCESS_METRICS_TOKEN` are measured
+in the bytes they are compared in, since length is the first thing an attacker tries. Production
+refuses to start when a token is shorter (§4.4). Signing and encryption secrets are 32 bytes (§4.4).
 
-**The values of the example are not secrets.** A production deployment
-refuses to start when one of its secrets is a value of `.env.example` or
-a secret that is one repeated character (`000…0`, `111…1`, `aaaa…`),
-whatever its length. A deployment that copies the example of a
-development machine into a production one must not start with the
-secrets of the example: the example is published, and so is every
-deployment that kept it.
+**Example values are not secrets.** Production refuses to start when a secret is a value from
+`.env.example` or one repeated character (`000…0`, `111…1`, `aaaa…`), whatever its length. The
+example is published, so any deployment that copied it is exposed.
 
-### 4.2 The signing key
+### 4.2 Signing key
 
-The tokens the access service issues are signed with `RS256` and published at
-`/oauth/jwks`. The key is a secret of the deployment: it comes from the
-environment or from a secret manager, it is never generated at the start of
-a process (a key that changes at every restart invalidates every token
-that is alive) and it is never written to a disk of the container.
+Issued tokens are signed with `RS256` and published at `/oauth/jwks`. The key is a deployment
+secret from the environment or a secret manager. It is never generated at start (a key that changes
+on restart invalidates every live token) and never written to the container's disk.
 
-A rotation is the publication of a second key in the JWKS and the change
-of `ACCESS_SIGNING_KEY`; the old key stays published until the last token it
-signed has expired.
+To rotate, publish a second key in the JWKS and change `ACCESS_SIGNING_KEY`. The old key stays
+published until the last token it signed has expired.
 
-### 4.3 The secrets at rest
+### 4.3 Secrets at rest
 
-The two client secrets of a tenant (the one of the provider and the one of
-the gateway) are encrypted with AES-256-GCM under
-`ACCESS_SECRET_ENCRYPTION_KEY` before they are written. The administrative
-endpoints take them in clear over TLS and never return them: an answer
-carries `null` in their place.
+A tenant's two client secrets (provider and gateway) are encrypted with AES-256-GCM under
+`ACCESS_SECRET_ENCRYPTION_KEY` before they are written. Administrative endpoints accept them in
+clear over TLS and never return them; answers carry `null` in their place.
 
-Changing `ACCESS_SECRET_ENCRYPTION_KEY` makes every stored secret
-unreadable. The migration is a re-encryption of the two columns, done by
-the operator, in one transaction (`scripts/cli/rotate-secrets.ts`).
+Changing `ACCESS_SECRET_ENCRYPTION_KEY` makes every stored secret unreadable. The operator
+re-encrypts both columns in one transaction with `scripts/cli/rotate-secrets.ts`.
 
-The key of the encryption is derived from the secret of the deployment
-with HKDF-SHA256, so the secret may be a passphrase, a hexadecimal string
-or a base64 string, and the key of the encryption is always 32 bytes.
+The encryption key is derived from the configured secret with HKDF-SHA256, so the secret may be a
+passphrase, a hex string or a base64 string; the derived key is always 32 bytes.
 
-The stored ciphertext carries the version of its format, so a change of
-the format is a version and not a migration of the column:
+Stored ciphertext carries its format version, so a format change is a new version, not a column
+migration:
 
-| Bytes | What they hold |
+| Bytes | Content |
 | --- | --- |
-| `1` | The version of the format (currently `1`). |
-| `12` | The nonce of the encryption. |
-| The rest | The body and the tag of the encryption. |
+| `1` | Format version (currently `1`). |
+| `12` | Encryption nonce. |
+| The rest | Ciphertext body and tag. |
 
-A service without `ACCESS_SECRET_ENCRYPTION_KEY` does not store the client
-secrets in clear: it refuses to write a tenant and says so.
+Without `ACCESS_SECRET_ENCRYPTION_KEY`, the service never stores client secrets in clear: it
+refuses to write a tenant and says so.
 
-### 4.3.1 The rotation of a secret
+### 4.3.1 Rotating a secret
 
-A secret that a client presents is rotated without a window in which the
-client and the access service disagree.
+A secret that a client presents rotates with no window in which client and service disagree.
 
-**The secret of the gateway of a tenant.** The call of the administration
-that changes the secret of a tenant keeps the secret it replaces for
-**24 hours**. Both secrets are accepted until the window is over: the
-gateway is changed first, the tenant is changed second, and the old
-secret is dropped by the deployment that owns it. The window is the
-rotation, not a second credential.
+**A tenant's gateway secret.** The administration call that changes it keeps the replaced secret
+for **24 hours**, and both are accepted during that window. Change the gateway first and the tenant
+second; the deployment that owns the old secret then drops it. The window is the rotation, not a
+second credential.
 
-A call that presents the secret that is already in use is **not** a
-rotation: it does not close the window of the rotation that is in
-flight. An unrelated change of a tenant does not shorten the window of
-the secret of its gateway.
+Presenting the secret already in use is **not** a rotation and does not close an in-flight
+rotation window. An unrelated tenant change does not shorten the window.
 
-**The token of the decisions and the token of the administration.** They
-are read from the environment, and the environment holds the one that is
-in use and, during a rotation, the one it replaced:
+**The decision and administration tokens** come from the environment, which holds the current
+token and, during a rotation, the one it replaced:
 
-| Variable | What it holds |
+| Variable | Content |
 | --- | --- |
-| `ACCESS_DECISION_TOKEN` | The token that the gateway presents on `POST /v1/decisions`. Optional: without it, only the credentials of a tenant are accepted (§8.8). |
-| `ACCESS_PREVIOUS_DECISION_TOKEN` | The token that the current one replaced. It is accepted until the deployment removes it. It is refused without the token it replaced: a deployment that removes the shared secret removes it entirely (§8.8). |
+| `ACCESS_DECISION_TOKEN` | The token the gateway presents on `POST /v1/decisions`. Optional: without it, only tenant credentials are accepted (§8.8). |
+| `ACCESS_PREVIOUS_DECISION_TOKEN` | The token the current one replaced, accepted until the deployment removes it. Refused without the token it replaced: removing the shared secret removes it entirely (§8.8). |
 | `ACCESS_ADMIN_TOKEN` | The token of the twelve administrative endpoints. |
-| `ACCESS_PREVIOUS_ADMIN_TOKEN` | The token that the current one replaced. It is accepted until the deployment removes it. |
+| `ACCESS_PREVIOUS_ADMIN_TOKEN` | The token the current one replaced, accepted until the deployment removes it. |
 
-A rotation is therefore a rolling change: the previous value is put in
-the environment of the replicas, the new value replaces it, and the
-previous value is removed. The rotation of the token of the decisions is
-a change of the environment of every gateway at the same time, and the
-window is what makes it a rolling one.
+A rotation is rolling: put the previous value in every replica's environment, replace the current
+value, then remove the previous one. Rotating the decision token changes every gateway's
+environment at once; the window is what makes it rolling. Both values are compared in constant
+time.
 
-The comparison of the two tokens is in constant time, like the
-comparison of one.
+### 4.4 Production requirements
 
-### 4.4 What a production deployment needs
-
-A production deployment (`ACCESS_ENVIRONMENT=production`) refuses to start
-when one of these is missing. Every problem of the environment is reported
-at once and the message names the variables that are missing: a deployment
-that fixes one variable and restarts to learn about the next one stays
-down.
+With `ACCESS_ENVIRONMENT=production`, the service refuses to start when any of these is missing.
+All environment problems are reported at once, naming the variables, so a deployment never fixes
+one, restarts and only then learns about the next.
 
 | Variable | Why it is required |
 | --- | --- |
-| `ACCESS_DATABASE_URL` | The eight tables live there. A production environment must name a server (§3.9). |
-| `ACCESS_ISSUER` | It is the `iss` of every token the access service issues and the issuer the gateway is configured with. |
-| `ACCESS_REDIS_URL` | The authorization codes have to be shared by the replicas, unless `ACCESS_ALLOW_MEMORY_STATE=true` names a deployment of a single node. |
+| `ACCESS_DATABASE_URL` | Holds the eight tables. Production must name a server (§3.9). |
+| `ACCESS_ISSUER` | The `iss` of every issued token and the issuer the gateway is configured with. |
+| `ACCESS_REDIS_URL` | Replicas must share authorization codes, unless `ACCESS_ALLOW_MEMORY_STATE=true` marks a single-node deployment. |
 | `ACCESS_ADMIN_TOKEN` | It is the bearer token of the twelve administrative endpoints, unless the deployment names its credentials in `ACCESS_ADMIN_TOKENS` (§4.6). |
-| `ACCESS_STATE_SECRET` | It signs and encrypts the state of a login. At least 32 bytes. |
-| `ACCESS_SECRET_ENCRYPTION_KEY` | It encrypts the client secrets at rest. At least 32 bytes. |
-| `ACCESS_SIGNING_KEY` | It is the private key the access service signs its tokens with, in PEM. |
-| `ACCESS_SIGNING_KID` | It is the identifier of the key in the JWKS. |
+| `ACCESS_STATE_SECRET` | Signs and encrypts the login state. At least 32 bytes. |
+| `ACCESS_SECRET_ENCRYPTION_KEY` | Encrypts client secrets at rest. At least 32 bytes. |
+| `ACCESS_SIGNING_KEY` | The private key that signs issued tokens, in PEM. |
+| `ACCESS_SIGNING_KID` | The key's identifier in the JWKS. |
 
-A secret is at least 32 bytes long. A secret that is handed over as a hex
-string or as a base64 string is counted the way it is read: 32 bytes are 64
-hexadecimal characters and 44 base64 characters.
+Production also refuses to start when:
 
-A **bearer token** of the environment is at least **16 bytes** long, and
-it is measured in the bytes it is compared in (§4.1). A production
-deployment also refuses the values of `.env.example` and the secrets that
-are one repeated character (§4.1). Every problem is reported at once, and
-the message names the variable.
+- a secret is shorter than 32 bytes, counted as decoded (64 hex characters, 44 base64 characters);
+- a bearer token is shorter than **16 bytes**, or a secret is an example or one-character value
+  (§4.1);
+- the database role is a superuser or has `BYPASSRLS`, since the database does not enforce tenant
+  isolation for it (§3.10). The message names the role and the fix.
 
-The level of the log is the only value of the environment that does not
-stop the service: a typo in the level of a log must not keep a deployment
-down.
+The log level is the only value that never stops the service: a typo in it must not keep a
+deployment down.
 
-**`ACCESS_DECISION_TOKEN` is not required.** It is the bearer token of the
-deployment on the decisions (§8.8), and it is **deprecated**: it is not
-scoped to a tenant, so the gateway that presents it may ask about any
-principal of the platform. A deployment that does not set it accepts
-**only** the credentials of a tenant, which are scoped. That is the end
-of the migration, and it is reachable: the token is optional, so a
-deployment can remove it once every one of its gateways presents the
-credentials of its tenant. The gateway of the reference sends the bearer
-token, so a deployment that still has such a gateway keeps the token
-until that gateway is moved (§8.8).
+**Optional:** `ACCESS_DECISION_TOKEN`, which is deprecated and unscoped; keep it only while a
+gateway (such as the reference gateway) still sends it (§8.8). `ACCESS_CONTEXT_TOKENS`, needed only
+by a deployment that serves a data backend (§9).
 
-`ACCESS_CONTEXT_TOKENS` is optional too: it holds the credentials of
-the access context contract (§9), and only a deployment that serves a
-data backend needs it.
+### 4.5 Secrets in files
 
-A production deployment also refuses to start when the role of the
-database is a superuser or a role with `BYPASSRLS`: the isolation of the
-tenants is enforced by the database, and it is not enforced for such a
-role (§3.10). The message names the role and what to do about it.
+Any secret may be given in a **file** instead of its variable: `ACCESS_SIGNING_KEY_FILE` for the
+private key, `ACCESS_CONTEXT_TOKENS_FILE` for the access context credentials,
+`ACCESS_ADMIN_TOKEN_FILE` for the administration token, and so on.
 
-### 4.5 The values that are in a file
+- The file's content is the value, with the trailing newline removed.
+- An unreadable file is a configuration error; the service does not start without the secret.
+- Setting both a variable and its file is refused at start rather than guessing which was meant.
 
-A value of the environment may be in a **file** instead of in the
-variable: `ACCESS_SIGNING_KEY_FILE` holds the private key,
-`ACCESS_CONTEXT_TOKENS_FILE` holds the credentials of the access
-context, `ACCESS_ADMIN_TOKEN_FILE` holds the token of the administration,
-and so on. Every secret of the environment may be given that way.
+Files are how containers receive secrets: a secret manager writes them, whereas a private key in an
+environment variable gets mangled by a shell.
 
-The value of the file is the value of the variable, with the trailing
-newline removed. A file that cannot be read is a configuration error, and
-the service says so instead of starting without the secret.
+### 4.6 Administration credentials
 
-A variable and its file are **not** set at the same time: a deployment
-that sets both is a deployment that does not know which one it meant, and
-the service refuses to start rather than choose.
-
-The files are how a secret is given to a container: a secret of a
-deployment is a file that a secret manager writes, and a private key in
-a variable of the environment is a private key that a shell mangles.
-
-### 4.6 The credentials of the administration
-
-The administration is guarded by bearer tokens. A deployment may name
-them in `ACCESS_ADMIN_TOKENS`, a json object whose keys are the tokens and
-whose values are the scope of every one of them:
+The administration is guarded by bearer tokens. `ACCESS_ADMIN_TOKENS` is a JSON object whose keys
+are the tokens and whose values are their scopes:
 
 ```json
 {
@@ -719,234 +561,186 @@ whose values are the scope of every one of them:
 }
 ```
 
-A value of `null` is the credential of the **platform**: it may act for
-every tenant. A value of an object names the **slug** of the tenant the
-credential may act for, and the **name** of its operator. The name is
-what the audit of a change carries: a name is what an operator of a
-platform can answer for, and the credential itself is never written.
+- `null`: a **platform** credential, which may act for every tenant.
+- An object: the **slug** of the one tenant it may act for, and its operator's **name**. The audit
+  records the name, which an operator can answer for; the credential itself is never written.
 
-A credential is at least 16 characters long, and a malformed value stops
-the service: a credential that is not understood is a credential that is
-not scoped.
+A credential is at least 16 characters, and a malformed value stops the service: a credential that
+is not understood would not be scoped.
 
-`ACCESS_ADMIN_TOKEN` is the credential of the platform of a deployment that
-names none. It keeps working, and the operator of the audit is the
-fingerprint of the token. The two schemes are not exclusive: a
-deployment may name the credentials of its tenants and keep the token of
-the platform.
+`ACCESS_ADMIN_TOKEN` is the platform credential of a deployment that names none in
+`ACCESS_ADMIN_TOKENS`. It keeps working, and the audit operator is the token's fingerprint. The two
+schemes combine: a deployment may name tenant credentials and keep the platform token.
 
----
+## 5. Login
 
-## 5. The login
+### 5.1 Endpoints
 
-### 5.1 The endpoints of the access service
-
-The bodies of the requests and of the answers are in [api.md](api.md).
-
-| Endpoint | Behaviour |
+| Endpoint | Behavior |
 | --- | --- |
-| `GET /oauth/authorize` | The authorization endpoint of the access service. The gateway sends the browser here. |
-| `GET /oauth/tenant/callback` | The callback of the access service at the provider of a tenant. The provider sends the browser here. |
-| `POST /oauth/token` | The token endpoint of the access service. The gateway exchanges the code here. The client authenticates with `client_secret_basic`; a client without a secret is refused. |
-| `GET /oauth/jwks` | The keys of the access service. |
-| `GET /oauth/userinfo` | The claims of the principal of a bearer token. |
-| `GET /.well-known/openid-configuration` | The discovery document of the access service. |
-| `POST /v1/decisions` | The decision contract of the gateway (§8). |
+| `GET /oauth/authorize` | Authorization endpoint. The gateway sends the browser here. |
+| `GET /oauth/tenant/callback` | Callback registered at each tenant's provider. The provider sends the browser here. |
+| `POST /oauth/token` | Token endpoint, where the gateway exchanges the code. The client authenticates with `client_secret_basic`; a client without a secret is refused. |
+| `GET /oauth/jwks` | The service's public keys. |
+| `GET /oauth/userinfo` | Claims of a bearer token's principal. |
+| `GET /.well-known/openid-configuration` | Discovery document. |
+| `POST /v1/decisions` | The gateway's decision contract (§8). |
 | `GET /healthz` | `200 {"status":"ok",…}`. Always available. |
-| `GET /readyz` | `200` when the database answers and the migrations are applied, `503` otherwise. |
+| `GET /readyz` | `200` when the database answers and migrations are applied, `503` otherwise. |
 | `GET /metrics` | Prometheus text. `404` when `ACCESS_METRICS_TOKEN` is unset, `401` when the bearer token does not match. |
-| `GET /openapi.json` | The description of the API of the access service: the paths it serves and the shape of their answers. |
+| `GET /openapi.json` | API description: the paths served and the shape of their answers. |
 | `POST /v1/admin/tenants` | Administration (§10.2). |
 | `GET /v1/admin/tenants` | Administration (§10.3). |
 | `POST /v1/admin/users` | Administration (§10.4). |
-| `GET /v1/admin/users` | The list of the principals, paginated (§10.5). |
+| `GET /v1/admin/users` | Principals, paginated (§10.5). |
 | `PUT /v1/admin/grants` | Administration (§10.6). |
 | `DELETE /v1/admin/grants/{id}` | Administration (§10.7). |
-| `GET /v1/admin/grants` | The list of the grants, paginated (§10.8). |
-| `POST /v1/admin/groups` | The group and its membership (§10.9). |
-| `GET /v1/admin/groups` | The list of the groups, paginated (§10.10). |
-| `PUT /v1/admin/roles` | The role and its memberships (§10.11). |
-| `GET /v1/admin/roles` | The list of the roles, paginated (§10.12). |
-| `DELETE /v1/admin/roles/{id}` | The removal of a role (§10.13). |
-| `GET /v1/admin/audit` | The audit of the changes, paginated (§10.1). It reads and it does not change. |
+| `GET /v1/admin/grants` | Grants, paginated (§10.8). |
+| `POST /v1/admin/groups` | A group and its membership (§10.9). |
+| `GET /v1/admin/groups` | Groups, paginated (§10.10). |
+| `PUT /v1/admin/roles` | A role and its memberships (§10.11). |
+| `GET /v1/admin/roles` | Roles, paginated (§10.12). |
+| `DELETE /v1/admin/roles/{id}` | Removes a role (§10.13). |
+| `GET /v1/admin/audit` | The audit of changes, paginated (§10.1). Read-only. |
 
 Every other path is `404 not_found`.
 
-### 5.2 The tenant of a login
+### 5.2 Resolving the tenant
 
-The tenant of a login is resolved in this order. The first match wins.
+The login's tenant is resolved in this order; the first match wins.
 
-1. **The client of the request.** The `client_id` of the authorization
-   request names the tenant whose `client_id` it is. This is the normal
-   case and it is the only one a gateway can reach (§1.4).
-2. **The `tenant` parameter.** When the tenant of the client has
-   `shared_client = true`, the authorization request may name another
-   tenant in its `tenant` parameter, and that tenant is used. The
-   parameter is ignored when the client is not shared, so a parameter
-   cannot move a login to another tenant.
-3. **The hint.** When the request carries a `login_hint` that is an
-   e-mail, its domain names the tenant whose `email_domain` is that
-   domain. The hint is only usable when the tenant of the client is
-   shared.
-4. **The default tenant.** When the tenant of the client is shared and no
-   other rule matched, the tenant whose `is_default = true` is used.
+1. **The request's client.** The authorization request's `client_id` names the tenant that owns it.
+   This is the normal case and the only one a gateway can reach (§1.4).
+2. **The `tenant` parameter.** When the client's tenant has `shared_client = true`, the request may
+   name another tenant in `tenant`, and that tenant is used. The parameter is ignored for a client
+   that is not shared, so it cannot move a login to another tenant.
+3. **The hint.** When the request carries a `login_hint` that is an e-mail, its domain names the
+   tenant with that `email_domain`. Only usable when the client's tenant is shared.
+4. **The default tenant.** When the client's tenant is shared and nothing else matched, the tenant
+   with `is_default = true` is used.
 
-A client that names no tenant → `400 invalid_request`. A tenant that is
-disabled → `403 tenant_disabled`.
+A client that names no tenant → `400 invalid_request`. A disabled tenant → `403 tenant_disabled`.
 
-A shared client is a deliberate weakening: the operator accepts that a
-login may be resolved to a tenant by a hint that the caller controls. It
-is refused by default and it is the reason a shared gateway is not the
-recommended topology. Only the operator of the platform may enable it:
-the flag is one of the flags of the tenant that belong to the platform
-(§10.1).
+A shared client is a deliberate weakening: the operator accepts that a hint the caller controls may
+choose a login's tenant. It is off by default, which is why a shared gateway is not the
+recommended topology. Only the platform operator may enable it: it is one of the tenant flags that
+belong to the platform (§10.1).
 
-**The redirect uri of the request.** The url the browser comes back to
-is a value the caller controls, so it is checked against the ones the
-gateway of the client is registered with (`client_redirect_uris`,
-§3.1) before the tenant is resolved:
+**The request's redirect uri.** The caller controls the url the browser returns to, so it is checked
+against the gateway's registered urls (`client_redirect_uris`, §3.1) before the tenant is resolved:
 
-- A `redirect_uri` that is not one of them → `400 invalid_request`, and
-  the browser is **not** sent to it. The refusal is a page of the access service, not a
-  redirection: a url that is not registered never receives a code.
-- A tenant that has registered no url refuses every login. A deployment
-  that has not registered its gateway yet does not log anyone in; it
-  registers the url and the logins work.
+- A `redirect_uri` that is not registered → `400 invalid_request`, and the browser is **not** sent
+  there. The refusal is an access service page, not a redirect: an unregistered url never receives
+  a code.
+- A tenant with no registered url refuses every login, until the deployment registers its
+  gateway's url.
 
-The check is on the **client**, not on the tenant of the login: with a
-shared client the tenant of the login may be another one, but the url
-the browser comes back to always belongs to the gateway that presented
-the client id.
+The check is on the **client**, not the login's tenant. With a shared client the login's tenant may
+differ, but the return url always belongs to the gateway that presented the client id.
 
-### 5.3 The state of a login
+### 5.3 Login state
 
-The state of a login is carried by two cookies and by the parameters of
-the redirects.
+Login state is carried by two cookies and by the redirect parameters.
 
-**The state cookie** (`access_login_state`) holds, encrypted with
-`ACCESS_STATE_SECRET` (AES-256-GCM, authenticated): the tenant, the client
-id, the redirect uri, the `state` of the gateway, the `nonce`, the
-verifier of the PKCE of the provider and the moment the login started. It
-is `HttpOnly`, `Secure` in production, `SameSite=Lax`,
-`Path=/oauth/tenant/callback`, and it lives ten minutes.
+**The state cookie** (`access_login_state`) holds, encrypted with `ACCESS_STATE_SECRET`
+(AES-256-GCM, authenticated): the tenant, the client id, the redirect uri, the gateway's `state`,
+the `nonce`, the PKCE verifier for the provider, and the login start time. It is `HttpOnly`,
+`Secure` in production, `SameSite=Lax`, `Path=/oauth/tenant/callback`, and lives ten minutes.
 
-The state cookie is **single use**: it is deleted as soon as the callback
-is processed, whatever the outcome.
+The cookie is **single use**: it is deleted as soon as the callback is processed, whatever the
+outcome.
 
-**The state of the provider.** The access service sends a fresh random `state` to the
-provider and a fresh `nonce`; both are bound to the state cookie and are
-checked when the browser comes back.
+**Provider state.** The access service sends the provider a fresh random `state` and a fresh
+`nonce`, both bound to the state cookie and checked when the browser returns.
 
-**The PKCE.** The access service sends `S256` to the provider and keeps the verifier in
-the state cookie. A provider that does not support PKCE is refused at the
-registration of the tenant.
+**PKCE.** The access service sends `S256` to the provider and keeps the verifier in the state
+cookie. A provider without PKCE support is refused when the tenant is registered.
 
-### 5.4 The flow, step by step
+### 5.4 Flow
 
 1. The gateway sends the browser to
    `GET /oauth/authorize?client_id=…&redirect_uri=…&response_type=code&scope=openid profile email groups&state=…&nonce=…&code_challenge=…&code_challenge_method=S256`.
-2. The access service resolves the tenant (§5.2), creates the state cookie and redirects
-   the browser to the authorization endpoint of the provider of the tenant,
-   with the `state`, the `nonce`, the `code_challenge` and the
-   `redirect_uri` of the tenant.
-3. The provider authenticates the caller and sends the browser back to
+2. The access service resolves the tenant (§5.2), sets the state cookie and redirects the browser to
+   the provider's authorization endpoint with the `state`, `nonce`, `code_challenge` and the
+   tenant's `redirect_uri`.
+3. The provider authenticates the caller and sends the browser to
    `GET /oauth/tenant/callback?code=…&state=…`.
-4. The access service reads the state cookie, checks that the `state` matches, deletes
-   the cookie, exchanges the code at the provider with the verifier of the
-   PKCE, and validates the id token (§6.1).
-5. The access service maps the external identity to a principal (§6.2, §6.4).
-6. The access service issues an authorization code for the gateway and redirects the
-   browser to the `redirect_uri` of the request, with the code and the
-   `state` of the gateway.
-7. The gateway exchanges the code at `POST /oauth/token` with its
-   verifier, its client id and its secret.
+4. The access service reads the state cookie, checks the `state`, deletes the cookie, exchanges the
+   code at the provider with the PKCE verifier, and validates the id token (§6.1).
+5. It maps the external identity to a principal (§6.2, §6.4).
+6. It issues an authorization code for the gateway and redirects the browser to the request's
+   `redirect_uri` with the code and the gateway's `state`.
+7. The gateway exchanges the code at `POST /oauth/token` with its verifier, client id and secret.
 8. The access service answers with an `id_token` and an `access_token` (§7).
 
-### 5.5 The authorization code
+### 5.5 Authorization code
 
-The code is an opaque random string of 32 bytes. It is stored in the
-shared store under a hash of itself, with the client id, the redirect uri,
-the challenge of the PKCE, the principal and the moment it was created.
+An opaque random 32-byte string, stored in the shared store under its hash, together with the
+client id, the redirect uri, the PKCE challenge, the principal and its creation time.
 
 - It lives **60 seconds**.
-- It is **single use**: the first exchange deletes it, the second exchange
-  is `invalid_grant`.
-- It is bound to the client id, to the redirect uri and to the challenge
-  of the PKCE. An exchange that presents another redirect uri, another
-  client or a verifier that does not match the challenge is
-  `invalid_grant`.
-- It is bound to the **client that began the login**, and not to the
-  tenant of the login: with a shared client, the tenant of the login may
-  be another one (§5.2), and the gateway exchanges the code with the
-  client id it is registered with. The audience of the tokens is that
-  client id as well (§7.1).
-- It never carries the identity in the clear.
+- It is **single use**: the first exchange deletes it; a second exchange is `invalid_grant`.
+- It is bound to the client id, the redirect uri and the PKCE challenge. Another redirect uri,
+  another client or a verifier that does not match → `invalid_grant`.
+- It is bound to the **client that began the login**, not the login's tenant. With a shared client
+  the tenant may differ (§5.2), and the gateway exchanges the code with its own registered client
+  id, which is also the token audience (§7.1).
+- It never carries the identity in clear.
 
-The shared store is Redis. A deployment of one replica may use the memory
-of the process with `ACCESS_ALLOW_MEMORY_STATE=true`. A store that cannot be
-reached is an error: the login fails, it never falls back to "no state".
+The shared store is Redis. A single-replica deployment may use process memory with
+`ACCESS_ALLOW_MEMORY_STATE=true`. An unreachable store fails the login; it never falls back to "no
+state".
 
-### 5.6 What a failed login answers
+### 5.6 Failed logins
 
 | Case | Answer |
 | --- | --- |
-| The provider refuses the login | The provider's own answer is passed to the browser, unchanged. |
-| The provider is unreachable | `502 upstream_unavailable`, with a page that says the provider is not reachable and the name of the tenant. The reason is never the raw error of the provider. |
-| The token of the provider is invalid | `403 identity_rejected`, with a page that says the identity was refused. The reason of the refusal is in the log of the service. |
-| The identity is unknown and the tenant does not auto-provision | `403 identity_unknown`, with a page that says the identity is not known to the platform. The log carries the `(tenant, subject)` that was refused. |
+| The provider refuses the login | The provider's own answer is passed to the browser unchanged. |
+| The provider is unreachable | `502 upstream_unavailable`, with a page saying the provider is not reachable and naming the tenant. Never the provider's raw error. |
+| The provider token is invalid | `403 identity_rejected`, with a page saying the identity was refused. The reason is in the service log. |
+| Unknown identity, tenant does not auto-provision | `403 identity_unknown`, with a page saying the identity is not known to the platform. The log carries the refused `(tenant, subject)`. |
 | The principal is disabled | `403 principal_disabled`. |
-| The state does not match, or the cookie is missing | `400 login_state_invalid`. The login is refused and a new one has to start. |
+| The state does not match, or the cookie is missing | `400 login_state_invalid`. The login is refused; a new one must start. |
+| The state cookie is not readable | `400 login_state_invalid`. A cookie that is not a valid escape is not a cookie. |
 
-| The cookie of the state is not readable | `400 login_state_invalid`. A cookie that is not a valid escape is not a cookie. |
+**Response headers.** Every answer carries `x-content-type-options: nosniff`,
+`x-frame-options: DENY` and `referrer-policy: no-referrer`. A refusal page carries
+`content-security-policy: default-src 'none'`. A deployment served over https carries
+`strict-transport-security`. The token endpoint's answer carries `cache-control: no-store` and
+`pragma: no-cache`, so no intermediary or browser stores a token (RFC 6749 §5.1).
 
-**The headers of the answers.** Every answer of the access service carries
-`x-content-type-options: nosniff`, `x-frame-options: DENY` and
-`referrer-policy: no-referrer`. A page of a refusal carries
-`content-security-policy: default-src 'none'`. A deployment that is
-served in https carries `strict-transport-security`. The answer of the
-token endpoint carries `cache-control: no-store` and `pragma: no-cache`:
-a token is never stored by an intermediary or by a browser (RFC 6749
-§5.1).
+## 6. Identity mapping
 
----
+### 6.1 Validating the provider token
 
-## 6. The mapping of the identity
-
-### 6.1 The validation of the token of the provider
-
-Before a single row is read, the token of the provider is validated:
+The provider token is validated before any row is read:
 
 | Check | Rule |
 | --- | --- |
-| The issuer | `iss` is **exactly** the `idp_issuer` of the tenant. A comparison that ignores the case or the trailing slash is not allowed. |
-| The audience | `aud` contains the `idp_client_id` of the tenant, or `azp` is it. |
-| The nonce | `nonce` is the nonce of the login in flight. |
-| The algorithm | The algorithm is in the `idp_algorithms` of the tenant. The `none` algorithm and an algorithm that is not in the list are refused. |
-| The signature | It is verified with the JWKS of the provider, fetched from its discovery document and cached for ten minutes. A token that names a key the cache does not have is the sign of a **rotation**: the keys are read again once and the token is verified against them (§6.6). |
-| The clock | `exp` and `iat` are checked with a tolerance of `ACCESS_CLOCK_SKEW_SECONDS`. |
-| The subject | `sub` is present and is not empty. |
+| Issuer | `iss` is **exactly** the tenant's `idp_issuer`. No case-insensitive or trailing-slash tolerant comparison. |
+| Audience | `aud` contains the tenant's `idp_client_id`, or `azp` is it. |
+| Nonce | `nonce` is the nonce of the login in flight. |
+| Algorithm | In the tenant's `idp_algorithms`. `none` and any unlisted algorithm are refused. |
+| Signature | Verified with the provider's JWKS, fetched via its discovery document and cached ten minutes. A token naming a key the cache lacks signals a **rotation**: the keys are re-read once and the token verified against them (§6.6). |
+| Clock | `exp` and `iat` checked with a tolerance of `ACCESS_CLOCK_SKEW_SECONDS`. |
+| Subject | `sub` is present and not empty. |
 
-The discovery document of the provider is fetched from
-`{idp_issuer}/.well-known/openid-configuration`. A provider whose issuer
-in the document is not the `idp_issuer` of the tenant is refused.
+The provider's discovery document is fetched from
+`{idp_issuer}/.well-known/openid-configuration`. A provider whose document names an issuer other
+than the tenant's `idp_issuer` is refused.
 
-**The addresses of the providers.** A tenant registers the issuer of its
-provider, and the access service calls that address: the discovery document and the
-keys are the only calls. The address is checked before the call: the
-host is resolved and every address it resolves to has to be a public one.
-A production deployment refuses the private addresses; a development
-machine accepts them (the fixtures of the tests are on the loopback).
+**Provider addresses.** The access service calls only the registered issuer's address, for the
+discovery document and the keys. Before the call, the host is resolved and every address it
+resolves to must be public. Production refuses private addresses; development accepts them (the
+test fixtures are on loopback).
 
-**The call is made to the address that was checked.** The guard resolves
-the host and pins the address it resolved to, and the call is made to
-that address, with the name of the host in the `Host` header and in the
-name the certificate of a secure call is checked against. The name of the
-host is therefore never resolved a second time: a host that answers a
-public address to the check and a private one to the connection is of no
-use. The answer of a provider is read up to one MiB: a provider that
-answers more than that is not reachable.
+**The call goes to the checked address.** The guard pins the resolved address and connects to it,
+sending the host name in the `Host` header and using it for certificate verification on secure
+calls. The host is never resolved twice, so a host that returns a public address to the check and a
+private one to the connection gains nothing. A provider answer is read up to one MiB; a provider
+that answers more is treated as unreachable.
 
-### 6.2 The key of the mapping
+### 6.2 Mapping key
 
 The mapping key is `**(tenant, subject)**`:
 
@@ -955,158 +749,128 @@ users.tenant_id        = the tenant of the login
 users.external_subject = the `sub` of the provider
 ```
 
-It is never the e-mail. An e-mail changes, is reused and is not unique;
-a principal that is bound to one is not a principal, it is a guess.
-Linking two external identities to one principal is a feature, and it is
-deferred (§14).
+Never the e-mail: an e-mail changes, is reused and is not unique, so a principal bound to one is a
+guess. Linking two external identities to one principal is a deferred feature (§14).
 
-### 6.3 The e-mail is a display value
+### 6.3 E-mail is a display value
 
-The e-mail of the token is written in the row of the principal and it is
-published in the token of the access service. It is **never** used to find a principal
-and it is **never** used to authorize anything. The domain of an e-mail
-selects a tenant only in the shared-client case (§5.2) and only as a
-hint.
+The token's e-mail is stored on the principal row and published in the access service's tokens. It
+is **never** used to find a principal and **never** used to authorize anything. An e-mail domain
+selects a tenant only for a shared client (§5.2), and only as a hint.
 
-### 6.4 An unknown identity
+### 6.4 Unknown identity
 
 When the mapping finds no row:
 
-- the tenant has `auto_provision = true` → the row is created, with the
-  status `active`, **and with no grant at all**. The caller authenticates
-  and reaches nothing: the principal exists, the access does not. The
-  login succeeds and the first request is denied by §8.
-- the tenant has `auto_provision = false` → the login is refused with
-  `403 identity_unknown` (§5.6).
+- `auto_provision = true` → the row is created with status `active` **and no grant at all**. The
+  caller authenticates and reaches nothing: the login succeeds and the first request is denied by
+  §8.
+- `auto_provision = false` → the login is refused with `403 identity_unknown` (§5.6).
 
-The default is `false`: an identity that nobody registered does not get
-an account because it managed to log in somewhere.
+The default is `false`: an identity nobody registered does not get an account just because it
+logged in somewhere.
 
-### 6.5 The principal of a decision
+### 6.5 Principal of a decision
 
-The `subject` of a decision request is the id of the row of the
-principal. The row is found by its id; it is unique in the whole
-platform, so the tenant of the principal is known without the request
-carrying it. A subject that resolves to no row is a denial
-(`the principal does not exist`).
+A decision request's `subject` is the principal row's id. The id is unique across the platform, so
+the principal's tenant is known without the request carrying it. A subject that matches no row is a
+denial (`the principal does not exist`).
 
-### 6.6 The rotation of the keys of a provider
+### 6.6 Provider key rotation
 
-A provider rotates its signing key: it publishes a new key in its JWKS
-and it signs the tokens with it, and the old key stays published until
-the last token it signed has expired.
+A provider rotates by publishing a new key in its JWKS and signing with it; the old key stays
+published until the last token it signed has expired.
 
-The keys of a provider are cached for ten minutes (§6.1). A token that
-names a key that the cache does not have is therefore **not** a bad
-token: it is the sign of a rotation. The access service reads the keys of the provider
-again, once, and it verifies the token against them. A token that is
-signed with a key the provider does not publish is refused as before.
+Provider keys are cached ten minutes (§6.1), so a token naming an uncached key is **not** a bad
+token but a sign of rotation. The access service re-reads the keys once and verifies the token
+against them. A token signed with a key the provider does not publish is still refused.
 
-The keys are not read again on every call: at most once every thirty
-seconds for a tenant. A provider that is hammered with tokens it did not
-sign is not hammered with calls.
+Keys are re-read at most once every thirty seconds per tenant, so a provider is not hammered with
+calls when callers send tokens it did not sign.
 
-The client of a provider is kept for the same ten minutes. A change of
-the registration of a tenant (its secret, its issuer) drops the client of
-that tenant, and the next login builds a new one.
+The provider client is also kept ten minutes. A change to a tenant's registration (its secret, its
+issuer) drops that tenant's client, and the next login builds a new one.
 
----
+## 7. Tokens
 
-## 7. The tokens of the access service
+The access service is the gateway's OIDC provider; it issues ordinary OIDC tokens.
 
-The access service is the provider of the gateway. The tokens it issues are ordinary
-OpenID Connect tokens.
-
-### 7.1 The claims of the id token
+### 7.1 ID token claims
 
 | Claim | Value |
 | --- | --- |
-| `iss` | The issuer of the access service. |
-| `sub` | The id of the principal. |
-| `aud` | The client id of the gateway of the tenant — the client that began the login (§5.2, §5.5). |
+| `iss` | The access service's issuer. |
+| `sub` | The principal's id. |
+| `aud` | The client id of the tenant's gateway, i.e. the client that began the login (§5.2, §5.5). |
 | `exp`, `iat` | Five minutes of life. |
-| `nonce` | The nonce of the login, when there was one. |
-| `email` | The e-mail of the principal, when it is known. |
-| `name` | The display name of the principal, when it is known. |
-| `roles` | The keys of the permissions of the active grants of the principal (§7.3). |
-| `tid` | The slug of the tenant. |
-| `email_verified` | Always `false`: the access service does not verify the e-mail of a provider. |
+| `nonce` | The login's nonce, when there was one. |
+| `email` | The principal's e-mail, when known. |
+| `name` | The principal's display name, when known. |
+| `roles` | Permission keys of the principal's active grants (§7.3). |
+| `tid` | The tenant's slug. |
+| `email_verified` | Always `false`: the access service does not verify a provider's e-mail. |
 
-The gateway reads `sub`, `email` and `roles` and nothing else, so the
-claims above are the whole contract with the gateway.
+The gateway reads only `sub`, `email` and `roles`; those claims are the whole contract with the
+gateway.
 
-The `sub` is the id of a principal: a **uuid** (§8.1). The gateway of
-the release `1.0.0` of the platform writes the subject of the identity
-**as it is**, and refuses with a `500` a subject that cannot be written
-into a header — one that carries a control character, one that is empty,
-one that is longer than 512 characters. A uuid carries no control
-character and is thirty-six characters long: the subject of the access service is
-always written, and it is never rewritten.
+`sub` is a principal id, a **uuid** (§8.1). The release `1.0.0` gateway writes the identity's
+subject **as is** and refuses with `500` a subject that cannot be written into a header: one with a
+control character, an empty one, or one longer than 512 characters. A uuid has no control character
+and is thirty-six characters long, so the access service's subject is always written and never
+rewritten.
 
-### 7.2 The access token
+### 7.2 Access token
 
-An access token is a JWT signed with `RS256`, with the issuer, the
-audience (the client id), the subject, the scope and a life of five
-minutes. It is accepted by the gateway in the `jwt` and `any` modes,
-because the gateway validates a bearer token against the same provider it
-discovers for the browser.
+A JWT signed with `RS256`, with the issuer, the audience (the client id), the subject, the scope
+and a five-minute life. The gateway accepts it in its `jwt` and `any` modes, because it validates
+bearer tokens against the same provider it discovers for the browser.
 
 | Claim | Value |
 | --- | --- |
-| `iss` | The issuer of the access service. |
-| `sub` | The id of the principal. |
-| `aud` | The client id of the gateway of the tenant. |
+| `iss` | The access service's issuer. |
+| `sub` | The principal's id. |
+| `aud` | The client id of the tenant's gateway. |
 | `exp`, `iat` | Five minutes of life. |
-| `scope` | The scopes of the login. |
-| `roles` | The keys of the permissions of the active grants of the principal (§7.3). |
-| `tid` | The slug of the tenant. |
+| `scope` | The login's scopes. |
+| `roles` | Permission keys of the principal's active grants (§7.3). |
+| `tid` | The tenant's slug. |
 
-The token carries **no nonce** and **no e-mail**. A bearer token that
-carries a nonce is an id token, and the gateway refuses it
-(`GATEWAY_OIDC_REJECT_NONCE_TOKEN`): an id token travels through the
-browser, and it lands in the history, in the logs and in the referrers.
-The e-mail of the principal is the claim of the id token: a caller that
-comes with a bearer token is a client of an API, and it is identified by
-its subject and by its roles.
+The token carries **no nonce** and **no e-mail**. A bearer token with a nonce is an id token, and
+the gateway refuses it (`GATEWAY_OIDC_REJECT_NONCE_TOKEN`): id tokens travel through the browser
+and end up in history, logs and referrers. The e-mail belongs to the id token; a bearer-token
+caller is an API client, identified by its subject and roles.
 
-The gateway of the reference requires an **expiry** on a bearer token,
-and it bounds the lifetime of a token with the moment it was issued
-(`GATEWAY_OIDC_MAX_TOKEN_AGE_MS`): the access token of the access service carries `exp`
-and `iat`, and its lifetime is five minutes, so the gateway accepts it
-whatever the bound of the deployment is.
+The reference gateway requires an **expiry** on a bearer token and bounds a token's lifetime from
+its issue time (`GATEWAY_OIDC_MAX_TOKEN_AGE_MS`). The access token carries `exp` and `iat` and lives
+five minutes, so the gateway accepts it whatever bound the deployment sets.
 
-There is **no refresh token**. The gateway does not use one, and a refresh
-token is a credential that has to be revoked, stored and rotated. A
-client that needs one asks for it: it is a feature, it is deferred (§14).
+There is **no refresh token**. The gateway does not use one, and a refresh token is a credential
+that must be revoked, stored and rotated. A client that needs one asks for it: it is a deferred
+feature (§14).
 
-### 7.3 The roles claim
+### 7.3 `roles` claim
 
-The `roles` claim is the list of the keys of the permissions of the grants
-of the principal that are alive at the moment the token is issued: not
-revoked, not expired, with an enabled permission. The grants of the
-**groups** of the principal are part of it: a permission that the group
-holds is a permission of every member of the group.
+The permission keys of the principal's grants that are alive when the token is issued: not
+revoked, not expired, with an enabled permission. Grants of the principal's **groups** count: a
+group's permission is a permission of every member.
 
-It is a **snapshot**. It is published for the upstreams of the deployment,
-which receive it in the `x-gateway-roles` header. It is **not** the
-policy: the decision of §8 is computed over the table of grants, never
-over the claim (§8.4).
+It is a **snapshot**, published for the deployment's upstreams in the `x-gateway-roles` header. It
+is **not** the policy: the §8 decision is computed over the grants table, never over the claim
+(§8.4).
 
-The list is sorted and capped at 64 entries. A principal with more
-permissions than that gets a token with the first 64 of them, and the
-count of the rest is in the log.
+The list is sorted and capped at 64 entries. A principal with more permissions gets the first 64,
+and the number left out is logged.
 
-### 7.4 The scopes
+### 7.4 Scopes
 
-The access service accepts the scopes `openid`, `profile`, `email` and `groups`. A scope
-that the access service does not know is ignored, not refused: the gateway asks for
-`groups` by default and a broker that refused an unknown scope would
-break a gateway that never changed.
+The access service accepts the scopes `openid`, `profile`, `email` and `groups`. An unknown scope
+is ignored, not refused: the gateway asks for `groups` by default, and refusing unknown scopes would
+break gateways that never changed.
 
-### 7.5 The discovery document
+### 7.5 Discovery document
 
-`GET /.well-known/openid-configuration` is the document the gateway reads
-once and caches for ten minutes. It carries at least:
+`GET /.well-known/openid-configuration` is read once by the gateway and cached for ten minutes. It
+carries at least:
 
 | Field | Value |
 | --- | --- |
@@ -1123,19 +887,15 @@ once and caches for ten minutes. It carries at least:
 | `code_challenge_methods_supported` | `["S256"]` |
 | `token_endpoint_auth_methods_supported` | `["client_secret_basic"]` |
 
-The `userinfo_endpoint` answers the claims of the principal of a bearer
-token: `sub`, `email`, `name` and `roles`. A token that is expired, that
-is signed with another key or that belongs to another audience is `401`.
+The `userinfo_endpoint` returns the bearer token principal's `sub`, `email`, `name` and `roles`. A
+token that is expired, signed with another key or issued for another audience → `401`.
 
----
+## 8. Decisions
 
-## 8. The decisions
+This is the contract the gateway already speaks, defined in §6 of the gateway spec. It is repeated
+here because the access service must implement it exactly.
 
-This is the contract the gateway already speaks. It is described in §6 of
-the spec of the gateway; it is repeated here because the access service has to implement
-it exactly.
-
-### 8.1 The request
+### 8.1 Request
 
 ```
 POST {ACCESS_ISSUER}/v1/decisions
@@ -1145,139 +905,107 @@ Content-Type: application/json
 {"subject":"…","workspaceId":"…","routeId":"…","roles":["…"]}
 ```
 
-The four fields are the ones the gateway sends. The access service does not require a
-field that the gateway does not send, and it does not refuse a field it
-does not know: the request of the gateway is the request of the contract.
+These four fields are what the gateway sends. The access service requires no field the gateway does
+not send and refuses no field it does not know.
 
-- A missing or wrong credential → `401 unauthorized`. The two schemes of
-  the credentials are in §8.8.
-- A body that is not JSON, or a `subject` that is not a string → `400 bad_request`.
-- A `subject` that is not the id of a principal → `400 bad_request`. The
-  id of a principal is a uuid: a value that is not one names no row, and
-  the request is refused instead of being asked of the database. The
-  database is never asked to cast a value it cannot cast, so a caller
-  cannot turn a malformed request into a failure of the storage.
-- A database that cannot be reached, or a query that takes longer than
-  `ACCESS_DECISION_TIMEOUT_MS` → `503 service_unavailable`.
+- Missing or wrong credential → `401 unauthorized`. The two credential schemes are in §8.8.
+- Body that is not JSON, or a `subject` that is not a string → `400 bad_request`.
+- A `subject` that is not a principal id → `400 bad_request`. A principal id is a uuid; a value
+  that is not one names no row, so the request is refused without asking the database. The database
+  is never asked to cast a value it cannot cast, so a malformed request cannot become a storage
+  failure.
+- Database unreachable, or a query longer than `ACCESS_DECISION_TIMEOUT_MS` →
+  `503 service_unavailable`.
 
-Every one of these three is a **denial** for the gateway, because the
-gateway fails closed on anything that is not a successful answer.
+Each of these is a **denial** for the gateway, which fails closed on anything but a successful
+answer.
 
-### 8.2 The answer
+### 8.2 Answer
 
 ```
 200 {"allow": true,  "reason": "allowed"}
 200 {"allow": false, "reason": "the principal does not have the role of the workspace", "reasonCode": "missing_role"}
 ```
 
-The status is `200` for a decision, allow or deny. The reason is free
-text and is **never** given to the caller: the gateway hides it. It
-exists for the operator, and it is in the log of the service.
+A decision, allow or deny, is `200`. The reason is free text and is **never** shown to the caller:
+the gateway hides it. It is for the operator and is in the service log.
 
-A **denial** carries the **code** of its reason, and an allowance
-carries none. The code is the vocabulary of the gateway (§6.1 of the
-specification of the gateway): `missing_role` is a denial because the
-caller does not have the role the policy asks for, and `access_denied` is
-a denial for a reason the service does not name.
+A **denial** carries its reason **code**; an allowance carries none. The codes are the gateway's
+vocabulary (§6.1 of the gateway spec): `missing_role` means the caller lacks the role the policy
+requires, and `access_denied` is a denial for a reason the service does not name.
 
-The gateway counts the code when the service sends one, and it counts the
-text of the reason when the service sends none (§6.5 of the specification
-of the gateway). The code and the text always agree: the code of a
-reason is `missing_role` if and only if the text of the reason mentions
-a role (§8.7). A gateway that reads the code and a gateway that reads
-the text therefore count the same denials, and a reason that is reworded
-does not change the metric of the gateway.
+The gateway counts the code when one is sent and the reason text otherwise (§6.5 of the gateway
+spec). Code and text always agree (§8.7), so rewording a reason does not change the gateway's
+metric.
 
-### 8.3 The rule
+### 8.3 Rule
 
-A principal may use a workspace on a route when there is at least one
-grant that satisfies **all** of the following:
+A principal may use a workspace on a route when at least one grant satisfies **all** of:
 
 | Condition | Rule |
 | --- | --- |
-| The principal | `users.id = subject` and `users.status = 'active'`. |
-| The tenant | `users.tenant_id` names a tenant whose `enabled = true`. |
-| The grant | `grants.revoked_at is null` and the grant names the principal (`grants.user_id = users.id`) or a group of the principal (`grants.group_id` names a group whose `members` hold `users.id`). |
-| The expiry | `grants.expires_at is null` or `grants.expires_at > now()`. |
-| The permission | The permission of the grant is `enabled`. |
-| The workspace | `grants.workspace_id is null` (every workspace of the tenant) or `grants.workspace_id = workspaceId`. |
-| The route | `grants.route_id is null` (every route) or `grants.route_id = routeId`. |
+| Principal | `users.id = subject` and `users.status = 'active'`. |
+| Tenant | `users.tenant_id` names a tenant with `enabled = true`. |
+| Grant | `grants.revoked_at is null`, and the grant names the principal (`grants.user_id = users.id`) or one of its groups (`grants.group_id` names a group whose `members` hold `users.id`). |
+| Expiry | `grants.expires_at is null` or `grants.expires_at > now()`. |
+| Permission | The grant's permission is `enabled`. |
+| Workspace | `grants.workspace_id is null` (every workspace of the tenant) or `grants.workspace_id = workspaceId`. |
+| Route | `grants.route_id is null` (every route) or `grants.route_id = routeId`. |
 
-A grant of one workspace does not grant another one. A grant of one route
-does not grant another one. A grant without a workspace and without a
-route is a grant of the whole tenant.
+A grant on one workspace or route does not grant another. A grant with neither workspace nor route
+covers the whole tenant.
 
-A grant of a **group** holds for every principal of the group, and for
-nobody else. A principal that is removed from the group loses the access
-at the next decision: the membership is read from the table, never from a
-token.
+A **group** grant holds for every member and nobody else. A principal removed from the group loses
+access at the next decision: membership is read from the table, never from a token.
 
-A grant of a **role** (§3.6) holds for the subject that holds the role:
-the permissions of the role, and the permissions of the roles it names,
-are the permissions of the subject. The role is expanded by the same
-statement, and the expansion is transitive: a role that names a role that
-names a permission holds that permission.
+A **role** grant (§3.6) gives the subject the role's permissions and those of the roles it names.
+The same statement expands roles transitively: a role that names a role that names a permission
+holds that permission.
 
-The query is a single statement over the tables of the policy, with the
-indexes of §8.5.
+The query is a single statement over the policy tables, using the indexes of §8.5.
 
-**The deadline of the statement is the deadline of the server.** The
-statement runs with the `statement_timeout` of the connection of the
-pool, which is the tightest deadline of the service
-(`ACCESS_DECISION_TIMEOUT_MS`, two seconds by default). A statement that
-takes too long is stopped by PostgreSQL, the transaction is rolled back
-and the connection is given back to the pool at once. A deadline that
-lives only in the memory of the process would let a statement keep a
-connection of the pool for the whole window of the timeout of the pool.
+**The statement deadline is enforced by the server.** The statement runs under the pool
+connection's `statement_timeout`, the service's tightest deadline (`ACCESS_DECISION_TIMEOUT_MS`,
+two seconds by default). PostgreSQL stops a slow statement, rolls back the transaction and the
+connection returns to the pool at once. A deadline held only in process memory would let a
+statement occupy a pool connection for the pool's whole timeout window.
 
-The deadline of the process is the backstop of the deadline of the
-server: it is longer by a quarter of a second, and it answers `503`
-(the gateway fails closed) when the server did not answer at all.
+The process deadline is the backstop: a quarter of a second longer, answering `503` (the gateway
+fails closed) when the server did not answer at all.
 
-### 8.4 The roles of the request
+### 8.4 Request roles
 
-The `roles` of the request are **context, not policy**. The gateway
-copies them from the token of the caller, and the token is a snapshot
-(§7.3): a grant that is given after the token was issued would not be in
-it, and a grant that is revoked would still be in it. A policy that read
-the roles of the request would therefore allow a revoked grant until the
-next login.
+The request's `roles` are **context, not policy**. The gateway copies them from the caller's token,
+which is a snapshot (§7.3): it misses grants given after issue and still lists revoked ones. A
+policy that read them would honor a revoked grant until the next login.
 
-The rule of §8.3 reads the table and the table only. The roles of the
-request are recorded in the log of the decision, and they are used for one
-thing only: the **reason** of a denial names the roles the principal
-holds, so the operator sees what the principal had.
+The §8.3 rule reads the table only. Request roles are recorded in the decision log and used for one
+thing: a denial's **reason** names the roles the principal holds, so the operator sees what it had.
+Reasons are worded so the gateway's metric separates `missing_role` from `access_denied` (§8.7).
 
-The gateway counts a denial whose reason mentions a *role* as
-`missing_role` and any other denial as `access_denied`. The reasons of
-the access service are chosen with that in mind, so the metric of the gateway separates
-the two.
-
-### 8.5 The indexes
+### 8.5 Indexes
 
 | Index | Serves |
 | --- | --- |
-| `users (id)` | The primary key: the subject of the request. |
-| `grants (user_id) where revoked_at is null` | The grants of the principal. |
-| `grants (group_id) where revoked_at is null` | The grants of the groups of the principal. |
-| `groups` (GIN on `members`) | The groups that hold the principal: the containment `members @> array[principal]`. |
-| `permissions (id)` | The primary key. |
+| `users (id)` | Primary key: the request's subject. |
+| `grants (user_id) where revoked_at is null` | The principal's grants. |
+| `grants (group_id) where revoked_at is null` | Grants of the principal's groups. |
+| `groups` (GIN on `members`) | Groups holding the principal: the containment `members @> array[principal]`. |
+| `permissions (id)` | Primary key. |
 
-The query of §8.3 stops at the first grant that satisfies it.
+The §8.3 query stops at the first grant that satisfies it.
 
-### 8.6 The latency of a revocation
+### 8.6 Revocation latency
 
-The access service does not cache a decision: the table is the truth and the query is
-cheap. The latency of a revocation is therefore the one of the gateway:
-the lifetime of its cache of the decisions,
+The access service does not cache decisions: the table is the truth and the query is cheap.
+Revocation latency is therefore the gateway's decision cache lifetime,
 `GATEWAY_ACCESS_CACHE_TTL_MS` (5 s by default).
 
-A route that declares `accessCacheTtlMs: 0` asks the access service for every request,
-and a revocation is immediate on that route. The access service cannot make it faster:
-the gateway does not ask it again, and changing that would be a change of
-the gateway.
+A route with `accessCacheTtlMs: 0` asks the access service on every request, so revocation is
+immediate there. The access service cannot do better: the gateway does not ask again, and changing
+that would be a gateway change.
 
-### 8.7 The reasons
+### 8.7 Reasons
 
 | Situation | Reason | Code |
 | --- | --- | --- |
@@ -1288,109 +1016,65 @@ the gateway.
 | No grant satisfies the rule | `the principal does not have the role of the workspace` | `missing_role` |
 | A grant exists but it expired | `the role of the workspace has expired` | `missing_role` |
 
-The last two contain the word *role*, so the gateway counts them as
-`missing_role`.
+**Code and text agree.** The code is `missing_role` if and only if the text mentions a *role*, as
+the last two rows do. The gateway counts the code when sent and falls back on the text otherwise
+(§8.2), so both count the same denials.
 
-**The code and the text agree.** The code of a reason is `missing_role`
-if and only if the text of the reason mentions a role. The gateway
-counts the code when it is sent, and it falls back on the text when it
-is not (§8.2): a gateway that reads the code and a gateway that reads
-the text count the same denials.
+They are one contract: adding, rewording or removing a reason changes this table first, and a test
+holds the agreement. A reason that mentions a role without being a role denial would change the
+metric of the reference gateway, which counts the text.
 
-The two are one contract: a reason that is added, reworded or removed is
-a change of this table first, and a test holds the agreement of the two.
-A reason that mentions a role and is not a denial of a role would change
-the metric of the gateway of the reference, which counts the text.
+### 8.8 Gateway credentials
 
-### 8.8 The credentials of the gateway
-
-The gateway authenticates itself on the decisions. Two schemes are
-accepted, and a deployment picks one of them or the other.
+The gateway authenticates on decisions with one of two schemes. They are not exclusive.
 
 | Scheme | What it is | What it may ask about |
 | --- | --- | --- |
-| `Authorization: Bearer {token}` | The token of the deployment, `ACCESS_DECISION_TOKEN`. **Optional and deprecated.** | Every principal of the platform. |
-| `Authorization: Basic {id:secret}` | The registration of the gateway of a tenant (§3.1). | The principals of that tenant. |
+| `Authorization: Bearer {token}` | The deployment token, `ACCESS_DECISION_TOKEN`. **Optional and deprecated.** | Every principal of the platform. |
+| `Authorization: Basic {id:secret}` | A tenant gateway's registration (§3.1). | That tenant's principals. |
 
-The **bearer token** is the scheme of the gateway of the reference: it is
-the one the gateway already sends, and it keeps working. It is not
-scoped: every gateway of the deployment shares it, so the gateway that
-presents it may ask about any principal of the platform. The blast
-radius of that secret is the whole platform.
+The **bearer token** is the only scheme the reference gateway has, so it keeps working. It is not
+scoped: every gateway of the deployment shares it and may ask about any principal, so its blast
+radius is the whole platform.
 
-The gateway of the reference presents that token and nothing else: it
-authenticates itself at the decisions with a bearer token, and it has no
-scheme for the credentials of a tenant. The shared token is therefore the
-scheme of a deployment whose gateway is the one of the reference, and the
-credentials of a tenant are the scheme of a deployment whose gateway
-presents them.
+**Tenant credentials** are the client id and secret registered for a tenant's gateway (§3.1). The
+client id names the tenant, the secret is compared in constant time, and decisions are **scoped to
+that tenant**: a subject outside it is refused with the reason for a principal that does not
+exist. The answer never reveals that the subject exists in another tenant.
 
-The **credentials of a tenant** are the client id and the client secret
-that are registered for the gateway of a tenant (§3.1). The client id
-names the tenant, the secret is compared in constant time, and the
-decisions of that gateway are **scoped to that tenant**: a subject that is
-not a principal of the tenant is refused with the reason of a principal
-that does not exist. The answer does not tell the gateway that the
-subject exists in another tenant.
+The scope does not depend on the tenant row. A `shared_client` tenant may log in other tenants'
+principals (§5.2), but its decisions stay scoped to its own tenant; a gateway that asks about every
+tenant's principals presents the unscoped deployment bearer token.
 
-The scope of the credentials of a tenant does not depend on the row of
-the tenant. A tenant whose `shared_client` is true may log in the
-principals of the other tenants (§5.2), and its decisions are still
-scoped to its own tenant: a gateway that asks about the principals of
-every tenant presents the bearer token of the deployment, which is the
-scheme that is not scoped.
+A credential in neither scheme, or a refused one → `401 unauthorized`. Comparison is constant-time
+in both schemes, and a tenant secret is never logged.
 
-A credential that is neither of the two schemes, or one that is refused →
-`401 unauthorized`. The comparison is in constant time in both cases, and
-the secret of a tenant is never written to a log.
+The scheme is a deployment property; nothing in the gateway changes.
 
-The two schemes are not exclusive and nothing of the gateway changes: the
-scheme of the credentials is a property of the deployment. A deployment
-that moves its gateways to their own credentials removes the shared
-secret of the platform.
+**The bearer token is optional.** `ACCESS_DECISION_TOKEN` is not required in production (§4.4).
+Without it, only tenant credentials are accepted, and a bearer request → `401 unauthorized`. The
+token used to be **required**, so a deployment that had moved every gateway still kept a
+platform-wide secret; now it removes the token once the last gateway that sends it has moved.
 
-**The bearer token is optional.** `ACCESS_DECISION_TOKEN` is not required in
-a production deployment (§4.4): a deployment that does not set it
-accepts **only** the credentials of a tenant, and a request that
-presents the bearer scheme is refused with `401 unauthorized`. This is
-the end of the migration, and it is reachable — the token was
-**required** before, so a deployment that had moved every one of its
-gateways to the credentials of their tenant still had to keep a secret
-whose blast radius was the whole platform. A deployment removes the
-token when the last gateway that sends it has been moved.
+**The bearer token is deprecated.** It keeps working, but the first decision that presents it logs
+a notice, once per service, saying the token is not tenant-scoped and naming the scheme to use
+instead. A warning on every decision would drown the decision log.
 
-**The bearer token of the deployment is deprecated.** It keeps working:
-the gateway of the reference sends it, and a change of the gateway is
-not a change of the deployment. But the service says so, once, in the
-log of the first decision that presents it: the token is not scoped to a
-tenant, and the credentials of a tenant are. The notice names the
-scheme to use instead, and it is written once per service — a warning
-on every decision would drown the log of the decisions.
+## 9. Access context
 
----
+> [!NOTE]
+> Extension: added by the access context contract, a required integration change for the data
+> backend. It does not change §8: the gateway keeps using `POST /v1/decisions`.
 
-## 9. The access context
+A data-owning service needs more than a boolean: it needs **which** capabilities a principal holds
+to decide what it may read and write. The §8 decision answers "may this principal use this
+workspace on this route"; the access context answers "which capabilities does this principal hold
+for this workspace and route".
 
-> **Status: extension.** This section was added by the extension of the
-> access context contract, which is a required integration change of the
-> data backend. It does not change the contract of §8: the gateway keeps
-> using `POST /v1/decisions` and nothing of the gateway changes.
+Both contracts read the same tables and evaluate the same policy. The access context never replaces
+the decision; the gateway keeps using §8. Request and response bodies are in [API](api.md).
 
-A service that owns data needs more than a boolean. It needs to know
-**which** capabilities a principal holds, so that it can decide what the
-principal may read and what it may write. The decision of §8 answers
-"may this principal use this workspace on this route"; the access context
-answers "which capabilities does this principal hold for this workspace
-and this route".
-
-The two contracts read the same tables and they evaluate the same policy.
-The access context never replaces the decision: the gateway continues to
-use §8.
-
-The bodies of the requests and of the answers are in
-[api.md](api.md#the-access-context-contract).
-
-### 9.1 The discovery
+### 9.1 Discovery
 
 ```
 GET {ACCESS_ISSUER}/v1/access-context
@@ -1401,11 +1085,10 @@ Authorization: Bearer {access context credential}
 {"versions":[1],"maxPermissionKeys":4096,"maxLifetimeMs":5000}
 ```
 
-The discovery is the readiness check of a consumer. A version the
-consumer does not know stops its readiness: a consumer that guesses the
-contract guesses the permissions.
+Discovery is the consumer's readiness check. A version the consumer does not know fails its
+readiness: a consumer that guesses the contract guesses the permissions.
 
-### 9.2 The request
+### 9.2 Request
 
 ```
 POST {ACCESS_ISSUER}/v1/access-context
@@ -1415,33 +1098,26 @@ Content-Type: application/json
 {"version":1,"subject":"…","tenantId":"…","workspaceId":"…","routeId":"…"}
 ```
 
-The body is at most 64 KiB. A field that is not known, a field of the
-wrong type and a version that is not supported are refused with
-`400 bad_request`. The `subject` and the `tenantId` are the ids of the
-rows of the platform, so they are uuids: a value that is not one names
-no row, and the request is refused instead of being asked of the
-database.
+The body is at most 64 KiB. An unknown field, a field of the wrong type or an unsupported version →
+`400 bad_request`. `subject` and `tenantId` are platform row ids, so uuids: a value that is not one
+names no row, and the request is refused without asking the database.
 
-The credential of the access context is **not** the credential of the
-gateway and it is not a credential of the administration. It is a
-dedicated read only credential, and it is scoped to an explicit set of
-tenants:
+The access context credential is **neither** the gateway's credential nor an administration
+credential. It is a dedicated read-only credential scoped to an explicit set of tenants:
 
-| Situation                                   | Answer  |
-| ------------------------------------------- | ------- |
-| A missing or wrong credential               | `401 unauthorized` |
-| A credential that may not ask about the tenant | `403 forbidden` |
-| A body that is not understood               | `400 bad_request` |
-| A policy that cannot be evaluated completely | `503 service_unavailable` |
+| Situation | Answer |
+| --- | --- |
+| Missing or wrong credential | `401 unauthorized` |
+| Credential may not ask about the tenant | `403 forbidden` |
+| Body not understood | `400 bad_request` |
+| Policy cannot be evaluated completely | `503 service_unavailable` |
 
-The scope of a credential is configured with `ACCESS_CONTEXT_TOKENS`,
-a JSON object whose keys are the bearer tokens and whose values are the
-lists of the tenants the token may ask about. A `null` value is a
-credential of the platform: it may ask about every tenant. It is a
-choice of the deployment and it is never the default of a credential of
-a tenant.
+Credential scopes come from `ACCESS_CONTEXT_TOKENS`, a JSON object whose keys are bearer tokens and
+whose values are the lists of tenants each may ask about. A `null` value is a platform credential
+that may ask about every tenant; it is a deployment choice and never the default for a tenant
+credential.
 
-### 9.3 The answer
+### 9.3 Answer
 
 ```json
 {
@@ -1457,336 +1133,259 @@ a tenant.
 }
 ```
 
-`permissionKeys` is the **complete**, sorted and deduplicated set of the
-keys of the grants that apply to the request: the grants of the
-principal and the grants of the groups of the principal, the grants that
-are enabled, that are not revoked, that are not expired and whose
-workspace and route scope match the request or is unrestricted.
+`permissionKeys` is the **complete**, sorted, deduplicated set of keys from the grants that apply:
+the principal's grants and its groups' grants that are enabled, not revoked, not expired, and whose
+workspace and route scope match the request or are unrestricted.
 
-The answer is never partial: more than 4096 keys is an error and never
-an allowance with fewer keys.
+The answer is never partial: more than 4096 keys is an error, never an allowance with fewer keys.
 
-`validUntil` is at most `evaluatedAt + 5000 ms` and at most the earliest
-expiry among the grants that contributed. A conservative earlier expiry
-is allowed. It is not a promise that a grant cannot be revoked before
-that instant.
+`validUntil` is at most `evaluatedAt + 5000 ms` and at most the earliest expiry among contributing
+grants. An earlier, conservative expiry is allowed. It does not promise that no grant is revoked
+before then.
 
-A denial is an answer of `200`: `allow` is false, `permissionKeys` is
-empty, `validUntil` is absent, and the answer does not disclose whether
-the cause was an unknown principal, another tenant, a disabled state or
-a missing grant.
+A denial is a `200` answer: `allow` is false, `permissionKeys` is empty, `validUntil` is absent, and
+the answer does not disclose whether the cause was an unknown principal, another tenant, a disabled
+state or a missing grant.
 
-### 9.4 The rule
+### 9.4 Rule
 
 The access service evaluates one consistent policy snapshot:
 
 1. The credential may ask about the requested tenant.
 2. The principal exists, is active and belongs to that tenant.
 3. The tenant is enabled.
-4. At least one enabled, unrevoked and unexpired grant applies to the
-   principal or to a group the principal belongs to.
+4. At least one enabled, unrevoked, unexpired grant applies to the principal or to one of its
+   groups.
 
-The access service does not own a catalog of the workspaces: the relation between a
-tenant and a workspace is the responsibility of the consumer. The access service still
-verifies that the principal belongs to the tenant of the request.
+The access service keeps no workspace catalog: which workspaces belong to a tenant is the
+consumer's responsibility. The access service still checks that the principal belongs to the
+requested tenant.
 
-### 9.5 The freshness
+### 9.5 Freshness
 
-The context is evaluated on every request and it is never cached by the access service.
-The consumer may cache a context for a read, and the bounds of the
-cache are the ones of the consumer: the cache of a consumer never holds
-a context longer than `validUntil`, and a mutation or a background
-command asks for a fresh context.
+The context is evaluated on every request and never cached by the access service. A consumer may
+cache it for reads, within its own bounds: never past `validUntil`, and a mutation or background
+command always asks for a fresh context.
 
-The authorization is evaluated at the moment of the decision. A
-revocation that happens after that moment may leave a request that is
-already running in flight. The bound of that window is the lifetime of
-the cache of the consumer plus the duration of the request that is
-running. It is not a distributed transaction.
+Authorization is evaluated at decision time. A revocation after that may leave an in-flight request
+running; the window is bounded by the consumer's cache lifetime plus the request's duration. It is
+not a distributed transaction.
 
----
+## 10. Administration
 
-## 10. The administration
+The administrative endpoints, plus one that reads the audit, are the whole administration surface:
+no console, no portal, no second way to change a tenant, principal or grant (§2.1, invariant 5).
 
-Nine endpoints, and one that reads the audit of the changes. That is the
-whole administration surface of the access service: there is no console, no portal and
-no second way to change a tenant, a principal or a grant (§2.1,
-invariant 5).
+### 10.1 Common rules
 
-The bodies of the requests and of the answers are in [api.md](api.md).
+Request and response bodies are in [API](api.md).
 
-### 10.1 The common rules
+- Every endpoint is under `/v1/admin` and requires a **bearer token**. Missing or wrong token →
+  `401 unauthorized`. Comparison is constant-time. The token the current one replaced is accepted
+  until the deployment removes it (§4.3.1).
 
-- Every endpoint is under `/v1/admin` and requires a **bearer token**. A
-  missing or wrong token → `401 unauthorized`. The comparison is in
-  constant time. The token that the current one replaced is accepted as
-  well, until the deployment removes it (§4.3.1).
+  Credential kinds (§4.6):
 
-  There are three kinds of credentials (§4.6):
-
-  | Credential | What it may act for | The operator of the audit |
+  | Credential | May act for | Audit operator |
   | --- | --- | --- |
-  | `ACCESS_ADMIN_TOKEN` | Every tenant of the platform. | The fingerprint of the token. |
-  | A credential of a tenant of `ACCESS_ADMIN_TOKENS` | The tenant of the credential and nothing else. | The name of the operator of the credential. |
-  | A credential of the platform of `ACCESS_ADMIN_TOKENS` | Every tenant of the platform. | The name of the operator, or the fingerprint of the token. |
+  | `ACCESS_ADMIN_TOKEN` | Every tenant. | The token's fingerprint. |
+  | Tenant credential in `ACCESS_ADMIN_TOKENS` | Its own tenant only. | The credential's operator name. |
+  | Platform credential in `ACCESS_ADMIN_TOKENS` | Every tenant. | The operator name, or the token's fingerprint. |
 
-  A credential of a tenant is refused with `403 forbidden` when the call
-  acts for **another** tenant: a principal, a group, a grant or a tenant
-  that is not its own. The lists of a credential of a tenant are the
-  lists of its tenant, and the filter of a query cannot widen them. A
-  credential of a tenant does not create a tenant: the creation of a
-  tenant is the work of the operator of the platform.
+  A tenant credential acting for **another** tenant (its principal, group, grant, or the tenant
+  itself) → `403 forbidden`. A tenant credential's lists are limited to its tenant, and a query
+  filter cannot widen them. A tenant credential cannot create a tenant; only the platform operator
+  can.
 
-  **The flags of a tenant that belong to the platform are the work of the
-  operator of the platform.** The `shared_client` of a tenant moves the
-  logins of the platform and the `is_default` routes the logins of the
-  shared clients: a credential of a tenant may not change them. A call
-  that carries a value that is not the value of the row → `403
-  forbidden`. A call that carries the value of the row changes the
-  tenant like any other change.
+  **Platform-owned tenant flags are for the platform operator only.** `shared_client` moves logins
+  across the platform and `is_default` routes shared-client logins, so a tenant credential may not
+  change them. A call carrying a value different from the row's → `403 forbidden`; a call carrying
+  the row's current value proceeds like any other change.
 
-- The bodies are JSON, at most 64 KiB. A body that is larger → `413`.
-- The answers are JSON. The errors are
-  `{"error": "<code>", "message": "<text>"}`.
-- The calls are rate limited per address: a burst of failed authentications
-  is refused with `429`, so the admin token cannot be guessed by hammering
-  the endpoint. **The budget of an address is spent by the calls that
-  fail**: a call that authenticates itself is answered, whatever the
-  address presented before, and it clears the count of the address. The
-  count of the failures is held by the **shared store**
-  of the deployment, so the window of the limiter is the window of the
-  deployment and not the window of a replica: a deployment of several
-  replicas does not accept five times the budget. A deployment that keeps
-  its state in the process is a single node, and its count is the count of
-  the deployment.
-- Every call is logged: the endpoint, the status, the address, and the
-  identifier of the thing that was changed. The secrets are never logged.
-- The two list endpoints are **paginated**: `limit` (default `50`, maximum
-  `200`) and `offset` (default `0`). A `limit` that is not a number, a
-  `limit` above the maximum or an `offset` that is negative →
-  `400 invalid_request`. The answer carries the `total` of the rows that
-  match the filter, so the operator knows how many pages there are.
-- **Every change is audited in a table.** The audit is the table
-  `admin_audit`: it holds the action, the identifier of the thing that
-  changed, the tenant, the operator, the address and the request. The
-  operator is the **name** of the credential when it carries one, and
-  the **fingerprint** of the credential when it does not (the first
-  twelve hexadecimal characters of the digest of the token): the audit
-  names the operator and it never holds the secret. The row is written
-  by **the same statement** that writes the thing that changed, so the
-  change and its audit are committed together or neither is: a change
-  that is not audited does not exist. A write that fails is a failure of
-  the call: the caller repeats it, and every call of the administration
-  is idempotent. The audit is read with `GET /v1/admin/audit`, which is
-  paginated like the other lists and filtered by `tenant` and by
-  `action`. The audit of a credential of a tenant is the audit of that
-  tenant.
+- Bodies are JSON, at most 64 KiB. Larger → `413`.
+- Answers are JSON. Errors are `{"error": "<code>", "message": "<text>"}`.
+- Calls are rate limited per address: a burst of failed authentications → `429`, so the admin
+  token cannot be guessed by hammering. **Only failed calls spend an address's budget**: an
+  authenticated call is answered whatever the address did before, and it clears the address's
+  count. The failure count lives in the deployment's **shared store**, so the limiter window is the
+  deployment's, not a replica's; several replicas do not multiply the budget. A deployment that
+  keeps state in process memory is a single node, so its count is the deployment's.
+- Every call is logged: endpoint, status, address and the identifier of what changed. Secrets are
+  never logged.
+- List endpoints are **paginated**: `limit` (default `50`, maximum `200`) and `offset` (default
+  `0`). A non-numeric `limit`, a `limit` above the maximum or a negative `offset` →
+  `400 invalid_request`. The answer carries the `total` of matching rows, so the operator knows how
+  many pages there are.
+- **Every change is audited in a table**, `admin_audit`: action, identifier of what changed,
+  tenant, operator, address and request. The operator is the credential's **name** when it has one
+  and its **fingerprint** otherwise (the first twelve hexadecimal characters of the token's
+  digest), so the audit names the operator but never holds the secret. The row is written by **the
+  same statement** as the change, so both commit or neither does: an unaudited change does not
+  exist. A failed write fails the call; the caller retries, and every administration call is
+  idempotent. Read the audit with `GET /v1/admin/audit`, paginated like the other lists and
+  filtered by `tenant` and `action`. A tenant credential sees only its tenant's audit.
 
-The error codes: `unauthorized`, `invalid_request`, `not_found`,
-`conflict`, `forbidden`, `too_many_requests`, `service_unavailable`. The
-last one is the answer of a call that cannot be authenticated because the
-count of the failed authentications could not be read: the count is held
-by the shared store of the deployment, and a store that is down is a call
-that is refused, never a call that is let through.
+Error codes: `unauthorized`, `invalid_request`, `not_found`, `conflict`, `forbidden`,
+`too_many_requests`, `service_unavailable`. `service_unavailable` answers a call that cannot be
+authenticated because the failed-authentication count, held in the shared store, could not be read:
+a store that is down refuses calls, never lets them through.
 
 ### 10.2 `POST /v1/admin/tenants`
 
-Creates a tenant, or updates the tenant of that slug. The slug is the
-key: the call is an **upsert**. `201` when the tenant was created, `200`
-when it was updated.
+Creates a tenant, or updates the tenant with that slug: an **upsert** keyed by slug. `201` when
+created, `200` when updated.
 
-A slug that belongs to another tenant of the same client id → `409
-conflict`. A `clientId` that belongs to another tenant → `409 conflict`. A
-`default` that would make a second tenant the default → `409 conflict`.
+A slug that belongs to another tenant of the same client id → `409 conflict`. A `clientId` that
+belongs to another tenant → `409 conflict`. A `default` that would make a second tenant the default
+→ `409 conflict`.
 
-The two client secrets are encrypted at rest and are never returned.
+Both client secrets are encrypted at rest and never returned.
 
 ### 10.3 `GET /v1/admin/tenants`
 
-The list of the tenants, with the number of their principals and of their
-grants.
+Lists tenants, with their principal and grant counts.
 
 ### 10.4 `POST /v1/admin/users`
 
-Creates a principal, or updates the principal of that `(tenant,
-externalSubject)` pair. This is the endpoint that registers a caller
-before its first login, and the one that disables a caller.
+Creates a principal, or updates the one with that `(tenant, externalSubject)` pair. Use it to
+register a caller before its first login, and to disable a caller.
 
-The pair is the key: the call is an **upsert**. `201` when the principal
-was created, `200` when it was updated. An unknown tenant → `404
-not_found`.
+An **upsert** keyed by the pair. `201` when created, `200` when updated. Unknown tenant →
+`404 not_found`.
 
-**The batch.** The body may carry a list of principals instead of one:
-`{"principals": [ … ]}`. It is the call that onboards a tenant: one call
-writes a hundred principals instead of a hundred calls.
+**Batch.** The body may carry a list of principals instead of one (shape in [API](api.md)). It is
+how a tenant is onboarded: one call writes a hundred principals instead of a hundred calls.
 
-- The batch holds at most **1 000** principals. A bigger list → `400
-  invalid_request`. An empty list → `400 invalid_request`. The body of a
-  batch is at most 1 MiB: the body of one principal is at most 64 KiB.
-- The answer is `200` and it names the outcome of **every** item:
-  `{"principals": [{"tenant", "externalSubject", "id", "created", "error"?,
-  "message"?}, …]}`.
-- **Every item is written on its own.** The change of an item and the row
-  of its audit are one statement: an item that is written is audited, and
-  an item that fails leaves nothing behind. An item that fails does not
-  stop the others — its `error` names the refusal (`not_found` for a
-  tenant that does not exist, `conflict` for an identity that is already
-  used) — because an operator that onboards a tenant wants to know
-  *which* identities were refused.
-- The call is **idempotent**: the same batch again writes the same
-  principals, and the ones that exist are updated instead of created.
-- The cost of a batch is the cost of its items: every item is one
-  statement and one row of the audit, so a batch of a thousand principals
-  is a thousand statements. The batch is the call that onboards a tenant,
-  and it is not the call of the path of a request.
+- At most **1 000** principals. A bigger list → `400 invalid_request`; an empty list →
+  `400 invalid_request`. A batch body is at most 1 MiB; a single-principal body is at most 64 KiB.
+- The answer is `200` and reports **every** item:
+  `{"principals": [{"tenant", "externalSubject", "id", "created", "error"?, "message"?}, …]}`.
+- **Each item is written on its own.** An item's change and its audit row are one statement: a
+  written item is audited, and a failed item leaves nothing behind. A failed item does not stop the
+  others; its `error` names the refusal (`not_found` for a missing tenant, `conflict` for an
+  identity already in use), so the operator knows *which* identities were refused.
+- The call is **idempotent**: repeating the batch updates the existing principals instead of
+  creating them.
+- Cost scales with items: each is one statement and one audit row, so a thousand principals is a
+  thousand statements. A batch is an onboarding call, not a request-path call.
 
 ### 10.5 `GET /v1/admin/users`
 
-The list of the principals. It is the endpoint that answers "who has an
-account here" and "what is the state of this account", without a query
-against the database by hand. The filters are `tenant`, `status` and
-`email`; the page is `limit` and `offset` (§10.1).
+Lists principals: who has an account here, and in what state, without querying the database by
+hand. Filters: `tenant`, `status`, `email`; paging: `limit`, `offset` (§10.1).
 
-The order is the newest first (`created_at desc, id desc`), and it is
-stable: two pages never show the same row twice and never skip one. The
-list never carries a secret.
+Order is newest first (`created_at desc, id desc`) and stable: pages never repeat or skip a row.
+The list never carries a secret.
 
 ### 10.6 `PUT /v1/admin/grants`
 
-Creates a grant, or updates the grant of that `(tenant, user, permission,
-workspace, route)` tuple.
+Creates a grant, or updates the one with that `(tenant, user, permission, workspace, route)` tuple.
 
-Exactly one of `userId` and `group` is required. The permission row is
-**created on demand** when it does not exist, in the scope of the tenant.
+Exactly one of `userId` and `group` is required. The permission row is **created on demand**, in
+the tenant's scope, when it does not exist.
 
-A principal that belongs to another tenant → `403 forbidden`. A `userId`
-that does not exist → `404 not_found`. A group that does not exist → `404
-not_found`. A group of another tenant → `403 forbidden`. A body that
-names neither a principal nor a group, or both → `400 invalid_request`.
-A permission that exists in the catalogue of the platform is reused. A
-permission that exists in another tenant is **not** reused: the tenant
-creates its own row, and the grant names that row — a key is a name
-inside a tenant (§3.3).
+| Case | Answer |
+| --- | --- |
+| Principal of another tenant | `403 forbidden` |
+| `userId` does not exist | `404 not_found` |
+| Group does not exist | `404 not_found` |
+| Group of another tenant | `403 forbidden` |
+| Neither a principal nor a group, or both | `400 invalid_request` |
 
-**The batch.** The body may carry a list of grants instead of one:
-`{"grants": [ … ]}`. The rules are the ones of the batch of the
-principals (§10.4): at most **1 000** grants, every item written on its
-own, the answer naming the outcome of every item, and the call
-idempotent.
+A permission in the platform catalogue is reused. A permission in another tenant is **not**: the
+tenant creates its own row and the grant names it, since a key is a name inside a tenant (§3.3).
+
+**Batch.** The body may carry a list of grants instead of one (shape in [API](api.md)). Same rules
+as the principal batch (§10.4): at most **1 000** grants, each item written on its own, every
+item's outcome reported, and the call idempotent.
 
 ### 10.7 `DELETE /v1/admin/grants/{id}`
 
-Revokes a grant. The row is kept and stamped with `revoked_at`: the
-history of the policy is worth more than the bytes, and a revoked grant
-that is revived is not a grant that never existed.
+Revokes a grant. The row is kept and stamped with `revoked_at`: policy history is worth more than
+the bytes, and a revived revoked grant is not a grant that never existed.
 
-The call is **idempotent**: a grant that is already revoked answers `204`
-as well. An id that does not exist → `404 not_found`. A revocation is
-visible to the gateway within `GATEWAY_ACCESS_CACHE_TTL_MS` (§8.6).
+**Idempotent**: an already revoked grant also answers `204`. Unknown id → `404 not_found`. The
+gateway sees a revocation within `GATEWAY_ACCESS_CACHE_TTL_MS` (§8.6).
 
 ### 10.8 `GET /v1/admin/grants`
 
-The list of the grants. It is the endpoint that answers "who may use this
-workspace" and "what is still live", without a query against the database
-by hand. The filters are `tenant`, `userId` and `live`; the page is
-`limit` and `offset` (§10.1). The order is the newest first and it is
-stable.
+Lists grants: who may use this workspace, and what is still live, without querying the database by
+hand. Filters: `tenant`, `userId`, `live`; paging: `limit`, `offset` (§10.1). Order is newest first
+and stable.
 
-The grant carries the `grantedBy` of the row: the operator has to be able
-to read who gave an access without a query against the database by hand.
+Each grant carries the row's `grantedBy`, so the operator can see who gave an access without
+querying the database.
 
 ### 10.9 `POST /v1/admin/groups`
 
-Creates a group, or changes the group of that key. The call **replaces**
-the membership of the group.
+Creates a group, or changes the one with that key. The call **replaces** the group's membership.
 
-The members are the external identities of the principals (§6.2): the
-operator knows the `sub` of the provider, not the id of the row. A member
-that is not a principal of the tenant → `404 not_found`: a group cannot
-name a principal that does not exist.
+Members are given as the principals' external identities (§6.2): the operator knows the provider's
+`sub`, not the row id. A member that is not a principal of the tenant → `404 not_found`; a group
+cannot name a principal that does not exist.
 
-The key is the key of the row: the call is an **upsert**. `201` when the
-group was created, `200` when it was changed.
+An **upsert** keyed by the group key. `201` when created, `200` when changed.
 
 ### 10.10 `GET /v1/admin/groups`
 
-The list of the groups, paginated like the other lists (§10.1). It reads
-and it does not change.
+Lists groups, paginated like the other lists (§10.1). Read-only.
 
-The filters are `tenant` and `key`. A tenant that does not exist →
-`404 not_found`.
+Filters: `tenant`, `key`. Unknown tenant → `404 not_found`.
 
-The group carries the **external subjects** of its members (§10.9): the
-operator knows the `sub` of the provider, not the id of the row.
+Each group carries its members' **external subjects** (§10.9).
 
 ### 10.11 `PUT /v1/admin/roles`
 
-Creates a role, or changes the role of that key. The call **replaces**
-the memberships of the role.
+Creates a role, or changes the one with that key. The call **replaces** the role's memberships: the
+**permissions** it holds and the **roles** it names (§3.6).
 
-The memberships are the **permissions** the role holds and the **roles** it
-names (§3.6). The permissions are named by their key, and a key that does
-not exist is created in the scope of the tenant, like the permission of a
-grant (§10.6). The roles are named by their key, and a key that does not
-exist → `404 not_found`: a role cannot name a role that does not exist.
+Permissions are named by key; an unknown key is created in the tenant's scope, as for a grant
+(§10.6). Roles are named by key; an unknown role key → `404 not_found`, since a role cannot name a
+role that does not exist.
 
-A role that names itself, directly or through other roles, → `409
-conflict`: the nesting would hold the roles forever, and the decision
-would never answer. The schema refuses the cycle as well (§3.6.3).
+A role that names itself, directly or through other roles → `409 conflict`: the nesting would never
+end and the decision would never answer. The schema refuses the cycle too (§3.6.3).
 
-The key is the key of the row: the call is an **upsert**. `201` when the
-role was created, `200` when it was changed.
+An **upsert** keyed by the role key, like a group (§10.9). `201` when created, `200` when changed.
 
 ### 10.12 `GET /v1/admin/roles`
 
-The list of the roles, paginated like the other lists (§10.1). It reads
-and it does not change.
+Lists roles, paginated like the other lists (§10.1). Read-only.
 
-The filters are `tenant` and `key`. A tenant that does not exist →
-`404 not_found`.
+Filters: `tenant`, `key`, as for groups (§10.10). Unknown tenant → `404 not_found`.
 
-The role carries the keys of the permissions it holds and the keys of the
-roles it names.
+Each role carries the keys of the permissions it holds and of the roles it names.
 
 ### 10.13 `DELETE /v1/admin/roles/{id}`
 
-Removes a role that no grant names. A role that a grant names → `409
-conflict`: the grants of the policy are kept, and the operator revokes
-them first. A role that does not exist → `404 not_found`.
+Removes a role that no grant names. A role named by a grant → `409 conflict`: grants are kept, so
+the operator revokes them first. Unknown role → `404 not_found`.
 
-### 10.14 The whole session, in twelve calls
+### 10.14 Full session in twelve calls
 
-The twelve calls of a tenant, from the registration to the revocation, are
-in [api.md](api.md) §"The session in twelve calls".
+The twelve calls for a tenant, from registration to revocation, are in [API](api.md).
 
 ### 10.15 `GET /v1/admin/audit`
 
-The audit of the changes, the newest first. It reads and it does not
-change, and it is paginated like the other lists.
+The audit of changes, newest first. Read-only, paginated like the other lists.
 
-The filter is `tenant` (the slug of a tenant that does not exist →
-`404 not_found`) and `action` (`tenant.created`, `tenant.updated`,
-`principal.created`, `principal.updated`, `group.created`,
-`group.updated`, `grant.created`, `grant.updated`, `grant.revoked`).
+Filters: `tenant` (an unknown tenant slug → `404 not_found`) and `action` (`tenant.created`,
+`tenant.updated`, `principal.created`, `principal.updated`, `group.created`, `group.updated`,
+`grant.created`, `grant.updated`, `grant.revoked`).
 
-The **format** of the answer is `json` by default. `csv` and `jsonl` are
-the **exports**: the rows leave the platform in a file that a spreadsheet
-or a script reads, and the filter of the list applies to them. A format
-that is not one of the three → `400 invalid_request`.
+`format` defaults to `json`; `csv` and `jsonl` are **exports** that a spreadsheet or script can
+read, with the list filters applied. Any other format → `400 invalid_request`.
 
-| Format | The answer |
+| Format | Answer |
 | --- | --- |
-| `json` | The paginated list: the rows, the `total`, the `limit` and the `offset`. |
-| `csv` | `text/csv`: the header is the name of the columns, and every row is a line. |
+| `json` | The paginated list: rows, `total`, `limit` and `offset`. |
+| `csv` | `text/csv`: a header row of column names, then one line per row. |
 | `jsonl` | `application/x-ndjson`: one object per line. |
 
-An export carries at most **10 000 rows** in one answer, and the `limit`
-of the list applies to it: an audit that holds more rows is exported page
-by page. The answer of an export names the file in
-`content-disposition`.
+An export carries at most **10 000 rows** per answer, and the list's `limit` applies: export a
+larger audit page by page. An export names its file in `content-disposition`.
 
-The answer carries the rows and the `total` of the rows that match the
-filter:
+The `json` answer carries the rows and the `total` matching the filter:
 
 ```json
 {
@@ -1808,12 +1407,9 @@ filter:
 }
 ```
 
-The row carries no secret: the operator is the fingerprint of the
-credential that made the call.
+A row carries no secret: the operator is the calling credential's fingerprint.
 
----
-
-## 11. The behavior of the decision, in the whole picture
+## 11. Decision outcomes
 
 | Path | Answer |
 | --- | --- |
@@ -1822,29 +1418,24 @@ credential that made the call.
 | The caller is not a principal of the access service | `{"allow":false,"reason":"the principal does not exist"}` |
 | The database is down | `503` → the gateway denies, because it fails closed |
 
-The gateway hides the reason from the caller and counts it: `allowed` is
-not counted, a denial with *role* in the reason is `missing_role`, any
-other denial is `access_denied`.
+The gateway hides the reason from the caller and counts it: `allowed` is not counted, a denial with
+*role* in the reason is `missing_role`, any other denial is `access_denied`.
 
----
+## 12. Operations
 
-## 12. The operations
+How-to: [Operations](operations.md). This section is the contract operations must respect.
 
-The how-to of the operations is in [operations.md](operations.md). This
-section is the contract that the operations have to respect.
+### 12.1 Probes
 
-### 12.1 The probes
+`GET /healthz` answers `200 {"status":"ok","service":"access","version":"<version>"}` while the
+process is alive. The version is the platform release tag, so you can see what is running without
+reading logs.
 
-`GET /healthz` answers `200 {"status":"ok","service":"access","version":"<version>"}`
-as long as the process is alive. The version is the version of the
-release of the platform: it is the number of the tag, and it says what
-is running without reading the logs.
+`GET /readyz` answers `200 {"status":"ready"}` when the database answers a trivial query and the
+migrations are applied, `503 {"status":"draining"}` during a drain, and `503 {"status":"not-ready"}`
+otherwise.
 
-`GET /readyz` answers `200 {"status":"ready"}` when the database answers a
-trivial query and the migrations are applied, `503 {"status":"draining"}`
-during a drain and `503 {"status":"not-ready"}` otherwise.
-
-### 12.2 The metrics
+### 12.2 Metrics
 
 | Metric | Type | Labels |
 | --- | --- | --- |
@@ -1854,49 +1445,42 @@ during a drain and `503 {"status":"not-ready"}` otherwise.
 | `access_admin_requests_total` | counter | `endpoint`, `status` |
 | `access_store_errors_total` | counter | `store` (`redis`, `postgres`) |
 
-The labels are bounded: the `tenant` label is capped at 100 values and
-the rest is aggregated into `overflow`. Neither a caller nor a provider can
-grow the number of series without limit.
+Labels are bounded: `tenant` is capped at 100 values, and the rest aggregate into `overflow`.
+Neither a caller nor a provider can grow the series count without limit.
 
-### 12.3 The logs
+### 12.3 Logs
 
-Structured JSON, one line per event, with the redacted fields. The events
-are: the login (tenant, outcome, the reason of a refusal), the decision
-(subject, workspace, route, allow or deny, the reason), the
-administration (endpoint, status, the identifier of the thing that
-changed) and the lifecycle of the process.
+Structured JSON, one line per event, with redacted fields. Events: login (tenant, outcome, refusal
+reason), decision (subject, workspace, route, allow or deny, reason), administration (endpoint,
+status, identifier of what changed) and process lifecycle.
 
-The redaction is the one of the gateway: a token, a secret, a cookie and
-an `Authorization` header never reach a log line.
+Redaction matches the gateway's: a token, a secret, a cookie or an `Authorization` header never
+reaches a log line.
 
-### 12.4 The drain
+### 12.4 Drain
 
-On `SIGTERM` the readiness probe answers `503` with the body `draining`,
-the listener stops accepting new work, the running logins are given five
-seconds to finish, and the process exits. A decision that is running when
-the deadline is reached is a denial.
-
----
+On `SIGTERM`, the readiness probe answers `503` with body `draining`, the listener stops accepting
+new work, running logins get five seconds to finish, and the process exits. A decision still running
+at the deadline is a denial.
 
 ## 13. What does not change in the gateway
 
-This is the point of the whole design, so it is written as a list of
-things that are **not** touched.
+The point of the design, as a list of what is **not** touched:
 
 | In the gateway | Status |
 | --- | --- |
-| The format of the route table (`config/routes.json`) | Unchanged. |
-| The environment of the gateway (`GATEWAY_*`) | The names carry the role of the gateway, and the contract is unchanged. The access service asks for no new variable: the variables that the releases of the gateway before the merge added are the business of the deployment, and two of them are required by a production deployment of the gateway (`GATEWAY_SESSION_SECRET` and `GATEWAY_IDENTITY_SIGNING_KEY`). The gateway added `GATEWAY_TRUSTED_PROXY_HOPS` (one by default), the number of the proxies that are in front of the gateway, and it changed the ranges of `GATEWAY_TRUSTED_PROXIES`: they replace the ranges of the route table when the environment names them, and they do not add to them. The release of the platform added no variable and changed no contract. |
+| The route table format (`config/routes.json`) | Unchanged. |
+| The gateway environment (`GATEWAY_*`) | Names carry the gateway's role; the contract is unchanged. The access service asks for no new variable. Variables added by gateway releases before the merge are the deployment's business; two are required by a production gateway (`GATEWAY_SESSION_SECRET` and `GATEWAY_IDENTITY_SIGNING_KEY`). The gateway added `GATEWAY_TRUSTED_PROXY_HOPS` (default one), the number of proxies in front of it, and changed `GATEWAY_TRUSTED_PROXIES`: when set, its ranges replace the route table's ranges instead of adding to them. The platform release added no variable and changed no contract. |
 | The single provider (`GATEWAY_OIDC_ISSUER`, `GATEWAY_OIDC_CLIENT_ID`, `GATEWAY_OIDC_REDIRECT_URI`, `GATEWAY_OIDC_CLIENT_SECRET`) | Unchanged. They name the access service. |
 | The single access service (`GATEWAY_ACCESS_URL`, `GATEWAY_ACCESS_TOKEN`) | Unchanged. They name the access service. |
-| The contract of the decision (`POST /v1/decisions`, `{subject, workspaceId, routeId, roles}` → `{allow, reason}`) | Unchanged. The access service implements it as it is, and it sends the `reasonCode` of a denial (§8.7). |
-| The cache of the decisions of the gateway | Unchanged. Its TTL is the latency of a revocation. |
-| The headers of the identity, the sessions, the limits, the WebSockets | The names carry the role of the gateway, and the contract is unchanged. The gateway of the release `1.0.0` writes the **subject** of the identity as it is and refuses a subject that cannot be written into a header: the subject of the tokens of the access service is a uuid (§7.1), so it is always written. |
-| The signature of the identity | The one of the gateway: the release `1.0.0` removed the symmetric format, and the upstreams verify the signature with the public key of the deployment. The gateway signs it, not the access service. |
-| The routes, the upstreams, the workspaces | Unchanged. They belong to the deployment, not to the broker. |
-| The code of the gateway | **No commit.** |
+| The decision contract (`POST /v1/decisions`, `{subject, workspaceId, routeId, roles}` → `{allow, reason}`) | Unchanged. The access service implements it as is and sends a denial's `reasonCode` (§8.7). |
+| The gateway's decision cache | Unchanged. Its TTL is the revocation latency. |
+| Identity headers, sessions, limits, WebSockets | Names carry the gateway's role; the contract is unchanged. The release `1.0.0` gateway writes the identity's **subject** as is and refuses one that cannot be written into a header; the access service's token subject is a uuid (§7.1), so it is always written. |
+| The identity signature | The gateway's own: release `1.0.0` removed the symmetric format, and upstreams verify the signature with the deployment's public key. The gateway signs it, not the access service. |
+| Routes, upstreams, workspaces | Unchanged. They belong to the deployment, not the broker. |
+| The gateway code | **No commit.** |
 
-### 13.1 The configuration of a deployment
+### 13.1 Deployment configuration
 
 ```
 GATEWAY_OIDC_ISSUER=https://access.example.com
@@ -1910,81 +1494,70 @@ GATEWAY_ACCESS_URL=https://access.example.com
 GATEWAY_ACCESS_TOKEN=the-access-token-of-the-access-service
 ```
 
-The gateway discovers the access service, reads its JWKS, exchanges the code at its
-token endpoint and asks it for the decisions. It cannot tell that the access service is
-in front of several identity providers, and it does not have to.
+The gateway discovers the access service, reads its JWKS, exchanges codes at its token endpoint and
+asks it for decisions, without knowing it fronts several identity providers.
 
-The gateway of the release `1.0.0` and later asks for two more variables
-in a production deployment: `GATEWAY_SESSION_SECRET`, the secret of the
-sessions of the browsers, and `GATEWAY_IDENTITY_SIGNING_KEY`, the
-private key that signs the identity of a request. They are the business
-of the deployment and not of the access service: the upstreams verify the identity with
-the public key of the deployment.
+The release `1.0.0` gateway and later also require, in production, `GATEWAY_SESSION_SECRET` (the
+browser session secret) and `GATEWAY_IDENTITY_SIGNING_KEY` (the private key that signs a request's
+identity). They are the deployment's business, not the access service's: upstreams verify the
+identity with the deployment's public key.
 
-### 13.2 The two configurations that have to agree
+### 13.2 Settings that must agree
 
-| On the side of the access service | On the side of the gateway |
+| Access service | Gateway |
 | --- | --- |
-| `ACCESS_ISSUER` | `GATEWAY_OIDC_ISSUER` — the **same** url, character for character. |
+| `ACCESS_ISSUER` | `GATEWAY_OIDC_ISSUER`: the **same** url, character for character. |
 | `tenants.client_id` | `GATEWAY_OIDC_CLIENT_ID` |
 | `tenants.client_secret` | `GATEWAY_OIDC_CLIENT_SECRET` |
 | `ACCESS_DECISION_TOKEN` | `GATEWAY_ACCESS_TOKEN` |
 
-### 13.3 What the gateway learns from the access service, and what it does not
+### 13.3 What the gateway learns
 
-The gateway learns the identity of the caller: the subject, the e-mail and
-the roles. It does not learn the tenant, the grants or the permissions:
-they are not claims of the token and the gateway does not read them.
+The gateway learns the caller's identity: subject, e-mail and roles. It does not learn the tenant,
+the grants or the permissions; they are not claims it reads.
 
-The e-mail is the claim of the id token: a caller that comes with a
-bearer token is identified by its subject and by its roles (§7.2).
+The e-mail is an id token claim: a bearer-token caller is identified by its subject and roles
+(§7.2).
 
-The tenant is in the `tid` claim for the operator. The gateway ignores
-it, and that is fine: the decision of §8 does not need it, because the
-subject names the principal and the principal names its tenant.
+The tenant is in the `tid` claim for the operator. The gateway ignores it, which is fine: the §8
+decision does not need it, because the subject names the principal and the principal names its
+tenant.
 
----
+## 14. Deferred features
 
-## 14. The deferred features
+Everything below is **deferred**: no column, table, flag, endpoint or code. The schema reserves
+nothing for them, because a column that is always `null` gets read as a feature.
 
-Everything below is **deferred**. A deferred feature has no column, no
-table, no flag, no endpoint and no code. The schema does not reserve
-anything for it, because a column that is always `null` is a column that
-somebody will read as a feature.
+One comes back only when **a named customer pays for it**. Not "it seems useful", not "it is on the
+roadmap", not "it is standard".
 
-The rule that brings one of them back: **a named customer pays for it.**
-Not "it seems useful", not "it is on the roadmap", not "it is standard".
-
-| Deferred | What it would mean | What is missing without it |
+| Deferred | What it would mean | Without it |
 | --- | --- | --- |
-| **SAML** | A tenant whose provider speaks SAML instead of OpenID Connect. | A tenant whose provider is not an OIDC provider is not served. |
-| **Account linking** | One principal, several external identities (a second provider, a second subject). | The mapping key is `(tenant, subject)`, and it is one to one. A person with two accounts has two principals and two sets of grants. |
-| **The console** | A web interface for the administration. | The twelve endpoints of §10 and `curl`. |
-| **SCIM** | The provisioning of the principals by a provider. | The principals are created by the endpoint of §10.4, or by the auto-provisioning of the tenant. |
-| **Directory sync** | The import of the directory of a tenant, on a schedule, from a source of truth. | The principals are created one at a time, by hand or by a script that calls the endpoints. |
+| **SAML** | A tenant whose provider speaks SAML instead of OIDC. | A tenant whose provider is not an OIDC provider is not served. |
+| **Account linking** | One principal, several external identities (a second provider, a second subject). | The mapping key `(tenant, subject)` is one to one. A person with two accounts has two principals and two sets of grants. |
+| **Console** | A web interface for the administration. | The twelve endpoints of §10 and `curl`. |
+| **SCIM** | Principal provisioning by a provider. | Principals are created by the §10.4 endpoint or by the tenant's auto-provisioning. |
+| **Directory sync** | Scheduled import of a tenant's directory from a source of truth. | Principals are created one at a time, by hand or by a script calling the endpoints. |
 
-The **groups** were not deferred: the operator of the platform asked for
-them, and they are the fifth table of the model (§3.5).
+**Groups** were not deferred: the platform operator asked for them, and they are the fifth table of
+the model (§3.5).
 
----
+## 15. Verification
 
-## 15. The verification
-
-A rule that has no test is a rule that is not implemented.
+The rule that every rule needs a test is in [platform architecture](../platform/architecture.md).
 
 | Kind | Where | What it proves |
 | --- | --- | --- |
-| Unit | `src/domains/*/*.test.ts` | The validation of the token of a provider, the mapping, the rule of the decision, the resolution of the tenant. |
-| Contract | `test/contract/` | The whole flow against the fixtures of the access service: the login of a browser, the exchange of the code, the decision, the twelve administrative endpoints, the audit, the rotation of the secrets. |
-| Integration | `test/integration/` | The decisions against a real PostgreSQL and a real Redis, the isolation of the tenants, the migrations, the deadline of a statement, the rule of the decision against a policy that is built at random. |
-| Compatibility | `test/compatibility/` | **The gateway, unchanged, against the access service.** The fixtures of the gateway reference are replaced by the access service, and the contract suite of the gateway is run against it. |
-| Architecture | `test/architecture/` | The import boundaries of the access service, and the absence of the deferred features. |
-| Tooling | `test/tooling/` | The runner of the compatibility suite: the pin of the reference, the sources of the checkout, and the refusals. |
+| Unit | `src/domains/*/*.test.ts` | Provider token validation, mapping, the decision rule, tenant resolution. |
+| Contract | `test/contract/` | The whole flow against the access service fixtures: browser login, code exchange, decision, the twelve administrative endpoints, the audit, secret rotation. |
+| Integration | `test/integration/` | Decisions against real PostgreSQL and Redis, tenant isolation, migrations, the statement deadline, the decision rule against randomly built policies. |
+| Compatibility | `test/compatibility/` | **The unchanged gateway against the access service.** The gateway reference's fixtures are replaced by the access service, and the gateway's contract suite runs against it. |
+| Architecture | `test/architecture/` | The access service's import boundaries, and the absence of deferred features. |
+| Tooling | `test/tooling/` | The compatibility suite runner: the reference pin, the checkout sources, and the refusals. |
 
-### 15.1 The compatibility test, in detail
+### 15.1 Compatibility test
 
-The gateway is started with its own configuration and with the fixtures
-replaced by the access service:
+The gateway starts with its own configuration, with its fixtures replaced by the access service:
 
 ```
 GATEWAY_OIDC_ISSUER   = the issuer of the access service
@@ -1993,101 +1566,81 @@ GATEWAY_ACCESS_URL    = the base url of the access service
 GATEWAY_ACCESS_TOKEN  = the access token of the access service
 ```
 
-The suite asserts:
+The suite asserts that:
 
-1. a browser logs in at the provider of the tenant and comes back to the
-   gateway with a session;
-2. The gateway writes the `x-gateway-user`, the `x-gateway-email` and the
-   `x-gateway-roles` headers with the values of the principal;
-3. a request with a grant on the workspace is forwarded, and a request
-   without one is refused with `403 workspace_forbidden`;
-4. a grant that is revoked is refused within the TTL of the cache of the
-   gateway;
-5. the metrics of the gateway count the denial as `missing_role`.
+1. a browser logs in at the tenant's provider and returns to the gateway with a session;
+2. the gateway writes the `x-gateway-user`, `x-gateway-email` and `x-gateway-roles` headers with
+   the principal's values;
+3. a request with a grant on the workspace is forwarded, and one without is refused with
+   `403 workspace_forbidden`;
+4. a revoked grant is refused within the gateway's cache TTL;
+5. the gateway's metrics count the denial as `missing_role`.
 
-The suite holds a second file: the **rehearsal of the cutover** of a
-tenant ([release.md](release.md) §4). It plays the phases of the runbook
-against the gateway of the reference: the tenant is registered, its
-principal and its grant are registered, a browser logs in and reaches an
-upstream, the grant is revoked and the access ends, and the tenant is
-switched again without registering anything.
+A second file **rehearses a tenant cutover** ([release.md](release.md) §4), playing the runbook
+phases against the reference gateway: register the tenant, its principal and its grant; a browser
+logs in and reaches an upstream; revoke the grant and access ends; switch the tenant again without
+registering anything.
 
-**The gateway is not modified for any of these tests.** If one of them
-needs a change in the gateway, the change is a change of the gateway, and
-it is refused: the compatibility test exists to prove that there is none.
+**The gateway is never modified for these tests.** A test that needs a gateway change is refused:
+the compatibility test exists to prove none is needed.
 
-### 15.2 The reference of the suite
+### 15.2 Suite reference
 
-The reference of the suite is the workspace `packages/gateway/` of the platform.
-The revision that the suite runs against is the revision of the
-repository, and the manifest `compatibility.json`, at the root of the
-repository, is the one place where the workspaces are named.
+The reference is the platform's `packages/gateway/` workspace, at the repository's revision. The
+manifest `compatibility.json`, at the repository root, is the one place that names the workspaces.
 
-The runner of the suite (`scripts/compat/compatibility.ts`, `bun run
-test:compat`) is the only way the reference is prepared:
+The suite runner (`scripts/compat/compatibility.ts`, `bun run test:compat`) is the only way the
+reference is prepared:
 
-1. it reads the manifest relatively to the root of the repository;
-2. it uses the workspace of the gateway as the reference, and it checks
-   that its tracked files are the ones of the revision of the repository;
-3. it passes the path of the reference in `ACCESS_GATEWAY_PATH`, and the
-   suite runs the gateway as a process, in its own directory;
-4. it asserts that the tracked files of the reference are the ones of
-   the revision, after the run.
+1. It reads the manifest relative to the repository root.
+2. It uses the gateway workspace as the reference and checks that its tracked files match the
+   repository revision.
+3. It passes the reference path in `ACCESS_GATEWAY_PATH`, and the suite runs the gateway as a
+   process in its own directory.
+4. After the run, it asserts that the reference's tracked files still match the revision.
 
-A published revision of the gateway is tested by naming it: the
-environment holds a repository and a **full commit id** — a branch, a
-tag, a short hash and a placeholder are refused, because a reference
-that moves is a reference that cannot be tested twice — and the runner
-clones it at that revision.
+To test a published gateway revision, name it: the environment holds a repository and a **full
+commit id**. A branch, tag, short hash or placeholder is refused, because a moving reference cannot
+be tested twice. The runner clones it at that revision.
 
-A reference that a developer prepared (`ACCESS_GATEWAY_PATH`) is checked
-and never written to: a reference that carries changes is refused with
-the reason. The runner never falls back to another source: a suite that
-runs against another revision proves nothing. The manual is in
-[compatibility.md](compatibility.md).
+A developer-prepared reference (`ACCESS_GATEWAY_PATH`) is checked and never written to; one that
+carries changes is refused with the reason. The runner never falls back to another source: a suite
+run against another revision proves nothing. Manual: [compatibility.md](compatibility.md).
 
----
+## 16. Code layout
 
-## 16. The layout of the code
-
-The layout, the layers and the boundaries are in
-[architecture.md](architecture.md). In one table:
+Layers and boundaries: [Architecture](architecture.md). Summary:
 
 | Path | Owns |
 | --- | --- |
-| `src/main.ts` | The entry point of the process. |
-| `src/app/` | The HTTP application: thin handlers, the order of the pipeline, the mapping of the failures to the answers of the protocol. |
-| `src/domains/identity/` | The validation of the token of a provider, the mapping to a principal, the resolution of the tenant. |
-| `src/domains/authorization/` | The rule of the decision, the reading of the grants, the reasons. |
-| `src/domains/administration/` | The twelve endpoints, the validation of their bodies, the audit of every change. |
-| `src/domains/provider/` | The tokens of the access service, the JWKS, the discovery document, the exchange of the code. |
-| `src/platform/` | The adapters: PostgreSQL, Redis, the Bun listener, the HTTP client. |
-| `src/observability/` | The logs, the metrics, the comparison of the secrets. |
-| `src/runtime/` | The environment, the composition root, the lifecycle and the drain. |
-| `scripts/compat/compatibility.ts` | The runner of the compatibility suite. It is outside the application: no file of `src/` imports it, and the service depends on no package of the reference. |
-| `compatibility.json` | The workspaces of the platform and the revision that is tested (§15.2). It is at the root of the repository. |
+| `src/main.ts` | Process entry point. |
+| `src/app/` | The HTTP application: thin handlers, pipeline order, mapping failures to protocol answers. |
+| `src/domains/identity/` | Provider token validation, principal mapping, tenant resolution. |
+| `src/domains/authorization/` | The decision rule, grant reads, reasons. |
+| `src/domains/administration/` | The twelve endpoints, body validation, auditing every change. |
+| `src/domains/provider/` | The access service's tokens, the JWKS, the discovery document, code exchange. |
+| `src/platform/` | Adapters: PostgreSQL, Redis, the Bun listener, the HTTP client. |
+| `src/observability/` | Logs, metrics, secret comparison. |
+| `src/runtime/` | Environment, composition root, lifecycle and drain. |
+| `scripts/compat/compatibility.ts` | The compatibility suite runner. Outside the application: no `src/` file imports it, and the service depends on no package of the reference. |
+| `compatibility.json` | The platform workspaces and the tested revision (§15.2). At the repository root. |
 
----
+## 17. Decisions
 
-## 17. The decisions
+Decisions that shape the contract are in [decisions.md](decisions.md). The rules for the decision
+table, and for a decision that changes the contract, are in
+[platform decisions](../platform/decisions.md).
 
-The decisions that shape the contract are in
-[decisions.md](decisions.md): the column **Stated in** of that table names
-the section of this document that states each of them. The rule of the
-table, and the rule of a decision that changes the contract, are in [the
-decisions of the platform](../platform/decisions.md).
+## 18. Settled questions
 
-## 18. The settled questions
+Questions open when this document was written, and the answers the implementation gives. The
+answers are the contract: changing one changes this document first.
 
-The questions that were open when this document was written, and the
-answer that the implementation gives them. The answers are the contract:
-a change of one of them is a change of this document first.
-
-| # | Question | The answer | Where |
+| # | Question | Answer | Where |
 | --- | --- | --- | --- |
-| 1 | May the shared client be enabled at all? | It is refused by default: `shared_client` is `false` unless the operator says so. When it is enabled, the parameter of the tenant and the hint of the e-mail can move a login to another tenant, and nothing else can. | §3.1, §5.2 |
-| 2 | Is the `roles` claim of the token the right list? | It is the list of the keys of the live grants of the principal, sorted, without duplicates and capped at sixty-four entries. The count of the roles that were left out is in the log. | §7.3 |
-| 3 | Does a grant need a scope on the path of the request? | No. The decision contract does not carry one and the contract does not change: a grant is a workspace and a route, which is the granularity the gateway knows. | §8.3 |
-| 4 | Is the expiry of a grant worth it? | Yes: it is in the model because a temporary access is a real thing, and it costs one comparison in the statement of the decision. | §3.4, §8.3 |
-| 5 | How is a secret rotated? | The secret of the gateway of a tenant is kept for 24 hours when it is replaced, and the tokens of the environment are read from two variables during a rotation. The rotation is a rolling change and never a window in which the client and the service disagree (§4.3.1). |
-| 6 | Where does the audit of the administration live? | In a table of the infrastructure, `admin_audit`, written by the call that changed the thing. A log line is not an audit: it disappears with the container and it is not queryable (§10.1). |
+| 1 | May the shared client be enabled at all? | Off by default: `shared_client` is `false` unless the operator says so. When enabled, the `tenant` parameter and the e-mail hint can move a login to another tenant, and nothing else can. | §3.1, §5.2 |
+| 2 | Is the token's `roles` claim the right list? | The keys of the principal's live grants, sorted, deduplicated and capped at sixty-four entries. The number left out is logged. | §7.3 |
+| 3 | Does a grant need a scope on the request path? | No. The decision contract carries none and does not change: a grant is a workspace and a route, the granularity the gateway knows. | §8.3 |
+| 4 | Is grant expiry worth it? | Yes: temporary access is real, and it costs one comparison in the decision statement. | §3.4, §8.3 |
+| 5 | How is a secret rotated? | A tenant's gateway secret is kept 24 hours after replacement, and environment tokens are read from two variables during a rotation. Rotation is rolling, never a window where client and service disagree. | §4.3.1 |
+| 6 | Where does the administration audit live? | In the infrastructure table `admin_audit`, written by the call that made the change. A log line is not an audit: it disappears with the container and is not queryable. | §10.1 |

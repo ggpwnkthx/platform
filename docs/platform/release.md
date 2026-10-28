@@ -1,111 +1,63 @@
-# The release of the platform
+# Release
 
-A release of the platform is a tag, and the tag names the version of the
-package of the root. The tag publishes the three images and the three
-binaries of the three workspaces.
+A release is a git tag named after the root `package.json` version. Pushing it publishes three images and three sets of binaries.
 
-## The line of the release
+## One version
 
-The version of the platform is one number, and it is written in every
-place that names a release:
+The platform has one version, written everywhere a release is named:
 
-| Where | What it holds |
+| Where | What |
 | --- | --- |
-| `package.json` of the root | The version of the platform. It is the reference. |
-| `package.json` of a workspace | The version of the platform. |
-| `Dockerfile` of a workspace | The default of `ARG VERSION`. |
-| `src/runtime/version.ts` of a workspace | The version that the probe of the health reports. |
-| `docs/gateway/spec.md`, `docs/access/spec.md`, `docs/data/specification.md` | The status of the specification: the release it describes. |
-| `CHANGELOG.md` of the root | The latest release. |
+| Root `package.json` | The platform version (the reference) |
+| Each workspace's `package.json` | The platform version |
+| Each workspace's `Dockerfile` | Default of `ARG VERSION` |
+| Each workspace's `src/runtime/version.ts` | Version reported by the health probe |
+| `docs/gateway/spec.md`, `docs/access/spec.md`, `docs/data/spec.md` | The spec's `Status:`, i.e. the release it describes |
+| Root `CHANGELOG.md` | Latest release |
 
-The check of the versions proves that they agree, and it runs in the
-continuous integration and in the test suite:
+`bun run versions` checks they agree; it runs in CI and in the test suite. A spec whose status names another release describes behavior the code doesn't have, so the check rejects it.
 
-```bash
-bun run versions
-```
+The three services were once separate repositories with their own version lines. Those repositories are retired and their lines are not continued: there is one release line.
 
-There is one line. The three services were three repositories, and each
-of them carried a version of its own; the repositories are retired, and
-the lines they carried are not continued here. A specification that
-describes another release describes a behaviour the code does not have,
-and the check refuses it.
+## Steps
 
-## The steps of a release
-
-1. **The version goes up.** The package of the root and the packages of
-   the three workspaces name the new version, the Dockerfiles carry it,
-   the constants of the runtimes carry it, and the changelog of the
-   platform describes it.
+1. **Bump the version.** Update the root and workspace `package.json` files, the Dockerfiles, the runtime constants and the changelog, then run `bun run versions`.
+2. **Wait for green CI.** Tag only a commit that passed; a release of an untested commit has to be withdrawn.
+3. **Cut the tag.** The tagger refuses a version that isn't newer than every existing tag.
 
    ```bash
-   bun run versions   # it proves that the files agree
+   bun run release:tag:dry-run   # show what it would do
+   bun run release:tag           # do it
    ```
 
-2. **The continuous integration is green.** The tag is cut only after
-   the proof: a release of a commit that did not pass the tests is a
-   release that has to be withdrawn.
+4. **Dispatch.** The tag is pushed with the workflow token, and GitHub starts no workflow on such a push, so the tag workflow dispatches the image and binary workflows on the new tag.
+5. **Publish images.** The image workflow builds the three images, publishes them with provenance and an SBOM, and runs every gate against the published **digest**. A failed gate withdraws the images from the registry.
+6. **Publish binaries.** The binary workflow compiles the three services for seven supported platforms, proves the runner binary starts and serves, and attaches the archives to the tag's release.
 
-3. **The tag is cut.** The tagger refuses a version that is not newer
-   than every tag of the repository, and it refuses a version that went
-   down.
-
-   ```bash
-   bun run release:tag:dry-run   # what it would do
-   bun run release:tag            # it does it
-   ```
-
-4. **The release is dispatched.** The tag is pushed with the token of
-   the workflow, and GitHub does not start a workflow on a push that
-   carries it: the workflow of the tag dispatches the workflow of the
-   images and the workflow of the binaries on the tag it published.
-
-5. **The images are published.** The workflow of the images builds the
-   three images, publishes them with their provenance and their SBOM,
-   and runs every gate against the **digest** of what it published. A
-   gate that fails withdraws the images from the registry.
-
-6. **The binaries are published.** The workflow of the binaries compiles
-   the three services for the seven supported platforms, proves that
-   the binary of the runner starts and serves, and publishes the
-   archives on the release of the tag.
-
-## What a release carries
+## Artifacts
 
 | Artifact | Where |
 | --- | --- |
-| The image of the gateway | `ghcr.io/ggpwnkthx/gateway:<version>` |
-| The image of the access service | `ghcr.io/ggpwnkthx/access:<version>` |
-| The image of the data service | `ghcr.io/ggpwnkthx/data:<version>` |
-| The binaries | The assets of the release of the tag. |
-| The typed client of the data service | `data-backend-client-<version>.tgz`, and the registry of the packages. |
+| Gateway image | `ghcr.io/ggpwnkthx/gateway:<version>` |
+| Access service image | `ghcr.io/ggpwnkthx/access:<version>` |
+| Data service image | `ghcr.io/ggpwnkthx/data:<version>` |
+| Binaries | Assets of the tag's release |
+| Data service typed client | `data-backend-client-<version>.tgz`, and the package registry |
 
-A binary carries the runtime of the release inside it: nothing else has
-to be installed. The archive of the access service carries the
-migrations of its schema next to the executable, and the archive of the
-data service carries its manifests and its migrations.
+Binaries embed the runtime; nothing else needs installing. The access service archive includes its schema migrations next to the executable; the data service archive includes its manifests and migrations.
 
-## The gates of a release
+## Gates
 
-The gates are the ones of the continuous integration, run against the
-published bytes:
+The CI gates, run against the published bytes:
 
-- the image starts with the configuration of a deployment and answers
-  its probes;
-- the image refuses to start when the environment of a production is
-  not complete, and it names the secret that misses;
-- the image is scanned, and a finding of a severity above high fails
-  the release;
-- the binary of the runner starts, serves the probes and stops;
-- the compatibility suite runs the three services of the release
-  together.
+- the image starts with a deployment configuration and answers its probes;
+- the image refuses to start with an incomplete production environment and names the missing secret;
+- the image is scanned, and any finding above high severity fails the release;
+- the runner binary starts, serves the probes and stops;
+- the compatibility suite runs the release's three services together.
 
-## The rollback
+## Rollback
 
-A release that failed its gates publishes nothing: its images are
-withdrawn from the registry, and the tag of the release points at
-nothing.
+A release that fails its gates publishes nothing: its images are withdrawn and its tag points at nothing.
 
-A release that failed **after** it was published is rolled back by the
-deployment: the image of the previous release is deployed. The schema of
-the data service is not rolled back with its image.
+A release that fails **after** publishing is rolled back by deploying the previous release's image. The data service schema is not rolled back with the image.

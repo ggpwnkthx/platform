@@ -1,33 +1,27 @@
-# The development machine
+# Getting started
 
-The instructions of this document take a checkout to a running
-service. They are the shortest path that exercises the whole trust
-chain: a signed request, a real PostgreSQL, the real roles and the
-real migrations.
+Take a checkout to a running service on your development machine. This is the shortest path that
+exercises the whole trust chain: a signed request, a real PostgreSQL, the real roles and the real
+migrations.
 
-## What you need
+## Requirements
 
 | Tool | Version |
 | --- | --- |
 | [Bun](https://bun.sh) | 1.4.3 or later |
-| PostgreSQL | 18, with the binaries of the server in the path |
-| Docker or Podman | for the stack of the development machine, and for the tests of a machine that has no binaries of PostgreSQL |
+| PostgreSQL | 18, with the server binaries on the `PATH` |
+| Docker or Podman | For the local stack, and for tests on a machine without PostgreSQL binaries |
 
-The integration tests start a PostgreSQL server of their own, in
-`.pg/tests/data` of the root of the repository, so a local server is not
-needed for them. The server of the tests is not the server of the
-development machine: the tests empty the tables and they create the
-roles of the separation with the passwords of the tests. A machine
-without the binaries of PostgreSQL starts the server of the tests in a
-container instead. The compatibility harness starts one in a temporary
+Integration tests start their own PostgreSQL server in `.pg/tests/data` at the repository root, so
+they don't need a local server. It is separate from your development server: the tests empty the
+tables and create the separation roles with test passwords. Without PostgreSQL binaries, the tests
+run that server in a container. The compatibility harness starts its own server in a temporary
 directory.
 
-The version 18 is the version that the suites prove. A deployment may
-run PostgreSQL 15 or later, and the requirement of a deployment is in
-[the readme](../README.md); it is not the version of the machine of a
-developer.
+The suites prove version 18. A deployment may run PostgreSQL 15 or later; that requirement is in
+[the docs index](../README.md) and doesn't apply to local development.
 
-## The steps
+## Steps
 
 ```bash
 bun install
@@ -39,55 +33,46 @@ bun run workspace -- create --id 22222222-2222-4222-8222-222222222222 \
 bun run start
 ```
 
-The service listens on `127.0.0.1:8082` by default, and it answers:
+The service listens on `127.0.0.1:8082` by default:
 
 ```bash
 curl -s http://127.0.0.1:8082/healthz
 curl -s http://127.0.0.1:8082/readyz
 ```
 
-`/healthz` answers while the process is alive. `/readyz` answers `200`
-only when the configuration, the schema, the privileges of the role and
-the discovery of the access service are in order.
+`/healthz` answers while the process is alive; `/readyz` answers `200` only when configuration,
+schema, role privileges and access service discovery are all in order (see
+[Operations](operations.md#probes)).
 
-The data paths need a signed request, so a plain `curl` of `/ws/…`
-answers `401 UNAUTHENTICATED`: the gateway signs the identity and the
-backend verifies it. The client of the API does the same thing through
-the gateway.
+Data paths need a signed request, so a plain `curl` of `/ws/…` answers `401 UNAUTHENTICATED`. The
+gateway signs the identity and the backend verifies it; the API client goes through the gateway too.
 
-## The environment
+## Environment
 
-`.env.example` is the reference of the variables, and
-[configuration.md](configuration.md) is their full description. The
-values of the example are the values of a development machine, and they
-are not secrets.
+`.env.example` lists the variables; [Configuration](configuration.md) describes them. Its values are
+for local development and are not secrets.
 
-The secrets are files, and they are read at the start of the process. The
-committed fixtures of the development machine are in
-`deploy/fixtures/secrets/`,
-and the paths of `.env.example` (`./secrets/…`) are the ones a
-deployment mounts:
+Secrets are files, read when the process starts. The committed local fixtures are in
+`deploy/fixtures/secrets/`; the `./secrets/…` paths in `.env.example` are the ones a deployment
+mounts:
 
-| File | What it holds |
+| File | Contents |
 | --- | --- |
-| `access-context.token` | The credential of the access context at the access service. |
-| `cursor.key` | The key that signs the cursors of the pages. At least 32 bytes, and it is not a key of the gateway. |
-| `identity.public.pem` | The **public** key of the gateway of the development machine. |
-| `identity.key` | The **legacy** derived key of the gateway. |
+| `access-context.token` | Credential for the access context at the access service. |
+| `cursor.key` | Key that signs page cursors. At least 32 bytes; not a gateway key. |
+| `identity.public.pem` | The local gateway's **public** key. |
+| `identity.key` | The gateway's **legacy** derived key. |
 
-The token of the metrics endpoint is not committed: without the file of
-the token the endpoint is absent and it answers `404`.
+The metrics token is not committed: without its file, the metrics endpoint is absent and answers
+`404`.
 
-The private key of the pair of the gateway is **not** in the
-repository: the gateway of the machine holds it, and it is generated
-with the script of the gateway (`bun run identity:key`).
+The gateway's private key is **not** in the repository. The local gateway holds it; generate it with
+the gateway's `bun run identity:key`.
 
-## The bindings of the gateway
+## Gateway bindings
 
-The service reads the routes the deployment accepts from
-`DATA_GATEWAY_BINDINGS_FILE`. The file holds the routes and the
-verification of the identity of every route: the version of the
-signature, the algorithm and the file of the key.
+`DATA_GATEWAY_BINDINGS_FILE` lists the routes the deployment accepts and how each route verifies
+identity: signature version, algorithm and key file.
 
 ```json
 {
@@ -108,37 +93,27 @@ signature, the algorithm and the file of the key.
 }
 ```
 
-The key of a route is the **public** key of the gateway: a key of the
-curve P-256, in pem. The gateway holds the private one and signs the
-identity with it, and the backend verifies with the public one. A
-backend that can verify an identity cannot mint one.
+A route's key is the gateway's **public** P-256 key, in PEM. The gateway signs with the private key;
+the backend verifies with the public one, so a backend that can verify an identity cannot mint one.
 
-A binding may also name `expectedTenantId`, and it restricts the route
-to one tenant of the access service.
+A binding may also set `expectedTenantId` to restrict the route to one access service tenant.
 
-## The migration from the shared key
+## Migrating from the shared key
 
-The previous format, `v4`, is symmetric: the backend held the key that
-is derived from the secret of the sessions of the gateway
-(`HMAC-SHA256(GATEWAY_SESSION_SECRET, "gateway-identity-signature-v1")`),
-and an upstream that could verify an identity could mint one.
+The previous format, `v4`, is symmetric: the backend held a key derived from the gateway's session
+secret (`HMAC-SHA256(GATEWAY_SESSION_SECRET, "gateway-identity-signature-v1")`), so any upstream that
+could verify an identity could also mint one.
 
-The migration is a change of the deployment of the gateway and of the
-deployment of the backend, and it happens in this order:
+Migrate the gateway and backend deployments in this order:
 
-1. The gateway is given the private key of a new pair, and it signs
-   with it. The old derived key still works for the upstreams that
-   have not changed yet.
-2. The backend is given the public key of the pair, in a binding of the
-   version 2. It refuses the version `v4` from that moment: a route
-   verifies one version, and it never falls back to another one.
-3. The deployments that still share the derived key stay on the file of
-   the version 1 of the bindings, which is read as the legacy mode it
-   is. A deployment that leaves the legacy mode deletes the derived key
-   of its secret store.
+1. Give the gateway the private key of a new pair and have it sign with it. The old derived key
+   still works for upstreams that haven't changed yet.
+2. Give the backend the pair's public key in a version 2 binding. From then on it refuses `v4`: a
+   route verifies exactly one version and never falls back.
+3. Deployments that still share the derived key stay on a version 1 bindings file, which is read as
+   legacy mode. When a deployment leaves legacy mode, delete the derived key from its secret store.
 
-A binding of the legacy mode names the version, the algorithm and the
-file of the key explicitly:
+A legacy binding names the version, algorithm and key file explicitly:
 
 ```json
 {
@@ -159,20 +134,17 @@ file of the key explicitly:
 }
 ```
 
-## The stack of the development machine
+## Local stack
 
 ```bash
 docker compose -f deploy/compose/platform.compose.yaml up --build
 ```
 
-The compose file starts the database, it provisions the roles, it
-applies the migrations and it runs the api. The gateway and the access
-service are not part of it: they are the services of the platform, and the
-compatibility harness runs the three of them together against the
-pinned revisions — see [compatibility.md](compatibility.md).
+The compose file starts the database, provisions the roles, applies the migrations and runs the API.
+It doesn't include the gateway or the access service; the compatibility harness runs all three
+services together at pinned revisions (see [Compatibility](compatibility.md)).
 
-The compose file runs the api only. The worker claims the deliveries of
-the events, and it needs a principal that the access service knows:
+The compose file runs only the API. The worker needs a principal the access service knows:
 
 ```
 DATA_PROCESS_ROLE=all
@@ -180,27 +152,26 @@ DATA_WORKER_PRINCIPAL_ID=<the uuid of the principal of the worker>
 DATA_WORKER_ROUTE_ID=data-worker
 ```
 
-## The files of `deploy/`
+## Files in `deploy/`
 
-The files of `deploy/` are the fixtures of a development machine, and
-they are committed on purpose:
+These are local development fixtures, committed on purpose:
 
-| File | What it holds |
+| File | Contents |
 | --- | --- |
-| `fixtures/bindings.json` | The routes of the machine, and the verification of their identities. |
-| `fixtures/secrets/identity.public.pem` | The public key of the gateway of the machine. |
-| `fixtures/secrets/identity.key` | The **legacy** derived key of the gateway. It is a signing capable secret, and it belongs inside the trust boundary of the gateway. |
-| `fixtures/secrets/access-context.token` | The credential of the deployment at the access service of the access context contract. |
-| `fixtures/secrets/cursor.key` | The key that signs the cursors of the pages. |
+| `fixtures/bindings.json` | Local routes and how their identities are verified. |
+| `fixtures/secrets/identity.public.pem` | The local gateway's public key. |
+| `fixtures/secrets/identity.key` | The gateway's **legacy** derived key. It can sign, so it belongs inside the gateway's trust boundary. |
+| `fixtures/secrets/access-context.token` | The deployment's credential for the access context contract. |
+| `fixtures/secrets/cursor.key` | Key that signs page cursors. |
 
-**These values are not secrets.** They are committed, and anyone who
-reads the repository knows them. A deployment mounts the credentials of
-its secret manager, and it never writes them in an image.
+> [!WARNING]
+> These values are not secrets: anyone who reads the repository knows them. A deployment mounts
+> credentials from its secret manager and never writes them into an image.
 
-## The first record
+## First record
 
-With the service running and a workspace created, the operator
-registers the collections it serves and publishes a bundle of policies:
+With the service running and a workspace created, register the collections the workspace serves and
+publish a policy bundle:
 
 ```bash
 export DATA_OWNER_DATABASE_URL=postgres://data_owner:...@127.0.0.1:5432/data
@@ -213,10 +184,7 @@ bun run policy -- publish \
   --file manifests/policies.json
 ```
 
-The operator commands run with the credentials of the owner of the
-schema, and they never run inside the api.
+Operator commands run with the schema owner's credentials, never inside the API.
 
-The two commands are optional on a machine that only wants to see the
-service answer: a workspace that registered nothing serves every
-collection of the deployment (the rule is in the specification of the
-data service, §7.5).
+Both commands are optional if you only want the service to answer: a workspace that registered
+nothing serves every collection of the deployment ([Specification](spec.md) §7.5).

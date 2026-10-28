@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import { headingsOf, linkProblemsOf, linksOf, slugOf } from '../tooling/documentation'
+import { repetitionProblemsOf, sentencesOfDocument } from '../tooling/repetition'
 
 /**
  * The documentation of the platform.
@@ -208,5 +209,106 @@ describe('the broken links of a documentation', () => {
     } finally {
       await rm(directory, { recursive: true, force: true })
     }
+  })
+})
+
+describe('the sentences of a document', () => {
+  test('a paragraph is split into its sentences', () => {
+    const sentences = sentencesOfDocument('a.md', 'One. Two.\n')
+    expect(sentences.map((sentence) => sentence.text)).toEqual(['One.', 'Two.'])
+  })
+
+  test('a list item is a sentence of its own', () => {
+    const sentences = sentencesOfDocument('a.md', '- One.\n- Two.\n')
+    expect(sentences.map((sentence) => sentence.text)).toEqual(['One.', 'Two.'])
+  })
+
+  test('a heading and a table are not prose', () => {
+    const sentences = sentencesOfDocument(
+      'a.md',
+      '# A heading\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n'
+    )
+    expect(sentences).toEqual([])
+  })
+
+  test('a block of code is not prose', () => {
+    const sentences = sentencesOfDocument('a.md', '```bash\n# not a sentence\n```\n')
+    expect(sentences).toEqual([])
+  })
+})
+
+describe('the repetition of a documentation', () => {
+  test('the check refuses a sentence that two documents carry', async () => {
+    // The check that never fails is not a check: the fixture holds two
+    // documents that say the same thing, and the check has to report it.
+    const directory = await mkdtemp(join(tmpdir(), 'platform-docs-'))
+    try {
+      await mkdir(join(directory, 'docs'), { recursive: true })
+      await writeFile(
+        join(directory, 'docs', 'a.md'),
+        '# A\n\nThe rule of a decision that changes a contract is written down.\n'
+      )
+      await writeFile(
+        join(directory, 'docs', 'b.md'),
+        '# B\n\nThe rule of a decision that changes a contract is written down.\n'
+      )
+      const problems = await repetitionProblemsOf(directory, [
+        join(directory, 'docs', 'a.md'),
+        join(directory, 'docs', 'b.md'),
+      ])
+      expect(problems).toEqual([
+        'the sentence "The rule of a decision that changes a contract is written down." is in docs/a.md:3, docs/b.md:3',
+      ])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the check refuses a sentence that one document carries twice', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platform-docs-'))
+    try {
+      await mkdir(join(directory, 'docs'), { recursive: true })
+      await writeFile(
+        join(directory, 'docs', 'a.md'),
+        '# A\n\nThe rule of a decision that changes a contract is written down.\n\n' +
+          'The rule of a decision that changes a contract is written down.\n'
+      )
+      const problems = await repetitionProblemsOf(directory, [join(directory, 'docs', 'a.md')])
+      expect(problems).toEqual([
+        'the sentence "The rule of a decision that changes a contract is written down." is in docs/a.md:3, docs/a.md:5',
+      ])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the check holds a pointer that two documents carry', async () => {
+    // Two documents may point at the same place: the reader of the
+    // second follows the pointer and reads the rule where it is said.
+    const directory = await mkdtemp(join(tmpdir(), 'platform-docs-'))
+    try {
+      await mkdir(join(directory, 'docs'), { recursive: true })
+      await writeFile(
+        join(directory, 'docs', 'a.md'),
+        '# A\n\nThe rule is in [the decisions of the platform](decisions.md).\n'
+      )
+      await writeFile(
+        join(directory, 'docs', 'b.md'),
+        '# B\n\nThe rule is in [the decisions of the platform](decisions.md).\n'
+      )
+      const problems = await repetitionProblemsOf(directory, [
+        join(directory, 'docs', 'a.md'),
+        join(directory, 'docs', 'b.md'),
+      ])
+      expect(problems).toEqual([])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('no sentence of the documentation is said twice', async () => {
+    const files = await filesOf(docs)
+    const problems = await repetitionProblemsOf(root, files)
+    expect(problems).toEqual([])
   })
 })

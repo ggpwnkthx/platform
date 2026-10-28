@@ -1,40 +1,37 @@
-# The backup and the restore
+# Backup and restore
 
-## What is in the backup
+How to back up and restore a data service deployment, and the record of each release's restore
+rehearsal.
 
-- the business records of every collection,
-- the registry of the workspaces,
-- the audit log, the events, the deliveries and the receipts,
-- the history of the migrations,
-- the manifests and the policy bundle of the deployment, next to the
-  dump.
+## Backup contents
 
-The secrets are **not** in the backup. The public key of the identity
-of the gateway, the derived identity key of the legacy format, the
-credential of the access context, the key of the cursors and the
-passwords of the roles belong to the secret manager of the deployment,
-and they are rotated and restored by it.
+- business records of every collection,
+- the workspace registry,
+- the audit log, events, deliveries and receipts,
+- migration history,
+- the deployment's manifests and policy bundle, stored next to the dump.
 
-## The command
+Secrets are **not** in the backup. The gateway identity public key, the legacy derived identity key,
+the access context credential, the cursor key and the role passwords belong to the deployment's
+secret manager, which rotates and restores them.
+
+## Backup
 
 ```bash
 DATA_BACKUP_DATABASE_URL=... DATA_BACKUP_DIR=/var/backups/data \
   ./scripts/ops/backup.sh
 ```
 
-The backup is a custom format dump of `pg_dump`, with its digest in a
-file next to it. It is taken with a consistent snapshot, so the dump is
-a state of the database and not a mixture of two states.
+The backup is a `pg_dump` custom-format dump with its digest in a file alongside. It uses a
+consistent snapshot, so the dump is one database state, never a mix of two.
 
-**The role of the backup bypasses the row level security.** The tables
-of the deployment carry the row level security, and it is forced: the
-owner of a table is subject to it as well. A backup holds the rows of
-every tenant, so the role that takes it is the administrator of the
-server or a role with the attribute `BYPASSRLS`. The command refuses a
-role that is subject to the policies of the tables: a backup that holds
-the rows of one tenant is not a backup of the deployment.
+> [!IMPORTANT]
+> **The backup role bypasses row-level security.** Row-level security is forced on the deployment's
+> tables, so even a table's owner is subject to it. A backup holds every tenant's rows, so it must
+> run as the server administrator or a role with `BYPASSRLS`. The command refuses a role subject to
+> the table policies: a backup holding one tenant's rows is not a deployment backup.
 
-## The rehearsal
+## Restore rehearsal
 
 ```bash
 DATA_ADMIN_DATABASE_URL=... DATA_RUNTIME_DATABASE_URL=... \
@@ -42,32 +39,25 @@ DATA_ADMIN_DATABASE_URL=... DATA_RUNTIME_DATABASE_URL=... \
   DATA_RESTORE_DATABASE=data_restore ./scripts/ops/restore.sh
 ```
 
-The restore runs with the administrator of the server, for the same
-reason as the backup: the rows of a restore belong to every tenant.
-When the url of the owner of the schema is given, the ownership of the
-restored tables and of the restored schemas goes back to it, and the
-separation of the privileges of the deployment is the same before and
-after the restore.
+Restore runs as the server administrator for the same reason: restored rows belong to every tenant.
+When the schema owner's URL is given, ownership of the restored tables and schemas returns to it, so
+the deployment's privilege separation is the same before and after.
 
-The rehearsal restores into a database of its own and it checks:
+The rehearsal restores into its own database and checks that:
 
-1. the restore completes without an error,
-2. the isolation of the tenants holds after the restore: the rows of a
-   scope that does not exist are not visible. The check runs with the
-   role of the api, because an administrator bypasses the policies of
-   the tables,
-3. the deliveries that were pending are still there, and they are still
-safe: the worker claims them again, it asks the access service for a
-fresh context, and it does not repeat an effect that is already durable.
+1. the restore completes without error,
+2. tenant isolation holds after the restore: rows of a nonexistent scope are not visible. This check
+   runs as the API role, because an administrator bypasses the table policies,
+3. pending deliveries are still present and still safe: the worker claims them again, asks the
+   access service for a fresh context, and doesn't repeat an effect that is already durable.
 
-The rehearsal is a part of the release of a deployment. The record of
-the last rehearsal is in the release notes of the deployment.
+The rehearsal is part of a deployment's release; record the latest one in the deployment's release
+notes.
 
-### The rehearsal of the release of version 0.1
+### Release 0.1
 
-The rehearsal was run on the development machine of the release, on
-the PostgreSQL 15.19 of the machine, with the migrations of the
-repository and with one article in one workspace:
+Run on the release's development machine, PostgreSQL 15.19, with the repository's migrations and one
+article in one workspace:
 
 ```
 the backup is written to /tmp/rehearsal-backup/data-20261021T172011Z.dump
@@ -82,22 +72,18 @@ the deliveries of the restored state are counted
 the rehearsal is done
 ```
 
-The restored rows are zero because the check runs with the role of the
-api and the scope of the transaction is not set: the policies of the
-tables refuse the rows. The scope that does not exist sees nothing, and
-the deliveries are read with the role of the deliveries.
+Restored rows are zero because the check runs as the API role with no transaction scope set, so the
+table policies refuse the rows. The nonexistent scope sees nothing, and deliveries are read with the
+delivery role.
 
-The rehearsal of a deployment runs the same command on its own data.
+A deployment's rehearsal runs the same command on its own data.
 
-### The rehearsal of the release candidate of the version 1.0
+### Release candidate 1.0 on PostgreSQL 15.19
 
-The rehearsal was run on the development machine of the release, on the
-PostgreSQL 15.19 of the machine, with the migrations of the repository
-and with one article in one workspace. The command of the rehearsal of
-the repository is `bash scripts/ops/rehearse-backup.sh`: it starts a server
-of its own, it provisions the roles, it applies the migrations, it
-writes the workspace and its record, and it runs the two commands of the
-deployment.
+Same machine, PostgreSQL 15.19, the repository's migrations and one article in one workspace. The
+repository's rehearsal command is `bash scripts/ops/rehearse-backup.sh`: it starts its own server,
+provisions the roles, applies the migrations, writes the workspace and its record, then runs the
+deployment's two commands.
 
 ```
 the server of the rehearsal is started
@@ -119,30 +105,20 @@ the deliveries of the restored state are counted
 the rehearsal is done
 ```
 
-The restored rows are zero because the check runs with the role of the
-api and the scope of the transaction is not set: the policies of the
-tables refuse the rows. The scope that does not exist sees nothing, and
-the deliveries are read with the role of the deliveries.
+Restored rows are zero for the reason given under Release 0.1.
 
-**The rehearsal found a defect of the command of the backup.** The
-tables of the deployment carry the row level security, and it is
-forced: the owner of a table is subject to it. The backup was taken
-with the owner of the schema, and `pg_dump` refused to read the rows.
-The command of the backup now refuses a role that is subject to the
-policies of the tables and names the role that bypasses them, and the
-command of the restore gives the ownership of the restored tables back
-to the owner of the schema.
+> [!NOTE]
+> **This rehearsal found a defect in the backup command.** Because row-level security is forced, the
+> backup, taken as the schema owner, made `pg_dump` refuse to read the rows. The backup command now
+> refuses a role subject to the table policies and names the role that bypasses them, and the
+> restore command returns ownership of the restored tables to the schema owner.
 
-### The rehearsal of the release candidate of the version 1.0 on PostgreSQL 18
+### Release candidate 1.0 on PostgreSQL 18
 
-The rehearsal was run again on the development machine of the release,
-on the PostgreSQL 18.6 of the machine — the version that the
-development machine, the tests and the continuous integration use — with
-the migrations of the repository and with one article in one workspace.
-The command is the same one, and the client tools of the rehearsal are
-the ones of the server: a client that is older than the server refuses
-the dump, and the rehearsal would fail on the tools of the machine and
-not on the service.
+Rerun on the same machine with PostgreSQL 18.6 (the version used for local development, tests and
+CI), the repository's migrations and one article in one workspace. The command is the same. The
+rehearsal's client tools match the server: an older client refuses the dump, which would fail the
+rehearsal on the machine's tools rather than the service.
 
 ```
 the server of the rehearsal is started
@@ -166,31 +142,22 @@ the deliveries of the restored state are counted
 the rehearsal is done
 ```
 
-**The commands of the backup and of the restore name the versions.**
-The client of the two commands must not be older than the server, and
-the two commands refuse it with a message that names the version of the
-client and the version of the server. A deployment may run PostgreSQL
-15 or later: the requirement is not on the major of the server, it is
-on the client that talks to it.
+**Backup and restore name the versions.** Their client must not be older than the server; both
+commands refuse an older client with a message naming the client and server versions. A deployment
+may run PostgreSQL 15 or later: the requirement is on the client, not the server's major version.
 
-## The order of a restore
+## Restore order
 
-1. stop the api and the workers: a restore writes the tables of the
-   business,
-2. restore the dump,
-3. check the migrations: the ledger of the restored database holds the
-   checksums of the backup, and the manifests of the release have to
-   match them,
-4. start the api and the workers: the workers claim the deliveries that
-   were pending, and the handlers are idempotent.
+1. Stop the API and workers: a restore writes the business tables.
+2. Restore the dump.
+3. Check the migrations: the restored ledger holds the backup's checksums, and the release's
+   manifests must match them.
+4. Start the API and workers. Workers claim pending deliveries; handlers are idempotent.
 
-## The rollback
+## Rollback
 
-A migration that changed the data is not rolled back with the schema:
-the rollback of a data change is a forward fix. The backup is the
-safety net, and the restore rehearsal is what proves that the net is
-there.
+A migration that changed data is not rolled back with the schema: a data change is rolled back with
+a forward fix. The backup is the safety net, and the restore rehearsal proves the net is there.
 
-A rolling release preserves the backward compatibility of the schema
-and of the API. A destructive migration needs a reviewed maintenance
-plan and a tested restore.
+A rolling release keeps the schema and API backward compatible. A destructive migration needs a
+reviewed maintenance plan and a tested restore.

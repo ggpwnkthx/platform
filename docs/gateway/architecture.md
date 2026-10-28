@@ -1,40 +1,35 @@
-# The architecture of the gateway
+# Architecture
 
-The gateway is a modular monolith: one deployable, eight domains,
-explicit boundaries. [spec.md](spec.md) §14 is normative for the
-behavior and for the ownership. This document describes how the code is
-laid out and which import is allowed where.
+How the gateway's code is laid out, which imports are allowed where, and which file owns each rule. The
+gateway is a modular monolith: one deployable, split into domains with explicit boundaries. Behaviour and
+ownership are normative in [spec §14](spec.md#14-code-organization).
 
-The rules are checked by `scripts/gates/architecture.ts`, which runs in the test
-suite and in the CI workflow, so a violation fails the build instead of
-being noticed in a review.
+Two gates enforce this page; both run in the test suite and in CI, so a violation fails the build:
 
-The names of the environment live in `src/runtime/env/` and nowhere else.
-`scripts/gates/environment.ts` checks that the example and the manual of the
-deployment describe them: a variable that is not described is a variable
-nobody sets, and a variable that is described and does not exist is a
-setting that looks active but is not. It runs in the test suite and in the
-CI workflow as well.
+- `scripts/gates/architecture.ts` checks the import rules below.
+- `scripts/gates/environment.ts` checks that `.env.example` and [Operations](operations.md) match the
+  variables declared in `src/runtime/env/`, the only place environment names live. An undocumented
+  variable is one nobody sets; a documented variable that does not exist looks active but is not.
 
-## The layers
+## Layers
 
 | Path | Owns |
 | --- | --- |
-| `src/main.ts` | The entry point of the process. It starts the runtime and nothing else. |
-| `src/app/` | The Hono application: thin handlers, the middleware, the order of the pipeline, and the mapping of the failures to the answers of the protocol. |
-| `src/domains/<domain>/` | The policy, the use cases, the ports and the unit tests of one domain. |
-| `src/domains/<domain>/adapters/` | The concrete implementations of the ports of the domain. The composition root is their only consumer. |
-| `src/platform/bun/` | The listener, the peer address, the outbound HTTP transport and the socket primitives. |
-| `src/platform/redis/` | The construction, the TLS settings and the disposal of the shared Redis clients. |
-| `src/platform/postgres/` | The construction, the pool, the TLS settings, the schema and the disposal of the shared Postgres clients. |
-| `src/runtime/` | The environment, the composition root, the file watcher, the signals, the drain and the log of the policy that is running. |
-| `src/observability/` | The logging, the metrics and the observation handles. It knows nothing else. |
-| `services/fixtures/` | The deterministic fixtures of the identity provider, of the access service and of the upstreams. They are not part of a deployment. |
-| `services/` | The reference implementation of the access service, which a deployment may run. |
-| `scripts/` | The commands of the workspace, grouped by their kind: `cli/` (the key of the identity, the migrations, the revocation of the sessions), `dev/` (the runner of the development, the Postgres and the Redis of the tests), `gates/` (the architecture checker, the checker of the version of the release, the checker of the environment), `ops/` (the load, the benchmark), and `support/` (the modules the commands share). |
-| `test/` | The checks that are not the unit tests of a domain. The helpers they share are in `test/support/`. |
+| `src/main.ts` | Process entry point. Starts the runtime and nothing else. |
+| `src/app/` | The Hono application: thin handlers, middleware, pipeline order, and mapping failures to protocol answers. |
+| `src/domains/<domain>/` | One domain's policy, use cases, ports and unit tests. |
+| `src/domains/<domain>/adapters/` | Concrete port implementations. Only the composition root uses them. |
+| `src/platform/bun/` | Listener, peer address, outbound HTTP transport and socket primitives. |
+| `src/platform/redis/` | Construction, TLS settings and disposal of the shared Redis clients. |
+| `src/platform/postgres/` | Construction, pool, TLS settings, schema and disposal of the shared Postgres clients. |
+| `src/runtime/` | Environment, composition root, file watcher, signals, drain and the running-policy log. |
+| `src/observability/` | Logging, metrics and observation handles. Knows nothing else. |
+| `services/fixtures/` | Deterministic identity-provider, access-service and upstream fixtures. Not part of a deployment. |
+| `services/` | The access service reference implementation, which a deployment may run. |
+| `scripts/` | Workspace commands: `cli/` (identity key, migrations, session revocation), `dev/` (development runner, test Postgres and Redis), `gates/` (architecture, release version and environment checks), `ops/` (load, benchmark) and `support/` (shared modules). |
+| `test/` | Checks other than a domain's unit tests. Shared helpers are in `test/support/`. |
 
-## The domains
+## Domains
 
 | Domain | May use |
 | --- | --- |
@@ -48,96 +43,63 @@ CI workflow as well.
 | `websockets` | `forwarding` |
 | `control` | `configuration`, `authentication`, `workspace-access` |
 
-```
-                    ┌──────────────┐
-                    │     app      │  Hono, the pipeline, the endpoints
-                    └──────┬───────┘
-                           │ uses the public entry points
-      ┌────────────┬───────┼────────┬──────────────┬─────────────┐
-      ▼            ▼       ▼        ▼              ▼             ▼
- routing   configuration  authentication  workspace-access  forwarding  rate-limiting
-      ▲            │       ▲        ▲                      ▲            │
-      │            │       │        └──────────────────────┘            │
-      │            │       │                                           │
-      └────────────┘       │                        proxying   websockets
-                            │                            ▲           ▲
-                            │                            └───────────┘
-```
+## Import rules
 
-A domain that is not in a row may not be used at all.
+The architecture gate enforces:
 
-## The rules the checker enforces
+1. Import a domain only through its public entry point (`index.ts`); its internals are private.
+2. Use only the dependencies the domain matrix allows. A domain not listed in a row may not be used.
+3. A domain's core (everything outside `adapters/`) imports no framework, Bun API, application, platform,
+   runtime or concrete adapter. Dependencies arrive through injected ports.
+4. A domain's entry point exports no adapter; the composition root assembles adapters.
+5. The application uses domain entry points and observation interfaces, never a concrete adapter.
+6. The platform implements domain ports, makes no policy decision, and imports neither the application nor
+   the runtime.
+7. The observation layer imports nothing from the project.
+8. The runtime is the composition root and may assemble the application, domains, adapters, platform and
+   observation layer.
+9. No catch-all directories (`utils`, `services`, `repositories`, `common`, …) and no import cycles,
+   type-only imports included.
+10. Only the application uses the framework (Hono), and only the platform uses runtime APIs (listener,
+    sockets, shared-state client).
 
-1. A domain is imported through its public entry point (`index.ts`). The
-   internals of a domain belong to it.
-2. The matrix above. A domain that is not in a row may not be used at all.
-3. The core code of a domain (everything outside `adapters/`) imports no
-   framework, no Bun API, no application, no platform, no runtime and no
-   concrete adapter. It receives its dependencies through injected ports.
-4. The public entry point of a domain holds no adapter: the adapters are
-   assembled by the composition root.
-5. The application uses the public entry points of the domains and the
-   observation interfaces, never a concrete adapter.
-6. The platform implements the ports of the domains, it makes no policy
-   decision and it imports neither the application nor the runtime.
-7. The observation layer imports nothing of the project.
-8. The runtime is the composition root: it may assemble the application, the
-   domains, the adapters, the platform and the observation layer.
-9. There are no catch-all directories (`utils`, `services`, `repositories`,
-   `common`, …) and no import cycle, type-only imports included.
-10. The framework of the application (Hono) is only used by the application
-    and the API of the runtime (the listener, the sockets, the client of the
-    shared state) is only used by the platform.
+## Dead code
 
-## The code that nothing uses
+The import rules say where code may live, not whether anything uses it. `bun run dead` runs `knip` and fails
+the build when a file, export, type or dependency is unused.
 
-The boundaries above say where a piece of code may live. They do not say
-whether it is used at all. `knip` answers that question, and the answers
-are checked by the build: `bun run dead` fails the build when a file, an
-export, a type or a dependency of the project is used by nothing.
+- Configuration is the `knip` section of `package.json`. It declares the entry points (process, tests,
+  scripts, fixtures, examples) and reports exports of non-entry files.
+- `bun run dead` runs `knip --use-tsconfig-files`, so the project's directories are named once, in
+  `tsconfig.json`.
+- A domain's `index.ts` is **not** an entry point: an export no consumer imports is reported, since only
+  consumers decide what a domain exposes. Keep each `index.ts` to what is actually used.
+- An export used only inside its own module is reported too. The code is alive but the `export` is
+  superfluous, and an entry point that offers more than its consumers need is a promise nobody asked for.
+- Files that tools cannot see are declared as entries: workers that integration tests start with
+  `Bun.spawn`, and the development runner that `package.json` starts with `bun --watch`.
 
-The configuration of the check is the `knip` section of `package.json`. It
-declares what is an entry point of the project — the process, the tests, the
-scripts, the fixtures and the examples — and it reports the exports of the
-files that are not entries. The files of the project themselves are the ones
-of the compiler: `bun run dead` runs `knip --use-tsconfig-files`, so the
-directories of the project are named once, in `tsconfig.json`.
-The public entry point of a domain is not an entry point: an export of it
-that no consumer imports is reported, because the consumers of a domain are
-the only judge of what a domain exposes. The `index.ts` of a domain is
-therefore a deliberate list, and the list is kept to what is really used.
-
-An export that is used inside the module that declares it, and nowhere else,
-is not dead code: the code is alive and only the `export` keyword is
-superfluous. The check reports it anyway, because a public entry point that
-offers more than its consumers use is a promise nobody asked for.
-
-The check knows nothing about the runtime, so a few files are declared as
-entries that a tool cannot see: the workers that the integration tests
-start with `Bun.spawn` and the development runner that `package.json` starts
-with `bun --watch`.
-
-## The lifecycle of the pieces
+## Lifetimes
 
 | Lifetime | Owner |
 | --- | --- |
-| The process | `src/runtime/composition.ts` (the construction) and `src/runtime/lifecycle.ts` (the disposal) |
-| A configuration generation | The configuration domain: an immutable snapshot, published atomically |
-| A request | The application: it captures one generation and hands it to the domains |
-| An HTTP exchange | The proxying domain with the Bun transport |
-| A WebSocket pair | The WebSockets domain with the Bun socket primitives |
+| Process | `src/runtime/composition.ts` (construction) and `src/runtime/lifecycle.ts` (disposal) |
+| Configuration generation | The configuration domain: an immutable snapshot, published atomically |
+| Request | The application: captures one generation and hands it to the domains |
+| HTTP exchange | The proxying domain, with the Bun transport |
+| WebSocket pair | The WebSockets domain, with the Bun socket primitives |
 
-A single owner finalizes an exchange or a connection exactly once. The
-completion of a middleware is not the completion of an exchange.
+One owner finalizes each exchange or connection exactly once. The middleware rule is in
+[spec §14.4](spec.md#144-resource-ownership).
 
-## How a request flows through the code
+## Request flow
 
 ```
 Bun.serve (platform/bun/listener.ts)
   └─ app.fetch (app/app.ts)
-       └─ middleware: the request id, the cookies
-            ├─ the endpoints of the gateway (app/endpoints.ts)
-            └─ the dispatcher (app/dispatcher.ts)
+       └─ middleware: request id, cookies
+            ├─ gateway endpoints (app/endpoints.ts)
+            └─ dispatcher (app/dispatcher.ts)
                  ├─ routing: matchRoute
                  ├─ rate-limiting: the four scopes
                  ├─ authentication: selectCredential, authenticate
@@ -147,177 +109,165 @@ Bun.serve (platform/bun/listener.ts)
                  └─ websockets: handle   →  platform/bun/upstream-websocket.ts
 ```
 
-The dispatcher is the only place where the domains are combined. Each of
-them is called through its public entry point, and each of them decides
+The dispatcher is the only place domains are combined. Each is called through its entry point and decides
 only for itself.
 
-## The map of the source
+## Source map
 
-Every rule of the gateway lives in exactly one domain, and the domain owns
-the tests of that rule next to it. This map says where a change lands.
+Every gateway rule lives in exactly one domain, with its tests beside it. Use this map to find where a
+change lands.
 
-### `src/app/` — the application
+### `src/app/`
 
-The application is thin on purpose. It holds the order of the pipeline, it
-maps the failures of the domains to the answers of the protocol, and it
-writes the headers and the cookies of the answers.
+The application is deliberately thin: pipeline order, mapping domain failures to protocol answers, and
+writing response headers and cookies.
 
 | File | Owns |
 | --- | --- |
-| `app.ts` | The Hono application, the middleware of the request id, the endpoints of the gateway. |
-| `dispatcher.ts` | The order of the pipeline (§2.3 of the spec). The only place where the domains are combined. |
-| `admission.ts` | The bound of the requests that are inside the gateway, and the refusal of the ones that do not fit. |
-| `limits.ts` | The budgets of a request: the three independent budgets of §9 are counted at the same time, so the shared state is asked once instead of three times. |
-| `endpoints.ts` | The handlers of `/healthz`, `/readyz`, `/metrics`, `/auth/login`, `/auth/callback` and `/auth/logout`. |
-| `revalidation.ts` | The revalidation of an open WebSocket: the route, the session and the access are checked again. |
-| `dependencies.ts` | The interfaces the application is built with. It names the domains, never their adapters. |
-| `state.ts` | The state of a request: the request id, the generation, the forwarding context, the route. |
-| `errors.ts` | The body of a refusal of the gateway. |
-| `cookies.ts` | The reading of the cookies of a request. |
+| `app.ts` | The Hono application, request-id middleware and the gateway endpoints. |
+| `dispatcher.ts` | Pipeline order ([spec §2.3](spec.md#23-dispatcher)). The only place domains are combined. |
+| `admission.ts` | The bound on requests inside the gateway, and refusing those that do not fit. |
+| `limits.ts` | A request's budgets: the three independent §9 budgets are counted together, so the shared state is asked once, not three times. |
+| `endpoints.ts` | Handlers for `/healthz`, `/readyz`, `/metrics`, `/auth/login`, `/auth/callback` and `/auth/logout`. |
+| `revalidation.ts` | Revalidating an open WebSocket: route, session and access are checked again. |
+| `dependencies.ts` | The interfaces the application is built from. Names domains, never adapters. |
+| `state.ts` | Per-request state: request id, generation, forwarding context, route. |
+| `errors.ts` | The body of a gateway refusal. |
+| `cookies.ts` | Reading request cookies. |
 
-### `src/domains/` — the domains
+### `src/domains/`
 
-| Domain | The files | What each one owns |
+| Domain | File | Owns |
 | --- | --- | --- |
-| `routing` | `schema.ts` | The shape of the id, of the host pattern and of the path template. The validation of a placeholder against the path. |
-| | `match.ts` | The compilation of a route, the precedence, the matching, the decoding of the parameters, the detection of the ambiguities. |
-| `configuration` | `schema.ts` | The schema of the file, the strict validation, the effective defaults. |
-| | `store.ts` | The generation of the configuration: the immutable snapshot, the atomic publication, the last good state, the status of the reload. |
-| | `describe.ts` | The description of the policy that is running, and the settings that are permissive. |
-| | `compile.ts` | The compilation of a table and the difference between two tables. |
-| | `routes.ts` | The effective routes of a table and the defaults of the deployment. |
-| | `revisions.ts` | The shape of the revisions of the route table and the contract of the store of the shared state. |
-| | `adapters/redis-route-table.ts` | The route table in Redis. The write of a revision and the entry of the trail are one script. |
-| | `adapters/postgres-route-table.ts` | The route table in Postgres. The write of a revision and the entry of the trail are one transaction. |
-| `authentication` | `policy.ts` | The schema of the modes and of the workspace policy. |
-| | `principal.ts` | The selection of the credential, per mode. The rule that an invalid credential is rejected and never replaced. |
-| | `oidc.ts` | The relying party: the discovery, the PKCE, the exchange of the code, the validation of the bearer tokens. |
-| | `login-state.ts` | The signed state of a login in flight, and the sanitization of the redirect target. |
-| | `session.ts` | The record of a session, its bounds, the rules of the lifetime. |
-| | `cookies.ts` | The names and the attributes of the cookies of the gateway. |
-| | `service.ts` | The use cases: authenticate, begin a login, complete a login, log out. |
-| | `adapters/memory-sessions.ts` | The store of the sessions in the memory of the process. |
-| | `adapters/redis-sessions.ts` | The store of the sessions in Redis. The refresh of the expiry is one script of the server. |
-| | `adapters/postgres-sessions.ts` | The store of the sessions in Postgres. The refresh of the expiry is one function of the server. |
-| `workspace-access` | `workspace.ts` | The validation of the identifier of a workspace. |
-| | `decision.ts` | The shape of a decision and the mapping of its reason to the metric. |
-| | `breaker.ts` | The health of the access service: the service is not called while it is failing. |
-| | `client.ts` | The client of the access service: the request, the answer, the cache, the fail-closed behavior. |
-| | `adapters/memory-cache.ts` | The cache of the decisions in the memory of the process. |
-| | `adapters/redis-cache.ts` | The cache of the decisions in Redis. |
-| | `adapters/postgres-cache.ts` | The cache of the decisions in Postgres. |
-| `forwarding` | `network.ts` | The parsing of the CIDR ranges and the evaluation of the trusted proxies. |
-| | `context.ts` | The peer address, the client address, the chain, the protocol and **the effective host**. |
-| | `origins.ts` | The cross-site policy: the normalization of the origins, the guard of the requests, the guard of the navigations, the origin of a handshake. |
-| | `headers.ts` | The header policy in both directions, and the cookies of the gateway. |
-| | `cookies.ts` | The parsing of a `Cookie` header, the rendering of a `Set-Cookie` header, and the name of a cookie. |
-| | `identity.ts` | The sanitization of the identity, the canonical payload, the signature and its verification. |
-| | `trace.ts` | The trace context of a request: the parsing of the `traceparent` of the caller, the span of the gateway and the header it writes. |
-| | `target.ts` | The url of the upstream, and the rewriting of the `Location` of an answer. |
-| `rate-limiting` | `policy.ts` | The scopes and the keys of the windows. |
-| | `window.ts` | The sliding window: the size of a bucket, the index of a bucket and the evaluation of the window. |
-| | `limiter.ts` | The limiter of the memory: the bounded table, the shared window of the overflow. |
-| | `fallback.ts` | What happens to a request while the state the replicas share cannot be reached: the request is counted in the process, allowed, or refused. |
-| | `adapters/redis-limiter.ts` | The limiter of Redis: the counter and the expiry are one script. It fails open. |
-| | `adapters/postgres-limiter.ts` | The limiter of Postgres: the counter and the expiry are one function. It fails open. |
-| `proxying` | `transport.ts` | The ports of the transport: the request and the answer. |
-| | `exchange.ts` | The state machine of an exchange: the phases, the budgets, the limits, the cancellation, the finalization. |
-| `websockets` | `ports.ts` | The ports of the sockets, of the handshake and of the revalidation. |
-| | `context.ts` | The context of an upgrade, assembled by the application. |
-| | `reservation.ts` | The slots of the connections, the handshakes in flight included. |
-| | `bridge.ts` | The relay between the two legs, the buffers, the backpressure, the keepalive, the revalidation. |
-| | `service.ts` | The order of the handshake: the origin, the slot, the upstream, the caller, the bridge. |
-| `control` | `policy.ts` | The scopes of the tokens, the reading of the map of the tokens, the routes a write may not change. |
-| | `service.ts` | The rules of the administrative writes: the compare and swap, the validation, the protected routes and the trail of the writes. |
-| | `adapters/redis-failures.ts` | The counter of the failed authentications in Redis. |
-| | `adapters/postgres-failures.ts` | The counter of the failed authentications in Postgres. |
+| `routing` | `schema.ts` | Shape of the id, host pattern and path template; validating placeholders against the path. |
+| | `match.ts` | Route compilation, precedence, matching, parameter decoding, ambiguity detection. |
+| `configuration` | `schema.ts` | File schema, strict validation, effective defaults. |
+| | `store.ts` | Configuration generations: immutable snapshot, atomic publication, last good state, reload status. |
+| | `describe.ts` | Description of the running policy and its permissive settings. |
+| | `compile.ts` | Compiling a table and diffing two tables. |
+| | `routes.ts` | A table's effective routes and the deployment defaults. |
+| | `revisions.ts` | Route-table revision shape and the shared-state store contract. |
+| | `adapters/redis-route-table.ts` | Route table in Redis. Writing a revision and its trail entry is one script. |
+| | `adapters/postgres-route-table.ts` | Route table in Postgres. Writing a revision and its trail entry is one transaction. |
+| `authentication` | `policy.ts` | Schema of the modes and the workspace policy. |
+| | `principal.ts` | Credential selection per mode; an invalid credential is rejected, never replaced. |
+| | `oidc.ts` | The relying party: discovery, PKCE, code exchange, bearer-token validation. |
+| | `login-state.ts` | Signed in-flight login state and redirect-target sanitization. |
+| | `session.ts` | Session record, bounds and lifetime rules. |
+| | `cookies.ts` | Names and attributes of the gateway cookies. |
+| | `service.ts` | Use cases: authenticate, begin login, complete login, log out. |
+| | `adapters/memory-sessions.ts` | In-process session store. |
+| | `adapters/redis-sessions.ts` | Redis session store. Expiry refresh is one server script. |
+| | `adapters/postgres-sessions.ts` | Postgres session store. Expiry refresh is one server function. |
+| `workspace-access` | `workspace.ts` | Workspace identifier validation. |
+| | `decision.ts` | Decision shape and mapping its reason to the metric. |
+| | `breaker.ts` | Access-service health: the service is not called while failing. |
+| | `client.ts` | Access-service client: request, answer, cache, fail-closed behaviour. |
+| | `adapters/memory-cache.ts` | In-process decision cache. |
+| | `adapters/redis-cache.ts` | Redis decision cache. |
+| | `adapters/postgres-cache.ts` | Postgres decision cache. |
+| `forwarding` | `network.ts` | CIDR parsing and trusted-proxy evaluation. |
+| | `context.ts` | Peer address, client address, chain, protocol and **the effective host**. |
+| | `origins.ts` | Cross-site policy: origin normalization, request and navigation guards, handshake origin. |
+| | `headers.ts` | Header policy in both directions, and the gateway cookies. |
+| | `cookies.ts` | Parsing `Cookie`, rendering `Set-Cookie`, cookie names. |
+| | `identity.ts` | Identity sanitization, canonical payload, signature and verification. |
+| | `trace.ts` | Request trace context: parsing the caller's `traceparent`, the gateway span and the header it writes. |
+| | `target.ts` | Upstream URL and rewriting a response `Location`. |
+| `rate-limiting` | `policy.ts` | Scopes and window keys. |
+| | `window.ts` | Sliding window: bucket size, bucket index, window evaluation. |
+| | `limiter.ts` | In-memory limiter: bounded table, shared overflow window. |
+| | `fallback.ts` | Behaviour while the shared state is unreachable: count in process, allow, or refuse. |
+| | `adapters/redis-limiter.ts` | Redis limiter: counter and expiry in one script. Fails open. |
+| | `adapters/postgres-limiter.ts` | Postgres limiter: counter and expiry in one function. Fails open. |
+| `proxying` | `transport.ts` | Transport ports: request and response. |
+| | `exchange.ts` | Exchange state machine: phases, budgets, limits, cancellation, finalization. |
+| `websockets` | `ports.ts` | Socket, handshake and revalidation ports. |
+| | `context.ts` | Upgrade context, assembled by the application. |
+| | `reservation.ts` | Connection slots, including in-flight handshakes. |
+| | `bridge.ts` | Relay between the two legs: buffers, backpressure, keepalive, revalidation. |
+| | `service.ts` | Handshake order: origin, slot, upstream, caller, bridge. |
+| `control` | `policy.ts` | Token scopes, reading the token map, routes a write may not change. |
+| | `service.ts` | Administrative write rules: compare-and-swap, validation, protected routes, write trail. |
+| | `adapters/redis-failures.ts` | Failed-authentication counter in Redis. |
+| | `adapters/postgres-failures.ts` | Failed-authentication counter in Postgres. |
 
-### `src/platform/` — the adapters of the runtime
+### `src/platform/`
 
-The platform implements the ports of the domains. It makes no policy
-decision.
-
-| File | Owns |
-| --- | --- |
-| `bun/listener.ts` | `Bun.serve`, the peer address of a request, the stop of the listener. |
-| `bun/http-transport.ts` | The outbound HTTP: no redirect is followed, no body is buffered, the answer is not decompressed. |
-| `bun/access-transport.ts` | The call to the access service. |
-| `bun/client-upgrade.ts` | The upgrade of the caller, with the headers of the gateway. |
-| `bun/upstream-websocket.ts` | The handshake with the upstream, and the socket of the upstream. |
-| `bun/runtime.ts` | The version of the runtime of the process. The api of the runtime belongs to the platform, so the version is read here and the policy that decides whether it is good enough lives in the runtime. |
-| `redis/client.ts` | The construction of the client, the shapes of the server (a server, a cluster, a sentinel), the TLS, the background connection and the disposal. |
-| `redis/commands.ts` | The commands of the shared state. |
-| `postgres/client.ts` | The construction of the client, the pool of the connections, the TLS, the background connection and the disposal. |
-| `postgres/schema.ts` | The tables and the functions of the shared state, and the bootstrap of the schema. |
-| `postgres/commands.ts` | The commands of the shared state. |
-
-### `src/runtime/` — the composition root
+Implements domain ports; makes no policy decisions.
 
 | File | Owns |
 | --- | --- |
-| `env/` | The environment of the process: `settings.ts` holds the shape of the settings, `schema.ts` holds the names of the variables and the schema of the gateway and of the control plane, and `read.ts` reads and validates them. The only place that reads `process.env`. |
-| `shared-state.ts` | The backends the shared state may live in, and the choice of the backend by the scheme of the url. |
-| `composition.ts` | The construction of everything: the clients, the stores, the domains, the application, the listener. |
-| `lifecycle.ts` | The watcher of the configuration, the signals, the drain, the deadline. |
-| `policy-log.ts` | The log of the policy that is running: the routes and the settings that are permissive. |
-| `version.ts` | The version of the build. |
+| `bun/listener.ts` | `Bun.serve`, a request's peer address, stopping the listener. |
+| `bun/http-transport.ts` | Outbound HTTP: no redirects followed, no body buffered, no response decompression. |
+| `bun/access-transport.ts` | Calls to the access service. |
+| `bun/client-upgrade.ts` | Upgrading the caller, with the gateway headers. |
+| `bun/upstream-websocket.ts` | The upstream handshake and socket. |
+| `bun/runtime.ts` | The process's runtime version. Runtime APIs belong to the platform, so the version is read here; the policy that judges it lives in the runtime layer. |
+| `redis/client.ts` | Client construction, server shapes (single server, cluster, sentinel), TLS, background connection, disposal. |
+| `redis/commands.ts` | Shared-state commands. |
+| `postgres/client.ts` | Client construction, connection pool, TLS, background connection, disposal. |
+| `postgres/schema.ts` | Shared-state tables and functions, and schema bootstrap. |
+| `postgres/commands.ts` | Shared-state commands. |
 
-### `src/observability/` — the observation
+### `src/runtime/`
 
 | File | Owns |
 | --- | --- |
-| `logging.ts` | The redaction of the credentials, before anything is written. |
-| `metrics.ts` | The metrics, and the bounded labels. |
+| `env/` | The process environment: `settings.ts` (settings shape), `schema.ts` (variable names and the gateway and control-plane schemas), `read.ts` (reading and validation). The only reader of `process.env`. |
+| `shared-state.ts` | Available shared-state backends, chosen by URL scheme. |
+| `composition.ts` | Constructs everything: clients, stores, domains, application, listener. |
+| `lifecycle.ts` | Configuration watcher, signals, drain, deadline. |
+| `policy-log.ts` | Log of the running policy: routes and permissive settings. |
+| `version.ts` | Build version. |
 
-### `services/` — the fixtures and the reference implementation
+### `src/observability/`
 
-`services/fixtures/oidc-provider.ts`, `services/fixtures/access-fixture.ts`,
-`services/fixtures/upstream.ts` and `services/fixtures/raw-http.ts` are the
-deterministic stand-ins for the identity provider, the access service and
-the upstreams. They refuse to run in a production environment, and they
-are not part of the image of the gateway.
+| File | Owns |
+| --- | --- |
+| `logging.ts` | Credential redaction before anything is written. |
+| `metrics.ts` | Metrics and their bounded labels. |
 
-`services/access-service.ts` is the **reference implementation** of the
-access service: it applies a policy file and it answers the protocol of
-§6.1 of the specification. It is not a fixture — it runs in a production
-environment and a deployment may use it — and it is the implementation the
-conformance suite of `test/support/access-conformance.ts` runs against,
-so the protocol and its reference do not drift apart.
+### `services/`
+
+`services/fixtures/oidc-provider.ts`, `services/fixtures/access-fixture.ts`, `services/fixtures/upstream.ts`
+and `services/fixtures/raw-http.ts` are deterministic stand-ins for the identity provider, access service
+and upstreams. They refuse to run in production and are not in the gateway image.
+
+`services/access-service.ts` is the access service **reference implementation**: it applies a policy file
+and answers the [spec §6.1](spec.md#61-access-service-protocol) protocol. It is not a fixture; it runs in production and a deployment
+may use it. The conformance suite in `test/support/access-conformance.ts` runs against it, so protocol and
+reference cannot drift apart.
 
 ## Where a change lands
 
-| The change | The file |
+| Change | File |
 | --- | --- |
-| A new authentication mode | `authentication/policy.ts`, then `authentication/principal.ts`. |
-| A new header of the identity | `forwarding/identity.ts`, then `forwarding/headers.ts`. |
-| A new limit scope | `rate-limiting/policy.ts`, then `app/dispatcher.ts`. |
-| A new metric | `observability/metrics.ts`. |
-| A new environment variable | `runtime/env/schema.ts`, then `.env.example`. |
-| A new phase of the exchange | `proxying/exchange.ts`, then the spec §11.2. |
-| A new field of the route table | `configuration/schema.ts`, then `routing/schema.ts` if it is a match. |
+| New authentication mode | `authentication/policy.ts`, then `authentication/principal.ts` |
+| New identity header | `forwarding/identity.ts`, then `forwarding/headers.ts` |
+| New limit scope | `rate-limiting/policy.ts`, then `app/dispatcher.ts` |
+| New metric | `observability/metrics.ts` |
+| New environment variable | `runtime/env/schema.ts`, then `.env.example` |
+| New exchange phase | `proxying/exchange.ts`, then [spec §11.2](spec.md#112-phases-and-budgets) |
+| New route-table field | `configuration/schema.ts`, then `routing/schema.ts` if it affects matching |
 
-## The rules of the work
+## Working rules
 
-- One rule, one domain, one test file next to it.
-- A rule that has no test is a rule that is not implemented.
-- A decision is recorded before the behavior it decides is implemented, not
-  after.
-- The import boundaries are checked by the build, not by a review.
-- The measurements of the runtime are taken before the code depends on them.
+Rules shared by all three workspaces are in the [platform architecture](../platform/architecture.md). The
+gateway adds one: a request is an exchange, not a chain of middlewares.
 
-## The verification
+## Verification
 
-| Kind | Where | What it proves |
+| Kind | Where | Proves |
 | --- | --- | --- |
-| Unit | `src/**/*.test.ts` | The policy of one domain, or of one part of the runtime, without the network. |
-| Contract | `test/contract/` | The pipeline of the gateway, over a socket, with the real fixtures around it. |
-| Network | `test/network/` | The capabilities of the runtime that the proxying depends on. |
-| Integration | `test/integration/` | The shared state against a real Redis and a real Postgres, the contract the two backends share, and a deployment with several replicas. |
-| Browser | `test/browser/` | The cookies and the origins in a real browser. |
-| Load | `test/load/` | The soak and the resources that settle after the traffic. |
-| Architecture | `test/architecture/` | The import boundaries, and the coverage of the tree by the tools. |
-| Dead code | `bun run dead` | That every file, every export and every dependency of the project is used by something. |
+| Unit | `src/**/*.test.ts` | One domain's or runtime part's policy, without the network. |
+| Contract | `test/contract/` | The gateway pipeline over a socket, with real fixtures around it. |
+| Network | `test/network/` | The runtime capabilities proxying depends on. |
+| Integration | `test/integration/` | Shared state against real Redis and Postgres, the contract both backends share, and a multi-replica deployment. |
+| Browser | `test/browser/` | Cookies and origins in a real browser. |
+| Load | `test/load/` | Soak, and resources settling after traffic. |
+| Architecture | `test/architecture/` | Import boundaries, and tool coverage of the tree. |
+| Dead code | `bun run dead` | Every file, export and dependency is used. |
 
-A rule that has no test is a rule that is not implemented. The domain owns
-the test of its rule; the contract suite proves that the domains are wired
-together the way the spec says.
+Each domain owns the tests of its rules; the contract suite proves the domains are wired as the spec says.
+The rule for a rule without a test is in the [platform architecture](../platform/architecture.md).

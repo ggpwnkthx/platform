@@ -1,36 +1,24 @@
-# The access service
+# Access service
 
-The access service is an **OpenID Connect broker** and an **access
-decision service**. It authenticates a caller against the identity
-provider of a *tenant*, maps the external identity to a *principal*, and
-answers the decision contract that the gateway already speaks.
+The access service is an OpenID Connect broker and access decision service: it authenticates callers against each tenant's identity provider, maps external identities to principals, and answers the gateway's existing decision contract.
 
-The whole domain model is eight tables — `tenants`, `users`,
-`permissions`, `grants`, `groups` — and the whole administration surface
-is twelve `curl` endpoints, plus one that reads the audit of the changes.
+The domain model is eight tables (`tenants`, `users`, `permissions`, `grants`, `groups`, `roles`, `role_permissions`, `role_roles`). Administration is twelve `curl` endpoints, plus one that reads the change audit.
 
-| Document | What it holds |
+## Pages
+
+| Page | Use it for |
 | --- | --- |
-| [spec.md](spec.md) | **The normative contract.** The behavior of the service. A change of behavior is a change of this document first. |
-| [api.md](api.md) | The HTTP surface: every endpoint, its request, its answer, its errors, with `curl` examples. |
-| [architecture.md](architecture.md) | How the code is laid out, the boundaries the build checks, the two flows, the data model. |
-| [decisions.md](decisions.md) | The decisions behind the contract, with their evidence. |
-| [operations.md](operations.md) | Running it: configuration, deployment, probes, metrics, alerts, runbooks, backup, capacity. |
-| [security.md](security.md) | The security model and the item-by-item review, with the findings that are open. |
-| [release.md](release.md) | Shipping it: readiness, the cutover of a tenant, the delivery of the image, what is still open. |
-| [compatibility.md](compatibility.md) | The pinned gateway of the reference, the runner of the compatibility suite and the way to move the pin. |
-| [../../CHANGELOG.md](../../CHANGELOG.md) | The releases of the platform, and the changes of the contract of each one. |
+| [spec.md](spec.md) | **The normative contract.** Change it first when behavior changes. |
+| [api.md](api.md) | Every HTTP endpoint: request, response, errors, `curl` examples. |
+| [architecture.md](architecture.md) | Code layout, build-checked boundaries, login and decision flows, data model. |
+| [decisions.md](decisions.md) | Design decisions with their evidence. |
+| [operations.md](operations.md) | Configuration, deployment, probes, metrics, alerts, runbooks, backup, capacity. |
+| [security.md](security.md) | Security model, item-by-item review, open findings. |
+| [release.md](release.md) | Readiness, tenant cutover, image delivery, known limits. |
+| [compatibility.md](compatibility.md) | The pinned reference gateway and the compatibility suite runner. |
+| [CHANGELOG.md](../../CHANGELOG.md) | Platform releases and their contract changes. |
 
-A reference to `§N` in the code, in the tests or in these documents is a
-reference to a section of [spec.md](spec.md).
-
-A change of behaviour is a change of [spec.md](spec.md) first, in the
-same commit as the code. The guide of a contribution is in
-[CONTRIBUTING.md](../../CONTRIBUTING.md), and it holds the order of a
-change, the commands and the style of the repository.
-
-The parts of the platform that are common to the three services are in
-[the documentation of the platform](../platform/).
+`§N` in code, tests and these pages means a section of [spec.md](spec.md). A behavior change updates [spec.md](spec.md) in the same commit as the code; see [CONTRIBUTING.md](../../CONTRIBUTING.md) for the change workflow, commands and style. For what the three services share, see [Platform](../platform/).
 
 ## Running it
 
@@ -39,45 +27,27 @@ bun install
 ACCESS_SECRET_ENCRYPTION_KEY=$(printf 'a%.0s' {1..64}) bun run src/main.ts
 ```
 
-Without a database in the environment, a development machine runs the
-**embedded PostgreSQL** of the process (`pglite`) in `./.access/pglite`:
-the same PostgreSQL as the one of a deployment, so the migrations of the
-production are the migrations of the development. `ACCESS_DATABASE_URL`
-names a server (`postgres://…`) or another embedded database
-(`pglite://<path>`); a production environment must name a server.
+With no database configured, the process runs **embedded PostgreSQL** (`pglite`) in `./.access/pglite`, so local development uses the same migrations as production. `ACCESS_DATABASE_URL` names a server (`postgres://…`) or another embedded database (`pglite://<path>`); production must name a server.
 
-The runner of the development machine of the repository
-(`bun run dev` at the root) names the **server of the machine**: the
-machine has one PostgreSQL, and every service has its own database on
-it. The embedded database is the fallback of a service that is run
-alone. The rule is in [spec.md](spec.md) §4.
+The repository's dev runner (`bun run dev` at the root) uses the machine's single PostgreSQL server, with one database per service (§4).
 
-The repository is developed and tested against **PostgreSQL 18**: the
-compose file of the development machine, the jobs of the CI and the gates
-of the release run it, and the embedded PostgreSQL is that version. A
-deployment names the server it uses, and the service does not read its
-version.
+The repository is developed and tested against **PostgreSQL 18**: the dev compose file, CI jobs, release gates and embedded database all use it. A deployment chooses its server; the service does not check its version.
 
-The tests run on the embedded PostgreSQL too:
+Tests also run on the embedded database:
 
 ```bash
 bun run test
 ACCESS_TEST_DATABASE_URL=postgres://access:access@localhost:5432/access bun run test:integration
 ```
 
-`bun run test` runs the tests of **this** repository: the units, the
-contracts, the integrations, the boundaries and the tooling. It needs no
-gateway of the reference and no sibling directory.
-
-The compatibility suite is a separate command: it runs the real gateway
-of the gateway, unchanged, against this service.
+`bun run test` covers units, contracts, integrations, boundaries and tooling. It needs no reference gateway and no sibling directory. The compatibility suite, which runs the real gateway unchanged against this service, is separate:
 
 ```bash
 bun run test:compat
-bun run test:all   # the two
+bun run test:all   # both
 ```
 
-The other commands:
+Other commands:
 
 ```bash
 bun run typecheck   # tsc --noEmit
@@ -86,30 +56,12 @@ bun run format      # biome format --write .
 bun run architecture # the import boundaries
 ```
 
-## The gateway it brokers for
+## Gateway
 
-The gateway is the workspace `packages/gateway/` of the platform, and it is
-read-only here. The version this service is built against is the
-revision of the repository. The compatibility suite
-(`test/compatibility/`) runs the gateway, unchanged, against this
-service, and the CI fails when the tree of the reference is touched.
+The gateway is the platform's `packages/gateway/` workspace and is read-only here; this service is built against the repository's revision of it. The compatibility suite (`test/compatibility/`) runs it unchanged against this service, and CI fails if the reference tree is touched. See [Compatibility](compatibility.md) for the runner and its sources.
 
-The runner of the suite, the sources it accepts and the way the
-reference is chosen are in [compatibility.md](compatibility.md).
+## Release state
 
-## The state of the release
+Version `1.0.0` of the platform. Milestones M0 to M9 are closed: the process starts, validates its environment, answers probes, drains on a signal, brokers logins, issues its own tokens, answers gateway decisions, and passes the unchanged reference gateway's suite.
 
-Version `1.0.0` of the platform. The milestones M0 to M9 are closed: the
-process starts, validates its environment, answers the probes, drains on
-a signal, brokers the login of a caller, issues its own tokens, answers
-the decisions of a gateway, and runs the gateway of the reference
-against itself, unchanged.
-
-The release carries the administration that has a credential per tenant,
-the denial that carries the code of its reason, the groups of the
-principals, the batches of the administration, and the audit that is
-exported. The behaviour of the service is the one it had before the
-merge: the gateway of the reference is the workspace of the repository,
-and the release proves the published image against it. What is **not**
-done is written down in [release.md](release.md) §6. It is a short list,
-and it is a list of facts, not of intentions.
+The release adds per-tenant administration credentials, denial reason codes, principal groups, administration batches and audit export. Behavior is unchanged from before the merge: the reference gateway is the repository's own workspace, and the release proves the published image against it. What is **not** done is listed in [release.md](release.md#7-what-this-release-does-not-do).

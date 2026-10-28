@@ -1,17 +1,15 @@
-# The compatibility with the platform
+# Compatibility
 
-The data service does not own the contracts of the platform. The gateway
-signs the identity of the caller, and the access service owns the
-identity, the tenants and the grants. The data service proves that it
-works with them: the compatibility harness runs the **real** gateway,
-the **real** access service and the **real** data service of this
-repository, against a real PostgreSQL server.
+How the data service proves it works with the platform contracts it does not own: the compatibility
+harness runs the **real** gateway, access service and data service of this repository against a real
+PostgreSQL server.
 
-## The baseline of the integration
+The gateway signs the caller's identity; the access service owns identities, tenants and grants.
 
-The manifest `compatibility.json`, at the root of the repository, is the
-one place that owns the workspaces of the three services and the
-revision that is tested against them.
+## Integration baseline
+
+`compatibility.json` at the repository root is the single owner of the three service workspaces and
+of the revision tested against them.
 
 <!-- compatibility-manifest:start -->
 
@@ -43,179 +41,136 @@ revision that is tested against them.
 
 <!-- compatibility-manifest:end -->
 
-The baseline is a revision of the repository, pinned in the manifest: it is
-immutable, and a change of it is a change of the manifest and a new run of
-the harness.
+- The baseline is a pinned, immutable repository revision. Changing it means changing the manifest
+  and running the harness again.
+- References: the gateway (`packages/gateway/`) and access service (`packages/access/`) at the pinned
+  revision. The harness clones them at that revision, installs their dependencies and proves the
+  clones' tracked files match the revision.
+- Candidate: the data service (`packages/data/`) from the working tree. The harness proves the run
+  did not change it.
+- A run may instead test a **published** revision named in the environment; the reference is cloned
+  at that revision. That is a candidate run, and the harness reports it is not proof of the baseline.
 
-The references of the harness are the gateway of `packages/gateway/` and
-the access service of `packages/access/`, at the revision the manifest
-pins: the harness clones them at that revision, it installs their
-dependencies, and it proves that the tracked files of the clones are the
-ones of the revision. The data service of `packages/data/` is the
-candidate: it is the tree of the working directory, and the harness
-proves that the run did not change it.
-
-A run may test a **published** revision of a service instead: the
-environment names a repository and a revision, and the reference is
-cloned at that revision. Such a run is a run of a candidate, and the
-harness says that it is not the proof of the baseline.
-
-The baseline is written in the [specification](specification.md) §1.1,
-and the check of the drift proves that the two still agree:
+The baseline is also stated in [spec](spec.md) §1.1. Check that the two agree:
 
 ```bash
 bun run check:compatibility
 ```
 
-The check also refuses a workflow of the continuous integration that
-holds a revision of its own: a pin that is written twice is a pin that
-drifts, and a harness that runs against another revision than the one
-of the specification proves nothing.
+The check also refuses a CI workflow that pins its own revision: a pin written twice drifts, and a
+harness run against a revision other than the specification's proves nothing.
 
-## The release `1.0.0` of the platform
+## Platform release `1.0.0`
 
-The release of the platform changes the contracts of the gateway and of
-the access service: they are **MAJOR** ones for the two of them. The
-contract of the API of the data service does not change: the path of
-every route is still `v1`, the identity of the gateway is still the
-version `v5`, and the access context of the access service is still the
-version `1`. The data service reads the contracts of the platform and
-never writes them, so the changes below are the ones a deployment of the
-platform has to make, and the ones the data service has to follow.
+The platform release is a **MAJOR** change to the gateway and access-service contracts. The data
+service API contract is unchanged: every route is still `v1`, the gateway identity is still `v5`, and
+the access context is still version `1`. The data service only reads platform contracts, so the
+changes below are what a platform deployment must do and what the data service must follow.
 
-### The gateway
+### Gateway
 
-The gateway closes five defects of the security of a deployment. One of
-them changes the contract that the data service reads — the subject of
-the identity — and the four others are the business of the deployment of
-the gateway. The harness proves the data service against the real
-gateway of the release:
+The gateway closes five deployment security defects. One changes a contract the data service reads
+(the identity subject); the other four concern only the gateway's deployment. The harness proves the
+data service against the real release gateway.
 
-| The change | What it means for the data service |
+| Change | Effect on the data service |
 | --- | --- |
-| The **subject** of the caller is written **as it is**: it is never rewritten, and a subject that cannot be written into a header is refused by the gateway with a `500`. | The subject of the identity of the access service is a uuid, and the backend requires it. The backend reads the header as it is and rebuilds the signed bytes from it: it MUST NOT trim it and MUST NOT normalize it. The unit suite proves that a subject that the gateway did not write is refused. |
-| The **host** is decided before the method: a catch-all that names `GET` does not answer the `GET` of a host that has a route of its own. | The bindings of the backend are per host, and the backend derives the route from the binding that matches the signed host. A deployment that relies on a catch-all of the gateway has to move the hosts it names to the catch-all. |
-| The **address of the caller** is the entry that is `GATEWAY_TRUSTED_PROXY_HOPS` positions from the right of the chain of `x-forwarded-for`. | The variable is new and it is the business of the deployment of the gateway. A deployment behind a single ingress has nothing to do: the default is one. |
-| The **ranges of the trusted proxies** of the environment replace the ranges of the route table. | The variable is the business of the deployment of the gateway. A deployment that set `GATEWAY_TRUSTED_PROXIES` and relied on the ranges of its file has to name the ranges of the file in the variable. |
-| The **users of the shared state in Redis** are described by a file that holds one rule per line, and the passwords are not in it. | The deployment writes the passwords of the two users after the server started. It is the business of the deployment of the gateway: the data service holds no shared state. |
+| The caller **subject** is written **as is**: never rewritten; a subject that cannot be written into a header is refused by the gateway with a `500`. | The access-service subject is a UUID and the backend requires it. The backend reads the header as is and rebuilds the signed bytes from it: it MUST NOT trim or normalize it. The unit suite proves a subject the gateway did not write is refused. |
+| The **host** is decided before the method: a catch-all naming `GET` does not answer a `GET` for a host that has its own route. | Backend bindings are per host, and the route comes from the binding matching the signed host. A deployment relying on a gateway catch-all must move the hosts it names into the catch-all. |
+| The **caller address** is the `x-forwarded-for` entry `GATEWAY_TRUSTED_PROXY_HOPS` positions from the right. | New gateway deployment variable. Behind a single ingress there is nothing to do: the default is one. |
+| **Trusted proxy ranges** from the environment replace those from the route table. | Gateway deployment concern. A deployment that set `GATEWAY_TRUSTED_PROXIES` and relied on the file's ranges must name those ranges in the variable. |
+| **Redis shared-state users** are described in a file with one rule per line and no passwords. | The deployment sets the two users' passwords after the server starts. Gateway deployment concern; the data service holds no shared state. |
 
-The format of the route table, the protocol of the decisions, the
-headers of the identity and the version of the signature are unchanged:
-`v5` is still `v5`, and the legacy format `v4` is still refused by the
-routes of the current format.
+Unchanged: the route table format, the decision protocol, the identity headers and the signature
+version (`v5` is still `v5`; legacy `v4` is still refused by current-format routes).
 
-### The access service
+### Access service
 
-The contract of the access service changed, and the access context
-contract — the one the data service speaks — did not: the discovery, the
-request, the answer and the rule of the access context are the ones of
-the version `1`, and the extension that carries it is still the
-extension of the data service.
+The access-service contract changed; the access context contract the data service speaks did not.
+Discovery, request, answer and rules are still version `1`, and the extension carrying it is still
+the data service's extension.
 
-| The change | What it means for the data service |
+| Change | Effect on the data service |
 | --- | --- |
-| The **credentials of a gateway** are always scoped to their tenant. The bearer token of the deployment is the only scheme that is not scoped, and it is deprecated. | The data service does not call the decision endpoint: it speaks the access context contract with its own credential, and that credential is scoped to the tenants it may ask about. The change is the business of the deployment of the gateway. |
-| The **flags of a tenant** that belong to the platform (`shared_client`, `is_default`) are the work of the operator of the platform. | The data service holds no tenant of the access service and administers none. |
-| The **budget of the limiter** of the administration is spent by the calls that fail, and the **call to a provider** is made to the address that was checked. | The data service calls no provider of the access service: the identity is the one the gateway forwards. |
-| The **answers carry the headers of a browser**, and the answer of the token endpoint is never stored by a cache. | The data service reads the body of the access context and nothing else. |
+| **Gateway credentials** are always scoped to their tenant. The deployment bearer token is the only unscoped scheme, and it is deprecated. | None: the data service does not call the decision endpoint. It speaks the access context contract with its own credential, scoped to the tenants it may ask about. Gateway deployment concern. |
+| Platform-owned **tenant flags** (`shared_client`, `is_default`) are set by the platform operator. | None: the data service holds and administers no access-service tenant. |
+| The administration **limiter budget** is spent by failing calls, and **provider calls** go to the checked address. | None: the data service calls no provider; it uses the identity the gateway forwards. |
+| **Answers carry browser headers**, and token endpoint answers are never cached. | None: the data service reads only the access context body. |
 
-The subject of the tokens of the access service is a **uuid**, and the
-gateway of the release writes it into the headers of the identity as it
-is: it is never rewritten, and it is always writable. The principal of
-the backend is therefore the uuid of the principal of the access
-service, and the two services never speak of two different callers.
+Access-service token subjects are **UUIDs**, and the release gateway writes them into the identity
+headers as is (never rewritten, always writable). So the backend principal is the access-service
+principal's UUID, and the two services never disagree about the caller.
 
-## The harness
+## Harness
 
 ```bash
 bun run --cwd packages/data test:compat
 ```
 
-The harness clones the gateway and the access service at the revision
-the manifest pins, it starts them with a PostgreSQL server and a
-deployment of the data service, and it performs the acceptance scenario
-of the specification through the gateway: a client discovers a
-collection, it creates a record under its own identity, it reads the
-fields it may read, it updates its own record with a current validator, it
-observes the metadata of the audit, and it proves that another tenant
-cannot reach the data.
+The harness clones the gateway and access service at the pinned revision, starts them with PostgreSQL
+and a data service deployment, and runs the specification's acceptance scenario through the gateway:
+a client discovers a collection, creates a record under its own identity, reads the fields it may
+read, updates its record with a current validator, observes the audit metadata, and proves another
+tenant cannot reach the data.
 
-The command of the platform runs the two suites of the platform — the
-contract of the access service and the acceptance of the platform:
+The platform command runs both platform suites (access-service contract and platform acceptance):
 
 ```bash
 bun run compatibility
 ```
 
-## The sources of the references
+## Reference sources
 
-The harness takes the references from the revision the manifest pins, and
-it takes them from another revision when the environment names one. The
-order of the sources is the order of the list: an explicit repository
-wins over a mirror, a mirror wins over the local repository, and the
-local repository wins over the url of the manifest.
+References come from the pinned revision unless the environment names another. Source precedence:
+explicit repository, then mirror, then local repository, then the manifest URL.
 
-| Variable | What it is |
+| Variable | Meaning |
 | --- | --- |
-| `GATEWAY_REPOSITORY` | The repository of the gateway: a git url, or the path of a local repository. |
-| `ACCESS_REPOSITORY` | The repository of the access service. |
-| `GATEWAY_COMMIT` | The revision of the gateway. |
-| `ACCESS_COMMIT` | The revision of the access service. |
-| `COMPAT_MIRROR` | A directory that holds the bare mirrors `gateway.git` and `access.git`. |
-| `COMPAT_KEEP` | When it is set, the temporary directory of the run is kept. |
+| `GATEWAY_REPOSITORY` | Gateway repository: a git URL or a local repository path. |
+| `ACCESS_REPOSITORY` | Access service repository. |
+| `GATEWAY_COMMIT` | Gateway revision. |
+| `ACCESS_COMMIT` | Access service revision. |
+| `COMPAT_MIRROR` | Directory holding the bare mirrors `gateway.git` and `access.git`. |
+| `COMPAT_KEEP` | If set, keep the run's temporary directory. |
 
 ```bash
 GATEWAY_REPOSITORY=/srv/mirrors/gateway ACCESS_REPOSITORY=/srv/mirrors/access \
   bun run --cwd packages/data test:compat
 ```
 
-A repository that is a path on the disk is cloned from that path, and
-the clone of a local path does not use the network. A url with or
-without the suffix `.git` names the same mirror.
+- A path repository is cloned from that path without network access. A URL with or without `.git`
+  names the same mirror.
+- `GATEWAY_COMMIT` and `ACCESS_COMMIT` override the revision; such a run is a candidate run, not proof
+  of the baseline. An override that is not a full revision is an error, and the harness never falls
+  back to another source.
 
-`GATEWAY_COMMIT` and `ACCESS_COMMIT` name another revision: a run with
-an override is a run of a candidate, and the harness says that it is
-not the proof of the baseline. An override that is not a full revision
-is an error, and the harness never falls back to another source.
+## Access service extension
 
-## The extension of the access service
+The access context contract is a **required integration and deployment dependency**: an access
+service that does not answer `/v1/access-context` cannot serve this data service, which fails closed
+without it.
 
-The access context contract is a **required integration and deployment
-dependency**: an access service that does not answer
-`/v1/access-context` cannot serve this data service, and the data
-service fails closed without it.
+The extension is **upstream**: the platform's access service carries it, and the harness baseline is
+a revision that includes it. The data service holds no copy; platform contracts live in the platform
+repository and the harness proves them against the real access service. An access-service contract
+change takes two steps:
 
-The extension is **upstream**: the access service of the platform
-carries it, and the baseline of the harness is a revision that carries
-it. The data service holds no copy of the change. A contract of the
-platform lives in the repository of the platform, and the harness proves
-it against the real access service.
+1. Land the change in the access service workspace, preserving the existing gateway decision
+   contract.
+2. Pass the harness against the new revision.
 
-A change of the contract of the access service therefore has two steps:
+## Signature fixtures
 
-1. the change lands in the workspace of the access service, and it
-   preserves the existing contract of the decisions of the gateway,
-2. the harness passes against the new revision.
-
-## The fixtures of the signature
-
-The fixture of the signature of the identity is produced by the gateway
-itself: the canonical payload and the signature come from the code of
-the gateway, and the test of the data service checks its own verification
-against those bytes.
+The gateway itself produces the identity signature fixture: the canonical payload and signature come
+from gateway code, and data service tests check their own verification against those bytes.
 
 ```bash
 GATEWAY_CHECKOUT=/path/to/platform/gateway \
   bun run --cwd packages/data scripts/dev/generate-fixtures.ts
 ```
 
-The workspace has to be the one of the revision of the repository: the
-fixture is the evidence of the contract of that revision and not of
-another one. The fixture carries the revision it comes from.
-
-The fixture also carries the legacy format `v4`, because the backend
-still reads it for the deployments whose gateway is older. The gateway
-does not sign it any more — it was removed in the release `1.0.0` — so
-the derivation of its key is the one part of the fixture that the
-harness and the generator keep locally: the payload and the signature
-are still the ones of the code of the gateway.
+- The checkout must be at the repository revision: the fixture is evidence of that revision's
+  contract, and it records the revision it comes from.
+- The fixture also carries legacy `v4`, which the backend still reads for older gateways. The gateway
+  stopped signing `v4` in release `1.0.0`, so the `v4` key derivation is the one part the harness and
+  generator keep locally; payload and signature still come from gateway code.

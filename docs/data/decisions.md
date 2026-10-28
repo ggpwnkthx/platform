@@ -1,689 +1,388 @@
-# The decisions of the data service
+# Decisions
 
-[specification.md](specification.md) is normative for the behavior. This
-file records the decisions behind it: what was decided, why, and where
-the evidence is. A rule of a decision that changes the contract, and the shape of the table
-below, are in [the decisions of the platform](../platform/decisions.md).
+Contract and implementation decisions of the data service, with the reason for each. The
+[specification](spec.md) is normative for behavior.
 
-The decisions that shape the contract are in the table below; the column
-**Stated in** names the section of the specification that states each of
-them. The decisions of the implementation follow, in the prose that
-records the reason of each.
+How contract-changing decisions are made, and the shape of the table below, are defined in the
+[platform decisions](../platform/decisions.md).
+
+## Contract decisions
+
+**Stated in** names the specification section that states each decision.
 
 | # | Question | Decision | Stated in | Status | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Is the service a studio? | The service is headless; Studio is a separate project. | §1.3 | resolved | `src/app/app.ts`, `test/contract/http.test.ts` |
-| 2 | Who owns the identity and the capabilities? | The access service remains the authority of the identity and of the assignment of the capabilities. | §5 | resolved | `src/domains/authorization/access-context.ts`, `test/contract/http.test.ts` |
-| 3 | Where is the boundary of the authentication? | The gateway remains the authenticated boundary; the integration uses its existing contract of signed identity. | §4 | resolved | `src/domains/gateway-context/verify.ts`, `test/contract/http.test.ts` |
-| 4 | What is the contract of the access context? | A new contract of the access context of the access service is required; the snapshots of the stale roles are not enough. | §5.2 | resolved | `src/domains/authorization/access-context.ts`, `test/integration/replicas.test.ts` |
-| 5 | Where do the workspaces and the policies live? | The workspaces and the semantics of the policies of the data belong to the backend. | §6 | resolved | `src/domains/workspaces/index.ts`, `test/contract/catalog.test.ts` |
-| 6 | What is the first supported model of the schema? | PostgreSQL, the reviewed migrations and the registered manifests are the first supported model of the schema. | §7.1 | resolved | `migrations/`, `src/platform/postgres/migrations.ts` |
-| 7 | What is the first transport? | REST is the first transport, with the metadata, the OpenAPI and a small typed client. | §9 | resolved | `src/app/openapi.ts`, `packages/client/` |
-| 8 | What is transactional? | The audit, the committed events and the receipts of the creations are the transactional parts of the correctness of a mutation. | §11 | resolved | `src/domains/audit/index.ts`, `test/integration/transactions.test.ts` |
-| 9 | How do the trusted subscribers receive? | The trusted subscribers use an explicit authority of a service principal and a delivery of at least once. | §11.4 | resolved | `src/domains/events/index.ts`, `test/integration/worker.test.ts` |
-| 10 | What is deferred? | The assets, the lifecycle of the content, the public realtime, the configuration of the workflows, GraphQL, the MCP and the AI, and the other database engines need subsequent specifications. | §2.2 | resolved | `docs/data/specification.md` §2.2 |
+| 1 | Is the service a studio? | No: the service is headless; Studio is a separate project. | §1.3 | resolved | `src/app/app.ts`, `test/contract/http.test.ts` |
+| 2 | Who owns identity and capabilities? | The access service stays the authority for identity and capability assignment. | §5 | resolved | `src/domains/authorization/access-context.ts`, `test/contract/http.test.ts` |
+| 3 | Where is the authentication boundary? | The gateway stays the authenticated boundary; integration uses its existing signed-identity contract. | §4 | resolved | `src/domains/gateway-context/verify.ts`, `test/contract/http.test.ts` |
+| 4 | What is the access context contract? | A new access-service access context contract is required; stale role snapshots are not enough. | §5.2 | resolved | `src/domains/authorization/access-context.ts`, `test/integration/replicas.test.ts` |
+| 5 | Where do workspaces and policies live? | Workspaces and data policy semantics belong to the backend. | §6 | resolved | `src/domains/workspaces/index.ts`, `test/contract/catalog.test.ts` |
+| 6 | What is the first supported schema model? | PostgreSQL, reviewed migrations and registered manifests. | §7.1 | resolved | `migrations/`, `src/platform/postgres/migrations.ts` |
+| 7 | What is the first transport? | REST, with metadata, OpenAPI and a small typed client. | §9 | resolved | `src/app/openapi.ts`, `packages/client/` |
+| 8 | What is transactional? | Audit, committed events and creation receipts are the transactional parts of a mutation's correctness. | §11 | resolved | `src/domains/audit/index.ts`, `test/integration/transactions.test.ts` |
+| 9 | How do trusted subscribers receive? | With an explicit service-principal authority and at-least-once delivery. | §11.4 | resolved | `src/domains/events/index.ts`, `test/integration/worker.test.ts` |
+| 10 | What is deferred? | Assets, content lifecycle, public realtime, workflow configuration, GraphQL, MCP and AI, and other database engines need later specifications. | §2.2 | resolved | `docs/data/spec.md` §2.2 |
 
----
+## Implementation decisions
 
-## The decisions of the implementation
+Choices the implementation made inside the contract.
 
-The specification fixes the contract. What follows records the choices
-the implementation made inside that contract, and the reason of each one.
+### 1. The records domain builds its own SQL
 
-The records domain builds the SQL it runs: the identifiers come from the
-manifest and the values are bound parameters. The platform owns the
-connections, the scopes and the transactions.
+Identifiers come from the manifest and values are bound parameters; the platform layer owns
+connections, scopes and transactions. Query rules (visible fields, rows a policy covers, paging) are
+domain rules, and a query engine that accepted outside statements would have to trust them, which the
+specification forbids. Cost: the domain knows SQL. The alternative puts one rule in two places.
 
-**Why.** The rules of a query — which fields a caller may see, which
-rows a policy covers, how a page is built — are the rules of the domain.
-A query engine that receives a statement from the outside would have to
-trust it, and the trust is exactly what the specification forbids. The
-cost is that the domain knows SQL; the price of the other arrangement is
-a rule that lives in two places.
+### 2. Read projection is built in the database
 
-## 2. The projection of a read is built in the database
+The statement assembles each row's payload, adding a field only when a policy that matched the row
+grants it, so a value the caller may not see never leaves the database. This is the only way to meet
+the specification's no-materialization rule without an extra round trip per row. Cost: longer
+statements.
 
-The payload of a row is assembled by the statement: a field is added
-only when a policy that matched the row grants it. The value of a field
-the caller may not see never leaves the database.
+- **The projection covers the page, not the scope.** The statement first selects the page (ids,
+  order, limit), then builds payloads for those rows. Projecting the whole scope cost 97 ms per
+  50-row page at 200,000 rows, against 0.9 ms for the page alone.
+- **Writes build the same projection.** The statement that locks a written row computes the read
+  policy flags with the same compiler, and the representation is built from them. A record's
+  validator is identical whether read or written, and the database decides which policies match.
+  Previously the write path rebuilt the representation in memory, evaluating the predicates a second
+  time: one rule in two places, and two implementations behind one validator.
 
-**Why.** The specification asks for a projection that does not
-materialize the unauthorized values in the code that builds the answer.
-Building the payload in the statement is the only way to keep that
-promise without a second round trip per row. The cost is a statement
-that is longer than the one a reader would write by hand.
+### 3. Page order is the database's order
 
-**The projection is built for the rows of the page, and not for the rows
-of the scope.** The statement reads the page first — the identifiers,
-the order and the limit — and the second part builds the payload of the
-rows of that page.
+The service sorts nulls last in both directions, written as `col asc nulls last`; the cursor position
+keeps each value's null rank. The equivalent `((col is null))::int asc, col asc` is not recognised as
+an index order, so the database read and sorted the whole scope per page; `col asc nulls last` uses
+the workspace-scope index. The null rank stays in the cursor because continuation must compare nulls
+with the position's nulls.
 
-**Why.** The projection reads every field of a row and builds a json
-value for each of them. A statement that projected every row of the
-scope and then kept the page paid the projection of the whole
-collection for every page: 97 milliseconds for a page of fifty rows at
-two hundred thousand rows, against 0.9 milliseconds when the projection
-is built for the page only. The two parts are the same promise — the
-value the caller may not see never leaves the database — and the second
-one is the only one that is affordable.
+Cost: a descending sort needs an index the deployment declares `desc nulls last` (the default column
+index is `asc nulls first` for the descending direction). Indexes belong in the collection's reviewed
+migration.
 
-**The write path builds the same projection.** The statement that locks
-the row of a write computes the flags of the read policies — the
-predicates of the policies, compiled by the same compiler — and the
-representation of the record is built from those flags. The validator
-of a record is therefore the same whether the record was read or
-written, and it is the database that says which policies match the row.
+### 4. Page position is a tuple, not an offset
 
-**Why.** The representation was built in memory, over the values that
-the lock had read, and the predicates were evaluated there a second
-time. The two evaluations of the same rule were one rule in two
-places, and the validator of a record was the validator of two
-different implementations.
+The cursor holds the sort columns' values and their null ranks; continuation is the explicit
+expansion of the tuple comparison. An offset grows with the table and shifts on insert; a tuple is
+stable and bounded. The null rank is part of the tuple because PostgreSQL sorts nulls last in both
+directions and continuation must match the order.
 
-## 3. The order of a page is the order of the database
+### 5. One policy authorizes a write, and the database evaluates its predicates
 
-The order of the service is the order of the nulls last, in the two
-directions. The statement writes it as `col asc nulls last`, and the
-position of the cursor keeps the rank of the nulls with the value of the
-column.
+Policy predicates compile to SQL for both reads and writes. The write statement carries the `where`
+over the row before the change and the `check` over the row after it, the latter supplied as a common
+table expression of bound parameters. In-memory evaluation remains as the oracle and as a fast path
+that refuses a write before it touches the database.
 
-**Why.** `((col is null))::int asc, col asc` is the same order, and the
-database does not recognise it as the order of an index: it read the
-whole scope and sorted it for every page. `col asc nulls last` is the
-order of an index, and the page is read with the index of the scope of
-the workspace. The rank of the nulls stays in the position of the
-cursor, because the continuation of a page has to compare the nulls of
-a column with the nulls of the position.
+The two evaluations previously lived apart and diverged three times before comparison was made by
+field type. One implementation fixes that. The generated guard check compares both answers on
+predicates not written by hand, so divergence fails CI instead of surprising a deployment.
 
-**The cost.** A descending sort needs an index that the deployment
-declares `desc nulls last`: the default index of a column is `asc nulls
-first` for the descending direction, and the order of the service is the
-order of the nulls last. The indexes belong to the reviewed migration of
-the collection.
+Cost: the write statement carries two row images. The database does not resolve a CTE inside an
+update's condition, so the condition is a subquery over the expressions; the write reads the locked
+row once more.
 
-## 4. The page position is a tuple, not an offset
+### 6. Idempotency keys are claimed with a waiting statement
 
-The cursor holds the values of the columns of the sort and the rank of
-their null values, and the continuation of a page is the explicit
-expansion of the tuple comparison.
+The claim is `insert … on conflict do update … where false`: it waits for the transaction holding the
+key, bounded by a two-second lock timeout. `on conflict do nothing` does not always wait, and a
+duplicate answered before the first commit would create two records. Cost: an update privilege on
+receipts, limited to rows in the transaction's scope.
 
-**Why.** An offset grows with the table and it is not stable when a row
-is inserted. The tuple is stable and it is bounded. The rank of the null
-values is part of the tuple because PostgreSQL sorts the nulls last in
-the two directions and the continuation has to agree with the order.
+### 7. The access context is not cached by default
 
-## 5. The write is authorized by one policy, and the database evaluates its predicates
+`DATA_CONTEXT_CACHE_TTL_MS` defaults to zero. An operator may enable read caching; an entry expires at
+the earlier of the validity the access service announced and the local lifetime. The specification
+allows 0 to 5000 ms and requires no cache by default, so a revoked grant is visible on the next
+request. A revocation's bound is the cache lifetime plus the running request's duration.
 
-The predicate of a policy is compiled to SQL for the reads and for the
-writes. The write path holds the row, and the statement of the write
-carries the predicates of the policies: the `where` over the row before
-the change and the `check` over the row after it. The row after the
-change is given to the database as a common table expression of bound
-parameters. The evaluation in memory stays as the oracle of the check.
+### 8. Transaction scope uses `set_config(…, true)`
 
-**Why.** A write has to check the row before the change and the row
-after it, and the row after it does not exist yet. The two evaluations
-of the same rule lived in two places, and they diverged three times
-before the comparison was made the comparison of the type of the field.
-One implementation is the fix: the database evaluates the rule, with
-the compiler that the reads use, and the memory is the fast path that
-refuses a write before it touches the database. The generated check of
-the guard compares the two answers on predicates that were not written
-by hand, so a divergence is a failure of the continuous integration and
-not a surprise of a deployment.
+`data.tenant_id`, `data.workspace_id` and `data.principal_id` are transaction-local. A pooled
+connection never carries another request's scope, and table policies deny rows when the settings are
+missing. The setting is a scope, not a credential: callers never read it and it never goes over the
+wire.
 
-**The cost.** The statement of a write carries two images of the row:
-the row before the change and the row after it. The database does not
-resolve a common table expression in the condition of an update, so the
-condition is a subquery over the expressions. The write reads the row
-once more, and the row it reads is the row it locked.
+### 9. Gateway identity is verified with a public key
 
-## 6. The idempotency key is claimed with a statement that waits
-
-The claim of a key uses `insert … on conflict do update … where false`.
-It waits for the transaction that holds the key, and it is bounded by a
-lock timeout of two seconds.
-
-**Why.** `on conflict do nothing` does not always wait for the
-transaction that holds the conflicting row, and a duplicate that is
-answered before the first one committed would create two records. The
-statement that waits costs a privilege of update on the receipts, and
-that privilege is limited to the rows of the scope of the transaction.
-
-## 7. The context of the access service is never cached by the service, by default
-
-`DATA_CONTEXT_CACHE_TTL_MS` is zero. A read may be cached when the
-operator asks for it, and the entry leaves the cache at the earlier of
-the validity the access service announced and the local lifetime.
-
-**Why.** The specification allows a cache of zero to five thousand
-milliseconds and asks for the default of no cache. The revocation of a
-grant is visible in the next request, and the bound of a revocation is
-the lifetime of the cache plus the duration of the request that is
-running.
-
-## 8. The scope of a transaction is set with `set_config(…, true)`
-
-The settings `data.tenant_id`, `data.workspace_id` and
-`data.principal_id` are local to the transaction.
-
-**Why.** A pooled connection never carries the scope of another
-request, and the policies of the tables deny the rows when the settings
-are missing. The setting is a scope and not a credential: it is never
-read by a caller and it is never sent over the wire.
-
-## 9. The identity of the gateway is verified with a public key
-
-The backend holds the **public** key of the identity signature of the
-gateway, never `GATEWAY_SESSION_SECRET` and never the private key of
-the gateway. The legacy format, which derives the key of the signature
-from the secret of the sessions, is still read: it is the migration path
-of a deployment that shares a key with its gateway, and a route has to
+The backend holds the gateway's **public** identity-signing key, never `GATEWAY_SESSION_SECRET` or
+the gateway private key. The legacy format, which derives the signing key from the session secret, is
+still readable as a migration path for deployments sharing a key with their gateway, and a route must
 name it explicitly.
 
-**Why.** The derivation separates the two secrets, and it was enough
-when the trust boundary of the gateway was its network: the upstream
-that could verify an identity could mint one, and the key of the
-signature was a signing capable secret that belonged inside the trust
-boundary of the gateway. The public key moves the boundary to the key:
-an upstream that verifies an identity cannot mint one, the backend never
-holds a secret of the gateway, and the compromise of the backend does
-not give the sessions of the gateway. The legacy format stays readable
-because a deployment that changes the format of its bindings and the key
-of its gateway at the same time is a deployment that is down; the route
-names the format, so the two never mix.
+The derived key kept the two secrets apart and sufficed while the trust boundary was the gateway's
+network, but any upstream that could verify an identity could also mint one. With a public key the
+boundary is the key: verifiers cannot mint, the backend holds no gateway secret, and a compromised
+backend does not expose gateway sessions. The legacy format stays readable because switching the
+binding format and the gateway key at the same moment takes a deployment down; the route names its
+format, so the two never mix.
 
-## 10. The baseline of the integration is one file, and it is checked
+### 10. The integration baseline is one checked file
 
-The repositories of the gateway and of the access service, and the
-revisions that are tested against them, live in `compatibility.json`,
-and the documentation of the baseline and the workflows read it.
+Gateway and access-service repositories and tested revisions live in `compatibility.json`; the
+baseline docs and workflows read it. A pin written twice drifts. The drift check compares the
+specification's baseline block with the manifest and refuses workflows with their own revision.
+Earlier baselines' revisions stay in the release notes as historical evidence, not as the active
+baseline.
 
-**Why.** A pin that is written twice is a pin that drifts, and a
-harness that runs against another revision than the one of the
-specification proves nothing. The check of the drift compares the block
-of the baseline of the specification with the manifest, and refuses a
-workflow that holds a revision of its own. The revisions of the earlier
-baselines stay in the release notes: they are the historical evidence of
-the earlier releases and they are not the active baseline.
+### 11. The workspace is read before the context exists
 
-## 11. The workspace is read before the context exists
+The registry reader may select three columns of one table and only look a workspace up by exact id.
+The request scope is the workspace, whose tenant is needed before the principal's context exists.
+This reader is the specification's narrowest exception and touches no business table.
 
-The registry is read with a narrow reader: the role may select three
-columns of one table and it may only look a workspace up by its exact
-identifier.
+### 12. Events and audit are written by the domain in the mutation's transaction
 
-**Why.** The scope of a request is the workspace, and the workspace
-belongs to a tenant: the tenant of the workspace is needed before the
-context of the principal exists. The reader is the narrowest exception
-of the specification, and it has no access to any business table.
+The records service writes the audit entry, event and receipt through the mutation's unit of work.
+The specification requires the four effects to commit together or not at all; only the mutation's
+own transaction can guarantee that, and only failure injection at every stage proves it.
 
-## 12. The events and the audit are written by the domain, in the transaction of the mutation
+### 13. Subscribers are registered in the composition root
 
-The records service writes the audit entry, the event and the receipt
-through the unit of work of the mutation.
+Subscribers are code with a stable id and an event filter; the worker resolves a fresh
+service-principal context before every command. The specification requires trusted subscribers and
+refuses uploaded plugins and caller-defined handlers. A subscriber's authority is the service
+principal's; the originating caller is an attribution.
 
-**Why.** The specification requires the four effects to be committed
-together or not at all. The only place that can guarantee it is the
-transaction of the mutation itself, and the only way to prove it is to
-inject a failure at every stage of the transaction.
+### 14. Page rows are bounded by the answer, not the page
 
-## 13. The subscriber is registered in the composition root
+The 4 MiB budget is checked while rows are encoded, and relation expansion is bounded before rows are
+materialized. A limit checked after the page is built is not a limit. Expansion uses one statement
+per relation and parent batch, never one per parent.
 
-The subscribers of the deployment are code, with a stable identifier and
-a filter of the events they handle. The worker resolves a fresh context
-of the service principal before every command.
+### 15. The access-service extension lives in the access service
 
-**Why.** The specification asks for trusted subscribers and refuses the
-uploaded plugins and the caller defined handlers. The authority of a
-subscriber is the authority of the service principal, and the identity
-of the caller that started the chain is an attribution.
-
-## 14. The number of the rows of a page is bounded by the answer and not by the page
-
-The budget of four mebibytes is checked while the rows are encoded, and
-the expansion of the relations is bounded before the rows are
-materialized.
-
-**Why.** A limit that is checked after the page was built is not a
-limit. The expansion uses one statement per relation and per batch of
-the parents, never one statement per parent.
-
-## 15. The extension of the access service lives in the access service and not in a copy here
-
-The extension of the access context contract is a change of the access
-service, and it is taken upstream: the access service carries it in the
-workspace `packages/access/`, the data service pins the revision of the
-platform that carries it in `compatibility.json`, and the data service
-holds no copy of the change. **Why.** The gateway and the access service
-are the contracts of the platform, and a change of them is a change of
-the platform. A patch that is reviewed against a pinned revision is
-reviewable; a fork is not. Once the change is in the workspace of the
-access service, a copy of it here would be a second source of truth that
-can only rot: the data service proves the contract with the
-compatibility harness, against the real access service, at the pinned
+The access context contract extension is an access-service change taken upstream: it lives in
+`packages/access/`, `compatibility.json` pins the platform revision that carries it, and the data
+service keeps no copy. Gateway and access service are platform contracts; a patch reviewed against a
+pinned revision is reviewable, a fork is not, and a local copy would be a second source of truth that
+rots. The compatibility harness proves the contract against the real access service at the pinned
 revision.
 
-## 16. The tests run against a real PostgreSQL server
-
-The integration tests and the compatibility harness start a PostgreSQL
-server of their own.
-
-**Why.** The isolation, the locking and the claims of the workers are
-the behaviour of a server. An embedded engine proves the rules of the
-domain and nothing else, and the specification asks for the server level
-checks.
-
-## 17. The null of a comparison follows the database
-
-The predicate of a policy is compiled to SQL for the reads and it is
-evaluated in memory for the writes. The two evaluations use the three
-valued logic of the database: a comparison with a null value is unknown
-and it never matches, and only `_is_null` matches a null value.
-
-**Why.** The two evaluations answer the same question about the same
-row, and they have to answer it the same way. A policy that reads the
-records whose body differs from a value does not cover a record whose
-body is null, exactly as the statement of the read does not match it.
-The evaluation in memory that treated the null as a value would let a
-caller write a record that the read hides, and the two rules of the
-service would contradict each other inside the same request.
-
-The comparison of the text is the comparison of the bytes, and not the
-comparison of the locale of the database: the compiler writes the
-collation `C` on the columns of the text, and the evaluation in memory
-compares the code units. A deployment whose database carries a collation
-of the locale would otherwise answer differently from the evaluation in
-memory — `'Zebra' < 'apple'` is true for the bytes and false for the
-collation of the unicode.
-
-The two normalizations of the database are part of the parser, and not
-of the two evaluations: the uuid is written in lower case, and the json
-does not keep the order of its keys. The parser normalizes the operand
-of a uuid, and the comparison of a json compares the content and not the
-order, so the two evaluations compare the same values.
-
-The two evaluations are compared by a differential test: the same
-predicates run against the same rows, in memory and in the server, and
-the two answers have to be the same. The fixture of the test carries a
-column with the collation of the unicode, so the test proves that the
-compiler does not depend on the collation of the deployment. The test is
-the proof that a change of one of the two engines does not change the
-meaning of a policy.
-
-## 18. The metrics of the dependency and of the cache are recorded by the component that owns them
-
-The client of the access service records the calls it makes and their
-duration, the resolver records the hits and the misses of the cache of
-the context, the pool records the waits for a connection, and the store
-records the rolled back transactions.
-
-**Why.** A metric that the component that knows the event does not
-record is a metric that drifts from the truth. The specification asks
-for the duration of the access service, for the hits of the cache and for
-the rollbacks, and the component that holds the event is the only one
-that can count it without a guess.
-
-## 19. The catalog of a workspace is a logical registry over the tables of the deployment
-
-A workspace registers the collections of the deployment that it serves,
-and it publishes the bundle of policies that applies to it. The
-registration never creates a table and never names one that the
-deployment does not declare.
-
-**Why.** The physical schema is the strongest property of the service:
-the tables come from reviewed migrations, their isolation is written in
-those migrations, the role of the api may not alter them, and the
-readiness compares the manifest with the deployed schema and refuses the
-drift. A registry that created a table per tenant would give all of
-that away: the policies of the isolation would have to be written at
-runtime, on tables that no migration describes, and the drift of the
-schema would have nothing to compare against. The registry keeps the
-physical schema global and reviewed, and it makes the *logical* schema
-per workspace, which is what a customer of the platform actually asks
-for.
-
-The cost is that a workspace cannot have a field that another workspace
-does not have. The tables of the deployment are the vocabulary of the
-platform, and a deployment that needs another vocabulary adds a
-migration: the review of the change stays where it belongs.
-
-The rule of the catalog is in the specification of the data service
-(§7.5): a workspace that registered nothing serves every collection of
-the deployment.
-
-## 20. The publication of a bundle is an operator command and not an HTTP route
-
-A bundle of policies is published with a command of the operator, on the
-machine of the deployment. There is no endpoint that writes a bundle.
-
-**Why.** A bundle says what a permission grants. An endpoint that
-publishes a bundle is an authority that does not go through the access
-service, and it would have to be guarded by a permission of its own: a
-tenant that can publish a bundle can grant itself the read of every
-field of every collection, and the isolation of the workspaces would
-hold only as long as that endpoint is closed. The command runs with the
-credentials of the owner of the schema, it is on the machine of the
-operator, and it leaves a history of the publications that the audit log
-of the records points at. The grants of a principal stay the business of
-the access service, and the two authorities do not mix.
-
-The cost is that a tenant cannot change its own policies through the
-api. A studio that edits the policies of a workspace will need an
-endpoint, and that endpoint will need an authority of its own, defined
-in the access service and not in the deployment.
-## 21. The negation of a predicate keeps the three valued logic of the database
-
-The operator `_not` negates a whole predicate, and the negation of an
-unknown is an unknown: a row whose value is null is never matched by a
-negated comparison. The evaluation in memory carries the third value
-explicitly, and the statement of the database carries it natively.
-
-**Why.** The two evaluations of a predicate have to answer the same
-question about the same row: the reads compile the predicate into SQL
-and the writes evaluate it in memory over the row that is locked. The
-negation is the first operator that forces the unknown to be a value of
-its own: `not (a = 1 and b = 2)` is unknown when `b` is null, and a
-negation that treated the unknown as a false would let a caller write a
-record that the read hides. The differential test carries the cases of
-the negation, and it runs them against a real server: the two answers
-have to be the same, row by row.
-
-## 22. The catalog is read with the registry of the workspaces, and it is carried by the context
-
-The narrow reader of the registry reads the workspace **and** the
-registry of its catalog in one statement, and the application puts the
-resolved catalog in the context that the domain operations receive. The
-records service reads the manifest and the bundle of the context, and it
-never resolves them itself.
-
-**Why.** The registry of the workspaces is on the path of every request:
-the service needs the tenant of the workspace before it asks the access
-service. The catalog is the configuration of the workspace, and it is
-read with it: a second round trip for the catalog would double the work
-of the registry pool, which is the smallest pool of the deployment, and
-the measurement showed a third of the throughput of the read path. The
-statement that reads both costs a tenth of a millisecond more than the
-statement that read the workspace alone.
-
-The catalog is carried by the context because it is the same for
-every operation of a request: a bundle that was published in the middle
-of a request does not change the answer of that request, and the
-cursors, the audit entries and the statements of the request all name
-the same versions. A service that resolved the catalog itself would have
-to answer the question "which bundle applies" in a second place.
-
-The resolved catalog is memoized in the process, and the fingerprint of
-its inputs is the key: the collections that the workspace registered and
-the digest of the bundle it published. The memoization removes the
-parsing of the bundle from the path of the request, and it does not
-weaken the guarantee: a bundle that was edited in the database has
-another digest, and it is parsed again and refused when it cannot be
-used.
-
-## 23. The search is a parameter of the query and not an operator of the filter
-
-The search of a collection is the `search` parameter of the list and of
-the aggregate. It is not an operator of the filter grammar.
-
-**Why.** The predicates of the policies are evaluated twice: they are
-compiled to SQL for the reads and they are evaluated in memory for the
-writes, over the row that is locked. The two evaluations have to answer
-the same question about the same row, and the differential test proves
-that they do. A text search has no meaning in the second evaluation:
-the ranking and the stemming of the database have no equivalent in the
-memory of the process, and a policy that read a text search would
-authorize a write with a rule that the reads do not apply. The search
-is therefore a parameter of the queries of the callers, and it never
-reaches a predicate of a policy.
-
-The fields of the search are the fields that the deployment declares
-searchable, and they have to be the fields the caller may filter and
-sort by: a search over a field that a policy hides would disclose what
-the policy protects, exactly as a sort over that field would.
-
-The index of the search is a part of the reviewed migration of the
-collection, and its expression is the expression of the statement of the
-search. The database only uses the index when the two are the same, and
-a difference is a silent regression: the search answers the same rows
-and it costs a scan of the table. The test of the integration reads the
-plan of the database and it fails when the index is not used.
-
-## 24. The aggregate reads the rows that a list reads, and it uses the fields that the caller may filter by
-
-The aggregate is a statement of a list with a `group by`: the same
-scope, the same disjunction of the read predicates of the policies and
-the same filter of the caller. The fields of the group and the fields
-of the metrics are the fields the caller may filter and sort by.
-
-**Why.** An aggregate that reads the rows of another query is a
-privileged query path, and the specification refuses them. The
-intersection of the read policies is the conservative answer, and it is
-the answer the filter and the sort already give: a caller that may not
-filter by a field may not learn the distribution of that field either.
-
-The sum and the average of an integer are decimals, exactly as the
-database answers them: the sum of a big integer does not fit in a big
-integer, and a number that does not fit would be a lie. The number of
-the groups is bounded, and the answer says when the groups of the
-answer are not all of them: a truncated answer that does not say it is
-truncated is a lie too.
-
-## 25. The failures of the database are translated into the codes of the contract
-
-The driver of PostgreSQL answers with the SQLSTATE of the server. The
-service translates it into the code of the contract in one table, in
-the platform layer, and the domain never sees the state of the server.
-
-**Why.** The contract publishes the codes, and a client switches on the
-code. A lock that was not granted in time is a `409 CONFLICT` and not
-an internal error of the service, and a statement that ran out of its
-budget is a `504 DEADLINE_EXCEEDED`. The translation is deliberately
-conservative: a state that is not in the table is not translated, and a
-defect of the service — a statement that does not parse, a column that
-does not exist — stays an internal error. A translation that hides a
-defect behind a plausible answer is worse than an answer that is
-obviously wrong.
-
-**The cost.** The reason of the failure is the cause of the error and
-not its message: the answer of the service is the safe summary of the
-code, and the reason belongs to the log. The log of a failure of the
-database carries the state of the server, and the answer of the service
-does not.
-
-## 26. A statement that fails does not break a connection
-
-A statement that fails — a constraint that is violated, a lock that is
-not granted — leaves the connection usable: the transaction is rolled
-back and the session is clean. A failure of the connection itself does
-not: the state of the session is unknown, and the connection must not
-go back to the pool.
-
-**Why.** The two failures were not told apart, and a failing statement
-took the connection with it: the connection was neither returned to the
-pool nor destroyed, and it was lost. Twenty failing writes exhausted
-the pool of the api, and every request of the deployment answered
-`503` afterwards. The pool of the api is the resource that the
-isolation of the tenants relies on, and a client that may spend it
-with twenty bad requests may spend it with twenty thousand.
-
-**The cost.** A connection that is broken is destroyed, and the pool
-opens a new one: a failure of the network costs a connection of the
-pool and not a request.
-
-## 27. The size of an answer is measured by the database, and the budget is spent as the answer is built
-
-The four mebibytes of the contract are a bound of the resources of the
-service and not only of the bytes that leave it. The size of every
-piece of the payload of a row is measured by the statement that built
-the row, the budget is spent as the answer is built, and the answer is
-refused as soon as the budget is spent.
-
-**Why.** The budget was checked once the answer was built, so it
-bounded the bytes that leave the service and not the memory that it
-holds: the answer of four megabytes could cost two hundred megabytes
-of memory before it was refused. The measurement is in the database
-because the data is there: the process does not serialize a row to
-know how big it is, and the measurement costs the hot path nothing.
-
-**The expansion of a relation is read in chunks.** The chunk aims at a
-mebibyte and its size follows the size of the rows: a collection of
-small rows is read in big chunks, and a collection of large rows is
-read in small ones. The relation of a page is read with one statement
-and not with one statement per root row: the expansion was a query per
-row of the page, and the bound of the rows was a thousand per root
-record.
-
-**The cost.** The measure counts the pieces that the policies do not
-grant for a row: the budget is an upper bound of the size of the
-answer, and never a lower one. An answer that is just under the bound
-may be refused a little early.
-
-## 28. The cache of the context is bounded
-
-The cache of the context is bounded, the entries that are spent leave
-it, and the entry that is the least recently used leaves it when it is
-full.
-
-**Why.** The cache is the mitigation of the availability of the access
-service: it is the answer of a deployment that prefers the availability
-over the instant revocation. It was a map without a bound and without a
-sweep, and an entry left it only when the same key was asked again. A
-mitigation that grows without a bound is a leak, and the leak appears
-exactly when the mitigation is used.
-
-## 29. The bound of a tenant is applied after the tenant is known
-
-The bound of the listener is the bound of the machine, and it answers a
-`503 OVERLOADED`. The bound of a tenant is applied once the tenant of
-the request is known — after the signature of the gateway and the
-registry of the workspaces — and it answers a `429 TOO_MANY_REQUESTS`
-with a `Retry-After`.
-
-**Why.** The two bounds answer two different questions. The first one
-says that the service is full; the second one says that the caller is
-sending too much. A tenant that takes the room of the others receives
-an answer that tells it that the service is broken, and it does not
-know that it is the one that is talking too much.
-
-**The cost.** The room of a tenant is the room of the process until the
-deployment declares another one. A deployment with one tenant does not
-need to declare it, and a deployment with several declares the room
-that each of them holds. A bound may not be disabled: the
-specification refuses a bound that a zero turns off.
-
-## 30. The suites are broken on purpose, and they have to notice
-
-The gate of the mutation takes the code, breaks it on purpose, and
-checks that the suites notice. A mutation that survives is a behaviour
-that nothing in the repository proves.
-
-**Why.** Every check of this repository was written by the author of
-the code, and a check that agrees with the code because it shares its
-assumptions proves nothing. The gate is the part of the answer that a
-machine can give: it does not replace the review of somebody else, and
-it found five behaviours that nothing proved — the type of the
-protected header of the signature, the critical header, the fields of a
-row, the bound of a collection, and the connection of the pool.
-
-**The cost.** The gate is slow: it runs a suite per mutation. It only
-covers the mutations that were thought of, and a mutation that is
-equivalent — a defect that another defect already covers — survives
-without meaning anything.
-
-## 31. The history of the versions is a typed mirror, and the image is written by the statement of the change
-
-A collection that keeps a history declares the table of its versions in
-the manifest, and the table is a mirror of the table of the collection:
-the same columns, the same names and the same types, plus the columns
-of the history. The image of a version is written by the statement of
-the change itself — the change is a common table expression and the
-image is the insert that reads it — and the rollback is an ordinary
-update, or an ordinary creation for a record that was deleted.
-
-**Why.** The authorization of a version is the authorization of a
-record: the database evaluates the predicates of the read policies over
-the image, and the fields that the policies hide are not in the
-answer. A history held as a json document would have to be evaluated in
-memory, and the evaluation in memory of a predicate is the thing that
-decision 5 removed from the write path. The image is written by the
-statement of the change because a history that is written by another
-statement is a history that may disagree with the record: a change that
-commits without its image, or an image of a change that was refused,
-is a history that lies.
-
-**The cost.** The table of the versions holds the values of the
-business, and it is the first surface of the service that does. It is
-declared by the deployment, it is created by a reviewed migration, it
-is bounded by the retention, and it is read with the policies of the
-deployment. The rollback is not a privileged command: a version that
-the policies forbid to write is refused, and the version of the record
-never moves back.
-
-**The alternative that was refused.** A trigger of the database would
-have written the image without touching the service, and it would have
-caught the writes of the scripts and of the workers. The trigger writes
-the image of every row of the table, and the service would not know
-which rows it wrote: the history of a deployment would then depend on
-the paths that reach the database. The service writes what it changes,
-and it knows what it changed.
-
-## 32. The development machine and the continuous integration use PostgreSQL 18, and a deployment may run 15 or later
-
-The development machine, the integration tests, the compatibility
-harness and the continuous integration run PostgreSQL 18. The service
-itself does not require a major: a deployment may run PostgreSQL 15 or
-later, and the scripts of the deployment check the version of their
-client against the version of their server.
-
-**Why.** The suites prove the semantics of a version, and a suite that
-runs against another major proves another version. The major that the
-suites run against is the newest one that a deployment may meet, and
-the tests that prove the semantics of the version are the ones that
-catch a difference between the versions before a deployment meets it.
-
-**The cost.** The machine of a developer needs the binaries of the
-version 18, and the continuous integration installs them: the runner
-does not have them, and the image of the database of the stack of the
-development machine is the one of the version 18 as well. A machine
-without the binaries starts the server in a container of the version 18
-instead, and the runner of the development machine stops the container
-when it stops. The script that starts the server of the tests warns
-when the machine has another major, and it refuses a data directory of
-another major: a server of the version 18 does not start on the files
-of the version 15, and the refusal of the server is not the message
-that a developer needs.
-
-**The alternative that was refused.** The requirement of the version 18
-in the contract of the service was refused: the managed PostgreSQL of
-the operators lags the newest major by months, and a requirement of
-the version 18 in the contract of the version `1.0.0` would close the
-door of the deployments that use a managed database. The requirement
-belongs to the machine of the developers and not to the contract of the
-deployments.
-
-## 33. The service of the records is one class, and the pure parts of it are beside it
-
-The service of the records is one class in one file. The statements of
-the reads, the mapping of the rows and the comparison of the values are
-not in it: they are in `sql.ts`, in `rows.ts` and in `values.ts`, and
-they are the parts that can be read, compared and proved on their own.
-
-**Why.** The operations of the records share one vocabulary: the scope,
-the collection, the policies of the deployment, the context of the
-request and the budget of the answer. A split of the class into a
-reader, a writer and a history would move that vocabulary into a base
-class that holds most of the code, and the boundaries of the split would
-be the names of the operations rather than the work they do. The parts
-that are worth splitting are the parts that do not share the vocabulary,
-and they are split.
-
-**The cost.** The file of the service is the longest of the repository,
-and a reader has to walk the operations to find the one it seeks. The
-boundaries of the domain, the matrix of the imports and the mutation
-gate are what keep it honest.
-
-**The alternative that was refused.** The split of the class into three
-classes was refused: the helpers of the operations are used by all of
-them, and the base class that the split needs would hold the code that
-the split was meant to divide.
+### 16. Tests run against a real PostgreSQL server
+
+Integration tests and the compatibility harness start their own server. Isolation, locking and
+worker claims are server behavior; an embedded engine proves only domain rules, and the specification
+requires server-level checks.
+
+### 17. Null comparisons follow the database
+
+Reads compile predicates to SQL and writes evaluate them in memory; both use the database's
+three-valued logic. A comparison with null is unknown and never matches; only `_is_null` matches null.
+Otherwise a policy reading records whose body differs from a value would let a caller write a
+null-body record the read hides, and the service would contradict itself within one request.
+
+- **Text compares by bytes**, not database locale: the compiler emits collation `C` on text columns,
+  and memory compares code units. Under a locale collation `'Zebra' < 'apple'` is false, while bytewise
+  it is true.
+- **Database normalizations live in the parser**: UUID operands are lowercased, and JSON compares by
+  content, not key order.
+- **A differential test** runs the same predicates on the same rows in memory and on the server and
+  requires identical answers. Its fixture includes a Unicode-collation column, proving the compiler
+  does not depend on the deployment's collation, and that a change to either engine keeps a policy's
+  meaning.
+
+### 18. Dependency and cache metrics are recorded by their owners
+
+The access-service client records its calls and their duration; the resolver records context cache
+hits and misses; the pool records connection waits; the store records rolled-back transactions. Only
+the component that sees the event can count it without guessing, and the specification requires
+access-service duration, cache hits and rollbacks.
+
+### 19. A workspace catalog is a logical registry over deployment tables
+
+A workspace registers the deployment collections it serves and publishes its policy bundle.
+Registration never creates a table or names one the deployment does not declare.
+
+The physical schema is the service's strongest property: tables come from reviewed migrations that
+also define their isolation, the API role cannot alter them, and readiness refuses drift between
+manifest and schema. Per-tenant tables would give that up (isolation policies written at runtime on
+undescribed tables, nothing to check drift against). The registry keeps the physical schema global
+and makes the *logical* schema per workspace, which is what platform customers ask for.
+
+Cost: one workspace cannot have a field another lacks. Deployment tables are the platform
+vocabulary; a different vocabulary needs a migration, keeping review where it belongs. A workspace
+that registered nothing serves every deployment collection ([spec](spec.md) §7.5).
+
+### 20. Bundle publication is an operator command, not an HTTP route
+
+Policy bundles are published by an operator command on the deployment machine; no endpoint writes a
+bundle. A bundle defines what a permission grants, so a publishing endpoint would be an authority
+outside the access service: a tenant able to publish could grant itself every field of every
+collection, and workspace isolation would hold only while that endpoint stayed closed. The command
+uses schema-owner credentials, runs on the operator's machine, and keeps a publication history that
+record audit entries reference. Principal grants stay with the access service.
+
+Cost: tenants cannot change their policies through the API. A studio editing workspace policies will
+need an endpoint with its own authority, defined in the access service, not the deployment.
+
+### 21. Predicate negation keeps three-valued logic
+
+`_not` negates a whole predicate, and negating unknown gives unknown, so a negated comparison never
+matches a null row. Memory evaluation carries the third value explicitly; SQL carries it natively.
+Negation is the first operator that forces unknown to be a distinct value: `not (a = 1 and b = 2)` is
+unknown when `b` is null, and treating it as false would let a caller write a record the read hides.
+The differential test covers negation against a real server, row by row.
+
+### 22. The catalog is read with the workspace registry and carried by the context
+
+The registry reader fetches the workspace **and** its catalog registry in one statement, and the
+application puts the resolved catalog in the context that domain operations receive. The records
+service uses the context's manifest and bundle and never resolves them itself.
+
+- The registry is on every request's path (the tenant is needed before asking the access service). A
+  separate catalog round trip would double the load on the registry pool, the smallest in the
+  deployment; measured, it cut read-path throughput to a third. The combined statement costs a tenth
+  of a millisecond more.
+- The catalog is the same for every operation of a request: a bundle published mid-request does not
+  change that request, and its cursors, audit entries and statements all name the same versions.
+- The resolved catalog is memoized in-process, keyed by an input fingerprint ([spec](spec.md) §7.5).
+  This removes bundle parsing from the request path without weakening the guarantee: a bundle edited
+  in the database has a new digest and is parsed again, and refused if unusable.
+
+### 23. Search is a query parameter, not a filter operator
+
+Search is the `search` parameter of lists and aggregates. Policy predicates are evaluated both in SQL
+(reads) and in memory over the locked row (writes), and the differential test proves the two agree.
+Database ranking and stemming have no in-memory equivalent, so a policy using text search would
+authorize writes by a rule reads do not apply. Search therefore never reaches a policy predicate.
+
+- Searchable fields are deployment-declared and must be fields the caller may filter and sort by;
+  searching a hidden field would disclose it, as sorting by it would.
+- The search index belongs to the collection's reviewed migration, and its expression must equal the
+  search statement's expression. Otherwise the database silently falls back to a table scan with the
+  same results. The integration test reads the query plan and fails when the index is unused.
+
+### 24. Aggregates read what lists read, over filterable fields
+
+An aggregate is a list statement with `group by`: same scope, same disjunction of read predicates,
+same caller filter. Group and metric fields must be filterable and sortable by the caller. An
+aggregate over other rows would be a privileged query path, which the specification refuses; a
+caller who may not filter by a field may not learn its distribution either.
+
+Integer sums and averages are decimals as the database returns them, since a big-integer sum may not
+fit a big integer. Group count is bounded, and the answer says when it is truncated; a silent
+truncation would be a lie.
+
+### 25. Database failures map to contract codes
+
+The PostgreSQL driver reports the server's SQLSTATE; one table in the platform layer maps it to a
+contract code, and the domain never sees server states. A lock timeout is `409 CONFLICT`, not an
+internal error; a statement over budget is `504 DEADLINE_EXCEEDED`. The mapping is conservative:
+unmapped states stay untranslated, and service defects (unparseable statement, missing column) stay
+internal errors, because hiding a defect behind a plausible answer is worse than an obviously wrong
+one.
+
+Cost: the failure reason is the error's cause, not its message. The response carries the code's safe
+summary; the log carries the server state.
+
+### 26. A failing statement does not break its connection
+
+A failed statement (violated constraint, lock not granted) leaves the connection usable: the
+transaction rolls back and the session is clean. A connection failure leaves session state unknown,
+so that connection must not return to the pool.
+
+The two used to be conflated: a failing statement's connection was neither returned nor destroyed,
+just lost. Twenty failing writes exhausted the API pool and every later request answered `503`. Tenant
+isolation relies on that pool, and a client who can drain it with twenty bad requests can do so with
+twenty thousand.
+
+Cost: a broken connection is destroyed and replaced, so a network failure costs a pool connection,
+not a request.
+
+### 27. The database measures answer size, and the budget is spent while building
+
+The contract's 4 MiB bounds service resources, not just outgoing bytes. The statement that builds a
+row measures each payload piece, the budget is spent as the answer is built, and the answer is
+refused once it is exhausted. Checking only the finished answer bounded output but not memory: a
+4 MB answer could cost 200 MB before refusal. Measuring in the database costs the hot path nothing;
+the process never serializes a row to size it.
+
+- **Relation expansion is read in chunks** targeting one mebibyte, sized by row size (small rows, big
+  chunks; large rows, small chunks). A page's relation is read in one statement, not one per root
+  row; previously expansion was one query per page row, bounded at a thousand rows per root record.
+- **Cost:** the measure counts pieces the policies do not grant, so the budget is an upper bound on
+  answer size; an answer just under the limit may be refused slightly early.
+
+### 28. The context cache is bounded
+
+Expired entries are dropped, and the least recently used entry is evicted when full. The cache
+mitigates access-service unavailability for deployments that prefer availability over instant
+revocation. It used to be an unbounded map, swept only when the same key was asked again; a
+mitigation that grows without bound is a leak, and it leaks exactly when the mitigation is in use.
+
+### 29. Per-tenant bounds apply once the tenant is known
+
+The listener bound is the machine's and answers `503 OVERLOADED`. The tenant bound applies after
+gateway signature verification and registry lookup and answers `429 TOO_MANY_REQUESTS` with
+`Retry-After`. The first says the service is full; the second says the caller sends too much. A tenant
+crowding out others should learn it is the problem, not that the service is broken.
+
+Cost: a tenant's room is the whole process until the deployment declares otherwise; single-tenant
+deployments need nothing, multi-tenant ones declare each tenant's room. A bound cannot be disabled:
+the specification refuses a bound that zero turns off.
+
+### 30. The suites are broken on purpose and must notice
+
+The mutation gate breaks the code deliberately and checks that the suites fail. A surviving mutation
+is behavior nothing in the repository proves. Every check here was written by the code's author, and
+a check sharing the code's assumptions proves nothing. The gate does not replace independent review,
+but it found five unproven behaviors: the signature's protected header type, the critical header, a
+row's fields, a collection bound, and the pool connection.
+
+Cost: the gate is slow (one suite run per mutation), covers only mutations someone thought of, and an
+equivalent mutation (a defect already covered by another) survives meaninglessly.
+
+### 31. Version history is a typed mirror written by the change statement
+
+A collection with history declares its versions table in the manifest. That table mirrors the
+collection table (same columns, names and types) plus history columns. The change statement writes
+the image itself (the change is a CTE and the image insert reads it). Rollback is an ordinary update,
+or an ordinary creation for a deleted record.
+
+Version authorization equals record authorization: the database evaluates read predicates over the
+image, and hidden fields are omitted. A JSON-document history would need in-memory evaluation, which
+decision 5 removed from the write path. History written by a separate statement could disagree with
+the record (a change committed without its image, or an image of a refused change).
+
+Cost: the versions table is the first surface holding business values. It is deployment-declared,
+created by reviewed migration, bounded by retention and read under deployment policies. Rollback is
+not privileged: a forbidden version write is refused, and the record version never moves back.
+
+Rejected: a database trigger would write images without service involvement and catch script and
+worker writes, but it images every row and the service would not know which rows it wrote, making
+history depend on whichever paths reach the database. The service writes, and knows, what it changed.
+
+### 32. Development and CI use PostgreSQL 18; deployments may run 15 or later
+
+Local development, integration tests, the compatibility harness and CI run PostgreSQL 18. The service
+requires no particular major: deployments may run 15 or later, and deployment scripts check their
+client version against the server. Suites prove one version's semantics, so they run against the
+newest major a deployment may meet, catching version differences before a deployment does.
+
+Cost: developers need version 18 binaries and CI installs them (the runner lacks them); the
+development stack's database image is also 18. Without local binaries the server starts in a
+version 18 container, which the development runner stops when it stops. The test server script warns
+on another local major and refuses a data directory from another major, since an 18 server will not
+start on 15 files and the server's own error is not the message a developer needs.
+
+Rejected: requiring 18 in the `1.0.0` contract. Managed PostgreSQL lags the newest major by months,
+and the requirement would exclude managed-database deployments. It belongs to developer machines,
+not the deployment contract.
+
+### 33. The records service is one class with its pure parts beside it
+
+The records service is one class in one file. Read statements, row mapping and value comparison live
+in `sql.ts`, `rows.ts` and `values.ts`, where they can be read, compared and proved alone. Record
+operations share one vocabulary (scope, collection, deployment policies, request context, answer
+budget). Splitting into reader, writer and history would push that vocabulary into a base class
+holding most of the code, with boundaries following operation names rather than work. Parts outside
+the shared vocabulary are split out.
+
+Cost: the service file is the repository's longest, and finding an operation means walking it. Domain
+boundaries, the import matrix and the mutation gate keep it honest.
+
+Rejected: three classes, because every operation uses the shared helpers and the required base class
+would hold the code the split meant to divide.

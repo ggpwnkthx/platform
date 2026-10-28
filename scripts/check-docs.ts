@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * The links of the documentation.
+ * The links of the documentation, and its repetitions.
  *
  * The documentation is one tree now, and a link that points at nothing
  * is a dead end for the reader. The checker reads every markdown file
@@ -13,15 +13,21 @@
  * address of a rendered document, and a link that names a heading that
  * is not there is a dead end too.
  *
- * The engine is in `tooling/documentation.ts`: the command runs it, and
- * the test suite proves it.
+ * The checker reads the sentences of the prose as well: a sentence that
+ * two documents carry is a sentence the reader reads twice, and the
+ * rule that both of them state belongs to one of them.
+ *
+ * The engines are in `tooling/documentation.ts` and in
+ * `tooling/repetition.ts`: the command runs them, and the test suite
+ * proves them.
  *
  *   bun run scripts/check-docs.ts
  */
 
 import { readFile, readdir, stat } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { join, relative, resolve } from 'node:path'
 import { linkProblemsOf } from '../tooling/documentation'
+import { repetitionProblemsOf } from '../tooling/repetition'
 import { GEOMETRY, MAP_HOPS, MAP_REQUESTS, MAP_STATIONS } from '../packages/console/src/domains/map'
 
 /** The root of the repository. */
@@ -29,6 +35,14 @@ const root = resolve(import.meta.dir, '..')
 
 /** The directories that hold no document. */
 const SKIPPED = ['node_modules', '.git', '.pg', '.access', 'dist', 'coverage']
+
+/**
+ * The files that are not checked for repetition.
+ *
+ * The changelog is the record of what was said: a release that repeats
+ * the words of an older release is a changelog that tells the truth.
+ */
+const HISTORICAL = ['CHANGELOG.md']
 
 /** Every markdown file of a directory, recursively. */
 async function filesOf(directory: string): Promise<string[]> {
@@ -50,14 +64,21 @@ async function main(): Promise<void> {
   const files = await filesOf(root)
   const problems: string[] = await linkProblemsOf(root, files)
   await checkAtlas(problems)
+  const living = files.filter((file) => !HISTORICAL.includes(relative(root, file)))
+  const repetitions: string[] = await repetitionProblemsOf(root, living)
   if (problems.length > 0) {
     for (const problem of problems) console.error(problem)
     console.error(`${problems.length} broken links`)
     process.exit(1)
   }
+  if (repetitions.length > 0) {
+    for (const repetition of repetitions) console.error(repetition)
+    console.error(`${repetitions.length} repeated sentences`)
+    process.exit(1)
+  }
   console.log(
     `every link of the ${files.length} documents of the documentation resolves, ` +
-      'and every place it names is there'
+      'every place it names is there, and no sentence of it is said twice'
   )
 }
 

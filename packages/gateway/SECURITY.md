@@ -1,87 +1,69 @@
-# The security of the gateway
+# Gateway security
 
-The gateway sits in front of the applications of a deployment and it
-decides who reaches them. A bug in it is a hole in front of every
-application behind it, so the report of a problem is treated as a report
-of a vulnerability.
+The gateway's security scope. The gateway decides who reaches every application behind it, so a bug in it
+is a hole in front of all of them, and any problem report is treated as a vulnerability report.
 
-The policy of the platform — the supported versions, the way to report a
-finding and what happens next — is in
-[the SECURITY.md of the repository](../../SECURITY.md). This document is
-the scope of the gateway.
+The platform policy (supported versions, how to report, what happens next) is in the
+[repository SECURITY.md](../../SECURITY.md).
 
-## The supported versions
+## Supported versions
 
 | Version | Supported |
 | --- | --- |
-| The release line of the platform | Yes |
+| The platform release line | Yes |
 | The line before the merge | No |
 
-The gateway is at the release `1.0.0` of the platform, and its
-specification is the one of that release: it is in
-[docs/spec.md](../../docs/gateway/spec.md). The behaviour of a release
-does not change under an operator: a fix that changes the contract is a
-new release.
+The gateway is at platform release `1.0.0`, and its contract is that release's
+[specification](../../docs/gateway/spec.md). A release's behaviour never changes under an operator: a fix
+that changes the contract is a new release.
 
-## How to report a problem
+## Reporting a problem
 
-Write to the maintainers of the repository, in a private channel: a public
-issue is a public disclosure. The report should carry:
+Write to the repository maintainers privately; a public issue is a public disclosure. Include:
 
-- the version of the gateway and the runtime it runs on;
+- the gateway version and the runtime it runs on;
 - what an attacker can do, and what they need to do it;
-- the steps to reproduce it, and the configuration that reproduces it;
-- the logs of the gateway, **with the credentials removed**.
+- reproduction steps and the configuration that reproduces it;
+- gateway logs, **with credentials removed**.
 
-The maintainers acknowledge the report within three working days, and they
-say what they expect to happen. A fix that needs a release is released as
-soon as it is ready, and the report is published with it — the reporter is
-named, unless they ask not to be.
+The maintainers acknowledge within three working days and say what they expect to happen. A fix that needs
+a release ships as soon as it is ready, and the report is published with it, naming the reporter unless
+they ask not to be named.
 
-## What is in scope
+## In scope
 
-Everything that lets a caller reach an upstream, or an upstream reach
-something it should not:
+Anything that lets a caller reach an upstream, or an upstream reach something it should not:
 
-- the authentication of the callers and the modes of the credentials;
-- the authorization of the workspace and the protocol of the access service;
-- the header policy, the identity headers and the signature of the identity;
-- the cookies of the gateway and the sessions;
+- caller authentication and credential modes;
+- workspace authorization and the access-service protocol;
+- header policy, identity headers and the identity signature;
+- gateway cookies and sessions;
 - the cross-site guard;
-- the limits and the shared state of the replicas;
-- the proxying of the requests, the uploads, the answers and the websockets;
-- the configuration of the deployment and its reload;
-- the secrets of the deployment.
+- limits and the replicas' shared state;
+- proxying of requests, uploads, responses and WebSockets;
+- deployment configuration and its reload;
+- deployment secrets.
 
-## What is out of scope
+## Out of scope
 
-- The applications behind the gateway: they are the responsibility of the
-  deployment that owns them.
-- The identity provider, the access service and the shared state: they are
-  dependencies of the gateway, and a problem in one of them is a problem in
-  it. The protocol of the access service is published in
-  [docs/spec.md](../../docs/gateway/spec.md) §6.1, and its conformance suite is in
-  `test/integration/access-conformance.ts`.
-- The ingress in front of the gateway: it terminates the TLS and it is
-  configured by the deployment.
-- A denial of service by a volume of traffic: the gateway bounds the
-  resources it uses and the limits of the deployment bound the traffic, but
-  a deployment that does not set the limits of §9 of the specification is
-  not protected against a flood.
-- The runtime of the gateway: the contract of the release names the version
-  it needs, and the gateway refuses to start on an older one.
+- The applications behind the gateway: the deployment that owns them is responsible.
+- The identity provider, the access service and the shared state: they are dependencies, and a problem in
+  one belongs to it. The access-service protocol is [spec §6.1](../../docs/gateway/spec.md); its
+  conformance suite is `test/support/access-conformance.ts`.
+- The ingress in front of the gateway: it terminates TLS and the deployment configures it.
+- Volumetric denial of service: the gateway bounds its own resources and deployment limits bound traffic,
+  but a deployment without the [spec §9](../../docs/gateway/spec.md) limits is not protected against a
+  flood.
+- The runtime: the release contract names the required version, and the gateway refuses to start on an
+  older one.
 
-## The rules of the release
+## Release rules
 
-- The contract of the gateway is [docs/spec.md](../../docs/gateway/spec.md). A change of
-the behaviour is a change of the contract, and it is recorded there and
-in [CHANGELOG.md](../../CHANGELOG.md).
-- The decisions behind the contract are in
-  [docs/decisions.md](../../docs/gateway/decisions.md), with the evidence that led to
-  them.
-- The identity of the callers is signed with a private key that only the
-  gateway holds: an upstream that verifies an identity cannot mint one.
-- The access service is asked and the gateway fails closed: without a
-  decision, the request is refused.
-- The gateway writes the policy it is running in its log, and it names the
-  settings that are permissive.
+- The gateway contract is the [specification](../../docs/gateway/spec.md). A behaviour change is a
+  contract change, recorded there and in [CHANGELOG.md](../../CHANGELOG.md).
+- The decisions behind the contract, with their evidence, are in
+  [decisions.md](../../docs/gateway/decisions.md).
+- Caller identities are signed with a private key only the gateway holds, so an upstream that verifies an
+  identity cannot mint one.
+- The gateway asks the access service and fails closed: no decision, no request.
+- The gateway logs the policy it is running and names permissive settings.

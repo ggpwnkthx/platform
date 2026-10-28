@@ -1,151 +1,85 @@
-# The gateway
+# Gateway
 
-The gateway is the **application gateway** of the platform. It sits
-between the callers and the applications behind it: for every request it
-works out who the caller is, asks the access service what the caller
-may do, and forwards the request to the upstream of the route it matched,
-with the identity of the caller attached and signed.
+The gateway is the platform's application gateway. For every request it identifies the caller, asks the
+access service what the caller may do, and forwards the request to the matched route's upstream with the
+caller's identity attached and signed.
 
-The gateway holds no users, no roles and no permissions of its own. The
-identity provider knows who people are, the access service decides what
-they may do, and the gateway enforces both answers.
+The gateway holds no users, roles or permissions. The identity provider knows who people are, the access
+service decides what they may do, and the gateway enforces both answers. It does not terminate TLS, cache
+responses or decide access on its own; see [spec §13](spec.md#13-what-the-gateway-does-not-do) for the full list.
 
-## The documents
+## Pages
 
-| Document | What it holds |
+| Page | Use it to |
 | --- | --- |
-| [spec.md](spec.md) | **The normative contract.** The behaviour of the service. A change of behaviour is a change of this document first. |
-| [architecture.md](architecture.md) | How the code is laid out, which import is allowed where, and which file owns what. |
-| [decisions.md](decisions.md) | The decisions behind the contract, with their evidence. |
-| [operations.md](operations.md) | How to deploy, configure, run and review it. |
-| [recovery.md](recovery.md) | How to recover it when a dependency fails, a rollback is needed, a session has to end or a secret has to rotate. |
-| [capacity.md](capacity.md) | The measurements of the capacity. |
-| [runtime.md](runtime.md) | The capabilities of the runtime the gateway is written against. |
-| [upstream-identity.md](upstream-identity.md) | How an upstream verifies the identity of a request, with the code. |
+| [Specification](spec.md) | Read the normative contract. A behaviour change starts here. |
+| [Architecture](architecture.md) | Change the code: layout, allowed imports, which file owns what. |
+| [Decisions](decisions.md) | Learn why something is the way it is, with evidence. |
+| [Operations](operations.md) | Deploy, configure, run and review a deployment. |
+| [Recovery](recovery.md) | Handle a failing dependency, a rollback, session revocation or secret rotation. |
+| [Capacity](capacity.md) | Size a deployment from the measurements. |
+| [Runtime](runtime.md) | See which Bun capabilities the gateway relies on and how they were proved. |
+| [Upstream identity](upstream-identity.md) | Write an upstream that verifies the gateway's signed identity. |
 
-A reference to `§N` in the code, in the tests or in these documents is a
-reference to a section of [spec.md](spec.md). Where a document and the
-specification describe the same thing differently, the specification
-wins.
+To run it locally, see the [workspace README](../../packages/gateway/README.md#quick-start):
+`bun install && bun run dev:gateway`.
 
-## Where to start
+`§N` in code, tests and docs refers to a section of [spec.md](spec.md). If a page and the spec disagree,
+the spec wins.
 
-| You want to… | Read |
-| --- | --- |
-| Run it locally | [the README of the workspace](../../packages/gateway/README.md#quick-start): `bun install && bun run dev:gateway` |
-| Deploy and operate it | [operations.md](operations.md) |
-| Recover it when it is not behaving | [recovery.md](recovery.md) |
-| Change the code | [architecture.md](architecture.md), then the spec section for the behaviour you are changing |
-| Know why something is the way it is | [decisions.md](decisions.md) |
-| Write an upstream that trusts the gateway | [upstream-identity.md](upstream-identity.md) |
-| Size a deployment | [capacity.md](capacity.md) |
+## Request lifecycle
 
-## What it is
+Every request except the gateway's own endpoints (`/healthz`, `/readyz`, `/metrics`, `/auth/*`) goes
+through these steps in order. A step that refuses the request stops it.
 
-The gateway sits between callers and your applications. For every
-request it:
-
-1. **works out who the caller is**, from a browser session or a bearer token;
-2. **asks your access service** whether that caller may use the workspace
-   named in the URL;
-3. **forwards the request** to the application behind the route, with the
-   caller's identity attached and signed.
-
-It does not terminate TLS, cache responses, or decide access on its own.
-The full list is in [spec.md §13](spec.md#13-what-the-gateway-does-not-do).
-
-## The life of a request
-
-Every request that is not one of the gateway's own endpoints (`/healthz`,
-`/readyz`, `/metrics`, `/auth/*`) goes through the same steps, in this
-order. A step that refuses the request stops it there.
-
-| Step | What happens | If it fails |
+| Step | What happens | On failure |
 | --- | --- | --- |
-| Match a route | The host, path and method pick a route from the configuration file. | `404`, once the rate limits have counted the request |
-| Admit the request | The number of requests inside the gateway is bounded, so a dependency that hangs cannot pile them up. | `503`, at once |
-| Rate limits | The deployment's total, the caller's budget across all routes, and the caller's budget on this route. | `429` |
-| Authenticate | The route's mode says which credential to accept (see below). Then the signed-in caller's own budget on the route is checked. | `401`, or a redirect to the login page for a browser; `429` |
+| Match a route | Host, path and method pick a route from the configuration file. | `404`, after the rate limits count the request |
+| Admit | The number of requests inside the gateway is bounded, so a hanging dependency cannot pile them up. | `503`, immediately |
+| Rate limits | The deployment total, the caller's budget across all routes, and the caller's budget on this route. | `429` |
+| Authenticate | The route's mode picks the accepted credential; then the signed-in caller's own budget on the route is checked. | `401` (or a login redirect for a browser); `429` |
 | Cross-site guard | A request from another site that carries the session cookie is refused. | `403` |
-| Ask the access service | Only when the route names a workspace, or asks for a check. | `403` when denied, `503` when the service is down |
-| Forward | Headers are cleaned, the identity is written and signed, and the request is streamed to the upstream. | `502` or `504` |
+| Ask the access service | Only when the route names a workspace or asks for a check. | `403` if denied, `503` if the service is down |
+| Forward | Headers are cleaned, the identity is written and signed, and the request is streamed upstream. | `502` or `504` |
 
-The exact order, with every answer, is in [spec.md §2.3](spec.md#23-the-dispatcher), and the
-code follows it in `src/app/dispatcher.ts`.
+The exact order and every answer are in [spec §2.3](spec.md#23-dispatcher); the code is `src/app/dispatcher.ts`.
 
-## The ideas you need
+## Features
 
-**Route.** One entry of the configuration file (`config/routes.json`). It
-matches a host and a path, names one upstream or an ordered list of them,
-and carries the policy for those requests. An invalid file is rejected
-whole, and a reload that fails keeps the previous configuration running.
-→ [spec.md §3](spec.md#3-the-configuration-file)
+| Feature | Summary | Spec |
+| --- | --- | --- |
+| Routes | One entry of `config/routes.json`: matches host, path and optionally method (fixed precedence, ambiguity check at load), names one upstream or an ordered list, may rewrite the upstream path, and carries the request policy. An invalid file is rejected whole; a failed reload keeps the previous configuration. | [§3](spec.md#3-configuration-file) |
+| Authentication | OpenID Connect with PKCE for browsers, bearer tokens for API clients. Each route accepts one mode (table below). A credential that is present but invalid is refused; the gateway never falls back to another one. | [§5](spec.md#5-authentication) |
+| Access service | A small HTTP service you run. The gateway sends `POST /v1/decisions` with the caller and workspace; it answers `{"allow": true}` or `{"allow": false}`. Any other answer, or none, is an outage: `503`, never let through. A route may ask about itself instead of a workspace, or opt into a short grace that serves the last decision during an outage. A breaker stops the gateway waiting on a service that is down. The protocol is published, and `services/access-service.ts` is a reference implementation. | [§6](spec.md#6-workspace-access) |
+| Signed identity | The gateway strips caller-sent `x-gateway-*` headers, writes its own (`x-gateway-user`, `x-gateway-workspace`, …) and signs them in `x-gateway-signature` as a JWS. Upstreams verify it with the gateway's public key, so they trust the identity without trusting the network. It also writes the request's trace context. | [Upstream identity](upstream-identity.md) |
+| Proxying | Streamed bodies, server-sent events and uploads, a budget per exchange phase and a body limit. With several upstreams, a request that is safe to send twice moves to the next upstream when one fails; a request that could change data (a `POST`, for example) is sent once. A passive breaker moves recently failed upstreams to the end of the list. | [§11](spec.md#11-proxying) |
+| Sessions | Server-side, with an idle lifetime and a maximum age. All sessions of one caller can be revoked at once. | [§5.3](spec.md#53-sessions) |
+| Limits | Four scopes of sliding windows shared by the replicas, which bound a flood without a boundary burst. | [§9](spec.md#9-limits) |
+| WebSockets | Upstream handshake first, bounded buffers, keepalive, and revalidation that closes a connection whose access was revoked. | [§10](spec.md#10-websockets) |
+| Shared state | Sessions, rate-limit windows and cached decisions live in Redis or Postgres when you run more than one replica; both backends pass the same tests. A single node may keep them in memory if it sets `GATEWAY_ALLOW_MEMORY_STATE=true`. | [Operations](operations.md#shared-state) |
+| Control plane | A separate process, `gateway-control`, on its own internal socket, acts on the shared state directly. The gateway itself has no admin endpoint or admin token. The route table may also live in the shared state as immutable revisions that the control plane writes and every replica watches. | [Operations](operations.md#control-plane) |
+| Operations | Health and readiness probes, Prometheus metrics, structured logs with redaction, a log of the running policy, hot reload and graceful drain. | [§12](spec.md#12-operations) |
 
-**Authentication mode.** Each route accepts one of four:
+Authentication modes:
 
 | Mode | Accepts |
 | --- | --- |
 | `none` | Anyone. |
 | `session` | The browser session cookie, set after an OpenID Connect login. |
 | `jwt` | A bearer token in the `Authorization` header. |
-| `any` | A bearer token if there is one, otherwise the session cookie. |
-A credential that is present but invalid is refused. The gateway never
-falls back to another one. → [spec.md §5](spec.md#5-authentication)
+| `any` | A bearer token if present, otherwise the session cookie. |
 
-**Access service.** A small HTTP service you run. The gateway sends it
-`POST /v1/decisions` with the caller and the workspace, and it answers
-`{"allow": true}` or `{"allow": false}`. Any other answer, or no answer,
-is treated as an outage: the request is refused with `503`, never let
-through. A route may opt into a short grace period that keeps serving
-the last decision while the service is down. A reference implementation
-is in `services/access-service.ts`. → [spec.md
-§6](spec.md#6-workspace-access)
+## Platform
 
-**Signed identity.** The gateway removes any `x-gateway-*` headers the
-caller sent, writes its own (`x-gateway-user`, `x-gateway-workspace`, …),
-and signs them in `x-gateway-signature`. An upstream checks the signature
-with the gateway's public key, so it can trust the identity without
-trusting the network. → [upstream-identity.md](upstream-identity.md)
+The gateway is one of three services, each a separate process that owns a contract:
 
-**Shared state.** Sessions, rate-limit windows and cached access decisions
-live in Redis or Postgres when you run more than one replica, so every
-replica sees the same state. Both backends pass the same tests. A single
-node may keep them in memory instead, if it opts in with
-`GATEWAY_ALLOW_MEMORY_STATE=true`. →
-[operations.md](operations.md#the-shape-of-the-shared-state)
-
-**The control plane.** The administrative surface of a deployment is a
-separate process, `gateway-control`. It listens on its own socket, on the
-internal network, and it acts on the shared state directly: the gateway
-exposes no administrative endpoint and accepts no administrative token.
-The route table may live in the shared state too, as a list of immutable
-revisions that the control plane writes and that every replica watches. →
-[operations.md](operations.md#the-control-plane)
-
-**Several upstreams.** When a route lists more than one upstream, a request
-that is safe to send twice moves on to the next upstream if the first one
-fails. A request that could change data (a `POST`, for example) is only ever
-sent once. Upstreams that failed recently are moved to the end of the list
-for a while. → [spec.md §11.4](spec.md#114-the-upstreams-of-a-route)
-
-## The platform around it
-
-The gateway is one of the three services of the platform. They are
-separate processes and separate services, and each one of them owns a
-contract:
-
-| Service | What it owns |
+| Service | Owns |
 | --- | --- |
-| The gateway | The routing, the contract of the access decision, and the format of the identity it forwards. |
-| The access service | The OpenID Connect broker and the access service the gateway asks. |
-| The data service | The data service behind the gateway: it verifies the forwarded identity and asks the access service for the access context. |
+| Gateway | Routing, the access-decision contract, and the format of the forwarded identity. |
+| [Access service](../access/README.md) | The OpenID Connect broker and the access service the gateway asks. |
+| [Data service](../data/README.md) | The data service behind the gateway; it verifies the forwarded identity and asks the access service for the access context. |
 
-A deployment names the **addresses** of the services — the issuer, the
-access service and the upstream — in its environment and in its route
-table. The repository holds the source of the services; it is not a
-service endpoint. The gateway works with any conforming identity
-provider, access service and upstream, and the access service and the
-data service are the ones that ship with it.
-
-The parts of the platform that are common to the three services are in
-[the documentation of the platform](../platform/).
+The repository holds source code, not service endpoints: a deployment names the issuer, access service
+and upstream addresses in its environment and route table. The gateway works with any conforming identity
+provider, access service and upstream; the access and data services are the ones that ship with it. Shared
+platform material is in [Platform](../platform/README.md).

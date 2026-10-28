@@ -1,23 +1,12 @@
-# The compatibility suite and the reference of the gateway
+# Compatibility suite
 
-The compatibility suite runs the **real gateway of the platform**,
-unchanged, against the access service. The gateway is a reference: it
-is the workspace `packages/gateway/` of the revision that the manifest
-pins, and it is never modified.
+The compatibility suite runs the **real platform gateway**, unchanged, against the access service. This page covers where the reference comes from, how to run the suite, how to test another revision, and what failures mean.
 
-This document is the manual of the runner: where the reference comes
-from, how to run the suite, how to test another revision, and what
-happens when something is wrong.
+For all three services together, see [platform compatibility](../platform/compatibility.md).
 
-The compatibility of the three services together is described in
-[the compatibility of the platform](../platform/compatibility.md).
+## Reference
 
-## The reference
-
-The reference is the workspace `packages/gateway/` of the revision that
-the manifest pins. The baseline is that revision, and the manifest
-`compatibility.json` at the root of the repository is the one place
-where the workspaces are named:
+The reference gateway is the `packages/gateway/` workspace at the revision pinned by `compatibility.json` at the repository root. That manifest is the one place that names the workspaces:
 
 ```json
 {
@@ -37,55 +26,34 @@ where the workspaces are named:
 }
 ```
 
-The format is checked by the runner, and it is deliberately strict:
+The runner validates it strictly:
 
-- `version` is `2`. A manifest of another version is refused.
-- `repository` is the repository of the platform.
-- `workspaces` names the three workspaces of the platform, and a
-  workspace it does not know is refused.
-- a workspace may name a `source`: the repository and the revision it is
-  pinned to. The revision is a commit of forty hexadecimal characters, and
-  a branch is refused. A workspace with a source is a **reference**: it is
-  cloned at that revision. A workspace without one is the **candidate** of
-  the run: the tree of the working directory.
+- `version` is `2`; any other version is refused.
+- `repository` is the platform repository.
+- `workspaces` names the platform's three workspaces; an unknown workspace is refused.
+- A workspace may have a `source`: a repository and a 40-hex-character commit (branches are refused). A workspace with a source is a **reference** and is cloned at that commit. One without is the run's **candidate**: the working tree.
 
-There is no second pin. The workflow of the continuous integration does
-not carry a path and a revision of its own: it reads the manifest, like
-the runner and like a developer do.
+There is no second pin: CI reads the manifest, as the runner and developers do.
 
-The reference is a **clone**: the runner clones the source of the
-manifest at the pinned revision, it installs the dependencies of the
-clone, and it uses the workspace `packages/gateway/` of the clone. The
-local repository is the source of the clone when it holds the pinned
-revision, so a runner that has the revision does not need the network to
-test it.
-
-The clone is checked: the tracked files of it have to be the ones of the
-revision, and the tree of a developer is never written to.
+The runner clones the source at the pinned commit, installs the clone's dependencies, and uses its `packages/gateway/`. If the local repository holds the pinned commit, it is the clone source, so no network is needed. The clone's tracked files must match the commit, and your working tree is never written to.
 
 ## Running the suite
 
-A fresh checkout of this repository runs the real compatibility suite
-with one command:
+From a fresh checkout:
 
 ```bash
 bun install --frozen-lockfile
 bun run --cwd packages/access test:compat
 ```
 
-The command does everything:
+The command:
 
-1. it reads `compatibility.json` relatively to the root of the
-   repository, whatever the directory the command runs in is;
-2. it clones the gateway of the pinned revision, it installs the
-   dependencies of the clone, and it checks that the tracked files of
-   the clone are the ones of the revision;
-3. it runs `bun test test/compatibility` with the path of the reference
-   in `ACCESS_GATEWAY_PATH`: the gateway runs as a process, in its own
-   directory, with its own configuration;
-4. it checks that the reference is unchanged after the run.
+1. Reads `compatibility.json` from the repository root, whatever the current directory.
+2. Clones the gateway at the pinned commit, installs its dependencies, and checks its tracked files match the commit.
+3. Runs `bun test test/compatibility` with the reference path in `ACCESS_GATEWAY_PATH`; the gateway runs as a process in its own directory with its own configuration.
+4. Checks the reference is unchanged after the run.
 
-The runner prints the revision it tested:
+It prints the commit it tested:
 
 ```
 the reference is cloned from /srv/platform at 0f1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c
@@ -93,90 +61,58 @@ the reference is unchanged: it is still 0f1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c
 the compatibility suite passed against the gateway at 0f1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c (the baseline of the manifest (https://github.com/ggpwnkthx/platform.git at 0f1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c))
 ```
 
-The revision is a commit, not a branch: the
-[baseline of the integration](https://github.com/ggpwnkthx/platform) is
-the exact code that the access service is tested against.
+The revision is a commit, not a branch, so the [integration baseline](https://github.com/ggpwnkthx/platform) is exactly the code the access service is tested against.
 
-## The tests of the workspace, and the compatibility suite
+## Workspace tests vs. compatibility suite
 
-The two are separate, and the split is explicit:
-
-| Command | What it runs |
+| Command | Runs |
 | --- | --- |
-| `bun run --cwd packages/access test` | The tests of **this** workspace: the units, the contracts, the integrations and the boundaries. It needs no gateway and no sibling directory. |
-| `bun run --cwd packages/access test:compat` | The compatibility suite: the real gateway of the platform, unchanged, against the access service. |
-| `bun run compatibility` | The two, and the acceptance of the platform. |
+| `bun run --cwd packages/access test` | This workspace's units, contracts, integrations and boundaries. Needs no gateway and no sibling directory. |
+| `bun run --cwd packages/access test:compat` | The real platform gateway, unchanged, against the access service. |
+| `bun run compatibility` | Both, plus platform acceptance. |
 
-`bun test` alone, without an argument, also collects the compatibility
-suite, and the suite then fails with a message that says how to prepare
-the reference. It is `bun run test` that a developer runs every day.
+Plain `bun test` also collects the compatibility suite, which then fails with instructions for preparing the reference. Use `bun run test` day to day.
 
-## The sources of the reference
+## Reference sources
 
-The runner reads its source from the environment. The order is the one
-of the list below: **the first one that is set wins.**
+The runner picks its source from the environment. **The first one set wins:**
 
-| Variable | What it is |
+| Variable | Meaning |
 | --- | --- |
-| `ACCESS_GATEWAY_PATH` | The directory of the gateway that is already prepared. It is used as it is: the runner never resets it, never cleans it and never checks out over it. |
-| `GATEWAY_REPOSITORY` | The repository of the gateway: a git url, or the path of a local repository. It has to hold the revision of `GATEWAY_COMMIT`. |
-| `GATEWAY_COMMIT` | The revision of the gateway: forty hexadecimal characters. |
-| `COMPAT_MIRROR` | A directory that holds a bare repository named `gateway.git`. It is the way to run the suite without the network. |
-| — | The workspace of this repository: the canonical source. |
+| `ACCESS_GATEWAY_PATH` | An already-prepared gateway directory, used as is: never reset, cleaned or checked out over. |
+| `GATEWAY_REPOSITORY` | A git URL or local repository path. Must hold the `GATEWAY_COMMIT` revision. |
+| `GATEWAY_COMMIT` | The gateway revision: 40 hex characters. |
+| `COMPAT_MIRROR` | A directory holding a bare repository named `gateway.git`, for running without network. |
+| — | This repository's workspace: the canonical source. |
 
-Two variables are about the run itself:
+Run options:
 
-| Variable | What it is |
+| Variable | Meaning |
 | --- | --- |
-| `COMPAT_WORKSPACE` | The directory the checkout is created in. It is a temporary directory by default. |
-| `COMPAT_KEEP` | When it is set, the checkout is kept after the run: the tree of the reference is then inspected by hand. |
-| `COMPAT_TESTS` | The test files of the suite, separated by spaces. The whole of `test/compatibility` by default. It is the way to run one file of the suite. |
+| `COMPAT_WORKSPACE` | Directory for the checkout. Defaults to a temporary directory. |
+| `COMPAT_KEEP` | When set, keeps the checkout after the run for manual inspection. |
+| `COMPAT_TESTS` | Space-separated suite test files. Defaults to all of `test/compatibility`; use it to run one file. |
 
-### The access service of the suite
+### Against a running access service
 
-The suite runs against an access service that it starts itself, in the
-process of the test. It can also run against an access service that is
-**already running** — the image of a release, for instance — when the
-environment names it:
+By default the suite starts its own access service in the test process. To test one that is **already running**, such as a release image, set:
 
-| Variable | What it is |
+| Variable | Meaning |
 | --- | --- |
-| `ACCESS_EXTERNAL_URL` | The url the callers reach that access service at. The suite then never starts one of its own. |
-| `ACCESS_EXTERNAL_ADMIN_TOKEN` | The token of the administration of that access service. |
-| `ACCESS_EXTERNAL_ACCESS_TOKEN` | The token of the decisions of that access service: the gateway asks it for the roles of the principal. |
+| `ACCESS_EXTERNAL_URL` | The URL callers use to reach it. The suite then never starts its own. |
+| `ACCESS_EXTERNAL_ADMIN_TOKEN` | Its administration token. |
+| `ACCESS_EXTERNAL_ACCESS_TOKEN` | Its decision token, which the gateway uses to ask for a principal's roles. |
 
 ```bash
-# An access service that is already running, and the gateway of the
-# platform against it.
 ACCESS_EXTERNAL_URL=http://127.0.0.1:8081 \
 ACCESS_EXTERNAL_ADMIN_TOKEN=the-admin-token \
 ACCESS_EXTERNAL_ACCESS_TOKEN=the-access-token-of-the-development \
 bun run --cwd packages/access test:compat
 ```
 
-The suite never creates what the environment names: a suite that is
-supposed to prove the image of a release has to talk to that image, and
-a suite that talks to another access service proves nothing about it.
-The rule is in [the compatibility of the platform](../platform/compatibility.md).
+The suite never creates what the environment names; see [platform compatibility](../platform/compatibility.md).
 
-### A published revision of the gateway
-
-```bash
-GATEWAY_REPOSITORY=https://github.com/ggpwnkthx/platform.git \
-GATEWAY_COMMIT=d3cdb48b79c3962e66bf51d8f386132baff824b7 \
-bun run --cwd packages/access test:compat
-```
-
-The repository is cloned, not used as it is: the checkout of the runner
-is a fresh one at the revision, and the tree of the source is never
-touched. The source has to hold the revision — a repository whose
-default branch moved away from the revision is refused with the name of
-the commit it does not hold.
-
-This is the way to test a **published** release of the platform against
-the access service of the tree.
-
-### A mirror, without the network
+### Without network
 
 ```bash
 mkdir -p /srv/compat-mirror
@@ -184,36 +120,13 @@ git clone --bare https://github.com/ggpwnkthx/platform.git /srv/compat-mirror/ga
 COMPAT_MIRROR=/srv/compat-mirror bun run --cwd packages/access test:compat
 ```
 
-The mirror is a bare repository named after the reference. The same
-convention is used by the harness of the data service, so a mirror that
-serves one serves the other.
-
-## When it fails
-
-An override that is set and that cannot be used is an **error**: the
-runner never falls back to another source, because a suite that runs
-against another revision is a suite that proves nothing.
-
-| Situation | What the runner says |
-| --- | --- |
-| The reference carries changes | `the workspace … carries changes to its tracked files:` and the list of the changes |
-| The source does not hold the revision | `the source … does not hold the pinned commit …` |
-| The clone failed | `the clone of … failed:` and the output of git, with the ways to give another source |
-| The mirror holds no `gateway.git` | `COMPAT_MIRROR names a directory that holds no bare repository named "gateway.git": …` |
-| The suite failed | The output of the suite, and the status of the suite is the status of the runner. |
-| The reference was modified during the run | `the reference carries changes to its tracked files:` and the list of the changes |
-
-The temporary checkout is removed when the run fails and when the run is
-interrupted. A checkout that a developer supplied is never removed.
+The mirror is a bare repository named after the reference. The data service harness uses the same convention, so one mirror serves both.
 
 ## Testing another revision
 
-The reference moves with the platform: a change of the gateway that
-breaks the suite is a change of the contract, and it is fixed in the
-gateway, in this repository.
+The reference moves with the platform: a gateway change that breaks the suite is a contract change, fixed in the gateway in this repository.
 
-A **published** revision of the gateway is tested with the two
-variables of the environment:
+To test a **published** gateway revision against the current access service:
 
 ```bash
 GATEWAY_REPOSITORY=https://github.com/ggpwnkthx/platform.git \
@@ -221,22 +134,25 @@ GATEWAY_COMMIT=d3cdb48b79c3962e66bf51d8f386132baff824b7 \
 bun run --cwd packages/access test:compat
 ```
 
-The run prints the revision it tested. A run with an override is a run
-of a **candidate**: it is not the proof of the baseline of the
-repository.
+The runner makes a fresh checkout at the commit and never touches the source tree. The source must hold the commit; if its default branch has moved away from it, the runner refuses and names the missing commit. A run with an override tests a **candidate**, not the repository baseline.
 
-## What the CI does
+## Failures
 
-The job `compatibility` of `.github/workflows/ci.yml` runs
-`bun run compatibility`, and it checks, in a second step, that the trees
-of the three references are the ones of the revision that is tested. The
-job reads the manifest: it carries no path and no revision of its own.
+An override that is set but unusable is an **error**: the runner never falls back to another source, since a run against another revision proves nothing.
 
-The job is **blocking**: a red compatibility job is a red build,
-whatever the rest says.
+| Situation | Runner output |
+| --- | --- |
+| The reference has changes | `the workspace … carries changes to its tracked files:` plus the changes |
+| The source lacks the revision | `the source … does not hold the pinned commit …` |
+| The clone failed | `the clone of … failed:` plus git output and alternative sources |
+| The mirror has no `gateway.git` | `COMPAT_MIRROR names a directory that holds no bare repository named "gateway.git": …` |
+| The suite failed | The suite output; the runner exits with the suite's status. |
+| The reference changed during the run | `the reference carries changes to its tracked files:` plus the changes |
 
-The release runs the suite **again**, against the published image of the
-release and not against the source: the job `compatibility` of
-`.github/workflows/release.yml` starts the image by its digest and
-points the suite at it with `ACCESS_EXTERNAL_URL`. The bytes that the
-gateway of the platform talks to are the bytes that are published.
+Temporary checkouts are removed on failure and interruption. A checkout you supplied is never removed.
+
+## CI
+
+The `compatibility` job of `.github/workflows/ci.yml` runs `bun run compatibility`, then checks that all three reference trees match the tested revision. It reads the manifest and has no path or revision of its own. The job is **blocking**: a red compatibility job is a red build.
+
+The release runs the suite **again** against the published image, not the source: the `compatibility` job of `.github/workflows/release.yml` starts the image by digest and points the suite at it with `ACCESS_EXTERNAL_URL`. The gateway talks to exactly the bytes that ship.

@@ -1,80 +1,72 @@
-# The operations of the gateway
+# Operations
 
-How to deploy, configure, run and review the gateway. The behavior it
-implements is in [spec.md](spec.md). When the deployment is not
-behaving, the recovery is in [recovery.md](recovery.md).
+How to deploy, configure, run and review the gateway. The behaviour it implements is in
+[spec.md](spec.md); when a deployment misbehaves, see [Recovery](recovery.md).
 
 ```
                  ┌──────────────┐
-                 │   ingress    │  TLS, the limits of the connections
+                 │   ingress    │  TLS, connection limits
                  └──────┬───────┘
-                        │ http, the headers of the proxy
+                        │ http, proxy headers
                  ┌──────▼───────┐
-                 │   gateway    │  × N replicas, the same image
+                 │   gateway    │  × N replicas, same image
                  └──────┬───────┘
                         │
         ┌───────────────┼───────────────┐
         ▼               ▼               ▼
-   the upstreams   the identity      the access
-   (the apps)      provider          service
-                    (the workspaces)
+    upstreams       identity         access
+    (the apps)      provider         service
+                                     (workspaces)
                         │
                         ▼
                     ┌─────────┐
-                    │  redis  │  the sessions, the limits, the decisions
+                    │  redis  │  sessions, limits, decisions
                     └─────────┘
 ```
 
-The gateway is stateless: everything that has to survive a restart lives in
-the shared state. A replica can be replaced at any moment.
+The gateway is stateless: everything that must survive a restart lives in the shared state, so any replica
+can be replaced at any time.
 
-## The settings of a deployment
+## Environment
 
-The full list of the variables of the gateway, with the default of every
-value and the reason of each, is in
-[.env.example](../../packages/gateway/.env.example). That file is the
-canonical one: the check of the environment reads it and the source of the
-gateway, and it fails the build when the two disagree.
+[.env.example](../../packages/gateway/.env.example) is the canonical list of variables, with each default
+and its reason. The environment check compares it with the gateway source and fails the build when they
+disagree.
 
-The variables a **production** deployment has to set are the ones the
-gateway refuses to start without. They are `GATEWAY_SESSION_SECRET`,
-`GATEWAY_IDENTITY_SIGNING_KEY`, `GATEWAY_OIDC_ISSUER`,
-`GATEWAY_OIDC_CLIENT_ID`, `GATEWAY_OIDC_REDIRECT_URI`,
-`GATEWAY_OIDC_CLIENT_SECRET`, `GATEWAY_ACCESS_URL` and
-`GATEWAY_ACCESS_TOKEN`, plus one rate limit of
-`GATEWAY_RATE_LIMIT_MAX`, `GATEWAY_RATE_LIMIT_GLOBAL_MAX`,
-`GATEWAY_RATE_LIMIT_PRINCIPAL_MAX` or `GATEWAY_RATE_LIMIT_TOTAL_MAX`, and
-a `GATEWAY_SESSION_URL` and `GATEWAY_SHARED_STATE_URL` that name a server
-whose state is shared. The reason of each is in [spec.md](spec.md) §4, and
-the message the gateway throws names the one that is missing.
+A **production** deployment refuses to start without:
 
-The control plane is a separate process and it has its own variables:
-`GATEWAY_CONTROL_HOST`, `GATEWAY_CONTROL_PORT`, `GATEWAY_CONTROL_TOKENS`
-or `GATEWAY_CONTROL_TOKENS_FILE`, `GATEWAY_CONTROL_STATE_URL`,
-`GATEWAY_CONTROL_KEY_PREFIX`, `GATEWAY_CONTROL_SHARED_STATE_KEY_PREFIX`
-and `GATEWAY_PROTECTED_ROUTES`. They are in [spec.md](spec.md) §12.7, and
-the control plane accepts no request without a token, so it refuses to
+- `GATEWAY_SESSION_SECRET` and `GATEWAY_IDENTITY_SIGNING_KEY`;
+- `GATEWAY_OIDC_ISSUER`, `GATEWAY_OIDC_CLIENT_ID`, `GATEWAY_OIDC_REDIRECT_URI` and
+  `GATEWAY_OIDC_CLIENT_SECRET`;
+- `GATEWAY_ACCESS_URL` and `GATEWAY_ACCESS_TOKEN`;
+- at least one of `GATEWAY_RATE_LIMIT_MAX`, `GATEWAY_RATE_LIMIT_GLOBAL_MAX`,
+  `GATEWAY_RATE_LIMIT_PRINCIPAL_MAX` or `GATEWAY_RATE_LIMIT_TOTAL_MAX`;
+- `GATEWAY_SESSION_URL` and `GATEWAY_SHARED_STATE_URL` naming a shared server.
+
+The startup error names the missing variable; the reasons are in [spec §4](spec.md#4-environment).
+
+The control plane is a separate process with its own variables: `GATEWAY_CONTROL_HOST`,
+`GATEWAY_CONTROL_PORT`, `GATEWAY_CONTROL_TOKENS` or `GATEWAY_CONTROL_TOKENS_FILE`,
+`GATEWAY_CONTROL_STATE_URL`, `GATEWAY_CONTROL_KEY_PREFIX`, `GATEWAY_CONTROL_SHARED_STATE_KEY_PREFIX` and
+`GATEWAY_PROTECTED_ROUTES` ([spec §12.7](spec.md#127-control-plane)). It accepts no request without a token, so it refuses to
 start without one.
 
-The rest of the variables are tuning: they have a default, and the default
-is the one the measurements of [capacity.md](capacity.md) were made with.
+All other variables are tuning. Their defaults are the values [Capacity](capacity.md) was measured with.
 
-## The control plane
+## Control plane
 
-The control plane is the administrative surface of a deployment. It is a
-**separate process** (`gateway-control`, the same image as the gateway),
-it listens on its own socket and it acts on the shared state directly. The
-rule is in [spec.md](spec.md) §12.7.
+The control plane (`gateway-control`, same image as the gateway) is a deployment's administrative surface.
+It is a separate process on its own socket and acts on the shared state directly ([spec §12.7](spec.md#127-control-plane)).
 
 ```
                     ┌───────────────────┐
-   the operator ───▶│  gateway-control  │  the internal network only
+   operator ───────▶│  gateway-control  │  internal network only
                     └─────────┬─────────┘
-                              │ the shared state, with the credentials
-                              │ of the control plane
+                              │ shared state, with the
+                              │ control plane's credentials
                     ┌─────────▼─────────┐
-                    │      redis        │  the sessions, the decisions,
-                    │   (or postgres)   │  the revisions of the route table
+                    │      redis        │  sessions, decisions,
+                    │   (or postgres)   │  route-table revisions
                     └─────────┬─────────┘
                               │
                     ┌─────────▼─────────┐
@@ -82,51 +74,39 @@ rule is in [spec.md](spec.md) §12.7.
                     └───────────────────┘
 ```
 
-The deployment of the control plane needs three things:
+A control-plane deployment needs:
 
-1. **A socket that the callers cannot reach.** The listener binds the
-   loopback address by default (`GATEWAY_CONTROL_HOST`). The service is
-   internal: it is reached over the network of the deployment, and never
-   through the ingress.
-2. **A map of tokens.** `GATEWAY_CONTROL_TOKENS_FILE` points at a file
-   that holds a JSON map of `{token: {operator, scope}}`. The scopes are
-   `read` (the endpoints that read), `operate` (`read` and the purges of
-   the sessions and of the decisions) and `config` (`read` and the writes
-   of the route table). A token is at least 16 characters long. A map that
-   cannot be read stops the process: a control plane that starts with a map
-   it does not understand is a control plane that nobody controls. The map
-   is a **secret**: it is in the secret store of the platform, and it is
-   never the secret of something else. A token that is the password of the
-   shared state stops the process as well: a credential that is used twice
-   is used twice.
-3. **Its own credentials on the shared state.** The control plane writes
-   the route table, the history of the table and the trail of the writes;
-   the gateway reads them and writes nothing in them.
+1. **A socket callers cannot reach.** The listener binds loopback by default (`GATEWAY_CONTROL_HOST`).
+   Reach it over the deployment's internal network, never through the ingress.
+2. **A token map.** `GATEWAY_CONTROL_TOKENS_FILE` points at a JSON map of `{token: {operator, scope}}`.
+   Scopes: `read` (read endpoints), `operate` (`read` plus purging sessions and decisions) and `config`
+   (`read` plus route-table writes). Token length rules are in [spec §12.7](spec.md#127-control-plane). The map is a
+   **secret**: keep it in the platform secret store and never reuse another secret as a token. An
+   unreadable map stops the process, and so does a token equal to the shared-state password.
+3. **Its own shared-state credentials.** The control plane writes the route table, its history and the
+   write trail; the gateway reads them and writes nothing there.
 
-### The roles of the shared state
+### Shared-state roles
 
-The boundary of the control plane is the credential of the shared state and
-not the token of the caller. The rule is in [spec.md](spec.md) §12.7.
+The control plane's real boundary is the shared-state credential, not the caller's token
+([spec §12.8](spec.md#128-shared-state-roles)).
 
-**Postgres.** The migration script creates the two roles and grants them:
+**Postgres.** The migration script creates and grants both roles:
 
 ```sh
 bun run postgres:migrate -- --roles postgres://admin:<password>@host:5432/gateway
 ```
 
-| The role | What it may do |
+| Role | Permissions |
 | --- | --- |
-| `gateway_app` | It reads the route table (`gateway.config_revisions`, `gateway.config_active`) and it writes nothing in it. It still writes the sessions, the limits, the cached decisions and the heartbeats. |
-| `control_app` | It writes the route table, the history and the trail (`gateway.audit`), and it may revoke the sessions and purge the cached decisions. |
+| `gateway_app` | Reads the route table (`gateway.config_revisions`, `gateway.config_active`) and writes nothing in it. Writes sessions, limits, cached decisions and heartbeats. |
+| `control_app` | Writes the route table, its history and the trail (`gateway.audit`); may revoke sessions and purge cached decisions. |
 
-The gateway runs with `gateway_app` and the control plane runs with
-`control_app`. The passwords of the two roles are set by the
-deployment (`POSTGRES_GATEWAY_PASSWORD` and `POSTGRES_CONTROL_PASSWORD` of
-the migration script, or an `ALTER ROLE` of the deployment).
+The gateway runs as `gateway_app` and the control plane as `control_app`. Set their passwords with the
+migration script's `POSTGRES_GATEWAY_PASSWORD` and `POSTGRES_CONTROL_PASSWORD`, or with your own
+`ALTER ROLE`.
 
-**Redis.** The same split is made with the ACL users of the server. The
-users are declared in the configuration of the server (`aclfile`); the
-project ships them in
+**Redis.** The same split uses ACL users declared in the server's `aclfile`. The project ships them in
 [`deploy/redis/gateway.acl`](../../deploy/redis/gateway.acl):
 
 ```
@@ -134,142 +114,97 @@ user gateway on ~gateway:s:* ~gateway:u:* ~gateway:rl:* ~gateway:global:rl:* ~ga
 user gateway-control on ~gateway:* -@all +@read +@write +eval +ping
 ```
 
-The rules are applied in the order they are written: everything is refused
-first, and the commands of each user are granted afterwards.
+Rules apply in order: everything is denied first, then each user's commands are granted. The file format
+([spec §12.8](spec.md#128-shared-state-roles)) has three traps:
 
-Three rules of the format of the file are worth naming, because a file
-that breaks them does not do what it says. The format itself is in
-[spec.md](spec.md) §12.8:
+- **One rule per line**, nothing else. Any other line, such as a comment, stops the server from starting.
+- A **password** is written with `>` and a **key pattern** with `~`. What happens when they are confused
+  is in [spec §12.8](spec.md#128-shared-state-roles).
+- Key patterns are `~` (read/write), `%W~` (write only) and `%R~` (read only). The route table is read-only
+  for the gateway; a replica's heartbeat is the only key it writes there.
 
-- The file holds **one rule per line** and nothing else. The server reads
-  it as a list of rules: a line that is not a rule — a comment, for
-  example — stops the server from starting.
-- The command that writes a **password** is `>`, and the command that
-  reads a **key pattern** is `~`. A rule that writes `>~gateway:s:*` does
-  not write a key pattern at all: it publishes a password that is the
-  pattern itself, and the user it defines may not touch a single key.
-- The patterns of the keys are `~` (read and write), `%W~` (write only)
-  and `%R~` (read only). The route table is read only for the gateway, and
-  the heartbeat of a replica is the only key it writes there.
-
-The **passwords are not in the file**. The deployment writes them after
-the server started, and it writes them again at every start:
+**Passwords are not in the file.** Set them after the server starts, on every start:
 
 ```sh
 redis-cli ACL SETUSER gateway resetpass >"$REDIS_GATEWAY_PASSWORD"
 redis-cli ACL SETUSER gateway-control resetpass >"$REDIS_CONTROL_PASSWORD"
 ```
 
-`resetpass` removes the passwords the user had, so the secret of the
-deployment is the only one that authenticates. The server is **not** saved
-with `ACL SAVE`: the file of the deployment holds no secret, and the
-secrets live in the secret store.
+`resetpass` drops any earlier password, so only the deployment's secret authenticates. Do **not** run
+`ACL SAVE`: the deployment's file holds no secret, and secrets stay in the secret store.
 
-The user of the gateway may **read** the route table (`gateway:cfg:active`,
-`gateway:cfg:rev:*`, `gateway:cfg:revs`) and it writes the sessions, the
-limits and the heartbeats. It does not hold the commands that write the
-route table: the revisions and the pointer are hashes and the history is a
-list, and the user of the gateway may neither write a hash nor push a
-value. The user of the control plane writes everything.
+The `gateway` user may **read** the route table (`gateway:cfg:active`, `gateway:cfg:rev:*`,
+`gateway:cfg:revs`) and writes sessions, limits and heartbeats. Revisions and the pointer are hashes and
+the history is a list, and this user can neither write a hash nor push to a list, so it cannot change the
+route table. The `gateway-control` user writes everything. The write trail (`<prefix>:audit`) belongs to
+the control plane; the gateway never writes it.
 
-The keys of the trail of the writes (`<prefix>:audit`) belong to the
-control plane: the gateway never writes it.
+### Route table in the shared state
 
-### The route table in the shared state
+With `GATEWAY_CONFIG_SOURCE=store`, the route table is a list of **immutable revisions** in the shared
+state, plus a pointer to the active one. Every replica watches the pointer and converges on the same table.
 
-With `GATEWAY_CONFIG_SOURCE=store` the route table is not a file any more:
-it is a list of **immutable revisions** in the shared state, and a pointer
-names the revision that is active. Every replica watches the pointer and
-converges on the same table.
+- An **empty** store falls back to the `GATEWAY_CONFIG` file, and the deployment starts with it.
+- An **unreachable** store keeps the last valid table. The failure shows in `config.lastError` of
+  `/readyz` and in `gateway_config_reloads_total{result="failed"}`.
+- Each replica writes a **heartbeat** with a TTL, so `GET /v1/replicas` lists only live replicas.
 
-- An **empty** store falls back to the file of `GATEWAY_CONFIG`: the
-  deployment starts with it.
-- An **unreachable** store keeps the last valid table. The failure is
-  reported in `config.lastError` of `/readyz` and in
-  `gateway_config_reloads_total{result="failed"}`.
-- Every replica writes a **heartbeat** with a time to live, so
-  `GET /v1/replicas` shows the replicas that are really there.
+A table write is a compare-and-swap: send the revision you replace in `If-Match`; the pointer moves only
+if it still names that revision.
 
-A write of the table is a compare and swap: the caller sends the revision
-it replaces in the `If-Match` header, and the pointer moves only when it
-still names that revision.
+## Shared state
 
-## The shape of the shared state
+The shared-state URL scheme selects the backend, and the URL names the server shape
+([spec §4](spec.md#4-environment)). A cluster has one database, so the URL path is ignored there. The server certificate
+is verified against the deployment's CA (`GATEWAY_SESSION_TLS_CA` and `GATEWAY_SHARED_STATE_TLS_CA`).
 
-The url of the shared state names the shape of the server **and its
-backend**: the scheme picks the one of the two. The shapes are in
-[spec.md](spec.md) §4. A cluster holds one database, so the path of the
-url is dropped in that shape. The certificate of the server is verified with
-the authority of the deployment (`GATEWAY_SESSION_TLS_CA` and
-`GATEWAY_SHARED_STATE_TLS_CA`).
+```bash
+GATEWAY_SESSION_URL=rediss://:<password>@redis:6379/0                  # Redis
+GATEWAY_SESSION_URL=postgres://user:<password>@postgres:5432/gateway   # Postgres
+```
 
-### The Postgres server
+The two backends are interchangeable. [Capacity](capacity.md#shared-state-backends) compares them and
+shows the benchmark command; [spec §12.6](spec.md#126-backend-comparison) covers how to choose.
 
-The Postgres backend holds three tables and two functions in the schema
-`gateway`:
+### Postgres
 
-| The object | What it holds |
+The backend uses these objects in the `gateway` schema:
+
+| Object | Holds |
 | --- | --- |
-| `gateway.sessions` | The sessions of the callers. The record is a `jsonb`, the expiry is a column. |
-| `gateway.access_decisions` | The cached decisions of the access service. |
-| `gateway.rate_limit_buckets` | The buckets of the windows of the limiters. |
-| `gateway.session_touch(...)` | Reads a session and refreshes its expiry. One transaction, the equivalent of the `TOUCH_SCRIPT` of Redis. |
-| `gateway.rate_limit_check(...)` | Counts a request in the window of a caller. One transaction, the equivalent of the `WINDOW_SCRIPT` of Redis. |
+| `gateway.sessions` | Caller sessions: the record is `jsonb`, expiry is a column. |
+| `gateway.access_decisions` | Cached access-service decisions. |
+| `gateway.rate_limit_buckets` | Limiter window buckets. |
+| `gateway.session_touch(...)` | Reads a session and refreshes its expiry in one transaction (Redis: `TOUCH_SCRIPT`). |
+| `gateway.rate_limit_check(...)` | Counts a request in a caller's window in one transaction (Redis: `WINDOW_SCRIPT`). |
 
-The schema is built by the gateway when `GATEWAY_POSTGRES_AUTO_MIGRATE=true`,
-which is the default outside a production deployment. The statements are
-idempotent and an advisory lock makes one replica build the schema while
-the others wait for it.
+- **Schema.** The gateway builds it when `GATEWAY_POSTGRES_AUTO_MIGRATE=true`, the default outside
+  production. Statements are idempotent, and an advisory lock lets one replica build while others wait. A
+  production deployment that applies its own migrations sets it to `false` and runs:
 
-A production deployment that applies its own migrations says no and runs
-the script instead:
+  ```bash
+  bun run postgres:migrate -- postgres://user:<password>@host:5432/gateway
+  ```
 
-```bash
-bun run postgres:migrate -- postgres://user:<password>@host:5432/gateway
-```
+- **Pool.** `GATEWAY_POSTGRES_POOL_MAX`, ten per replica by default. The server needs replicas × pool size
+  connections; Postgres connection limits are low, so put a pooler in front when you run many replicas.
+- **Durability.** `GATEWAY_POSTGRES_SYNCHRONOUS_COMMIT=off` (default): the server does not wait for the
+  disk, and a crash costs a caller at most a few requests of budget ([spec §12.5](spec.md#125-shared-state)).
+- **Expiry.** Expiry is a column, not a vanishing key: the adapters sweep expired rows, and an expired row
+  is never served whatever the sweep did.
 
-**The connections are a pool** (`GATEWAY_POSTGRES_POOL_MAX`, ten per
-replica by default). A Postgres server has a low limit of connections, so
-a deployment with many replicas needs a pooler in front of it. The limit of
-the server is the number of the replicas times the size of the pool.
+## Route policies
 
-**The server does not wait for the disk** (`GATEWAY_POSTGRES_SYNCHRONOUS_COMMIT=off`,
-the default): a counter that is lost when the server crashes costs a
-caller a few requests of its budget. The rule is in [spec.md](spec.md)
-§12.5.
+Some policies belong to a route, not the deployment. Set them in the route table; they override the
+defaults.
 
-**The rows that are over are removed by a sweep.** The expiry of a row is
-a column and not the disappearance of a key, so the adapters remove the
-rows that are over, and the server never serves a row that is over,
-whatever the sweep did.
-
-### The comparison of the two backends
-
-The two backends are interchangeable and the gateway measures them side by
-side:
-
-```bash
-bun run benchmark -- --redis redis://127.0.0.1:6379/0 \
-                     --postgres postgres://127.0.0.1:5432/gateway
-```
-
-The script runs the same traffic against the same gateway with the two
-backends and prints the table of the comparison. The measurements of the
-last run are in [capacity.md](capacity.md), and the choice of a deployment
-is in [spec.md](spec.md) §12.6.
-
-## The policies of the routes
-
-Several policies are properties of a route rather than of the deployment.
-They are in the route table, and they replace the value of the defaults.
-
-| Key | Default | What it decides |
+| Key | Default | Effect |
 | --- | --- | --- |
-| `crossSite` | `navigation` | `strict` refuses the navigations from another site on that route. Use it for a route whose upstream changes the state of something on a `GET`. |
-| `forwardAuthorization` | `true` | `false` does not forward the `Authorization` header of the caller to that upstream. The identity of the caller still reaches it, in the headers of the gateway and in the signature. |
-| `accessCacheTtlMs` | the value of the environment | The lifetime of the cached decisions of the access service on that route. `0` asks the service for every request, so a revocation on that route is immediate. |
-| `replayMaxBytes` | the value of the environment | The size of a body that may be sent again to a second upstream. A body that fits is held in memory, so that the request may be sent to the next upstream when the first one fails. |
-| `timeouts.upstreamAttemptMs` | the value of the environment | The budget of one attempt to an upstream, when the route names several. `0` disables it. |
+| `crossSite` | `navigation` | `strict` refuses cross-site navigations on the route. Use it when the upstream changes state on a `GET`. |
+| `forwardAuthorization` | `true` | `false` stops forwarding the caller's `Authorization` header. The upstream still gets the identity in the gateway headers and the signature. |
+| `accessCacheTtlMs` | from the environment | Lifetime of cached access decisions on the route. `0` asks the service on every request, so revocation is immediate. |
+| `replayMaxBytes` | from the environment | Largest body that may be resent to a second upstream. A fitting body is held in memory so the request can move to the next upstream on failure. |
+| `timeouts.upstreamAttemptMs` | from the environment | Budget of one attempt when the route names several upstreams. `0` disables it. |
 
 ```jsonc
 {
@@ -277,31 +212,28 @@ They are in the route table, and they replace the value of the defaults.
   "match": { "host": "api.example.com", "path": "/ws/{workspaceId}/" },
   "upstream": "http://upstream-b:3000",
   "auth": { "mode": "any", "workspace": { "param": "workspaceId", "requireUuid": true } },
-  // The upstream of this route changes the state of something on a `GET`:
-  // it may only be reached from the site itself.
+  // The upstream changes state on a `GET`: only reachable from the site itself.
   "crossSite": "strict",
-  // The upstream does not need the token of the caller.
+  // The upstream does not need the caller's token.
   "forwardAuthorization": false
 }
 ```
 
-## The access service of the deployment
+A route can also declare `rewrite` (the path its upstream receives), several upstreams (tried in list
+order), `accessCheck` and `accessStaleGraceMs` (see [Access service](#access-service)). The full file
+format is in [spec §3](spec.md#3-configuration-file).
 
-The access service is a dependency of the deployment and not a part of
-the gateway. The gateway asks it and fails closed: without a decision,
-the request is refused.
+## Access service
 
-The address of the service is a **service address**:
-`GATEWAY_ACCESS_URL` names the service that answers the protocol, and
-`GATEWAY_OIDC_ISSUER` names the issuer of the tokens. The repository of
-the platform holds the source code of the services, not their endpoints,
-so a deployment never puts the url of a repository in the environment.
-The upstream of a route — the data service behind the gateway — is named
-the same way, in the `upstream` of the route of the route table.
+The access service is a deployment dependency, not part of the gateway. The gateway fails closed: no
+decision, no request.
 
-The protocol of the service is published in
-[spec.md](spec.md) §6.1, and a deployment that writes its own service runs
-the conformance suite against it:
+Configure **service addresses**, never a repository URL: `GATEWAY_ACCESS_URL` names the service that speaks
+the protocol, and `GATEWAY_OIDC_ISSUER` names the token issuer. An upstream such as the data service is
+named in its route's `upstream`.
+
+The protocol is in [spec §6.1](spec.md#61-access-service-protocol). If you write your own service, run the conformance suite
+against it:
 
 ```bash
 GATEWAY_TEST_ACCESS_URL=https://access.example.com \
@@ -311,9 +243,7 @@ GATEWAY_TEST_ACCESS_ALLOWED_WORKSPACE=11111111-1111-4111-8111-111111111111 \
 bun test test/integration/access-conformance.test.ts
 ```
 
-A deployment that has no service of its own may run the **reference
-implementation** that ships with the project:
-`services/access-service.ts` applies a policy file and answers the protocol.
+Otherwise run the **reference implementation**, `services/access-service.ts`, which applies a policy file:
 
 ```bash
 ACCESS_POLICY_FILE=/etc/platform/access-policy.json \
@@ -321,11 +251,8 @@ ACCESS_SERVICE_TOKEN=… \
 bun run services/access-service.ts
 ```
 
-The image of the reference implementation is built with the stage
-`access-service` of the `Dockerfile`. It is **not** part of the image of the
-gateway: the two are different programs and they are deployed apart.
-
-The policy file:
+Build its image from the `access-service` stage of the `Dockerfile`. It is **not** in the gateway image;
+deploy the two separately.
 
 ```json
 {
@@ -341,17 +268,11 @@ The policy file:
 }
 ```
 
-A subject that the file does not know is denied. The service applies the
-file, and it says no when the file says nothing.
+An unknown subject is denied: when the file says nothing, the answer is no. A subject's `routes` apply to
+requests that name **no workspace**: a route with `accessCheck` asks about itself, and the service decides
+from the subject's routes.
 
-The `routes` of a subject are the routes it may use when the request
-names **no workspace**: a route of the gateway that asks the access
-service about itself (`accessCheck`) sends a request without a workspace,
-and the service decides on the routes of the subject.
-
-**The grace of an outage.** A route may ask the access service for a
-decision and go on with the last decision the service took while the
-service is down:
+**Outage grace.** A route may keep using the service's last decision while the service is down:
 
 ```jsonc
 {
@@ -360,86 +281,68 @@ service is down:
 }
 ```
 
-The grace is `0` by default: an unreachable service is an outage, and the
-gateway answers `503 access_unavailable` to it, which is the answer that
-tells the operator that the service is down. A grace keeps the traffic of
-the route flowing, and it makes the revocations late by that much: the
-decisions that were served this way are counted in
-`gateway_access_stale_total{route}` and their age is measured in
+The default is `0`: an unreachable service is an outage, answered with `503 access_unavailable` so
+operators see it. A grace keeps the route's traffic flowing but delays revocations by that much. Stale
+decisions are counted in `gateway_access_stale_total{route}`, and their age in
 `gateway_access_stale_age_seconds{route}`.
 
-## The secrets
+## Secrets
 
-| Secret | Where it comes from | What it protects | How it is rotated |
+| Secret | Source | Protects | Rotation |
 | --- | --- | --- | --- |
-| `GATEWAY_SESSION_SECRET` | The secret store | The state of the login | The logins in flight fail and the callers sign in again. |
-| `GATEWAY_IDENTITY_SIGNING_KEY` | The secret store | The signature of the identity that the upstreams verify | The upstreams are given the new **public key** at the same time. The signatures of the old key are refused in the meantime. |
-| `GATEWAY_OIDC_CLIENT_SECRET` | The secret store | The exchange of the code | The provider accepts two secrets during the rotation of the client; the deployment changes the value afterwards. |
-| `GATEWAY_ACCESS_TOKEN` | The secret store | The calls to the access service | The service accepts two tokens during the rotation. |
-| The password of Redis | The secret store | The sessions and the limits | The deployment changes the password of the client and of the server in the same window. |
-| `GATEWAY_METRICS_TOKEN` | The secret store | The metrics | The scraper and the deployment change it together. |
-| The public key of the identity signature | `bun run identity:key --public` | The verification of the signature of the identity by the upstreams | The upstreams are given the public key, never the private one. |
+| `GATEWAY_SESSION_SECRET` | Secret store | Login state | In-flight logins fail; callers sign in again. |
+| `GATEWAY_IDENTITY_SIGNING_KEY` | Secret store | The identity signature upstreams verify | Give upstreams the new **public key** at the same time; old-key signatures are refused meanwhile. |
+| `GATEWAY_OIDC_CLIENT_SECRET` | Secret store | The code exchange | The provider accepts two secrets during client rotation; change the value afterwards. |
+| `GATEWAY_ACCESS_TOKEN` | Secret store | Access-service calls | The service accepts two tokens during rotation. |
+| Redis password | Secret store | Sessions and limits | Change client and server passwords in the same window. |
+| `GATEWAY_METRICS_TOKEN` | Secret store | Metrics | Change it in the scraper and the deployment together. |
+| Identity public key | `bun run identity:key --public` | Upstream verification of the identity | Upstreams get the public key, never the private one. |
 
-The rules:
+Rules:
 
-- a secret is never written in the image, in the configuration file or in
-  the repository;
-- the upstreams verify the signature of the identity with the **public key**
-  and never with the private one, so an upstream that verifies an identity
-  cannot mint one;
-- the secret of the sessions is the same on every replica: a replica with
-  another secret cannot read the session of a caller and cannot verify the
-  state of a login.
+- Never put a secret in the image, the configuration file or the repository.
+- Upstreams verify the identity with the **public key**, never the private key or the session secret, so
+  a verifying upstream cannot mint an identity.
+- Use the same session secret on every replica. A replica with a different secret cannot read callers'
+  sessions or verify login state.
 
-## The ingress
+Rotation procedures are in [Recovery](recovery.md#rotating-the-session-secret).
 
-The gateway does not terminate TLS and it does not rewrite the path of a
-request. The ingress is in front of it and it has to preserve the streaming
-of the bodies and the WebSockets.
+## Ingress
+
+The gateway does not terminate TLS or rewrite request paths. The ingress in front of it must preserve body
+streaming and WebSockets.
 
 | Setting | Value | Why |
 | --- | --- | --- |
-| The timeouts of the ingress | At least `GATEWAY_SHUTDOWN_TIMEOUT_MS` for the read, and **no** write timeout. | A stream of events lasts longer than any write timeout. |
-| The buffering of the request | off | The body is streamed to the upstream; a buffered body breaks the budgets and the limits of the body. |
-| The buffering of the answer | off | The same, for the answers. |
-| `proxy_http_version` | `1.1` | The WebSockets need it. |
-| `proxy_set_header Upgrade` / `Connection` | on | The WebSockets need it. |
-| The limits of the body | The limit of the route (`maxBodyBytes`), or the biggest one. | The gateway refuses the bodies that are over the limit with `413`; the ingress may refuse them earlier, with its own answer. |
-| The timeouts of the idle connections | At least `GATEWAY_WS_IDLE_TIMEOUT_SECONDS`. | The WebSockets of the editors are idle most of the time. |
-| The number of connections | At least the number of the WebSockets of the deployment. | The ingress is the limit of the connections. |
-| The health check | `GET /healthz` | It is always available. |
-| The readiness check | `GET /readyz` | It answers `503` when the gateway cannot serve the traffic. |
+| Timeouts | Read timeout ≥ `GATEWAY_SHUTDOWN_TIMEOUT_MS`; **no** write timeout. | An event stream outlives any write timeout. |
+| Request buffering | Off | Bodies stream upstream; buffering breaks body budgets and limits. |
+| Response buffering | Off | Same, for responses. |
+| `proxy_http_version` | `1.1` | Needed for WebSockets. |
+| `proxy_set_header Upgrade` / `Connection` | On | Needed for WebSockets. |
+| Body limit | The route's `maxBodyBytes`, or the largest one. | The gateway answers oversized bodies with `413`; the ingress may refuse earlier with its own answer. |
+| Idle connection timeout | ≥ `GATEWAY_WS_IDLE_TIMEOUT_SECONDS` | Editor WebSockets are mostly idle. |
+| Connection count | ≥ the deployment's WebSocket count | The ingress is the connection limit. |
+| Health check | `GET /healthz` | Always available. |
+| Readiness check | `GET /readyz` | `503` when the gateway cannot serve traffic. |
 
-### The headers of the proxy
+### Proxy headers
 
-The gateway tells the ingress the real address of the caller in
-`x-forwarded-for`, `x-forwarded-proto` and `x-forwarded-host`. The ingress
-has to set them, and the ranges of the ingress have to be in
-`GATEWAY_TRUSTED_PROXIES` (or in the `trustedProxies` of the configuration
-file): the headers of a client that is not a trusted proxy are ignored.
+The ingress must set `x-forwarded-for`, `x-forwarded-proto` and `x-forwarded-host`, and its ranges must be
+in `GATEWAY_TRUSTED_PROXIES` (or the file's `trustedProxies`). Headers from a client that is not a trusted
+proxy are ignored. Keep the ranges as narrow as possible: a range that covers callers lets each of them
+write the forwarding chain.
 
-The ranges name the **proxies** of the deployment, and they should be as
-narrow as the deployment allows: a range that covers the addresses of the
-callers trusts every one of them to write the headers of the chain.
+`GATEWAY_TRUSTED_PROXY_HOPS` (default one) is the number of proxies. Each proxy appends the address it saw
+to `x-forwarded-for`, and the gateway reads the chain from the right: the caller is the entry that many
+positions from the right. With an ingress and a load balancer in front, set it to `2`. This makes the
+caller address **unforgeable**: client-written entries sit left of the proxies' entries and are dropped,
+so a client's own `x-forwarded-for` cannot change its rate-limiter key.
 
-The number of the proxies is `GATEWAY_TRUSTED_PROXY_HOPS` (one by
-default). Every proxy appends the address it observed to the chain of
-`x-forwarded-for`, so the chain holds one entry per proxy, and the gateway
-reads the chain from the right: the address of the caller is the entry
-that is that many positions from the right. A deployment with two proxies
-in front of the gateway — an ingress and a load balancer, for instance —
-sets it to `2`.
-
-The variable is what makes the address of the caller **unforgeable**: the
-entries a client wrote are on the left of the ones the proxies wrote, and
-they are dropped. A client that sends its own `x-forwarded-for` chooses
-nothing, and the key of the rate limiter is the one of the caller.
-
-**The host needs attention.** The effective host decides the route that
-handles the request, the origin the browser is compared with, and the value
-the signature of the identity covers. An ingress that rewrites the `Host`
-header to its own name must report the public host in `x-forwarded-host`,
-or the requests do not match a route.
+> [!IMPORTANT]
+> The effective host picks the route, is compared with the browser's origin, and is covered by the identity
+> signature. An ingress that rewrites `Host` to its own name must send the public host in
+> `x-forwarded-host`, or requests match no route.
 
 A typical nginx configuration:
 
@@ -462,51 +365,41 @@ location / {
 }
 ```
 
-The path of a request is forwarded unchanged, unless the route declares a
-`rewrite`. The ingress must not rewrite it and must not add a prefix: the
-upstream application is mounted under the path of its route, and the
-signature of the identity covers the path the upstream receives.
+The ingress must not rewrite the path or add a prefix. The path is forwarded unchanged unless the route
+declares a `rewrite` (for example `/{rest}` strips the route prefix), which applies to the path the caller
+sent. Upstreams are mounted under their route's path, and the identity signature covers the path the
+upstream receives.
 
-A route that declares a `rewrite` writes the path its upstream receives —
-`/{rest}` removes the prefix of the route — and the ingress still must not
-rewrite the path: the rewrite of the route is applied to the path the
-caller sent.
+## Metrics
 
-## The metrics
+`GET /metrics` serves the Prometheus text format. It answers `404` when `GATEWAY_METRICS_TOKEN` is unset
+and `401` when the bearer token does not match. Metric definitions and labels are in
+[spec §12.1](spec.md#121-health-readiness-and-metrics).
 
-`GET /metrics` answers the Prometheus text exposition format. The endpoint
-is `404` when `GATEWAY_METRICS_TOKEN` is not set and `401` when the bearer
-token does not match.
-
-The list of the metrics, with their labels and what each one counts, is in
-[spec.md](spec.md) §12.1. What follows is what an operator does with
-them:
-
-| Metric | What an operator does with it |
+| Metric | Watch it for |
 | --- | --- |
-| `gateway_requests_total` | The traffic of the routes. |
-| `gateway_request_errors_total` | An error of the gateway or of the upstream. |
-| `gateway_auth_failures_total` | A policy of the platform, not an error of the gateway. |
-| `gateway_access_unavailable_total` | The access service is restored. The gateway fails closed, so the callers are refused meanwhile. |
-| `gateway_access_stale_total` | The access service is restored. The revocations of the callers are late by the grace of the route. |
+| `gateway_requests_total` | Route traffic. |
+| `gateway_request_errors_total` | Gateway or upstream errors. |
+| `gateway_auth_failures_total` | Platform policy at work, not gateway errors. |
+| `gateway_access_unavailable_total` | Access-service outage; callers are refused until it recovers. |
+| `gateway_access_stale_total` | Access-service outage covered by a route's grace; revocations are late. |
 | `gateway_cross_site_refusals_total` | An attack or a broken client. |
-| `gateway_websocket_connections_total` | The capacity. |
-| `gateway_websocket_refusals_total` | The capacity, the origins. |
-| `gateway_request_duration_seconds` | The budgets of the routes. |
-| `gateway_upstream_duration_seconds` | An upstream that is slow. |
-| `gateway_upstream_failures_total` | An upstream that is down. |
-| `gateway_upstreams_skipped_total` | The breaker of the upstreams is working. |
-| `gateway_active_requests` | The drain. |
+| `gateway_websocket_connections_total` | Capacity. |
+| `gateway_websocket_refusals_total` | Capacity and origins. |
+| `gateway_request_duration_seconds` | Route budgets. |
+| `gateway_upstream_duration_seconds` | Slow upstreams. |
+| `gateway_upstream_failures_total` | Upstreams that are down. |
+| `gateway_upstreams_skipped_total` | The upstream breaker at work. |
+| `gateway_active_requests` | Draining. |
 | `gateway_config_reloads_total` | A broken file on disk. |
 | `gateway_rate_limited_total` | A flood. |
-| `gateway_rate_limit_fallback_total` | The limits of the deployment are not the limits that are running: the budget of a caller is spent per replica, not per deployment. |
-| `gateway_shared_state_errors_total` | The degradation of the deployment. |
+| `gateway_rate_limit_fallback_total` | Limits running per replica instead of per deployment. |
+| `gateway_shared_state_errors_total` | Deployment degradation. |
 
-The labels are bounded, and a workspace, a subject, an url or a request id
-are never a label: the metrics of a busy gateway do not grow the memory of
-the process. The labels themselves are in [spec.md](spec.md) §12.1.
+Labels are bounded: a workspace, subject, URL or request id is never a label, so a busy gateway's metrics
+do not grow its memory. What to do when a metric grows is in [Recovery](recovery.md#symptoms).
 
-The scraper of the deployment sends the token as a bearer token:
+The scraper sends the token as a bearer token:
 
 ```yaml
 scrape_configs:
@@ -517,253 +410,199 @@ scrape_configs:
       credentials: <the token of the secret store>
 ```
 
-## The logs
+## Logs
 
-The logs are JSON, one object per line. What they carry, what they redact
-and the policy the gateway writes when it starts are in [spec.md](spec.md)
-§12.2. What an operator reads them for:
+Logs are JSON, one object per line. Content, redaction and the startup policy log are in
+[spec §12.2](spec.md#122-logs). Use them for:
 
-- the identifier of the request, which is also the header `x-request-id`
-  of the answer: a caller that sends a valid identifier can follow its
-  request in the logs;
-- the line of a proxied request, which carries the route, the method, the
-  path, the status, the duration, the bytes and the outcome (`complete` or
-  `aborted`);
-- the **caller** and the **workspace**: the gateway decides who reaches
-  what, so a log that cannot name the caller cannot answer "who used this
-  workspace". The lines of the refusals carry them as well, so a denial
-  says who was denied.
+- **Request id**, also returned as `x-request-id`: a caller that sends a valid id can trace its request.
+- **Proxied request line**: route, method, path, status, duration, bytes and outcome (`complete` or
+  `aborted`).
+- **Caller and workspace**, also on refusal lines, so you can answer "who used this workspace" and "who was
+  denied".
 
-## The review of a deployment
+## Deployment review
 
-This checklist is ticked once per deployment. Every item names the place
-where the setting lives, so a reviewer can check it without reading the
-code. The rules at the end of each section are the ones the gateway
-enforces; the questions are the ones a reviewer has to answer.
+Complete this checklist once per deployment. Each item names where the setting lives, so a reviewer need
+not read the code. The rules under each table are enforced by the gateway; the questions are for the
+reviewer.
 
-### 1. The authentication of the routes
+### 1. Route authentication
 
-| Question | Where | The answer of the deployment |
+| Question | Where | Answer |
 | --- | --- | --- |
-| Which routes accept a session cookie, which accept a bearer token and which accept both? | `auth.mode` of the route table | |
-| Which routes need a workspace and which placeholder carries it? | `auth.workspace` of the route table | |
-| Does any route accept no credential at all (`mode: none`)? | `auth.mode` of the route table | |
-| Is the upstream of a route with `mode: none` the one that authenticates the caller? | the route table and the application behind it | |
+| Which routes accept a session cookie, a bearer token, or both? | `auth.mode` in the route table | |
+| Which routes need a workspace, and which placeholder carries it? | `auth.workspace` in the route table | |
+| Does any route accept no credential (`mode: none`)? | `auth.mode` in the route table | |
+| Does the upstream of each `mode: none` route authenticate the caller? | Route table and the application | |
 
-**The rule**: a route with `mode: none` hands the `Authorization` header of
-the caller to its upstream unchanged. The upstream of such a route is the
-one that authenticates the caller.
+Rule: a `mode: none` route passes the caller's `Authorization` header through unchanged, so its upstream is
+the one that authenticates.
 
-### 2. The hosts that are accepted
+### 2. Accepted hosts
 
-| Question | Where | The answer of the deployment |
+| Question | Where | Answer |
 | --- | --- | --- |
-| Which hosts does the gateway answer for? | `match.host` of the route table | |
-| Is there a route that matches every host (`*`)? What does it serve? | the route table | |
-| Do the hosts of the routes match the hosts the callers use? | the route table and the ingress | |
-| Does the ingress preserve the `Host` header, or does it report the public host in `x-forwarded-host`? | the ingress | |
+| Which hosts does the gateway answer for? | `match.host` in the route table | |
+| Is there a catch-all host (`*`)? What does it serve? | Route table | |
+| Do route hosts match the hosts callers use? | Route table and ingress | |
+| Does the ingress keep `Host` or send the public host in `x-forwarded-host`? | Ingress | |
 
-**The rules**:
+Rules: see the host note under [Proxy headers](#proxy-headers). The gateway's own paths (`/healthz`,
+`/readyz`, `/metrics`, `/auth/login`, `/auth/callback`, `/auth/logout`) are always reserved, and a route
+claiming one is refused at load.
 
-- The effective host decides the route, the origin the browser is compared
-  with, and the value the signature of the identity covers. An ingress that
-  rewrites the `Host` header without reporting the public host breaks all
-  three.
-- The paths of the gateway itself (`/healthz`, `/readyz`, `/metrics`,
-  `/auth/login`, `/auth/callback`, `/auth/logout`) are reserved whatever
-  the configuration says, and a route that claims one of them is refused
-  when the configuration is loaded.
+### 3. Trusted proxies
 
-### 3. The trusted proxies
-
-| Question | Where | The answer of the deployment |
+| Question | Where | Answer |
 | --- | --- | --- |
-| Which ranges may send the forwarding headers? | `trustedProxies` of the file and `GATEWAY_TRUSTED_PROXIES` | |
-| How many proxies are in front of the gateway? | `GATEWAY_TRUSTED_PROXY_HOPS` | |
-| Is the ingress the only one that talks to the gateway? | the network policy | |
-| Is the client address of a caller the one the rate limiter counts? | `x-forwarded-for` and the trusted proxies | |
+| Which ranges may send forwarding headers? | File `trustedProxies` and `GATEWAY_TRUSTED_PROXIES` | |
+| How many proxies sit in front of the gateway? | `GATEWAY_TRUSTED_PROXY_HOPS` | |
+| Is the ingress the only client of the gateway? | Network policy | |
+| Is the caller address the one the rate limiter counts? | `x-forwarded-for` and trusted proxies | |
 
-**The rule**: the forwarding headers of a request that does not come from a
-trusted proxy are ignored, and the address of the peer is the address of the
-caller. A range that is too wide lets a caller that reaches the gateway
-from it write the whole chain of the request.
+Rule: without a trusted proxy, the peer address is the caller address and forwarding headers are ignored.
+An over-wide range lets any caller inside it write the whole chain.
 
-### 4. The access to the upstreams
+### 4. Upstream access
 
-| Question | Where | The answer of the deployment |
+| Question | Where | Answer |
 | --- | --- | --- |
-| Which upstream is behind which route? | the route table | |
-| Are the upstreams reachable from the internet? | the network policy and the services | |
-| Does the gateway reach the upstreams over TLS? | the url of the upstream | |
-| Are the upstreams of the different routes in different trust domains? | the namespace of the services | |
-| Do the upstreams verify the signature of the identity? | the application behind them | |
+| Which upstream is behind each route? | Route table | |
+| Can the upstreams be reached from the internet? | Network policy and services | |
+| Does the gateway reach upstreams over TLS? | Upstream URL | |
+| Are different routes' upstreams in different trust domains? | Service namespaces | |
+| Do the upstreams verify the identity signature? | The applications | |
 
-**The rules**:
+Rules: upstreams must be reachable only from the gateway, because identity headers are trustworthy only
+then. An upstream that skips signature verification trusts the headers on the network's word.
 
-- The upstreams are only reachable from the gateway. The identity headers of
-  the gateway are only trustworthy when the upstream cannot be reached from
-  anywhere else.
-- An upstream that does not verify the signature trusts the headers of the
-  gateway on the word of the network.
+### 5. Metrics protection
 
-### 5. The protection of the metrics
-
-| Question | Where | The answer of the deployment |
+| Question | Where | Answer |
 | --- | --- | --- |
-| Is `GATEWAY_METRICS_TOKEN` set? | the secret of the platform | |
-| Who reads the metrics and with which token? | the configuration of the scraper | |
-| Is the metrics endpoint reachable from outside the cluster? | the service and the network policy | |
+| Is `GATEWAY_METRICS_TOKEN` set? | Platform secret | |
+| Who reads metrics, with which token? | Scraper configuration | |
+| Is the metrics endpoint reachable from outside the cluster? | Service and network policy | |
 
-**The rule**: without a token the endpoint answers `404`; with a wrong token
-it answers `401`. The metrics carry the routes, the methods, the statuses
-and a closed set of reasons: never a workspace, a subject, an url or a
-request id.
+Rule: see [Metrics](#metrics). Labels carry routes, methods, statuses and a closed set of reasons only.
 
-### 6. The secrets
+### 6. Secrets
 
-| Secret | In the secret store | The same on every replica | Rotated |
+| Secret | In the secret store | Same on every replica | Rotated |
 | --- | --- | --- | --- |
 | `GATEWAY_SESSION_SECRET` | | | |
 | `GATEWAY_IDENTITY_SIGNING_KEY` | | | |
 | `GATEWAY_OIDC_CLIENT_SECRET` | | | |
 | `GATEWAY_ACCESS_TOKEN` | | | |
-| The password of the shared state | | | |
+| Shared-state password | | | |
 | `GATEWAY_METRICS_TOKEN` | | | |
 
-**The rules**:
+Rules: see [Secrets](#secrets).
 
-- the secret of the sessions is the same on every replica: a replica with
-  another secret cannot read the session of a caller and cannot verify the
-  state of a login;
-- the upstreams verify the signature of the identity with the **public
-  key** of the deployment, never with the private one and never with the
-  secret of the sessions;
-- a secret is never in the image, in the configuration file or in the
-  repository.
+### 7. Limits and budgets
 
-### 7. The limits and the budgets
-
-| Question | Where | The answer of the deployment |
+| Question | Where | Answer |
 | --- | --- | --- |
-| What is the limit of the body of a request, and does the ingress agree with it? | `maxBodyBytes` of the routes, `GATEWAY_MAX_BODY_BYTES` and the ingress | |
-| Which phase has which budget? | `timeouts` of the routes and of the defaults | |
-| Are the budgets of the routes longer than the timeouts of the ingress? | the ingress | |
-| Which rate limits are enabled? | `GATEWAY_RATE_LIMIT_MAX`, `_GLOBAL_MAX`, `_PRINCIPAL_MAX`, `_TOTAL_MAX` | |
-| Is the budget of the deployment enabled? | `GATEWAY_RATE_LIMIT_TOTAL_MAX` | |
-| How many requests may a replica handle at the same time? | `GATEWAY_MAX_CONCURRENT_REQUESTS` and the memory of the pod | |
-| How many WebSockets may a replica hold? | `GATEWAY_WS_MAX_CONNECTIONS` and the memory of the pod | |
-| How often is an open WebSocket revalidated? | `GATEWAY_WS_REVALIDATE_INTERVAL_MS` | |
+| What is the request body limit, and does the ingress agree? | Route `maxBodyBytes`, `GATEWAY_MAX_BODY_BYTES`, ingress | |
+| Which phase has which budget? | `timeouts` of routes and defaults | |
+| Are route budgets longer than the ingress timeouts? | Ingress | |
+| Which rate limits are on? | `GATEWAY_RATE_LIMIT_MAX`, `_GLOBAL_MAX`, `_PRINCIPAL_MAX`, `_TOTAL_MAX` | |
+| Is the deployment-wide budget on? | `GATEWAY_RATE_LIMIT_TOTAL_MAX` | |
+| How many concurrent requests may a replica handle? | `GATEWAY_MAX_CONCURRENT_REQUESTS` and pod memory | |
+| How many WebSockets may a replica hold? | `GATEWAY_WS_MAX_CONNECTIONS` and pod memory | |
+| How often are open WebSockets revalidated? | `GATEWAY_WS_REVALIDATE_INTERVAL_MS` | |
 
-**The rules**:
+Rules:
 
-- The ingress must not buffer the bodies and must not have a write timeout
-  that is shorter than a stream of events.
-- A production deployment has to set at least one rate limit. The scope of
-  the deployment is the only one that bounds a flood that spreads over many
+- The ingress must not buffer bodies or use a write timeout shorter than an event stream.
+- Production needs at least one rate limit. Only the deployment scope bounds a flood spread over many
   addresses.
-- The cap of the exchanges is the bound of the clients that open a request
-  and never send its body.
+- The exchange cap bounds clients that open a request and never send its body.
 
-### 8. The capacity
+### 8. Capacity
 
-| Question | Where | The answer of the deployment |
+| Question | Where | Answer |
 | --- | --- | --- |
-| What is the measured capacity of a replica? | [capacity.md](capacity.md) | |
-| How many replicas does the deployment have? | the autoscaling | |
-| What is the capacity of the shared state? | the server of the state | |
-| What is the memory of a replica under the load of the deployment? | the limit of the pod | |
+| What is a replica's measured capacity? | [Capacity](capacity.md) | |
+| How many replicas run? | Autoscaling | |
+| What is the shared state's capacity? | The state server | |
+| How much memory does a replica use under the deployment's load? | Pod limit | |
 
-**The rule**: the numbers of the capacity document are the ones of the
-gateway alone. The capacity of a deployment is bounded by its ingress and by
-its upstreams, and it has to be measured there.
+Rule: [Capacity](capacity.md) measures the gateway alone. A deployment is also bounded by its ingress and
+upstreams; measure it there.
 
-### 9. The operations
+### 9. Operations
 
-| Question | Where | The answer of the deployment |
+| Question | Where | Answer |
 | --- | --- | --- |
-| Which probe is the liveness and which one is the readiness? | the deployment | |
-| Is the grace period of the pod longer than the deadline of the drain? | the deployment | |
-| Who is paged when the readiness fails? | the alerts | |
-| How is a broken configuration file rolled back? | the configuration in the version control | |
-| How are the sessions invalidated? | [operations.md](operations.md) | |
-| What is the latency of a revocation? | `GATEWAY_ACCESS_CACHE_TTL_MS` and `GATEWAY_WS_REVALIDATE_INTERVAL_MS` | |
+| Which probe is liveness and which is readiness? | Deployment | |
+| Is the pod grace period longer than the drain deadline? | Deployment | |
+| Who is paged when readiness fails? | Alerts | |
+| How is a broken configuration file rolled back? | Configuration in version control | |
+| How are sessions invalidated? | [Recovery](recovery.md#revoking-sessions) | |
+| What is the revocation latency? | `GATEWAY_ACCESS_CACHE_TTL_MS` and `GATEWAY_WS_REVALIDATE_INTERVAL_MS` | |
 
-**The rule**: the latency of a revocation is the TTL of the cache of the
-decisions plus the interval of the revalidation of the WebSockets. They are
-the knobs an operator turns when a revocation has to be immediate.
+Rule: revocation latency is the decision-cache TTL plus the WebSocket revalidation interval. Turn those
+knobs when revocation must be immediate.
 
-## The checks of the project
+## Project checks
 
-| Check | Command | In the CI |
+| Check | Command | In CI |
 | --- | --- | --- |
 | Types | `bun run typecheck` | yes |
 | Lint | `bun run lint` | yes |
 | Format | `bun run format:check` | yes |
 | Import boundaries | `bun test test/architecture` | yes |
 | Unit and contract tests | `bun test src test/contract` | yes |
-| The property tests of the parsers | `bun test test/fuzz` | yes |
+| Parser property tests | `bun test test/fuzz` | yes |
 | Network tests | `bun test test/network` | yes |
-| The shared state against a real Redis | `bun test test/integration` | yes |
-| The shared state against a real Postgres | `bun test test/integration` | yes |
-| The browser | `bun test test/browser` | yes |
-| The interoperability with a real provider | `bun test test/interop` | yes |
-| The soak | `bun test test/load` | yes |
-| The load | `bun run load` | yes |
-| The comparison of the backends | `bun run benchmark` | no |
-| The image | `docker build` and the smoke tests | yes |
+| Shared state against real Redis | `bun test test/integration` | yes |
+| Shared state against real Postgres | `bun test test/integration` | yes |
+| Browser | `bun test test/browser` | yes |
+| Interop with a real provider | `bun test test/interop` | yes |
+| Soak | `bun test test/load` | yes |
+| Load | `bun run load` | yes |
+| Backend comparison | `bun run benchmark` | no |
+| Image | `docker build` and the smoke tests | yes |
 
-The last full run of the suite: **793 tests passed, 0 failed** over 79 files
-with Bun 1.4.3, including the tests against a real Redis 7.0.15
-(`GATEWAY_TEST_REDIS_URL=redis://127.0.0.1:6399/0`) and against a real
-Postgres 18.6 (`GATEWAY_TEST_POSTGRES_URL=postgres://postgres@127.0.0.1:5432/gateway`),
-the 3 tests in Chromium and the 2 soak tests. The four tests of the
-interoperability with a real provider are the ones that are skipped: they
-need a provider, and the CI workflow runs them against a dex of its own.
-The coverage of the source (`src/`) is **93.8 %** of the lines and
-**93.0 %** of the functions (the mean of the files of `src/`); the
-coverage of the whole tree, the tests included, is **91.7 %** of the lines
-and **91.8 %** of the functions.
+Last full run: **793 passed, 0 failed** across 79 files on Bun 1.4.3, including real Redis 7.0.15
+(`GATEWAY_TEST_REDIS_URL=redis://127.0.0.1:6399/0`), real Postgres 18.6
+(`GATEWAY_TEST_POSTGRES_URL=postgres://postgres@127.0.0.1:5432/gateway`), 3 Chromium tests and 2 soak tests.
+Only the four real-provider interop tests were skipped; CI runs them against its own dex. Coverage of `src/`
+is **93.8 %** lines and **93.0 %** functions (mean over `src/` files); the whole tree, tests included, is
+**91.7 %** lines and **91.8 %** functions.
 
-Without a Redis server and without a Postgres server, the 38 tests of the
-shared state are skipped and the rest pass. The tests of the shared state
-of a Postgres server run without a server when none is named: they run
-against the in-process engine of Postgres itself.
+Without a Redis server, the 38 shared-state tests are skipped and the rest pass. Without a named Postgres
+server, the Postgres shared-state tests run against Postgres's in-process engine.
 
-## The workflow of the release
+## Release workflow
 
-The CI workflow (`.github/workflows/ci.yml`) runs seven jobs:
+CI (`.github/workflows/ci.yml`) runs seven jobs:
 
-| Job | What it proves |
+| Job | Proves |
 | --- | --- |
-| `check` | The types, the lint, the format, the import boundaries, the unit and contract tests, the network tests and the soak. |
-| `redis` | The shared state against a real Redis 7. |
-| `postgres` | The shared state against a real Postgres 18, and the migration of the schema. |
-| `interop` | The flow against a real identity provider (dex): the discovery of the provider, and a caller that signs in against it. |
-| `load` | The capacity: 20 000 requests at 100 in flight, and 500 WebSockets. |
-| `browser` | The cookies and the origins in a real Chromium. |
-| `image` | The image builds, starts with the configuration of a deployment, refuses to start without a session secret, without an access service, without an identity provider and without a rate limit, and does not contain the fixtures. |
+| `check` | Types, lint, format, import boundaries, unit and contract tests, network tests and the soak. |
+| `redis` | Shared state against real Redis 7. |
+| `postgres` | Shared state against real Postgres 18, and the schema migration. |
+| `interop` | Provider discovery and a real sign-in against dex. |
+| `load` | Capacity: 20 000 requests at 100 in flight, and 500 WebSockets. |
+| `browser` | Cookies and origins in real Chromium. |
+| `image` | The image builds and starts with a deployment configuration; refuses to start without a session secret, access service, identity provider or rate limit; and contains no fixtures. |
 
-The release workflow (`.github/workflows/release.yml`) publishes the two
-artifacts of a tag: the **image** and the **binaries**. It refuses a tag
-that does not name the version of the package, and it computes the
-version, the tag and the revision of the release once, for both of them.
+The release workflow (`.github/workflows/release.yml`) publishes a tag's two artifacts, the **image** and
+the **binaries**. It refuses a tag that does not match the package version, and computes version, tag and
+revision once for both.
 
-The job of the image builds the image of the tag, starts it with the
-configuration of a deployment and exports it as an artifact of the run.
-The image carries the version and the revision as labels, and holds the
-dependencies of the gateway alone.
+The image job builds the tag's image, starts it with a deployment configuration and exports it as a run
+artifact. The image carries version and revision labels and only the gateway's dependencies. It is built
+twice: once into the local store so deployment checks can run it, and once for the registry. Only the
+second build adds attestations (provenance and SBOM), because the local docker exporter cannot carry an
+attestation manifest list.
 
-The image is built twice: once for the local store, so that the checks of
-the deployment can run it, and once for the registry. The attestations —
-the provenance and the bill of materials — are added by the second build:
-the docker exporter of a local build cannot carry the manifest list of an
-attestation.
+The binaries job compiles seven targets, and the release job attaches them to the tag's release:
 
-The job of the binaries compiles the gateway for the seven platforms of
-the release, and the job of the release publishes them on the release of
-the tag:
-
-| Platform | The target of the compilation |
+| Platform | Target |
 | --- | --- |
 | Linux x64 (glibc) | `bun-linux-x64` |
 | Linux x64 (musl, Alpine) | `bun-linux-x64-musl` |
@@ -773,81 +612,68 @@ the tag:
 | Windows x64 | `bun-windows-x64` |
 | Windows arm64 | `bun-windows-arm64` |
 
-The binaries carry the runtime of the release inside them: nothing else has
-to be installed. The workflow checks that every binary is of the format of
-its platform, and it starts the binary of the runner and waits for its
-health probe before it publishes anything. The checksums of the binaries
-are published with them.
-
-The libc of a binary is the one of its platform: a binary of `linux-x64`
-needs glibc and a binary of `linux-x64-musl` needs musl, so a deployment on
-Alpine takes the second one.
-
-## The tag of a release
-
-The version of a release lives in the package and in the files that name
-it, and the **tag** is what turns a commit into a release. The workflow of
-the tag (`.github/workflows/release-tag.yml`) creates it:
-
-| When | What it does |
-| --- | --- |
-| The CI of a push on `main` succeeded | It compares the version of the package with the version of the latest tag. The version that is greater is tagged, and the release of the tag starts. |
-| The version is the version of the latest tag | There is nothing to do: the release of that version is already published. |
-| The version is older than the latest tag | The version was rolled back, and nothing is tagged. |
-
-The tag is created on the commit that the CI proved, and it is never
-moved: a tag that exists is a release that was published, and a release
-that was published is not republished under another name.
-
-The workflow waits for the CI: a tag publishes a release, and a release of
-a commit that did not pass the tests is a release that has to be
-withdrawn.
-
-The release is **dispatched** and not triggered. A tag that is pushed with
-the token of the repository does not start a workflow by itself — GitHub
-holds the events of the token back — so the workflow of the release is
-dispatched on the tag it publishes, and it runs in the context of that
-tag. A tag that is pushed by hand starts it by itself, as it always did.
-
-The decision is a script, and it runs on a machine as well:
+Binaries embed the runtime, so nothing else needs installing. The workflow checks each binary's format,
+starts the runner's binary and waits for its health probe before publishing, and publishes checksums
+alongside. A `linux-x64` binary needs glibc and `linux-x64-musl` needs musl; use the latter on Alpine.
 
 ```bash
-bun run release:tag             # what it would do
-bun run release:tag -- --tag   # it does it
+gateway-1.0.0-linux-x64-musl   # Linux, Alpine
+gateway-1.0.0-linux-x64        # Linux, glibc
+gateway-1.0.0-darwin-arm64     # macOS
+gateway-1.0.0-windows-x64.exe  # Windows
 ```
 
-The script refuses to tag a commit whose files do not agree on the
-version: a release whose manifests name another version deploys
-something else than the one that was released.
+## Release tags
 
-## The gaps of the deployment
+The version lives in the package and the files that name it; the **tag** turns a commit into a release.
+`.github/workflows/release-tag.yml` creates it:
 
-Nothing is missing from the contract of [spec.md](spec.md). The following
-are outside the scope of the gateway and are the responsibility of the
-deployment:
-
-| Gap | Where it is closed |
+| When | Result |
 | --- | --- |
-| The TLS of the clients | An ingress in front of the gateway. |
-| The upstream is static per route | A router in front of the pods, when the workspace decides the pod. |
-| The revocation of an access takes the TTL of the cache | The TTL is the knob: `GATEWAY_ACCESS_CACHE_TTL_MS`, and `accessCacheTtlMs` on the route that has to be revoked at once. |
-| The latency of a decision that is not cached | The control plane has to be fast. The cache absorbs the rest. |
+| CI on a `main` push succeeded | Compares the package version with the latest tag. If the package version is greater, it is tagged and the release starts. |
+| Version equals the latest tag | Nothing: that release is already published. |
+| Version is older than the latest tag | The version was rolled back; nothing is tagged. |
+
+- The tag goes on the commit CI proved and is never moved: a published release is never republished under
+  another name.
+- The workflow waits for CI, so no release comes from a commit that failed tests.
+- The release is **dispatched**, not triggered: GitHub does not start workflows for a tag pushed with the
+  repository token, so the release workflow is dispatched on that tag and runs in its context. A tag
+  pushed by hand still starts it directly.
+
+Run the same decision locally:
+
+```bash
+bun run release:tag             # dry run
+bun run release:tag -- --tag    # create the tag
+```
+
+The script refuses to tag a commit whose files disagree on the version, because the manifests would
+deploy something other than what was released.
+
+## Deployment gaps
+
+The [spec](spec.md) contract is complete. These are outside the gateway's scope; the deployment closes them:
+
+| Gap | Closed by |
+| --- | --- |
+| Client TLS | An ingress in front of the gateway. |
+| Upstream is static per route | A router in front of the pods, when the workspace picks the pod. |
+| Revocation waits for the cache TTL | `GATEWAY_ACCESS_CACHE_TTL_MS`, and `accessCacheTtlMs` on routes that need immediate revocation. |
+| Latency of an uncached decision | A fast control plane; the cache absorbs the rest. |
 | One hostname per product surface | Subdomains, or one host with distinct path prefixes. |
-| The upstream of a websocket over TLS | The websocket client of the runtime cannot speak TLS: the upstream of a websocket is served over plain http. The measurements are in [runtime.md](runtime.md). |
+| WebSocket upstream over TLS | Not possible: the runtime's WebSocket client cannot speak TLS, so WebSocket upstreams use plain http ([Runtime](runtime.md)). |
 
-## What is not proven yet
+## Not yet proven
 
-The contract of [spec.md](spec.md) is complete. The following is **not**:
-these are the places where the design is settled and the evidence is thin.
-They are written down because an operator has to know where the ground is
-soft, and because a limit nobody knows about is a limit nobody relies on.
+The contract is complete; the evidence below is thin. Know where the ground is soft.
 
-| What | Where it stands |
+| Area | Status |
 | --- | --- |
-| The history of the project | The repository is young: the design is the work of a few days and it has never carried the traffic of a deployment. Every number of [capacity.md](capacity.md) was measured on one machine with the upstream in the same process. |
-| The calls of the access service that are shared | The calls that are in flight are shared **per replica**: a burst that arrives on N replicas asks the service N times, and not once. The cache of the decisions is shared, so the burst is bounded by the lifetime of the cache, and a deployment that needs one call needs a lock in the shared state. |
-| The breaker of the access service | The state is **per process**, like the breaker of the upstreams. A replica that did not see the failures calls the service while the others do not, and it learns from its own failures in the same way. |
-| The breaker of the upstreams | The state is per process for the same reason: a replica that did not see the failure sends its next requests to the upstream that is down, and it pays the budget of the route. |
-| The capacity behind an ingress | There is no ingress in the build environment. The settings that matter are in [the ingress](#the-ingress). |
-| The capacity with the shared state on another host | The measurements of [capacity.md](capacity.md) were made with the servers on the same machine: a deployment that reaches them over the network pays the latency of the network on every round trip. |
-| The interoperability with a real provider | The contract tests run against the provider of the project and the interop tests run against dex. A provider with another shape — a claim of another name, an id token that carries no nonce — has not been tried. |
+| Project history | The repository is young: the design is a few days' work and has never carried production traffic. Every [Capacity](capacity.md) number comes from one machine with the upstream in the same process. |
+| Shared access-service calls | In-flight calls are shared **per replica**: a burst across N replicas asks the service N times. The shared decision cache bounds the burst by its lifetime; a single call would need a lock in the shared state. |
+| Access-service breaker | State is **per process**, like the upstream breaker. A replica that saw no failures keeps calling the service and learns from its own failures. |
+| Upstream breaker | Per process for the same reason: a replica that saw no failure sends requests to a down upstream and pays the route's budget. |
+| Capacity behind an ingress | No ingress in the build environment. The relevant settings are under [Ingress](#ingress). |
+| Capacity with remote shared state | Measured with servers on the same machine; over a network, every round trip pays network latency. |
+| Interop with other providers | Contract tests use the project's provider and interop tests use dex. Other shapes (a differently named claim, an id token without a nonce) are untested. |

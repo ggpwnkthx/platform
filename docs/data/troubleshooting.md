@@ -1,173 +1,140 @@
-# The troubleshooting
+# Troubleshooting
 
-## The api answers 401 UNAUTHENTICATED
+Data service failures by symptom, each with likely causes and fixes. For alarms and metrics, see
+[Operations](operations.md).
 
-The request did not come through the gateway, or the signature does not
-match the request.
+## 401 UNAUTHENTICATED
 
-- The signature header is `x-gateway-signature`, and its value starts
-  with the version of the binding: `v5=` for a route of the current
-  format. A signature of another version is refused, and there is no
-  fallback to another one.
-- The key of the binding is the **public** key of the gateway, a key of
-  the curve P-256 in pem (`publicKeyFile`). A route of the legacy format
-  names the derived key of the gateway
-  (`HMAC-SHA256(GATEWAY_SESSION_SECRET, "gateway-identity-signature-v1")`)
-  in `identityKeyFile`, and the backend refuses a pem in that file.
-- The gateway signs with the private key of its pair
-  (`GATEWAY_IDENTITY_SIGNING_KEY`), and the backend never holds it: a
-  gateway that signs with another key is refused.
-- The signature covers the path and the query **as the upstream
-  received them**. A proxy that rewrites the path after the gateway
-  breaks the signature: the path of the binding has to be the path the
+The request didn't come through the gateway, or the signature doesn't match the request.
+
+- **Wrong signature version.** The header is `x-gateway-signature` and its value starts with the
+  binding's version: `v5=` for a current-format route. Another version is refused, with no fallback.
+- **Wrong key in the binding.** It must be the gateway's **public** P-256 key in PEM
+  (`publicKeyFile`). A legacy route names the gateway's derived key
+  (`HMAC-SHA256(GATEWAY_SESSION_SECRET, "gateway-identity-signature-v1")`) in `identityKeyFile`, and
+  the backend refuses a PEM there.
+- **Gateway signs with another key.** The gateway signs with its pair's private key
+  (`GATEWAY_IDENTITY_SIGNING_KEY`), which the backend never holds; any other key is refused.
+- **Path rewritten after the gateway.** The signature covers the path and query **as the upstream
+  received them**, so a proxy rewriting the path breaks it. The binding's path must be the path the
   gateway forwards.
-- The workspace of the path and the workspace of the signature have to
-  be the same. A gateway that rewrites the path of the workspace breaks
-  it.
-- The host of the binding is the authority the gateway signs, with its
-  port when there is one.
+- **Workspace mismatch.** The path's workspace must equal the signature's; a gateway that rewrites
+  the workspace path breaks it.
+- **Host mismatch.** The binding's host is the authority the gateway signs, including the port if
+  any.
 
-## The api answers 403 FORBIDDEN
+## 403 FORBIDDEN
 
-The access service refused the context of the principal, or the
-principal does not hold a capability for the collection.
+The access service refused the principal's context, or the principal lacks a capability for the
+collection.
 
-- The credentials of the access service are the ones of the contract of the access
-  context, and they are scoped to the tenants of the deployment.
-- The grant of the principal has to match the workspace and the route of
-  the request. The route of the request is the `routeId` of the
-  binding, and it is not the identifier of the collection.
-- The answers of the access service are not cached by default. A revocation is visible
-  in the next request.
-- A search over a field that a policy hides is also a `403`.
+- **Wrong access service credentials.** They must be the access context contract's credentials,
+  scoped to the deployment's tenants.
+- **Grant doesn't match.** The principal's grant must match the request's workspace and route. The
+  route is the binding's `routeId`, not the collection ID.
+- **Recent revocation.** Access service answers aren't cached by default, so a revocation applies on
+  the next request.
+- **Search on a hidden field.** Searching a field a policy hides is also `403`.
 
-## The api answers 404 NOT_FOUND for a workspace that exists
+## 404 NOT_FOUND for an existing workspace
 
-- The workspace is disabled: `bun run scripts/cli/workspace.ts list` shows
-  the state of the registry.
-- The tenant of the binding is not the tenant of the workspace: a
-  binding with `expectedTenantId` refuses the workspaces of the other
-  tenants.
-- The registry reader answers nothing: the credential of
-  `DATA_REGISTRY_DATABASE_URL` may not read the five columns of the
-  registry any more.
-- The collection is not registered for the workspace: a workspace that
-  registered something serves exactly the registered collections.
+- **Workspace disabled.** `bun run scripts/cli/workspace.ts list` shows the registry state.
+- **Tenant mismatch.** A binding with `expectedTenantId` refuses workspaces of other tenants.
+- **Registry reader sees nothing.** The `DATA_REGISTRY_DATABASE_URL` credential may have lost read
+  access to the registry's five columns.
+- **Collection not registered.** A workspace that registered anything serves exactly its registered
+  collections.
 
-## The api answers 503 AUTHORIZATION_UNAVAILABLE
+## 503 AUTHORIZATION_UNAVAILABLE
 
-The access service is not available, or it does not speak the version of
-the contract.
+The access service is unavailable or doesn't speak the contract version.
 
-- The access service is at a revision that carries the extension: an access
-  service before `4cedcfc` does not answer `/v1/access-context`. The
-  baseline of the access service is the revision of `compatibility.json`.
-- The credential of the access context is the one of the deployment, and
-  it is scoped to the tenant of the workspace.
-- The clock of the two servers is synchronized within a second: an
-  answer that was evaluated in the future is refused.
+- **Access service too old.** It must be at a revision with the extension; one before `4cedcfc`
+  doesn't answer `/v1/access-context`. The baseline revision is in `compatibility.json`.
+- **Wrong credential.** The access context credential must be the deployment's, scoped to the
+  workspace's tenant.
+- **Clock skew.** The two servers' clocks must agree within a second; an answer evaluated in the
+  future is refused.
 
-## The api answers 503 DATABASE_UNAVAILABLE
+## 503 DATABASE_UNAVAILABLE
 
-- The role of the connection may not be a superuser, and it may not
-  have `BYPASSRLS`.
-- The pool may not be exhausted: `data_db_pool_waits_total` grows.
-- The statement timeout may be too short for a slow query.
-- The database may not be reachable: the answer of the connection is
-  the one of the dependency, and it is not an internal error.
+- **Role too powerful.** The connection role may not be a superuser or have `BYPASSRLS`.
+- **Pool exhausted.** `data_db_pool_waits_total` grows.
+- **Statement timeout too short** for a slow query.
+- **Database unreachable.** The response reflects the dependency, not an internal error.
 
-## The api answers 429 TOO_MANY_REQUESTS
+## 429 TOO_MANY_REQUESTS
 
-- The tenant of the request holds its whole room: the answer carries a
-  `Retry-After` of one second, and the caller has to slow down.
-- The bound is declared with `DATA_MAX_IN_FLIGHT_REQUESTS_PER_TENANT`.
-  It is zero by default, and a deployment with one tenant does not
-  need it.
-- The refusals are counted by `data_tenant_overload_total`. A tenant
-  that is refused often is a tenant that sends too much, and the answer
-  of the listener is a `503 OVERLOADED` when the whole process is
-  full.
+- **Tenant at its share.** The response carries `Retry-After: 1`; the caller must slow down.
+- **Bound setting.** `DATA_MAX_IN_FLIGHT_REQUESTS_PER_TENANT` sets it. Unset, it defaults to the
+  whole process's bound (see [Configuration](configuration.md)), so a single-tenant deployment
+  doesn't need it.
+- **Frequent refusals.** `data_tenant_overload_total` counts them; a tenant refused often is sending
+  too much. When the whole process is full, the listener answers `503 OVERLOADED` instead.
 
-## The api answers 409 CONFLICT
+## 409 CONFLICT
 
-- A lock of a row was not granted in time: another transaction holds
-  the row. The answer is a conflict with the current state of the
-  record, and the caller reads the record again before it writes it.
-- A unique constraint was violated: two writes of the same record
-  raced, and one of them won.
-- The same operation is already running: the answer is a `409
-  OPERATION_IN_PROGRESS` with a `Retry-After` of one second, and the
-  caller retries with the same body and the same idempotency key.
+- **Row lock not granted in time.** Another transaction holds the row. The record's current state
+  conflicts; read it again before writing.
+- **Unique constraint violated.** Two writes of the same record raced and one won.
+- **Operation already running.** The response is `409 OPERATION_IN_PROGRESS` with `Retry-After: 1`;
+  retry with the same body and idempotency key.
 
-## The api answers 422 RESULT_TOO_LARGE
+## 422 RESULT_TOO_LARGE
 
-The answer of the request is larger than four mebibytes, or an
-expansion of a relation is larger than its budget.
+The response exceeds four mebibytes, or a relation expansion exceeds its budget.
 
-- The client asks for fewer fields, for a smaller page, or for a
-  narrower expansion.
-- The budget is not configurable: it is the contract of the release.
+- **Fix:** ask for fewer fields, a smaller page or a narrower expansion.
+- The budget isn't configurable; it is part of the release contract.
 
-## A write answers 412 PRECONDITION_FAILED
+## 412 PRECONDITION_FAILED on a write
 
-The record changed since the validator was issued. The client reads the
-record again and it applies its change on the new version.
+The record changed since its validator was issued. Read the record again and reapply the change to
+the new version.
 
-A write that answers 412 in a loop is a client that keeps a stale
-validator: the validator is the digest of the canonical representation,
-and it changes with every write.
+A write that returns 412 in a loop means the client keeps a stale validator: the validator is the
+digest of the canonical representation and changes on every write.
 
-## A creation answers 409 IDEMPOTENCY_CONFLICT
+## 409 IDEMPOTENCY_CONFLICT on a creation
 
-The key was used with another body. The key is scoped to the principal,
-the tenant, the workspace, the route and the endpoint: a key of another
-scope is another key.
+The key was used with a different body. A key is scoped to principal, tenant, workspace, route and
+endpoint; the same key in another scope is a different key.
 
-A creation answers `409 OPERATION_IN_PROGRESS` with a `Retry-After` of
-one second when the same key is being used at the same moment. The
-client retries with the same body and the same key.
+If the same key is in use at that moment, the creation answers `409 OPERATION_IN_PROGRESS` with
+`Retry-After: 1`; retry with the same body and key.
 
-## The deliveries do not run
+## Deliveries don't run
 
-- The subscriber is not registered in the deployment: a delivery whose
-  subscriber is missing is failed, not acknowledged.
-- The service principal of the worker does not hold the permission of
-  the subscriber: the handler asks the access service for a fresh context
-  and it is refused.
-- The chain of the events is deeper than ten: the delivery is failed.
+- **Subscriber not registered** in the deployment: its delivery fails rather than being acknowledged.
+- **Worker lacks permission.** The worker's service principal must hold the subscriber's permission;
+  otherwise the handler's fresh context request is refused.
+- **Event chain deeper than ten.** The delivery fails.
 
-`bun run scripts/cli/delivery.ts list` shows the state of the deliveries,
-and `bun run scripts/cli/delivery.ts requeue --event <uuid> --subscriber <id> --actor <name>`
-puts one back in the queue with its attribution.
+`bun run scripts/cli/delivery.ts list` shows delivery state, and
+`bun run scripts/cli/delivery.ts requeue --event <uuid> --subscriber <id> --actor <name>` requeues
+one with attribution.
 
-## The readiness answers 503
+## Readiness answers 503
 
-The answer carries the reason: the role of the connection, the
-migrations, the access service or the delivery store. The migrations
-that were changed after they were applied are a drift: a new migration
-is the answer, not a change of the old one.
+The response gives the reason: connection role, migrations, access service or delivery store. A
+migration changed after it was applied is drift; fix it with a new migration, never by editing the
+old one.
 
-## The audit log is empty
+## Audit log is empty
 
-- The principal does not hold `data.audit.read`: the endpoint answers
-  `403`.
-- The audit log is read with the scope of the workspace: the reader runs
-  inside a scoped transaction, like every other read.
+- **Missing permission.** Without `data.audit.read`, the endpoint answers `403`.
+- **Wrong scope.** The audit log is read in the workspace's scope, inside a scoped transaction like
+  every other read.
 
-## The model of the workspace does not change
+## Workspace model doesn't change
 
-- The principal does not hold `data.model.write`: the write of the
-  model answers `403`.
-- The field names no column of the table of the collection: the
-  deployment holds the tables, and the model never creates one. The
-  answer says which column is missing.
-- The type of the field is not the type of its column: the type of a
-  field is the type of its column, and it never changes.
-- The model changed since it was read: the write answers `409`, and the
-  reader reads the model again.
+- **Missing permission.** Without `data.model.write`, a model write answers `403`.
+- **No such column.** The field must name a column of the collection's table. The deployment owns
+  the tables and the model never creates one; the response names the missing column.
+- **Type mismatch.** The model can't change a field's type: it always follows the column.
+- **Stale model.** If the model changed since it was read, the write answers `409`; read it again.
 
-## The gateway refuses the request with 502
+## Gateway answers 502
 
-The backend answered with an error the gateway does not understand, or
-the connection was closed. The log of the backend holds the request id
-of the gateway: it is the correlation of the two sides.
+The backend returned an error the gateway doesn't understand, or the connection closed. The backend
+log holds the gateway's request ID, which correlates both sides.
