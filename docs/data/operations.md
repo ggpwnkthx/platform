@@ -143,12 +143,8 @@ creation resolves the ambiguous result of a `POST`.
 | `DATA_DB_POOL_MAX` | 20 | The connections of the process. |
 
 The effective timeout of a request is the smallest of the budgets that
-apply to it. A timer that leaves a statement running is not a
-cancellation: the statement timeout is a server side cancellation, and
-the transaction timeout destroys the connection, so the server rolls the
-transaction back.
-
-The variables and their bounds are in [the configuration](configuration.md).
+apply to it, and the variables and their bounds are in
+[the configuration](configuration.md).
 
 ## The catalog of the workspaces
 

@@ -241,7 +241,8 @@ creates it in a reviewed migration.
 The history holds the versions that are **not** the current one: the
 current version of a record is the record itself. A record that was
 deleted holds its tombstone, the image of its last version with the
-operation `delete`.
+operation `delete`. The rule is in
+[specification.md](specification.md) §11.
 
 The list of the versions:
 
@@ -401,11 +402,10 @@ service or the instructions of a studio. instructions of a studio.
 
 ## The model of a workspace
 
-The deployment holds the **physical** model: the tables of its
-migrations and the manifest that names them. A workspace holds its own
+The deployment holds the **physical** model and a workspace holds its own
 **logical** model: the overlay that says how the collections of the
-deployment look for that workspace — the labels, the constraints, the
-relations and the fields that the model does not hold.
+deployment look for that workspace. The rule is in
+[specification.md](specification.md) §7.6.
 
 `GET /ws/{workspaceId}/v1/model` answers the model of the workspace:
 its version, the digest of its content, the version of the schema it
@@ -417,13 +417,11 @@ workspace, and the metadata of the schema is the answer that every other
 caller reads.
 
 The model is applied to the manifest of the deployment when the catalog
-of a workspace is resolved, and it is applied **in realtime**: a change
-of the model is the change of the schema of the workspace for every
-request that follows it. The writes of the model require the permission
-`data.model.write`, which is granted on its own: it is not a side
-effect of editing the records.
+of a workspace is resolved, and it is applied **in realtime**. The rule is
+in [specification.md](specification.md) §7.
 
-The rules of the model are five:
+The rules of the model are five. They are in
+[specification.md](specification.md) §7:
 
 1. The overlay never creates a table and never alters one.
 2. A field of the model is a **column of the table** of the collection:

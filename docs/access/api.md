@@ -13,9 +13,8 @@ the request in the logs of the service; a client that sends a valid
 `x-request-id` gets its own back.
 
 Every answer carries `x-content-type-options: nosniff`, `x-frame-options:
-DENY` and `referrer-policy: no-referrer`. A page of a refusal carries
-`content-security-policy: default-src 'none'`. The answer of the token
-endpoint carries `cache-control: no-store` and `pragma: no-cache`.
+DENY` and `referrer-policy: no-referrer`. The rule is in
+[spec.md](spec.md) §5.
 
 ---
 
@@ -515,9 +514,7 @@ curl -sS -X PUT https://access.example.com/v1/admin/grants \
 #### The batch of the grants
 
 The body may carry a list of grants instead of one: `{"grants": [ … ]}`.
-The rules are the ones of the batch of the principals: at most 1 000
-grants, every item written on its own, the answer naming the outcome of
-every one of them, and the call idempotent.
+The rule is in [spec.md](spec.md) §10.
 
 ```json
 {

@@ -157,6 +157,7 @@ bun run --cwd packages/access test:compat
 The suite never creates what the environment names: a suite that is
 supposed to prove the image of a release has to talk to that image, and
 a suite that talks to another access service proves nothing about it.
+The rule is in [the compatibility of the platform](../platform/compatibility.md).
 
 ### A published revision of the gateway
 
