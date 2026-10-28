@@ -1,0 +1,253 @@
+# The composition of the platform: the three services and the
+# infrastructure they share.
+#
+#   docker compose -f deploy/compose/platform.compose.yaml up --build
+#
+# Before the first run, generate the pair of the identity signature and
+# export the private half of it:
+#
+#   bun run scripts/dev-keys.ts
+#   export GATEWAY_IDENTITY_SIGNING_KEY="$(cat deploy/secrets/identity-signing.pem)"
+#
+# The gateway listens on http://localhost:8080, the access service on
+# http://localhost:8081 and the data service on http://localhost:8082.
+#
+# Every service of the platform is also a stack of its own, in this
+# directory: `access.compose.yaml`, `data.compose.yaml` and
+# `gateway.compose.yaml` deploy one service without the other two. The
+# three files share the names of the services, the ports and the
+# variables of the environment, so a deployment that runs the three
+# apart and a deployment that runs the composition behave the same.
+#
+# The passwords of this file are the passwords of a development machine:
+# they are not secrets, and they are not the passwords of a deployment. A
+# deployment mounts the credentials of its own secret manager.
+name: platform
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: platform
+      POSTGRES_PASSWORD: platform
+      POSTGRES_DB: platform
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U platform']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+
+  # The roles of the services. A service refuses to start with a role
+  # that bypasses the isolation of the tenants, and the role of the
+  # administrator of the server is such a role.
+  roles:
+    image: postgres:18-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: platform
+    command:
+      - sh
+      - -c
+      - |
+        psql "postgres://platform:platform@postgres:5432/platform" -v ON_ERROR_STOP=1 <<'SQL'
+        create role access_app login password 'access_app';
+        grant usage, create on schema public to access_app;
+        SQL
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # The access service: the OpenID Connect broker and the access
+  # decision service.
+  access:
+    build:
+      context: ../..
+      dockerfile: packages/access/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      roles:
+        condition: service_completed_successfully
+    ports:
+      - '8081:8081'
+    environment:
+      ACCESS_ENVIRONMENT: development
+      ACCESS_HOST: 0.0.0.0
+      ACCESS_PORT: '8081'
+      ACCESS_ISSUER: http://localhost:8081
+      ACCESS_PUBLIC_URL: http://localhost:8081
+      ACCESS_DATABASE_URL: postgres://access_app:access_app@postgres:5432/platform
+      ACCESS_REDIS_URL: redis://redis:6379/0
+      ACCESS_ADMIN_TOKEN: the-admin-token-of-the-development
+      ACCESS_DECISION_TOKEN: the-access-token-of-the-development
+      # The credential of the data service at the access context contract.
+      # The value is the one of the fixture of the data service
+      # (`deploy/fixtures/secrets/access-context.token`): the two have to
+      # name the same credential.
+      ACCESS_CONTEXT_TOKENS: '{"development-access-context-token-0001":null}'
+      ACCESS_STATE_SECRET: 0000000000000000000000000000000000000000000000000000000000000000
+      ACCESS_SECRET_ENCRYPTION_KEY: 1111111111111111111111111111111111111111111111111111111111111111
+      ACCESS_LOG_LEVEL: info
+
+  # The roles of the data service and the schema of its deployment. The
+  # service waits for them: it refuses to start against a database that
+  # is not migrated.
+  data-migrate:
+    build:
+      context: ../..
+      dockerfile: packages/data/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ['sh', '-c', 'bun run scripts/cli/provision.ts && bun run scripts/cli/migrate.ts']
+    environment:
+      DATA_ADMIN_DATABASE_URL: postgres://platform:platform@postgres:5432/postgres
+      DATA_OWNER_DATABASE_URL: postgres://platform:platform@postgres:5432/data
+      DATA_OWNER_PASSWORD: dev-owner-password-0001
+      DATA_RUNTIME_PASSWORD: dev-runtime-password-0001
+      DATA_REGISTRY_PASSWORD: dev-registry-password-0001
+      DATA_DELIVERY_PASSWORD: dev-delivery-password-0001
+      DATA_MAINTENANCE_PASSWORD: dev-maintenance-password-001
+
+  # The data service: the headless, permission aware data api.
+  data:
+    build:
+      context: ../..
+      dockerfile: packages/data/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      data-migrate:
+        condition: service_completed_successfully
+    ports:
+      - '8082:8082'
+    environment:
+      DATA_ENVIRONMENT: development
+      DATA_HOST: 0.0.0.0
+      DATA_PORT: '8082'
+      DATA_PROCESS_ROLE: api
+      DATA_DATABASE_URL: postgres://data_runtime:dev-runtime-password-0001@postgres:5432/data
+      DATA_REGISTRY_DATABASE_URL: postgres://data_registry:dev-registry-password-0001@postgres:5432/data
+      DATA_SCHEMA_BUNDLE_FILE: /app/packages/data/manifests/schema.json
+      DATA_POLICY_BUNDLE_FILE: /app/packages/data/manifests/policies.json
+      DATA_GATEWAY_BINDINGS_FILE: /etc/platform/bindings.json
+      DATA_ACCESS_URL: http://access:8081
+      DATA_ACCESS_CONTEXT_TOKEN_FILE: /run/secrets/access-context.token
+      DATA_CURSOR_KEY_FILE: /run/secrets/cursor.key
+      DATA_LOG_LEVEL: info
+    volumes:
+      - ../config/bindings.json:/etc/platform/bindings.json:ro
+    secrets:
+      - source: access-context-token
+        target: access-context.token
+      - source: cursor-key
+        target: cursor.key
+      - source: identity-signing-public-key
+        target: identity-signing.public.pem
+
+  # The gateway: the only service the callers reach.
+  gateway:
+    build:
+      context: ../..
+      dockerfile: packages/gateway/Dockerfile
+    depends_on:
+      access:
+        condition: service_started
+      data:
+        condition: service_started
+    ports:
+      - '8080:8080'
+    environment:
+      GATEWAY_CONFIG: /etc/platform/routes.json
+      GATEWAY_HOST: 0.0.0.0
+      GATEWAY_PORT: '8080'
+      GATEWAY_OIDC_ISSUER: http://access:8081
+      GATEWAY_OIDC_CLIENT_ID: platform
+      GATEWAY_OIDC_CLIENT_SECRET: the-client-secret-of-the-development
+      GATEWAY_OIDC_REDIRECT_URI: http://localhost:8080/auth/callback
+      GATEWAY_OIDC_ALLOW_INSECURE: 'true'
+      GATEWAY_ACCESS_URL: http://access:8081
+      GATEWAY_ACCESS_TOKEN: the-access-token-of-the-development
+      GATEWAY_SESSION_SECRET: the-session-secret-of-the-development
+      GATEWAY_SESSION_URL: redis://redis:6379/0
+      GATEWAY_SHARED_STATE_URL: redis://redis:6379/1
+      GATEWAY_RATE_LIMIT_TOTAL_MAX: 1000
+      GATEWAY_LOG_LEVEL: info
+      # The key that signs the identity of the requests: it comes from
+      # the secret manager of a deployment, and from the environment of the
+      # developer here.
+      GATEWAY_IDENTITY_SIGNING_KEY: "${GATEWAY_IDENTITY_SIGNING_KEY:?the private key of the identity signature is required, run bun run scripts/dev-keys.ts}"
+    volumes:
+      - ../config/routes.json:/etc/platform/routes.json:ro
+
+  # The console: the web application of the platform. It is a client of
+  # the three services: it authenticates the caller against the access
+  # service, it reads the data through the gateway and it acts for the
+  # access service with the credential of the operator.
+  #
+  # The console is not published as an image: a deployment that wants it
+  # builds it from `packages/console/Dockerfile`.
+  console:
+    build:
+      context: ../..
+      dockerfile: packages/console/Dockerfile
+    depends_on:
+      access:
+        condition: service_started
+      data:
+        condition: service_started
+      gateway:
+        condition: service_started
+    ports:
+      - '8083:8083'
+    environment:
+      CONSOLE_ENVIRONMENT: development
+      CONSOLE_HOST: 0.0.0.0
+      CONSOLE_PORT: '8083'
+      CONSOLE_PUBLIC_URL: http://localhost:8083
+      CONSOLE_ACCESS_URL: http://access:8081
+      CONSOLE_CLIENT_ID: platform
+      CONSOLE_CLIENT_SECRET: the-client-secret-of-the-development
+      # The host of the route of the data service is the one of the
+      # route table of the development (`api.gateway.test`).
+      CONSOLE_GATEWAY_URL: http://api.gateway.test:8080
+      # The data service: the console reads the data through the
+      # gateway, and it reads the probes of the data service here.
+      CONSOLE_DATA_URL: http://data:8082
+      CONSOLE_ADMIN_TOKEN: the-admin-token-of-the-development
+      CONSOLE_ACCESS_CONTEXT_TOKEN: development-access-context-token-0001
+      CONSOLE_ROUTE_ID: console
+      CONSOLE_SESSION_SECRET: the-session-secret-of-the-development
+      CONSOLE_LOG_LEVEL: info
+
+# The credentials of the development machine. They are the fixtures of
+# the repository: they are **not** secrets, and a deployment mounts the
+# credentials of its own secret manager instead of them.
+secrets:
+  access-context-token:
+    file: ../fixtures/secrets/access-context.token
+  cursor-key:
+    file: ../fixtures/secrets/cursor.key
+  # The public half of the pair of the identity signature. The private
+  # half is in the environment of the gateway: it is never in a file of
+  # the repository.
+  identity-signing-public-key:
+    file: ../secrets/identity-signing.public.pem
+
+volumes:
+  pg-data:

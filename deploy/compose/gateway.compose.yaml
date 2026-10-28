@@ -1,0 +1,220 @@
+# The gateway alone: the gateway, its shared state and the fixtures of
+# its own development.
+#
+#   docker compose -f deploy/compose/gateway.compose.yaml up --build
+#
+# The gateway is the only service the callers reach, and it is deployed
+# on its own: the identity provider and the access service of a
+# deployment are its own. This stack brings the ones of a development
+# machine, so that the gateway can be run without the other two services
+# of the platform.
+#
+# Before the first run add the identity provider to your hosts file:
+#
+#   echo "127.0.0.1 dex.local" | sudo tee -a /etc/hosts
+#
+# The gateway listens on http://localhost:8080.
+#
+# The password of the accounts of the identity provider is
+# `alice-password`, and it is a fixture: a deployment brings its own
+# identity provider.
+name: platform-gateway
+
+services:
+  gateway:
+    build:
+      # The context is the root of the repository: the dependencies of a
+      # workspace are installed by the root `bun install`.
+      context: ../..
+      dockerfile: packages/gateway/Dockerfile
+    command: ['src/main.ts']
+    ports:
+      - '8080:8080'
+    environment:
+      GATEWAY_CONFIG: /etc/platform/routes.json
+      GATEWAY_HOST: 0.0.0.0
+      GATEWAY_PORT: '8080'
+      GATEWAY_OIDC_ISSUER: http://dex.local:5556/dex
+      GATEWAY_OIDC_CLIENT_ID: gateway
+      GATEWAY_OIDC_CLIENT_SECRET: gateway-secret
+      GATEWAY_OIDC_REDIRECT_URI: http://localhost:8080/auth/callback
+      GATEWAY_OIDC_SCOPES: openid profile email
+      # dex is served over plain http in this development stack.
+      GATEWAY_OIDC_ALLOW_INSECURE: 'true'
+      GATEWAY_ACCESS_URL: http://access-fixture:8090
+      # The gateway authenticates against the access service. A deployment
+      # without a token is refused in production.
+      GATEWAY_ACCESS_TOKEN: ${GATEWAY_ACCESS_TOKEN:-development-access-token}
+      GATEWAY_SESSION_SECRET: ${GATEWAY_SESSION_SECRET:-development-session-secret}
+      # The in-process store is enough for a single node. Start the stack
+      # with `--profile sessions` to use the redis service instead.
+      GATEWAY_SESSION_URL: ${GATEWAY_SESSION_URL:-memory://local}
+      GATEWAY_SESSION_KEY_PREFIX: gateway
+      GATEWAY_COOKIE_SECURE: 'false'
+      GATEWAY_EXTERNAL_PROTO: http
+      GATEWAY_LOG_LEVEL: info
+      # The ranges of the proxies of the stack: the network of docker and
+      # the loopback of the host. The variable replaces the ranges of the
+      # configuration file.
+      GATEWAY_TRUSTED_PROXIES: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1/32,::1/128
+      # One proxy is in front of the gateway: the port of the host.
+      GATEWAY_TRUSTED_PROXY_HOPS: 1
+      # The key that signs the identity of the requests. A deployment
+      # takes it from its secret manager; a development machine
+      # generates the pair with the script of the root:
+      #
+      #   bun run scripts/dev-keys.ts
+      GATEWAY_IDENTITY_SIGNING_KEY: "${GATEWAY_IDENTITY_SIGNING_KEY:?the private key of the identity signature is required, run bun run scripts/dev-keys.ts}"
+    volumes:
+      - ../config/routes.gateway.json:/etc/platform/routes.json:ro
+    depends_on:
+      dex:
+        condition: service_healthy
+      access-fixture:
+        condition: service_started
+      upstream-a:
+        condition: service_started
+      upstream-b:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'bun',
+          '-e',
+          "fetch('http://127.0.0.1:8080/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    # The gateway closes its websockets and lets the requests that are still
+    # in flight finish, the grace period is longer than its own deadline.
+    stop_grace_period: 20s
+    restart: unless-stopped
+
+  dex:
+    image: ghcr.io/dexidp/dex:v2.46.1
+    command: ['dex', 'serve', '/etc/dex/config.yaml']
+    ports:
+      - '5556:5556'
+    volumes:
+      - ../dex/config.yaml:/etc/dex/config.yaml:ro
+      - dex-data:/data
+    networks:
+      default:
+        aliases:
+          - dex.local
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:5556/dex/healthz']
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  access-fixture:
+    build:
+      context: ../..
+      dockerfile: packages/gateway/Dockerfile
+      # The fixtures live in their own stage, they are not part of the
+      # production image of the gateway.
+      target: fixtures
+    command: ['services/fixtures/access-fixture.ts']
+    environment:
+      PORT: '8090'
+      ACCESS_TOKEN: ${GATEWAY_ACCESS_TOKEN:-development-access-token}
+      ACCESS_POLICY: '{"user-alice":["11111111-1111-4111-8111-111111111111"],"alice@gateway.test":["11111111-1111-4111-8111-111111111111"]}'
+    expose:
+      - '8090'
+
+  # The reference implementation of the access service, for a stack that
+  # does not want the fixture. It applies the policy of the file and it
+  # answers the protocol of the specification. Start it with
+  # `docker compose --profile reference up` and point the gateway at it
+  # with GATEWAY_ACCESS_URL=http://access-service:8090.
+  access-service:
+    build:
+      context: ../..
+      dockerfile: packages/gateway/Dockerfile
+      target: access-service
+    profiles: ['reference']
+    command: ['services/access-service.ts']
+    environment:
+      PORT: '8090'
+      ACCESS_POLICY_FILE: /etc/platform/access-policy.json
+      ACCESS_SERVICE_TOKEN: ${GATEWAY_ACCESS_TOKEN:-development-access-token}
+    volumes:
+      - ../config/access-policy.json:/etc/platform/access-policy.json:ro
+    expose:
+      - '8090'
+
+  upstream-a:
+    build:
+      context: ../..
+      dockerfile: packages/gateway/Dockerfile
+      target: fixtures
+    command: ['services/fixtures/upstream.ts']
+    environment:
+      PORT: '3000'
+      UPSTREAM_NAME: upstream-a
+    expose:
+      - '3000'
+
+  upstream-b:
+    build:
+      context: ../..
+      dockerfile: packages/gateway/Dockerfile
+      target: fixtures
+    command: ['services/fixtures/upstream.ts']
+    environment:
+      PORT: '3000'
+      UPSTREAM_NAME: upstream-b
+    expose:
+      - '3000'
+
+  # The control plane is the administrative surface of the deployment. It is
+  # internal: the port is not published. It needs a shared state, so it is
+  # started with the `--profile sessions` profile, next to the redis server.
+  control:
+    build:
+      context: ../..
+      dockerfile: packages/gateway/Dockerfile
+    command: ['bun', 'run', 'src/control-main.ts']
+    profiles: ['sessions']
+    environment:
+      GATEWAY_CONTROL_HOST: 0.0.0.0
+      GATEWAY_CONTROL_PORT: '9090'
+      GATEWAY_CONTROL_TOKENS_FILE: /etc/platform/control-tokens.json
+      # The state of the sessions of the gateway (the database 0): the
+      # control plane revokes the sessions, purges the decisions and
+      # writes the route table of the deployment.
+      GATEWAY_CONTROL_STATE_URL: redis://redis:6379/0
+      GATEWAY_CONTROL_KEY_PREFIX: gateway
+      GATEWAY_CONTROL_SHARED_STATE_KEY_PREFIX: gateway
+      GATEWAY_LOG_LEVEL: info
+    volumes:
+      - ../config/control-tokens.example.json:/etc/platform/control-tokens.json:ro
+    expose:
+      - '9090'
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # The shared session store. Start it with `docker compose --profile
+  # sessions up` and set GATEWAY_SESSION_URL=redis://redis:6379/0.
+  redis:
+    image: redis:7-alpine
+    profiles: ['sessions']
+    command: ['redis-server', '--save', '60', '1', '--maxmemory-policy', 'volatile-ttl']
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  dex-data:
+  # The shared session store, only started with `--profile sessions`.
+  redis-data:

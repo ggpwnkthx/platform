@@ -1,0 +1,123 @@
+# The data service alone: the api, the schema of its deployment and the
+# infrastructure they need.
+#
+#   docker compose -f deploy/compose/data.compose.yaml up --build
+#
+# The data service is deployed on its own: it owns the workspaces, the
+# collections, the policies, the records, the audit and the events. It
+# asks the access service about the scope of a context, and the access
+# service of the deployment is somewhere else.
+#
+# The service listens on http://localhost:8082.
+#
+# The access service of the deployment is named by the environment. On a machine
+# where the access service runs, it is the address of the host:
+#
+#   DATA_ACCESS_URL=http://host.docker.internal:8081 \
+#   docker compose -f deploy/compose/data.compose.yaml up --build
+#
+# The public key of the gateway is the key of the pair of the identity
+# signature of the gateway of the deployment. It is the file named by the
+# environment, and the bindings of the service read it from the path it
+# has in the container:
+#
+#   GATEWAY_IDENTITY_PUBLIC_KEY=../secrets/identity-signing.public.pem \
+#   docker compose -f deploy/compose/data.compose.yaml up --build
+#
+# The passwords of this file are the passwords of a development machine:
+# they are not secrets, and they are not the passwords of a deployment. A
+# deployment mounts the credentials of its own secret manager.
+name: platform-data
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: platform
+      POSTGRES_PASSWORD: platform
+      POSTGRES_DB: platform
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U platform']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+
+  # The roles of the service and the schema of its deployment. The
+  # service waits for them: it refuses to start against a database that
+  # is not migrated.
+  data-migrate:
+    build:
+      context: ../..
+      dockerfile: packages/data/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ['sh', '-c', 'bun run scripts/cli/provision.ts && bun run scripts/cli/migrate.ts']
+    environment:
+      DATA_ADMIN_DATABASE_URL: postgres://platform:platform@postgres:5432/postgres
+      DATA_OWNER_DATABASE_URL: postgres://platform:platform@postgres:5432/data
+      DATA_OWNER_PASSWORD: dev-owner-password-0001
+      DATA_RUNTIME_PASSWORD: dev-runtime-password-0001
+      DATA_REGISTRY_PASSWORD: dev-registry-password-0001
+      DATA_DELIVERY_PASSWORD: dev-delivery-password-0001
+      DATA_MAINTENANCE_PASSWORD: dev-maintenance-password-001
+
+  data:
+    build:
+      context: ../..
+      dockerfile: packages/data/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      data-migrate:
+        condition: service_completed_successfully
+    # The address of the access service of the deployment, when it runs
+    # on another host of the machine.
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    ports:
+      - '8082:8082'
+    environment:
+      DATA_ENVIRONMENT: development
+      DATA_HOST: 0.0.0.0
+      DATA_PORT: '8082'
+      DATA_PROCESS_ROLE: api
+      DATA_DATABASE_URL: postgres://data_runtime:dev-runtime-password-0001@postgres:5432/data
+      DATA_REGISTRY_DATABASE_URL: postgres://data_registry:dev-registry-password-0001@postgres:5432/data
+      DATA_SCHEMA_BUNDLE_FILE: /app/packages/data/manifests/schema.json
+      DATA_POLICY_BUNDLE_FILE: /app/packages/data/manifests/policies.json
+      DATA_GATEWAY_BINDINGS_FILE: /etc/platform/bindings.json
+      DATA_ACCESS_URL: ${DATA_ACCESS_URL:-http://host.docker.internal:8081}
+      DATA_ACCESS_CONTEXT_TOKEN_FILE: /run/secrets/access-context.token
+      DATA_CURSOR_KEY_FILE: /run/secrets/cursor.key
+      DATA_LOG_LEVEL: info
+    volumes:
+      - ../config/bindings.json:/etc/platform/bindings.json:ro
+    secrets:
+      - source: access-context-token
+        target: access-context.token
+      - source: cursor-key
+        target: cursor.key
+      - source: gateway-identity-public-key
+        target: identity-signing.public.pem
+
+# The credentials of the development machine. They are the fixtures of
+# the repository: they are **not** secrets, and a deployment mounts the
+# credentials of its own secret manager instead of them.
+secrets:
+  access-context-token:
+    file: ../fixtures/secrets/access-context.token
+  cursor-key:
+    file: ../fixtures/secrets/cursor.key
+  # The public half of the pair of the identity signature of the gateway
+  # of the deployment. The private half stays in the gateway: an
+  # upstream that holds the public key cannot mint an identity.
+  gateway-identity-public-key:
+    file: ${GATEWAY_IDENTITY_PUBLIC_KEY:-../secrets/identity-signing.public.pem}
+
+volumes:
+  pg-data:
