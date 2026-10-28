@@ -1,0 +1,31 @@
+# The dependencies of the platform.
+#
+# Every dependency is pinned to an exact version: a version that moves is
+# a version that was not tested. Dependabot opens the pull request that
+# moves them, and the pull request is the review of the change: the
+# version is pinned, the tests run against it, and the image is built
+# with it.
+#
+# The workflows are dependencies too: the actions of the continuous
+# integration are pinned to a version that moves, and a new version of an
+# action is a change of the build.
+
+version: 2
+updates:
+  # The dependencies of the three workspaces are one tree: the lockfile
+  # of the root holds them, and a change of it is a change of the three.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      dependencies:
+        patterns:
+          - '*'
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
