@@ -35,6 +35,16 @@ export function idParameter(): Record<string, unknown> {
   }
 }
 
+/** The parameter of a field. */
+export function fieldParameter(): Record<string, unknown> {
+  return {
+    name: 'field',
+    in: 'path',
+    required: true,
+    schema: { type: 'string' },
+  }
+}
+
 /** A parameter of a query. */
 export function queryParameter(
   name: string,
@@ -350,6 +360,18 @@ export function apiPaths(): Record<string, unknown> {
         },
       },
     },
+    '/ws/{workspaceId}/v1/model/collections': {
+      post: {
+        summary: 'The registration of a collection of the deployment.',
+        description:
+          'A collection of the model is a collection of the deployment that the workspace uses: the registration names the collection of the deployment, and the workspace may change the fields of it.',
+        parameters: [workspaceParameter()],
+        responses: {
+          201: jsonResponse('The collection is registered.'),
+          403: errorResponse('The caller does not hold the model permission.'),
+        },
+      },
+    },
     '/ws/{workspaceId}/v1/model/collections/{collection}': {
       patch: {
         summary: 'The label and the description of a collection of the model.',
@@ -358,6 +380,16 @@ export function apiPaths(): Record<string, unknown> {
           200: jsonResponse('The version of the model.'),
           403: errorResponse('The caller does not hold the model permission.'),
           409: errorResponse('The model changed since it was read.'),
+        },
+      },
+      delete: {
+        summary: 'A collection that the model does not hold.',
+        description:
+          'The collection of the deployment is not removed: the workspace stops using it, and the records it holds are left as they are.',
+        parameters: [workspaceParameter(), collectionParameter()],
+        responses: {
+          200: jsonResponse('The collection is not used by the workspace any more.'),
+          403: errorResponse('The caller does not hold the model permission.'),
         },
       },
     },
@@ -376,7 +408,7 @@ export function apiPaths(): Record<string, unknown> {
     '/ws/{workspaceId}/v1/model/collections/{collection}/fields/{field}': {
       patch: {
         summary: 'The attributes of a field of the model.',
-        parameters: [workspaceParameter(), collectionParameter()],
+        parameters: [workspaceParameter(), collectionParameter(), fieldParameter()],
         responses: {
           200: jsonResponse('The version of the model.'),
           403: errorResponse('The caller does not hold the model permission.'),
@@ -384,7 +416,19 @@ export function apiPaths(): Record<string, unknown> {
       },
       delete: {
         summary: 'A field that the model does not hold.',
-        parameters: [workspaceParameter(), collectionParameter()],
+        parameters: [workspaceParameter(), collectionParameter(), fieldParameter()],
+        responses: {
+          200: jsonResponse('The version of the model.'),
+          403: errorResponse('The caller does not hold the model permission.'),
+        },
+      },
+    },
+    '/ws/{workspaceId}/v1/model/collections/{collection}/fields/{field}/move': {
+      post: {
+        summary: 'The place of a field of the model.',
+        description:
+          'A field moves up or down in the order of the fields of its collection: the order is the order the records are shown in.',
+        parameters: [workspaceParameter(), collectionParameter(), fieldParameter()],
         responses: {
           200: jsonResponse('The version of the model.'),
           403: errorResponse('The caller does not hold the model permission.'),

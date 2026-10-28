@@ -46,6 +46,7 @@
     "vocabulary:check": "bun run scripts/check-vocabulary.ts",
     "deploy:check": "bun run scripts/check-deploy.ts",
     "docs:check": "bun run scripts/check-docs.ts",
+    "api:check": "bun run scripts/check-api.ts",
     "atlas": "bun run scripts/atlas.ts",
     "compatibility": "bun run scripts/compatibility.ts",
     "release:tag": "bun run scripts/tag.ts",

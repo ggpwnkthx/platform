@@ -139,6 +139,13 @@ jobs:
         # nothing is a dead end for the reader.
         run: bun run docs:check
 
+      - name: the services serve the endpoints their documentation names
+        # A route that the documentation does not name is a route a
+        # client does not know about, and an endpoint the documentation
+        # names and the service does not serve is a promise the service
+        # does not keep.
+        run: bun run api:check
+
       - name: the deployment of the platform holds what it should hold
         # Every file of a deployment is in the directory of the
         # deployment, and every service of the platform is deployed on

@@ -10,6 +10,27 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The services serve the endpoints their documentation names
+
+The documentation of the API of a service and the routes of its code
+were two copies of the same fact, and they drifted: the data service
+served a route that moves a field of the model, and neither the API of
+the release nor the description of the API named it. A client that
+reads the description of the API did not know that the route existed.
+
+The surface of the API is checked now. The check reads the routes the
+code of every service registers — the paths of the scope of a
+workspace, the constants of the gateway and the routes of its control
+plane — and the endpoints the documentation names, and it refuses the
+two when they part company. The description of the API of the data
+service is read as well, and it is refused when it does not hold every
+route of the service.
+
+The check found four gaps, and they are closed: the route that moves a
+field is named in the specification of the data service and in its API,
+and the description of the API holds the registration of a collection,
+the removal of one and the move of a field.
+
 ### The console shows the documentation of the platform
 
 The documentation of the platform was a tree of markdown in the

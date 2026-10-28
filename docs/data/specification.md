@@ -1008,6 +1008,7 @@ The endpoints of the release:
 | `PATCH`, `DELETE` | `/model/collections/{collection}` | The label and the description of a collection, and the removal of the collection from the workspace. |
 | `POST` | `/model/collections/{collection}/fields` | A field of the model of a collection. |
 | `PATCH`, `DELETE` | `/model/collections/{collection}/fields/{field}` | The attributes of a field of the model, and the removal of the field from the model. |
+| `POST` | `/model/collections/{collection}/fields/{field}/move` | The place of a field of the model: it moves up or down in the order of the fields of its collection. |
 | `POST` | `/model/collections/{collection}/relations` | A relation of the model of a collection. |
 | `PATCH`, `DELETE` | `/model/collections/{collection}/relations/{relation}` | The attributes of a relation of the model, and the removal of the relation from the model. |
 | `GET` | `/openapi.json` | The versioned description of the API. |

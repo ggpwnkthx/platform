@@ -27,6 +27,7 @@ only with a major version of the client.
 | `/ws/{workspaceId}/v1/model/collections/{collection}` | `PATCH`, `DELETE` | The label and the description of a collection, and the removal of the collection from the workspace. |
 | `/ws/{workspaceId}/v1/model/collections/{collection}/fields` | `POST` | A field of the model of a collection. |
 | `/ws/{workspaceId}/v1/model/collections/{collection}/fields/{field}` | `PATCH`, `DELETE` | The attributes of a field of the model, and the removal of the field from the model. |
+| `/ws/{workspaceId}/v1/model/collections/{collection}/fields/{field}/move` | `POST` | The place of a field of the model: it moves up or down in the order of the fields of its collection. |
 | `/ws/{workspaceId}/v1/model/collections/{collection}/relations` | `POST` | A relation of the model of a collection. |
 | `/ws/{workspaceId}/v1/model/collections/{collection}/relations/{relation}` | `PATCH`, `DELETE` | The attributes of a relation of the model, and the removal of the relation from the model. |
 | `/ws/{workspaceId}/v1/openapi.json` | `GET` | The description of the API. |
