@@ -10,7 +10,7 @@
 import { createRoute } from 'honox/factory'
 import { DocumentBlocks } from '../../components/documentation'
 import { PageHead } from '../../components/page'
-import { textOf } from '../../../domains/documentation'
+import { navigatesItself, textOf } from '../../../domains/documentation'
 import { DOCUMENTATION, renderedOf } from '../../documentation'
 
 export default createRoute(async (c) => {
@@ -31,7 +31,7 @@ export default createRoute(async (c) => {
   return c.render(
     <div class="doc-page">
       <PageHead title={title} />
-      {headings.length > 1 ? (
+      {headings.length > 1 && !navigatesItself(rendered) ? (
         <details class="disclosure outline">
           <summary>On this page</summary>
           <ol>

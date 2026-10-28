@@ -17,6 +17,7 @@ export {
   type Document,
   groupsOf,
   headOf,
+  navigatesItself,
   renderOf,
   type Rendered,
   textOf,

@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path'
 import {
   groupsOf,
   headOf,
+  navigatesItself,
   resolveOf,
   textOf,
   titleOf,
@@ -183,6 +184,30 @@ describe('the urls of the documentation', () => {
 
   test('a link that names a url is a link of the web', () => {
     expect(resolveOf(tree, 'docs/console/spec.md', 'https://honojs.dev')).toBe('https://honojs.dev')
+  })
+})
+
+describe('a document that navigates itself', () => {
+  test('a document with a contents of its own is not given an outline', () => {
+    const rendered = {
+      document: {
+        path: 'data/specification',
+        source: 'docs/data/specification.md',
+        directory: 'data',
+        content: '',
+        title: 'The specification',
+        summary: '',
+      },
+      title: 'The specification',
+      blocks: parseMarkdown('## Contents\n\n- [1. Purpose](#1-purpose)\n\n## 1. Purpose\n'),
+    }
+    expect(navigatesItself(rendered)).toBe(true)
+    expect(
+      navigatesItself({
+        ...rendered,
+        blocks: parseMarkdown('## 1. Purpose\n'),
+      })
+    ).toBe(false)
   })
 })
 

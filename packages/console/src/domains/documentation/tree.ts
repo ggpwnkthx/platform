@@ -68,6 +68,24 @@ export function renderOf(document: Document): Rendered {
 }
 
 /**
+ * Reports whether a document navigates itself.
+ *
+ * A document that holds a table of contents names its own sections and
+ * links to them. The console does not add an outline to such a
+ * document: the reader would see the same list twice.
+ */
+export function navigatesItself(rendered: Rendered): boolean {
+  return rendered.blocks.some(
+    (block) =>
+      block.kind === 'heading' &&
+      block.level === 2 &&
+      block.inline.length === 1 &&
+      block.inline[0]!.kind === 'text' &&
+      block.inline[0]!.text.trim().toLowerCase() === 'contents'
+  )
+}
+
+/**
  * The head of a document: its title and its summary.
  *
  * The title is the heading of its first level, and the summary is the
