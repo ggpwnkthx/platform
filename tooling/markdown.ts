@@ -52,10 +52,25 @@ export type Block =
   | { readonly kind: 'list'; readonly ordered: boolean; readonly items: ListItem[] }
   | { readonly kind: 'code'; readonly language: string | null; readonly text: string }
   | { readonly kind: 'table'; readonly head: Inline[][]; readonly rows: Inline[][][] }
-  | { readonly kind: 'quote'; readonly blocks: Block[] }
+  | {
+      readonly kind: 'quote'
+      /**
+       * The kind of a callout, when the quote opens with one: GitHub's
+       * `> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]` or
+       * `> [!CAUTION]`. A plain quote has none.
+       */
+      readonly alert: Alert | null
+      readonly blocks: Block[]
+    }
   | { readonly kind: 'rule' }
 
 /** The markdown the parser does not know. */
+/** The kinds of callout a quote may open with. */
+export type Alert = 'note' | 'tip' | 'important' | 'warning' | 'caution'
+
+/** The marker of a callout: the first line of a quote. */
+const ALERT = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*$/i
+
 export class MarkdownError extends Error {
   constructor(
     /** The line the markdown is on. */
@@ -210,8 +225,11 @@ function blocksOf(scanned: readonly Scanned[], headings: ReadonlyMap<number, Nam
         quoted.push(match[1]!)
         index += 1
       }
+      const marker = quoted.length > 0 ? ALERT.exec(quoted[0]!.trim()) : null
+      if (marker) quoted.shift()
       blocks.push({
         kind: 'quote',
+        alert: marker ? (marker[1]!.toLowerCase() as Alert) : null,
         blocks: blocksOf(scanOf(quoted.join('\n')), new Map()),
       })
       if (index === start) index += 1

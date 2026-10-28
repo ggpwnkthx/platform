@@ -24,6 +24,7 @@
   --warn-soft: #fbf0dc;
   --error: #b3261e;
   --error-soft: #fbe7e5;
+  --violet: #7044c4;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --measure: 76rem;
@@ -50,6 +51,7 @@
     --warn-soft: #3a2d14;
     --error: #f2837b;
     --error-soft: #3d1c1a;
+    --violet: #b79cf5;
     --shadow: 0 1px 2px rgb(0 0 0 / 30%);
     color-scheme: dark;
   }
@@ -72,6 +74,7 @@
   --warn-soft: #3a2d14;
   --error: #f2837b;
   --error-soft: #3d1c1a;
+  --violet: #b79cf5;
   --shadow: 0 1px 2px rgb(0 0 0 / 30%);
   color-scheme: dark;
 }
@@ -1179,4 +1182,50 @@ details.disclosure.outline > summary {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* Callouts: `> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`, `> [!CAUTION]`. */
+
+.callout {
+  --tone: var(--accent);
+  max-width: 72ch;
+  margin: 1.4rem 0;
+  padding: 0.75rem 1rem 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--tone) 30%, var(--rule));
+  border-left: 3px solid var(--tone);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--tone) 7%, var(--card));
+}
+
+.callout.tip {
+  --tone: var(--ok);
+}
+
+.callout.important {
+  --tone: var(--violet);
+}
+
+.callout.warning {
+  --tone: var(--warn);
+}
+
+.callout.caution {
+  --tone: var(--error);
+}
+
+.doc .callout p {
+  margin: 0.35rem 0 0;
+}
+
+.doc .callout > :nth-child(2) {
+  margin-top: 0.15rem;
+}
+
+.doc .callout-title {
+  margin: 0;
+  color: var(--tone);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }

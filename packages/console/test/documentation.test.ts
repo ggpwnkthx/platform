@@ -273,3 +273,11 @@ describe('the tree of the documentation', () => {
     })
   })
 })
+
+describe('a callout of a document', () => {
+  test('a quote that opens with a marker is a callout', () => {
+    const [warning, plain] = parseMarkdown('> [!WARNING]\n> Mind it.\n\n> Just a quote.\n')
+    expect(warning).toMatchObject({ kind: 'quote', alert: 'warning' })
+    expect(plain).toMatchObject({ kind: 'quote', alert: null })
+  })
+})

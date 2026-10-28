@@ -6,6 +6,9 @@
  * code of a document. Every link of a document is rewritten to the
  * address of its target, so that the reader walks the documentation
  * the way the reader of the repository walks it.
+ *
+ * A quote that opens with a GitHub-style marker (`> [!NOTE]`) is a
+ * callout: it carries its kind and the label of it.
  */
 
 import type { Block, Inline } from '../../domains/documentation'
@@ -16,6 +19,15 @@ interface RenderProps {
   readonly tree: Tree
   /** The path of the repository of the document the text is in. */
   readonly from: string
+}
+
+/** The label of each callout kind. */
+const ALERTS: Record<string, string> = {
+  note: 'Note',
+  tip: 'Tip',
+  important: 'Important',
+  warning: 'Warning',
+  caution: 'Caution',
 }
 
 /** The blocks of a document, as the console shows them. */
@@ -111,6 +123,14 @@ function BlockOf(props: { block: Block } & RenderProps) {
         </div>
       )
     case 'quote':
+      if (block.alert) {
+        return (
+          <aside class={`callout ${block.alert}`} aria-label={ALERTS[block.alert]}>
+            <p class="callout-title">{ALERTS[block.alert]}</p>
+            <DocumentBlocks blocks={block.blocks} tree={props.tree} from={props.from} />
+          </aside>
+        )
+      }
       return (
         <blockquote>
           <DocumentBlocks blocks={block.blocks} tree={props.tree} from={props.from} />

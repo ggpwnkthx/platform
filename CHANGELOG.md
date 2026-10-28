@@ -10,6 +10,17 @@ in the same commit as the code.
 
 ## Unreleased
 
+### A quote may open with a callout
+
+The documents of the platform use the callouts of GitHub — `> [!NOTE]`,
+`> [!WARNING]` — and the console read them as plain quotes: the marker
+was shown to the reader as text, and the note looked like a quotation
+of nobody.
+
+The parser reads the marker now, and the console shows the quote it
+opens as a callout: it carries its kind, the label of the kind and the
+tone of it. A quote without a marker stays a quote.
+
 ### The titles of the documents are short, and no sentence is said twice
 
 The titles of the documents named their service and their subject at
