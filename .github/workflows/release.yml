@@ -63,7 +63,7 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       sha: ${{ steps.revision.outputs.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # The tag of the release: the ref of a push, the input of a
           # dispatch. The release is the tag, and the tag is the commit
@@ -115,7 +115,7 @@ jobs:
       matrix:
         service: [gateway, access, data]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.version.outputs.tag }}
 
