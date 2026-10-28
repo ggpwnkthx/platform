@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test'
-import { readFile, readdir, stat } from 'node:fs/promises'
-import { dirname, join, relative, resolve } from 'node:path'
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join, relative } from 'node:path'
+import { headingsOf, linkProblemsOf, linksOf, slugOf } from '../tooling/documentation'
 
 /**
  * The documentation of the platform.
@@ -9,6 +11,12 @@ import { dirname, join, relative, resolve } from 'node:path'
  * link that points at nothing is a dead end for the reader, and the
  * documentation is the only thing a reader has: a link that broke when
  * the documentation moved is a link that broke for everybody.
+ *
+ * A link names two things: the document it points at, and the place
+ * inside it, when it names one. Both are resolved: a link that names a
+ * heading that is not there is a dead end too, and it is a dead end
+ * that nobody notices, because the reader of a document sees a link
+ * that goes nowhere.
  *
  * The second check is about the shape of the tree: the documentation
  * of a contract lives in the directory of its name, and the
@@ -40,32 +48,6 @@ async function filesOf(directory: string): Promise<string[]> {
     if (entry.name.endsWith('.md')) found.push(path)
   }
   return found
-}
-
-/** A link of a document. */
-interface Link {
-  /** The file the link is in. */
-  readonly file: string
-  /** The line the link is on. */
-  readonly line: number
-  /** The target of the link. */
-  readonly target: string
-}
-
-/** Every relative link of a document. */
-function linksOf(file: string, content: string): Link[] {
-  const links: Link[] = []
-  const lines = content.split('\n')
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index]!
-    for (const match of line.matchAll(/\]\(([^)]+)\)/g)) {
-      const target = match[1]!
-      // A link that is a url, an anchor or a mail address is not a path.
-      if (/^(?:[a-z]+:|#)/i.test(target)) continue
-      links.push({ file, line: index + 1, target: target.split('#')[0]! })
-    }
-  }
-  return links
 }
 
 describe('the documentation of the platform', () => {
@@ -104,23 +86,7 @@ describe('the documentation of the platform', () => {
 
   test('every link of the documentation resolves', async () => {
     const files = await filesOf(root)
-    const problems: string[] = []
-    for (const file of files) {
-      const content = await readFile(file, 'utf8')
-      for (const link of linksOf(file, content)) {
-        if (link.target === '') continue
-        const target = resolve(dirname(file), link.target)
-        const exists = await stat(target).then(
-          () => true,
-          () => false
-        )
-        if (!exists) {
-          problems.push(
-            `${relative(root, link.file)}:${link.line} points at ${link.target}, which is not there`
-          )
-        }
-      }
-    }
+    const problems = await linkProblemsOf(root, files)
     expect(problems).toEqual([])
   })
 
@@ -138,7 +104,7 @@ describe('the documentation of the platform', () => {
       const content = await readFile(file, 'utf8')
       for (const link of linksOf(file, content)) {
         // A link that enters the documentation of another service.
-        const match = /^(?:\.\.\/)*docs\/(gateway|access|data)\//.exec(link.target)
+        const match = /^(?:\.\.\/)*docs\/(gateway|access|data)\//.exec(link.path)
         if (!match) continue
         const directory = relative(root, dirname(file)).split('/').filter(Boolean)[0] ?? ''
         if (DIRECTORIES.includes(directory) && directory !== match[1]) {
@@ -149,5 +115,98 @@ describe('the documentation of the platform', () => {
       }
     }
     expect(problems).toEqual([])
+  })
+})
+
+describe('the names of the headings', () => {
+  test('a name is the text of the heading, in lower case, without its punctuation', () => {
+    expect(slugOf('6.2 The places')).toBe('62-the-places')
+    expect(slugOf('The access service — HTTP API')).toBe('the-access-service--http-api')
+  })
+
+  test('the markup of a heading is not part of its name', () => {
+    expect(slugOf('`POST /v1/admin/tenants`')).toBe('post-v1admintenants')
+    expect(slugOf('The **rollback** of a record')).toBe('the-rollback-of-a-record')
+    expect(slugOf('The [access context](spec.md) of a caller')).toBe(
+      'the-access-context-of-a-caller'
+    )
+  })
+
+  test('two headings of the same name carry two names', () => {
+    const names = headingsOf('# A\n\n## B\n\n## B\n\n## B\n')
+    expect([...names]).toEqual(['a', 'b', 'b-1', 'b-2'])
+  })
+
+  test('a heading in a block of code is not a heading of the document', () => {
+    // The comment of a shell is not a heading, and a link that names it
+    // points at nothing.
+    const names = headingsOf('# Real\n\n```bash\n# the access service\n```\n\n## Also real\n')
+    expect([...names]).toEqual(['real', 'also-real'])
+  })
+})
+
+describe('the links of a document', () => {
+  test('a link that names a url is not a path of the repository', () => {
+    const links = linksOf('a.md', '[x](https://example.com/a#b) and [y](mailto:a@b.c)')
+    expect(links).toEqual([])
+  })
+
+  test('a link that names a place of its own file carries no path', () => {
+    const links = linksOf('a.md', '[x](#the-places)')
+    expect(links).toEqual([{ file: 'a.md', line: 1, path: '', anchor: 'the-places' }])
+  })
+
+  test('a link that names a document and a place carries both', () => {
+    const links = linksOf('a.md', '[x](spec.md#62-the-places)')
+    expect(links).toEqual([{ file: 'a.md', line: 1, path: 'spec.md', anchor: '62-the-places' }])
+  })
+})
+
+describe('the broken links of a documentation', () => {
+  test('the check refuses a link that names a place that is not there', async () => {
+    // The check that never fails is not a check: the fixture holds a
+    // link that names a heading that is not there, and the check has to
+    // report it.
+    const directory = await mkdtemp(join(tmpdir(), 'platform-docs-'))
+    try {
+      await mkdir(join(directory, 'docs'), { recursive: true })
+      await writeFile(
+        join(directory, 'docs', 'spec.md'),
+        '# The specification\n\n### 6.2 The places\n'
+      )
+      await writeFile(
+        join(directory, 'docs', 'README.md'),
+        [
+          '# The documentation',
+          '',
+          'A link that is there: [the places](spec.md#62-the-places)',
+          'A link that is not there: [the holes](spec.md#62-the-holes)',
+          'A link to a place of this file: [here](#the-documentation)',
+          'A link to a place of this file that is not there: [there](#nowhere)',
+          '',
+        ].join('\n')
+      )
+      const problems = await linkProblemsOf(directory, [
+        join(directory, 'docs', 'README.md'),
+        join(directory, 'docs', 'spec.md'),
+      ])
+      expect(problems).toEqual([
+        'docs/README.md:4 points at 62-the-holes, and docs/spec.md has no heading of that name',
+        'docs/README.md:6 points at nowhere, and docs/README.md has no heading of that name',
+      ])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the check refuses a link that names a document that is not there', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platform-docs-'))
+    try {
+      await writeFile(join(directory, 'README.md'), 'A link: [x](spec.md#62-the-places)\n')
+      const problems = await linkProblemsOf(directory, [join(directory, 'README.md')])
+      expect(problems).toEqual(['README.md:1 points at spec.md, which is not there'])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
   })
 })

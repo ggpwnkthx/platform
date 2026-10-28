@@ -10,6 +10,30 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The names of the headings are checked
+
+The links of the documentation were checked, but only half of them were.
+A link that pointed at a document that is not there was a dead end the
+check refused, and a link that pointed at a **place** of a document — a
+heading — was a dead end it ignored. The name of a heading is the text
+of the heading, in lower case, without its punctuation, with the spaces
+replaced by hyphens, and it is the name the reader sees in the address
+of a rendered document. A link that carries a name that is not there
+leads nowhere, and the reader has no way to tell that it is broken.
+
+The names are checked now. The check resolves the path of every link
+and the name of every place it names: the headings of a markdown
+document, and the elements of an html document. The names of the
+headings are the names the rendered documents carry, two headings of
+the same name carry two names, and a heading in a block of code is a
+comment of a shell: it is not a heading of the document, and the name of
+it does not exist.
+
+The engine lives in `tooling/documentation.ts` now, and not in the
+command: the command runs it, and the suite of the platform proves it.
+The suite holds a documentation whose links are broken, and it has to
+report them — a check that never fails is not a check.
+
 ### The server of a container is ready when it answers
 
 The machine of the development waits for the PostgreSQL of its
