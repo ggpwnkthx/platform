@@ -1,0 +1,100 @@
+# The production stack of the data service alone: the api, the schema of
+# its deployment and the credentials of the deployment.
+#
+#   docker compose -f deploy/compose/production/data.compose.yaml up -d
+#
+# The secrets of a deployment are files: the secret manager of the
+# deployment writes them on the host, and the stack mounts them. The
+# variables of the file name them, and they are the paths of the files on
+# the host of the deployment:
+#
+#   ACCESS_CONTEXT_TOKEN_FILE=/etc/platform/secrets/access-context.token \
+#   CURSOR_KEY_FILE=/etc/platform/secrets/cursor.key \
+#   GATEWAY_IDENTITY_PUBLIC_KEY=/etc/platform/secrets/identity-signing.public.pem \
+#   docker compose -f deploy/compose/production/data.compose.yaml up -d
+#
+# The bindings of the service read the public key of the gateway from
+# the path it has in the container, and the file of the deployment is
+# mounted there.
+name: platform-data
+
+services:
+  # The roles of the service and the schema of its deployment. The
+  # service waits for them: it refuses to start against a database that
+  # is not migrated.
+  data-migrate:
+    image: ghcr.io/ggpwnkthx/data:1.0.0
+    restart: on-failure
+    command: ['sh', '-c', 'bun run scripts/cli/provision.ts && bun run scripts/cli/migrate.ts']
+    environment:
+      DATA_ADMIN_DATABASE_URL: ${DATA_ADMIN_DATABASE_URL:?the administrator of the server is required}
+      DATA_OWNER_DATABASE_URL: ${DATA_OWNER_DATABASE_URL:?the owner of the schema is required}
+      DATA_OWNER_PASSWORD: ${DATA_OWNER_PASSWORD:?the password of the owner of the schema is required}
+      DATA_RUNTIME_PASSWORD: ${DATA_RUNTIME_PASSWORD:?the password of the role of the api is required}
+      DATA_REGISTRY_PASSWORD: ${DATA_REGISTRY_PASSWORD:?the password of the registry reader is required}
+      DATA_DELIVERY_PASSWORD: ${DATA_DELIVERY_PASSWORD:?the password of the role of the deliveries is required}
+      DATA_MAINTENANCE_PASSWORD: ${DATA_MAINTENANCE_PASSWORD:?the password of the role of the retention is required}
+
+  data:
+    image: ghcr.io/ggpwnkthx/data:1.0.0
+    restart: unless-stopped
+    depends_on:
+      data-migrate:
+        condition: service_completed_successfully
+    ports:
+      - '8082:8082'
+    environment:
+      DATA_ENVIRONMENT: production
+      DATA_HOST: 0.0.0.0
+      DATA_PORT: '8082'
+      DATA_PROCESS_ROLE: api
+      # The scoped role of the api and the narrow reader of the registry:
+      # two credentials, and neither of them may alter the schema.
+      DATA_DATABASE_URL: ${DATA_DATABASE_URL:?the credential of the data is required}
+      DATA_REGISTRY_DATABASE_URL: ${DATA_REGISTRY_DATABASE_URL:?the credential of the registry is required}
+      DATA_SCHEMA_BUNDLE_FILE: /app/packages/data/manifests/schema.json
+      DATA_POLICY_BUNDLE_FILE: /app/packages/data/manifests/policies.json
+      DATA_GATEWAY_BINDINGS_FILE: /etc/platform/bindings.json
+      # The access service of the access context contract. The credential travels with
+      # the request, so the url is https in a production deployment.
+      DATA_ACCESS_URL: ${DATA_ACCESS_URL:?the access service of the access context contract is required}
+      DATA_ACCESS_CONTEXT_TOKEN_FILE: /run/secrets/access-context.token
+      DATA_CURSOR_KEY_FILE: /run/secrets/cursor.key
+      # The token of the metrics endpoint is not set: without the file of
+      # the token the endpoint is absent and it answers `404`. A
+      # deployment that exposes the metrics mounts the file and names it
+      # in an override of its own.
+      DATA_LOG_LEVEL: ${DATA_LOG_LEVEL:-info}
+    volumes:
+      - ../../config/bindings.json:/etc/platform/bindings.json:ro
+    secrets:
+      - source: access-context-token
+        target: access-context.token
+      - source: cursor-key
+        target: cursor.key
+      - source: gateway-identity-public-key
+        target: identity-signing.public.pem
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'bun',
+          '-e',
+          "fetch('http://127.0.0.1:8082/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    stop_grace_period: 30s
+
+# The credentials of the deployment. They are files: the secret manager
+# of the deployment writes them, and the stack mounts them where the
+# service reads them.
+secrets:
+  access-context-token:
+    file: ${ACCESS_CONTEXT_TOKEN_FILE:?the file of the credential of the context contract is required}
+  cursor-key:
+    file: ${CURSOR_KEY_FILE:?the file of the key that signs the cursors is required}
+  gateway-identity-public-key:
+    file: ${GATEWAY_IDENTITY_PUBLIC_KEY:?the file of the public key of the gateway is required}

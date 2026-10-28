@@ -1,0 +1,96 @@
+# The production stack of the access service alone: the broker, the
+# decisions and the shared state of the authorization codes.
+#
+#   docker compose -f deploy/compose/production/access.compose.yaml up -d
+#
+# The secrets come from the environment of the shell (a secret store, a
+# vault agent, the secrets of the orchestrator). The file below holds no
+# credential: the values that are not set make the service refuse to start,
+# exactly like in a production deployment.
+name: platform-access
+
+services:
+  access:
+    image: ghcr.io/ggpwnkthx/access:1.0.0
+    restart: unless-stopped
+    ports:
+      - '8081:8081'
+    environment:
+      ACCESS_ENVIRONMENT: production
+      ACCESS_HOST: 0.0.0.0
+      ACCESS_PORT: '8081'
+      # The issuer is the `iss` of every token the service issues, and the
+      # url the gateway and the browser use to reach it.
+      ACCESS_ISSUER: ${ACCESS_ISSUER:?the issuer of the service is required}
+      # The public url of the service, when it differs from the issuer. It
+      # is not set here: the service uses the issuer when the variable is
+      # absent, and a deployment that needs another url sets it in an
+      # override of its own.
+      # The database of the five tables. The replicas share them.
+      ACCESS_DATABASE_URL: ${ACCESS_DATABASE_URL:?the database of the service is required}
+      # The shared state of the authorization codes: it has to be shared by
+      # the replicas, or ACCESS_ALLOW_MEMORY_STATE=true when the deployment is
+      # a single node that accepts it.
+      ACCESS_REDIS_URL: ${ACCESS_REDIS_URL:?the shared state of the codes is required}
+      # The bearer token of the nine administrative endpoints.
+      ACCESS_ADMIN_TOKEN: ${ACCESS_ADMIN_TOKEN:?the token of the administration is required}
+      # The bearer token the gateway presents on `POST /v1/decisions`.
+      ACCESS_DECISION_TOKEN: ${ACCESS_DECISION_TOKEN:?the token of the decisions is required}
+      # The credentials of the access context contract: a json object whose
+      # keys are bearer tokens and whose values hold the tenants a token
+      # may ask about. A `null` scope means every tenant.
+      ACCESS_CONTEXT_TOKENS: ${ACCESS_CONTEXT_TOKENS:?the credentials of the context contract are required}
+      # The secret that signs and encrypts the state of a login. It has to
+      # be the same on every replica.
+      ACCESS_STATE_SECRET: ${ACCESS_STATE_SECRET:?the secret of the state of a login is required}
+      # The key that encrypts the client secrets of the tenants at rest.
+      ACCESS_SECRET_ENCRYPTION_KEY: ${ACCESS_SECRET_ENCRYPTION_KEY:?the key of the secrets at rest is required}
+      # The private key the service signs its tokens with. A key that is
+      # generated at the start of a process invalidates every token that is
+      # alive, so it comes from the secret manager of the deployment.
+      ACCESS_SIGNING_KEY: ${ACCESS_SIGNING_KEY:?the key of the signature of the tokens is required}
+      # The identifier of the key in the JWKS.
+      ACCESS_SIGNING_KID: ${ACCESS_SIGNING_KID:?the identifier of the key is required}
+      # The token that guards the metrics endpoint.
+      ACCESS_METRICS_TOKEN: ${ACCESS_METRICS_TOKEN:-}
+      ACCESS_LOG_LEVEL: ${ACCESS_LOG_LEVEL:-info}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'bun',
+          '-e',
+          "fetch('http://127.0.0.1:8081/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    stop_grace_period: 30s
+
+  # The shared state of the authorization codes. A deployment that already
+  # has a Redis server points ACCESS_REDIS_URL at it and does not start this
+  # one.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --save
+      - '60'
+      - '1'
+      - --maxmemory-policy
+      - volatile-ttl
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  redis-data:
