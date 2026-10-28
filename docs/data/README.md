@@ -1,0 +1,62 @@
+# The documentation of the data service
+
+The data service is the headless data backend of the platform. It serves
+permission aware data APIs to the applications that live behind
+[the gateway](../../packages/gateway/), and it takes the identity and the
+capabilities of the caller from
+[the access service](../../packages/access/).
+
+This directory holds the whole documentation of the service. It is
+written for three audiences, and each document says which one it is
+for.
+
+The parts of the platform that are common to the three services are in
+[the documentation of the platform](../platform/).
+
+## Where to start
+
+| If you are | Read |
+| --- | --- |
+| a consumer of the API | [the contract of v1](api.md), then [the client](client.md) |
+| an operator of a deployment | [the configuration](configuration.md), [the operations](operations.md), [the migrations](migrations.md) |
+| a reviewer of the service | [the specification](specification.md), [the security model](security.md), [the decisions](decisions.md) |
+| a contributor | [the development](development.md), [the architecture](architecture.md) |
+
+## The documents
+
+| Document | What it holds |
+| --- | --- |
+| [architecture.md](architecture.md) | What the service is, how a request travels through it, and the boundaries of the code. |
+| [getting-started.md](getting-started.md) | The development machine, from an empty checkout to a running service. |
+| [configuration.md](configuration.md) | Every variable of the environment, the bindings file, the manifests and the policy bundles. |
+| [api.md](api.md) | The stable surface of the API: the paths, the envelopes, the errors, the filters and the rules of a change. |
+| [client.md](client.md) | The typed client `@data-backend/client`, and the types of the collections of a deployment. |
+| [specification.md](specification.md) | The normative contract of the release. |
+| [security.md](security.md) | The model of the security, the review of it and the findings that are open. |
+| [operations.md](operations.md) | The probes, the metrics, the logs, the drain, the budgets and the alarms. |
+| [compatibility.md](compatibility.md) | The baseline of the integration with the gateway and the access service, and the harness that proves it. |
+| [migrations.md](migrations.md) | The migrations, the drift, the roles and the bundles. |
+| [retention.md](retention.md) | The retention of the history and the removal of a workspace. |
+| [backup-restore.md](backup-restore.md) | The backup, the restore and the rehearsal of the restore. |
+| [troubleshooting.md](troubleshooting.md) | The failures of the service and what to do about them. |
+| [capacity.md](capacity.md) | The capacity report of the release, and what a deployment declares. |
+| [decisions.md](decisions.md) | The choices of the implementation and the reason of each one. |
+| [development.md](development.md) | The suites of the tests, the gates of a release and the scripts of the repository. |
+| [../../CHANGELOG.md](../../CHANGELOG.md) | The changes of the service, from the newest to the oldest: the platform has one changelog. |
+| [release-readiness.md](release-readiness.md) | The gates of the version 1.0.0, one by one, and the ones that are outside the repository. |
+
+## The status of the release
+
+**Version 1.0.0 is published, and it is a pre-production release.** It
+is implemented, it passes its own gates, and the compatibility harness
+runs it against the real gateway and the real access service — but it
+has never run outside its own harness. It has no production history, no
+external user, and no review that was written by somebody other than the
+author of the code. The findings that are still open are in
+[security.md](security.md).
+
+**The next release of the platform is a release candidate.** The
+gates of the repository are green, and the two gates that are outside
+the repository — a deployment with a real studio and a real tenant, and
+a review that was written by somebody else — are listed in [the
+readiness of the version 1.0.0](release-readiness.md).
