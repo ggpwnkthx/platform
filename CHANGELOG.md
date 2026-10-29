@@ -10,6 +10,13 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The places of the console are the places of the console
+
+The places of the console were five, and the page of the caller was not
+among them, although the specification names it and the console serves
+it. The places are the overview, the workspaces, the operators, the
+status, the documentation and the page of the caller.
+
 ### The guard of the forms takes the origin of the address the request reached
 
 The specification of the console guarded the POST alone, and it accepted

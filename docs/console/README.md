@@ -4,7 +4,7 @@ The platform's web interface: people read and change workspace data, operators a
 
 ## Concepts
 
-- **Places.** Five: overview, workspaces, operators, status and documentation. What each shows and calls: [spec §6.2](spec.md#62-places).
+- **Places.** The overview, the workspaces, the operators, the status and the documentation, plus the caller's own page. What each shows and calls: [spec §6.2](spec.md#62-places).
 - **Session.** The browser holds only a signed session identifier; the caller's token stays on the server ([spec §3](spec.md#3-sessions)).
 - **Operator scope.** The keys `console.status`, `console.admin` and `console.platform`, read from Access on every page ([spec §4](spec.md#4-operator-scope)).
 - **Ability.** What the console shows mirrors what the services allow: it may hide an action, never grant one ([spec §5](spec.md#5-ability)).
