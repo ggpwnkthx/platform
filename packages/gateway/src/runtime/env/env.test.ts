@@ -109,14 +109,14 @@ describe('the environment of the gateway', () => {
 describe('the environment of a production deployment', () => {
   const production = {
     NODE_ENV: 'production',
-    GATEWAY_SESSION_SECRET: 'secret',
+    GATEWAY_SESSION_SECRET: 'the-session-secret-of-the-production-deployment',
     GATEWAY_IDENTITY_SIGNING_KEY: '-----BEGIN PRIVATE KEY-----\nkey\n-----END PRIVATE KEY-----\n',
     GATEWAY_OIDC_ISSUER: 'https://dex.example.com/dex',
     GATEWAY_OIDC_CLIENT_ID: 'gateway',
     GATEWAY_OIDC_CLIENT_SECRET: 'client-secret',
     GATEWAY_OIDC_REDIRECT_URI: 'https://gateway.example.com/auth/callback',
     GATEWAY_ACCESS_URL: 'https://access.example.com',
-    GATEWAY_ACCESS_TOKEN: 'access-token',
+    GATEWAY_ACCESS_TOKEN: 'the-access-token-of-the-production-deployment',
     GATEWAY_RATE_LIMIT_MAX: '600',
     GATEWAY_SESSION_URL: 'redis://cache:6379/0',
   }
@@ -186,6 +186,30 @@ describe('the environment of a production deployment', () => {
     ['GATEWAY_ACCESS_TOKEN'],
   ])('a production deployment needs %s', (name) => {
     expect(() => readEnv({ ...production, [name]: undefined })).toThrow(new RegExp(name))
+  })
+
+  test('a secret that is short is refused', () => {
+    expect(() => readEnv({ ...production, GATEWAY_SESSION_SECRET: 'secret' })).toThrow(
+      /GATEWAY_SESSION_SECRET must be at least 32 bytes/
+    )
+    expect(() => readEnv({ ...production, GATEWAY_ACCESS_TOKEN: 'access-token' })).toThrow(
+      /GATEWAY_ACCESS_TOKEN must be at least 32 bytes/
+    )
+  })
+
+  test('a secret that the repository publishes is refused', () => {
+    expect(() =>
+      readEnv({ ...production, GATEWAY_SESSION_SECRET: 'dev-session-secret-of-the-development-1' })
+    ).toThrow(/GATEWAY_SESSION_SECRET is the value of the example/)
+    expect(() =>
+      readEnv({ ...production, GATEWAY_ACCESS_TOKEN: 'dev-access-token-0000000' })
+    ).toThrow(/GATEWAY_ACCESS_TOKEN is the value of the example/)
+  })
+
+  test('a secret of one repeated character is refused', () => {
+    expect(() => readEnv({ ...production, GATEWAY_SESSION_SECRET: '0'.repeat(40) })).toThrow(
+      /GATEWAY_SESSION_SECRET is the value of the example/
+    )
   })
 
   test('the secret of the client is required, unless the provider accepts a public client', () => {

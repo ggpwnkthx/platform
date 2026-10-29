@@ -29,6 +29,68 @@ export function parseLogLevel(value: string | undefined, fallback: LogLevel = 'i
 }
 
 /**
+ * The minimum length of a secret of the deployment.
+ *
+ * The secret of the session signs the state of a login and derives the
+ * key of the identity signature: a short secret is a secret that is
+ * guessed (spec §6.1).
+ */
+const MINIMUM_SECRET_BYTES = 32
+
+/**
+ * The secrets that are published in the repository.
+ *
+ * They are the values of the example of the development machine and the
+ * values of the deployment of the example: a gateway that starts with one
+ * of them holds a secret that everybody knows.
+ */
+const PUBLISHED_SECRETS: readonly string[] = [
+  'dev-state-secret-of-the-development-0001',
+  'dev-session-secret-of-the-development-1',
+  'dev-access-token-0000000',
+  'example-access-token-0000000',
+]
+
+/**
+ * Reports whether a secret is one repeated character.
+ *
+ * A secret of `000…0` or of `111…1` is not a secret whatever its
+ * length.
+ */
+function isRepeatedCharacterSecret(value: string): boolean {
+  const trimmed = value.trim()
+  if (trimmed.length < 8) return false
+  return [...trimmed].every((character) => character === trimmed[0])
+}
+
+/**
+ * Checks the strength of a secret of the deployment.
+ *
+ * A production deployment refuses a secret that is short, that is one
+ * repeated character or that is published in the repository. The message
+ * names the variable, so the operator knows what to fix.
+ */
+function checkSecret(
+  name: string,
+  value: string | undefined,
+  role: string,
+  production: boolean
+): string | null {
+  if (!value || !production) return null
+  const trimmed = value.trim()
+  // The published value is named first: it is the precise reason why the
+  // secret is refused, whatever its length is.
+  if (PUBLISHED_SECRETS.includes(trimmed) || isRepeatedCharacterSecret(trimmed)) {
+    return `${name} is the value of the example of the repository: it is published, and a deployment does not start with it`
+  }
+  const bytes = Buffer.byteLength(trimmed, 'utf8')
+  if (bytes < MINIMUM_SECRET_BYTES) {
+    return `${name} must be at least ${MINIMUM_SECRET_BYTES} bytes long: ${role}`
+  }
+  return null
+}
+
+/**
  * Reads the environment.
  *
  * A value that cannot be understood stops the gateway: the message names
@@ -83,6 +145,28 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
     throw new Error(
       'GATEWAY_ACCESS_TOKEN must be set in a production environment, or GATEWAY_ACCESS_ALLOW_ANONYMOUS=true when Access authenticates the gateway by other means'
     )
+  }
+
+  // The secrets of the deployment are strong: a deployment that starts
+  // with a short secret, or with a secret that the repository publishes,
+  // holds a secret that everybody knows (spec §6.1).
+  const weak: string[] = []
+  const sessionSecret = checkSecret(
+    'GATEWAY_SESSION_SECRET',
+    parsed.GATEWAY_SESSION_SECRET,
+    'it signs the state cookie of the login flow and it derives the key of the identity signature',
+    production
+  )
+  if (sessionSecret) weak.push(sessionSecret)
+  const accessToken = checkSecret(
+    'GATEWAY_ACCESS_TOKEN',
+    parsed.GATEWAY_ACCESS_TOKEN,
+    'it is the bearer token the gateway presents to Access',
+    production
+  )
+  if (accessToken) weak.push(accessToken)
+  if (weak.length > 0) {
+    throw new Error(`the environment is invalid: ${weak.join('; ')}`)
   }
   // The signature of the identity is asymmetric in a production
   // deployment: the gateway holds the private key and the upstreams hold
