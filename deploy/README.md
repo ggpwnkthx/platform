@@ -1,8 +1,10 @@
 # Deployment
 
-Every deployment file lives here. Each service (Gateway, Access, Data) can be deployed alone or as part of the full platform composition. The first-deployment procedure is in [Operations](../docs/platform/operations.md).
+Every deployment file of the platform lives in this directory: Compose stacks, Kubernetes manifests, configuration and development fixtures. Each service (the gateway, Access, Data) can be deployed alone or as part of the full platform; the first-deployment procedure is in [platform operations](../docs/platform/operations.md#first-deployment).
 
-```
+## Contents
+
+```text
 deploy/
   compose/                 Compose stacks
     platform.compose.yaml    all three services and the console
@@ -25,7 +27,7 @@ deploy/
 
 ## Deploying
 
-**One service:**
+Deploy **one service**:
 
 ```bash
 docker compose -f deploy/compose/gateway.compose.yaml up --build
@@ -37,7 +39,7 @@ kubectl apply -k deploy/kubernetes/base/access
 kubectl apply -k deploy/kubernetes/base/data
 ```
 
-**All three**, talking over the deployment network:
+Deploy **all three**, talking to each other over the deployment network:
 
 ```bash
 docker compose -f deploy/compose/platform.compose.yaml up --build
@@ -45,21 +47,26 @@ docker compose -f deploy/compose/platform.compose.yaml up --build
 kubectl apply -k deploy/kubernetes/overlays/platform
 ```
 
-**The console** is a client of the platform, not one of the three services, and it is not an upstream of the gateway: the browser reaches the console directly, and the console reaches Data through the gateway, like any other client. It has no published image: build it from `packages/console/Dockerfile`. Its stack is `deploy/compose/console.compose.yaml`.
+Both approaches use the same services, ports and environment variable names. A standalone service finds the others through environment variables (`GATEWAY_ACCESS_URL`, `DATA_ACCESS_URL`); the full composition uses network service names.
 
-Both approaches use the same services, ports and environment variable names. A standalone service finds the others through environment variables (`GATEWAY_ACCESS_URL`, `DATA_ACCESS_URL`); the composition uses network service names.
+### The console
+
+The console is a client of the platform, not one of the three services, and it is not an upstream of the gateway. The browser reaches the console directly, and the console reaches Data through the gateway like any other client. The console has no published image: build it from `packages/console/Dockerfile`. Its stack is `deploy/compose/console.compose.yaml`.
 
 ## Compose stacks
 
-The stacks in `deploy/compose/` are for **development**: they build local images, use development passwords, and include repository fixtures (identity provider, sample upstreams, Data credentials).
+| Directory | For | Behavior |
+| --- | --- | --- |
+| `deploy/compose/` | **Development** | Builds local images, uses development passwords, and includes repository fixtures (identity provider, sample upstreams, Data credentials). |
+| `deploy/compose/production/` | **Deployments** | Uses registry images, reads secrets from the shell environment (a secret store, vault agent or orchestrator secrets), and refuses to start if a secret is missing. |
 
-The stacks in `deploy/compose/production/` are for **deployments**: they use registry images, read secrets from the shell environment (a secret store, vault agent or orchestrator secrets), and refuse to start if a secret is missing.
+Start the production stack:
 
 ```bash
 docker compose -f deploy/compose/production/platform.compose.yaml up -d
 ```
 
-[`.env.min`](../.env.min) lists the variables the production stacks require, with example development values:
+[`.env.min`](../.env.min) lists the variables the production stacks require, with example development values. To try the production stack with it:
 
 ```bash
 docker compose --env-file .env.min \
@@ -68,11 +75,11 @@ docker compose --env-file .env.min \
 
 ## Kubernetes manifests
 
-Each base in `deploy/kubernetes/base/` applies on its own; the `deploy/kubernetes/overlays/platform/` overlay composes all three.
+Each base in `deploy/kubernetes/base/` applies on its own. The `deploy/kubernetes/overlays/platform/` overlay composes all three.
 
-Secrets are **not** in the manifests. Each base has a `secret.example.yaml` naming the secret's keys; apply the real secret from your secret store (sealed secrets, the external secrets operator, or equivalent).
+Secrets are **not** in the manifests. Each base has a `secret.example.yaml` that names the secret's keys. Apply the real secret from your secret store (sealed secrets, the external secrets operator, or an equivalent).
 
-Data migration is an operator command, not a base resource. Apply it by hand, once per deployment, with `deploy/kubernetes/base/data/migrate-job.yaml`.
+Data migration is an operator command, not a base resource. Run it by hand, once per deployment, with `deploy/kubernetes/base/data/migrate-job.yaml`.
 
 ## Configuration
 
@@ -95,13 +102,13 @@ bun run scripts/dev-keys.ts
 export GATEWAY_IDENTITY_SIGNING_KEY="$(cat deploy/secrets/identity-signing.pem)"
 ```
 
-The script writes both halves of the pair to `deploy/secrets/`, and the two source-run config files (`routes.local.json`, `bindings.local.json`) to `deploy/config/`.
+The script writes both halves of the pair to `deploy/secrets/`, and writes the two source-run config files (`routes.local.json`, `bindings.local.json`) to `deploy/config/`.
 
-Data's development credentials are deliberately committed fixtures in [`deploy/fixtures/secrets/`](fixtures/secrets/README.md).
+Data's development credentials, by contrast, are committed on purpose as fixtures in [`deploy/fixtures/secrets/`](fixtures/secrets/README.md).
 
 ## Rules
 
 - Every deployment file is in `deploy/` and nowhere else.
-- A service has the same name, port and environment variable names whether deployed alone or in the composition.
+- A service has the same name, port and environment variable names whether it is deployed alone or in the composition.
 - Deployment secrets are never in this directory: they come from the secret manager or the orchestrator's environment.
 - Image versions match the platform version; `bun run deploy:check` fails when they drift.

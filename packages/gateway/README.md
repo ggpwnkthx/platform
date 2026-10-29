@@ -1,8 +1,6 @@
 # Gateway
 
-The platform's application gateway, workspace `packages/gateway/` of [the platform](../../README.md). It
-authenticates each caller, asks Access what the caller may do, and forwards the request to the
-matched route's upstream with a signed identity.
+The workspace of the platform's application gateway, `packages/gateway/` of [the platform](../../README.md): how to run it locally and how to run its checks. The gateway authenticates each caller, asks Access what the caller may do, and forwards the request to the matched route's upstream with a signed identity.
 
 The gateway has no domain model: workspaces, roles and quotas live in Access. It enforces
 "authenticated, authorized for this workspace, forwarded safely" and nothing else. Documentation lives in
@@ -43,7 +41,8 @@ bun run control        # http://127.0.0.1:9090
 
 Configuration: the route table format is in [spec §3](../../docs/gateway/spec.md#3-configuration-file),
 every environment variable is in [Configuration](../../docs/gateway/configuration.md) (and
-[.env.example](.env.example)), and deployment is in [Operations](../../docs/gateway/operations.md).
+[.env.example](.env.example)), deployment is in [Operations](../../docs/gateway/operations.md), and diagnosis
+by symptom is in [Troubleshooting](../../docs/gateway/troubleshooting.md).
 
 ## Checks
 

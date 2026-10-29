@@ -1,58 +1,58 @@
 # Command line
 
-The platform's command line workspace. What the CLI does is in [`docs/cli/`](../../docs/cli/README.md); this page covers the code.
+The CLI's code workspace: its layout, its import rules and the commands maintainers run. What the CLI does and how to use it is in [`docs/cli/`](../../docs/cli/README.md).
 
-The program is `platformctl`. It is a client of the gateway, Access and Data: it asks, and it shows the answer. It holds no policy of its own, it never reaches a database, and it has no dependency beyond the runtime.
+The program is `platformctl`, a client of the gateway, Access and Data that sends a request and shows the answer. It has no policy of its own, no database access and no dependency beyond the runtime.
 
 ## Layout
 
-```
+```text
 packages/cli/
 ├── scripts/architecture.ts
 ├── src/
-│   ├── main.ts           process: reads the words of the reader, ends with the status of the command
-│   ├── runtime/          the commands of the registry, the composition of the ports, the version
-│   │   ├── commands/        one file per group of commands
-│   │   ├── env.ts           the environment of the shell and the files of the machine
-│   │   ├── services.ts      the ports of a command
-│   │   └── version.ts       the version of the program
+│   ├── main.ts           process: reads the command line, exits with the command's status
+│   ├── runtime/          command registry, port composition, version
+│   │   ├── commands/        one file per command group
+│   │   ├── env.ts           shell environment and the machine's file paths
+│   │   ├── services.ts      the ports a command receives
+│   │   └── version.ts       the program's version
 │   ├── app/              interface
-│   │   ├── cli.ts           the dispatcher: finds the command and answers it
-│   │   ├── args.ts          the reading of the words of the reader
+│   │   ├── cli.ts           dispatcher: finds the command and runs it
+│   │   ├── args.ts          command-line parsing
 │   │   ├── commands.ts      the shape of a command
-│   │   ├── help.ts          the help of the CLI, of a group and of a command
-│   │   ├── output.ts        the formats of the answer: table, json, yaml
-│   │   └── prompt.ts        the confirmation of a write
-│   ├── domains/          core: no sockets, no files, no answers of their own
-│   │   ├── contracts.ts     the ports of the core
-│   │   ├── context.ts       the profiles of the deployments and their resolution
-│   │   ├── identity.ts      the login, the claims of the caller
-│   │   ├── gateway.ts       the control plane of the gateway
-│   │   ├── access.ts        the administration and the decisions of Access
-│   │   ├── data.ts          the records and the model of a workspace
-│   │   ├── status.ts        the probes of the services
-│   │   ├── answer.ts        the answers of the services and their refusals
-│   │   └── failure.ts       the failure of a command and the status of the process
-│   └── platform/         adapters implementing the ports of the core
-│       ├── http.ts          the transport, and the transport of a dry run
-│       ├── files.ts         the profiles and the credential of the machine
-│       ├── callback.ts      the server that waits for the answer of the provider
-│       ├── browser.ts       the browser of the machine
-│       └── crypto.ts        the randomness of the login
+│   │   ├── help.ts          help for the CLI, a group and a command
+│   │   ├── output.ts        output formats: table, json, yaml
+│   │   └── prompt.ts        confirmation before a write
+│   ├── domains/          core: no sockets, no files, no output of its own
+│   │   ├── contracts.ts     the core's ports
+│   │   ├── context.ts       deployment profiles and their resolution
+│   │   ├── identity.ts      login, the caller's claims
+│   │   ├── gateway.ts       the gateway's control plane
+│   │   ├── access.ts        Access administration and decisions
+│   │   ├── data.ts          a workspace's records and model
+│   │   ├── status.ts        service probes
+│   │   ├── answer.ts        service answers and refusals
+│   │   └── failure.ts       command failures and exit statuses
+│   └── platform/         adapters implementing the core's ports
+│       ├── http.ts          transport, and the dry-run transport
+│       ├── files.ts         the machine's profiles and credential
+│       ├── callback.ts      the local server that waits for the provider's redirect
+│       ├── browser.ts       the machine's browser
+│       └── crypto.ts        randomness for the login
 └── test/
 ```
 
-The core imports neither the interface nor the adapters, and no module is in an import cycle: `packages/cli/scripts/architecture.ts` checks it with the same engine as the console.
+The core imports neither the interface nor the adapters, and no module is in an import cycle. `packages/cli/scripts/architecture.ts` checks this with the same engine as the console.
 
 ## Commands
 
 ```bash
 bun run start          # src/main.ts
 bun run build          # a single binary in dist/
-bun run cli            # from the root of the repository
+bun run cli            # from the repository root
 bun run test
 bun run typecheck
 bun run architecture   # the core imports neither the interface nor the adapters
 ```
 
-The environment of the CLI carries its own name: `PLATFORMCTL_GATEWAY_URL`, `PLATFORMCTL_CONTROL_URL`, `PLATFORMCTL_ACCESS_URL`, `PLATFORMCTL_WORKSPACE_ID`, `PLATFORMCTL_CLIENT_ID`, `PLATFORMCTL_CLIENT_SECRET`, `PLATFORMCTL_REDIRECT_URI`, `PLATFORMCTL_CONTROL_TOKEN`, `PLATFORMCTL_ADMIN_TOKEN`, `PLATFORMCTL_TOKEN`, `PLATFORMCTL_PROFILE` and `PLATFORMCTL_TIMEOUT_MS`.
+The CLI's environment variables all carry its own prefix: `PLATFORMCTL_GATEWAY_URL`, `PLATFORMCTL_CONTROL_URL`, `PLATFORMCTL_ACCESS_URL`, `PLATFORMCTL_WORKSPACE_ID`, `PLATFORMCTL_TENANT_ID`, `PLATFORMCTL_CLIENT_ID`, `PLATFORMCTL_CLIENT_SECRET`, `PLATFORMCTL_REDIRECT_URI`, `PLATFORMCTL_CONTROL_TOKEN`, `PLATFORMCTL_ADMIN_TOKEN`, `PLATFORMCTL_TOKEN`, `PLATFORMCTL_PROFILE` and `PLATFORMCTL_TIMEOUT_MS`. Their meanings are in [spec §3](../../docs/cli/spec.md#3-profiles).

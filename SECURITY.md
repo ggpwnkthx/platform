@@ -1,6 +1,6 @@
 # Security
 
-How to report a vulnerability in the platform, and what happens next. One policy covers the gateway, Access and Data.
+How to report a vulnerability in the platform, and what happens after you do. One policy covers the gateway, Access and Data.
 
 ## Supported versions
 
@@ -10,26 +10,26 @@ How to report a vulnerability in the platform, and what happens next. One policy
 | `packages/access/` | The platform release line |
 | `packages/data/` | The platform release line |
 
-Each release carries all three services, so a fix in the platform release line reaches all of them at once.
+Every release carries all three services, so a fix on the platform release line reaches each of them at the same time.
 
 ## Reporting
 
-Report privately, never in a public issue:
+Report privately. Never open a public issue for a vulnerability. Use either channel:
 
-- open a **security advisory** on the repository, or
+- open a **security advisory** on the repository;
 - email `security@ggpwnkthx.com`.
 
-Include the service, version, reproduction steps and the impact you expect.
+Include the service, the version, steps to reproduce, and the impact you expect.
 
 ## What happens next
 
-1. We confirm the finding, or close it with the reason it isn't one.
+1. We confirm the finding, or close it and give the reason it is not one.
 2. We prepare a fix on an unpublished branch.
-3. We cut a release containing the fix and its changelog entry.
+3. We cut a release that contains the fix and its changelog entry.
 4. We publish the advisory, naming the affected versions and the fixed version.
 
-A finding that is already public is handled at the pace of the disclosure: the fix ships as soon as it is proven.
+If a finding is already public, we work at the pace of the disclosure and ship the fix as soon as it is proven.
 
 ## Security model
 
-Trust boundaries, secret handling and least privilege: [platform security](docs/platform/security.md), which links to each service's own rules.
+The [platform security](docs/platform/security.md) page covers trust boundaries, secret handling and least privilege, and links to each service's own rules.

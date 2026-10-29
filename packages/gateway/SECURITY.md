@@ -1,7 +1,6 @@
 # Gateway security
 
-The gateway's security scope. The gateway decides who reaches every application behind it, so a bug in it
-is a hole in front of all of them, and any problem report is treated as a vulnerability report.
+The gateway's security scope: supported versions, how to report a problem, and what is in and out of scope. The gateway decides who reaches every application behind it, so a bug in it is a hole in front of all of them, and any problem report is treated as a vulnerability report.
 
 The platform policy (supported versions, how to report, what happens next) is in the
 [repository SECURITY.md](../../SECURITY.md).
@@ -14,8 +13,8 @@ The platform policy (supported versions, how to report, what happens next) is in
 | The line before the merge | No |
 
 The gateway is at platform release `1.0.0`, and its contract is that release's
-[specification](../../docs/gateway/spec.md). A release's behaviour never changes under an operator: a fix
-that changes the contract is a new release.
+[specification](../../docs/gateway/spec.md). A release's behavior never changes under an operator: a fix
+that changes the contract is a new release ([spec §14](../../docs/gateway/spec.md#14-release-compatibility)).
 
 ## Reporting a problem
 
@@ -48,18 +47,18 @@ Anything that lets a caller reach an upstream, or an upstream reach something it
 
 - The applications behind the gateway: the deployment that owns them is responsible.
 - The identity provider, Access and the shared state: they are dependencies, and a problem in
-  one belongs to it. The Access protocol is [spec §6.1](../../docs/gateway/spec.md); its
+  one belongs to it. The Access protocol is [spec §6.1](../../docs/gateway/spec.md#61-access-protocol); its
   conformance suite is `test/support/access-conformance.ts`.
 - The ingress in front of the gateway: it terminates TLS and the deployment configures it.
 - Volumetric denial of service: the gateway bounds its own resources and deployment limits bound traffic,
-  but a deployment without the [spec §9](../../docs/gateway/spec.md) limits is not protected against a
+  but a deployment without the [spec §9](../../docs/gateway/spec.md#9-limits) limits is not protected against a
   flood.
 - The runtime: the release contract names the required version, and the gateway refuses to start on an
-  older one.
+  older one ([spec §4.2](../../docs/gateway/spec.md#42-runtime-version)).
 
 ## Release rules
 
-- The gateway contract is the [specification](../../docs/gateway/spec.md). A behaviour change is a
+- The gateway contract is the [specification](../../docs/gateway/spec.md). A behavior change is a
   contract change, recorded there and in [CHANGELOG.md](../../CHANGELOG.md).
 - The decisions behind the contract, with their evidence, are in
   [decisions.md](../../docs/gateway/decisions.md).

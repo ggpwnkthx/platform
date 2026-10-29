@@ -1,17 +1,17 @@
 # Access
 
-The platform's OpenID Connect broker and access decision service. It authenticates callers against each tenant's identity provider, maps them to principals, issues its own tokens to the gateway, and answers the gateway's decision contract.
+This workspace holds Access, the platform's OpenID Connect broker and access decision service. It authenticates callers against each tenant's identity provider, maps them to principals, issues its own tokens to the gateway, and answers the gateway's decision contract.
 
-Documentation: [docs/access/](../../docs/access/README.md). Contribution workflow: [CONTRIBUTING.md](../../CONTRIBUTING.md). Releases: [CHANGELOG.md](../../CHANGELOG.md).
+Documentation: [docs/access/](../../docs/access/README.md). Environment variables: [configuration](../../docs/access/configuration.md), with development values in [.env.example](.env.example). Contribution workflow: [CONTRIBUTING.md](../../CONTRIBUTING.md). Releases: [CHANGELOG.md](../../CHANGELOG.md).
 
 ## Place in the platform
 
 | Workspace | Relationship |
 | --- | --- |
-| [`packages/gateway/`](../gateway/) | Client of this service: authenticates callers here, asks for decisions, and forwards the principal's identity upstream. |
+| [`packages/gateway/`](../gateway/) | Client of Access: authenticates callers here, asks for decisions, and forwards the principal's identity upstream. |
 | [`packages/data/`](../data/) | Reads `/v1/access-context` to learn what a caller may do. |
 
-The services are separate processes in one repository. This service talks to them over HTTP and OpenID Connect and depends on neither at runtime. Its environment is the `ACCESS_*` group, documented in [.env.example](.env.example).
+The services are separate processes in one repository. Access talks to them over HTTP and OpenID Connect and depends on neither at runtime. It reads only the `ACCESS_*` variables.
 
 ## Commands
 
