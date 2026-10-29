@@ -10,6 +10,16 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The matrix of the continuous integration names the workspaces that are there
+
+The matrix of the types, the boundaries and the tests named eight
+workspaces: the gateway, Access, Data and the console, and the
+administration, the operators, the status and the interface. The four
+last ones were the workspaces the console was before it was one
+workspace, and the matrix kept them after the console was one: four
+jobs of the eight failed on every push, and the gate of the platform
+was red before it said anything about the platform.
+
 ### The status and the documentation are in the foot of every page
 
 The header of every page of the console listed five places: the

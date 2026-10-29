@@ -43,14 +43,6 @@ jobs:
             path: packages/data
           - workspace: console
             path: packages/console
-          - workspace: admin
-            path: packages/admin
-          - workspace: operators
-            path: packages/operators
-          - workspace: status
-            path: packages/status
-          - workspace: ui
-            path: packages/ui
     steps:
       - uses: actions/checkout@v7
 
