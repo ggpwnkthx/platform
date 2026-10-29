@@ -10,6 +10,19 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The root commands name the platform once
+
+The root of the repository named every workspace twice: once in the
+shortcuts of the tests, and once in the shortcuts of the start. The
+documented way to run the command of one workspace is `--cwd`, and the
+root kept a second one.
+
+The root keeps the commands that act on the whole platform — the run of
+the development stack, the command line, the checks, the tests and the
+release — and the family of the tests, one line per workspace. The
+fast tests compose that family, so a workspace is named once, and the
+command line joins it like the others.
+
 ### The platform has a command line
 
 The `platformctl` program is a client of the gateway, Access and Data:
