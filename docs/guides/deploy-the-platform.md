@@ -56,7 +56,7 @@ How each service takes a secret differs:
 - The gateway's [configuration](../gateway/configuration.md#files) lists a file form only for the control-plane token map; its other secrets come from the environment your secret store fills, and keys also accept a `_BASE64` form.
 - The console reads only environment variables ([console configuration](../console/configuration.md#variables)).
 
-`bun run scripts/dev-keys.ts` and the values in [`.env.min`](../../.env.min) are for development and trials only; Access refuses example values in production.
+`bun run scripts/dev-keys.ts` and the values in [`.env.min`](../../.env.min) are for development and trials only; the three services refuse example values in production, and a token of the platform is at least thirty-two bytes long.
 
 ### 3. Create the database roles
 

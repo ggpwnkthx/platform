@@ -201,8 +201,12 @@ describe('the environment of Access', () => {
     // The length of a secret is the first thing that is tried: a token
     // of one character protects the administration as well as a token of
     // thirty two characters (spec §4.1).
+    //
+    // The token of the administration and the token of the decisions act
+    // for every tenant of the platform: they are thirty-two bytes at
+    // least (spec §10.1, §8.8).
     expect(() => readEnv({ ...PRODUCTION, ACCESS_ADMIN_TOKEN: 'short' })).toThrow(
-      /ACCESS_ADMIN_TOKEN must be at least 16 bytes/
+      /ACCESS_ADMIN_TOKEN must be at least 32 bytes/
     )
     expect(() => readEnv({ ...PRODUCTION, ACCESS_METRICS_TOKEN: 'short' })).toThrow(
       /ACCESS_METRICS_TOKEN must be at least 16 bytes/
@@ -213,7 +217,19 @@ describe('the environment of Access', () => {
         ACCESS_DECISION_TOKEN: 'short',
         ACCESS_PREVIOUS_DECISION_TOKEN: undefined,
       })
-    ).toThrow(/ACCESS_DECISION_TOKEN must be at least 16 bytes/)
+    ).toThrow(/ACCESS_DECISION_TOKEN must be at least 32 bytes/)
+  })
+
+  test('a token that the repository publishes is refused in a production deployment', () => {
+    // The values of the examples of the repository are published: a
+    // deployment that starts with one of them holds a credential that
+    // everybody knows (spec §4.1).
+    expect(() => readEnv({ ...PRODUCTION, ACCESS_ADMIN_TOKEN: 'dev-admin-token-0000000' })).toThrow(
+      /ACCESS_ADMIN_TOKEN is the value of the example/
+    )
+    expect(() =>
+      readEnv({ ...PRODUCTION, ACCESS_DECISION_TOKEN: 'example-access-token-0000000' })
+    ).toThrow(/ACCESS_DECISION_TOKEN is the value of the example/)
   })
 
   test('a token that is not set is not a short token', () => {

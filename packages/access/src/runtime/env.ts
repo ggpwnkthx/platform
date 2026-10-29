@@ -177,8 +177,14 @@ const MINIMUM_SECRET_BYTES = 32
  * A token is compared in the bytes it is written in, so it is measured
  * the same way: a token of one character is a token of one byte
  * (spec §4.1).
+ *
+ * The token of the administration and the token of the decisions act for
+ * every tenant of the platform: they are thirty-two bytes at least.
  */
 const MINIMUM_TOKEN_BYTES = 16
+
+/** The smallest size of a token of the platform, in bytes. */
+const MINIMUM_PLATFORM_TOKEN_BYTES = 32
 
 /**
  * The values of the file of examples.
@@ -186,6 +192,12 @@ const MINIMUM_TOKEN_BYTES = 16
  * A deployment that copies the example of a development machine into a
  * production one keeps a published secret. A production deployment
  * refuses to start with one of these values (spec §4.1).
+ *
+ * The list holds the values of the examples of the repository: the ones
+ * of the development machine, the ones of the deployment of the example
+ * and the ones of the deployment file of the example. They are all
+ * published, and a deployment that starts with one of them holds a
+ * credential that everybody knows.
  */
 const EXAMPLE_SECRETS: readonly string[] = [
   'the-admin-token-of-the-development',
@@ -193,6 +205,14 @@ const EXAMPLE_SECRETS: readonly string[] = [
   'the-access-token-of-the-development',
   'the-previous-access-token-of-the-development',
   'the-metrics-token-of-the-development',
+  'dev-admin-token-0000000',
+  'dev-access-token-0000000',
+  'dev-context-token-00000001',
+  'dev-tenant-token-of-the-development-01',
+  'dev-state-secret-of-the-development-0001',
+  'dev-encryption-key-of-the-development-01',
+  'example-admin-token-0000000',
+  'example-access-token-0000000',
 ]
 
 /**
@@ -517,12 +537,24 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
     ['ACCESS_PREVIOUS_DECISION_TOKEN', parsed.ACCESS_PREVIOUS_DECISION_TOKEN],
     ['ACCESS_METRICS_TOKEN', parsed.ACCESS_METRICS_TOKEN],
   ]
+  // The tokens of the platform act for every tenant: they are the
+  // credentials of the administration of the platform and the ones of
+  // the decision contract (spec §10.1, §8.8).
+  const PLATFORM_TOKENS: readonly string[] = [
+    'ACCESS_ADMIN_TOKEN',
+    'ACCESS_PREVIOUS_ADMIN_TOKEN',
+    'ACCESS_DECISION_TOKEN',
+    'ACCESS_PREVIOUS_DECISION_TOKEN',
+  ]
   for (const [name, value] of tokens) {
     if (!value || value.trim().length === 0) continue
     const bytes = Buffer.byteLength(value.trim(), 'utf8')
-    if (production && bytes < MINIMUM_TOKEN_BYTES) {
+    const minimum = PLATFORM_TOKENS.includes(name)
+      ? MINIMUM_PLATFORM_TOKEN_BYTES
+      : MINIMUM_TOKEN_BYTES
+    if (production && bytes < minimum) {
       problems.push(
-        `${name} must be at least ${MINIMUM_TOKEN_BYTES} bytes long: it is a bearer token of the service`
+        `${name} must be at least ${minimum} bytes long: it is a bearer token of the service`
       )
     }
     if (production && (isExampleSecret(value) || isRepeatedCharacterSecret(value))) {

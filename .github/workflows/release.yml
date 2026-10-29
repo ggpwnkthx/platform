@@ -329,8 +329,8 @@ jobs:
             -e ACCESS_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
             -e ACCESS_REDIS_URL=redis://host.docker.internal:6379/0 \
             -e ACCESS_ISSUER=https://access.example.com \
-            -e ACCESS_ADMIN_TOKEN=release-admin-token \
-            -e ACCESS_DECISION_TOKEN=release-access-token \
+            -e ACCESS_ADMIN_TOKEN=release-admin-token-of-the-release \
+            -e ACCESS_DECISION_TOKEN=release-access-token-of-the-release \
             -e ACCESS_STATE_SECRET="$(printf '4f9a2c8e%.0s' {1..8})" \
             -e ACCESS_SECRET_ENCRYPTION_KEY="$(printf 'b31e7d09%.0s' {1..8})" \
             -e ACCESS_SIGNING_KEY \

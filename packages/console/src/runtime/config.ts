@@ -118,19 +118,67 @@ function integerOf(
   return parsed
 }
 
-/** Reads a credential: at least sixteen characters, the rule of Access. */
-function credentialOf(env: Environment, name: string, problems: string[]): string | null {
+/**
+ * The minimum length of a credential of the console.
+ *
+ * The credential of the console is the credential of the platform at
+ * Access, and Access holds the rule of the strength of its own
+ * credentials: the console holds the rule of the length, and it refuses
+ * the values that the repository publishes.
+ */
+const MINIMUM_CREDENTIAL_LENGTH = 16
+
+/**
+ * The credentials that are published in the repository.
+ *
+ * They are the values of the example of the development machine and the
+ * values of the deployment of the example: a console that starts with
+ * one of them holds a credential that everybody knows. A development
+ * machine may use the values of the example; a deployment may not.
+ */
+const PUBLISHED_CREDENTIALS: readonly string[] = [
+  'dev-admin-token-0000000',
+  'dev-tenant-token-of-the-development-01',
+  'dev-context-token-00000001',
+  'dev-access-token-0000000',
+  'example-admin-token-0000000',
+  'example-access-token-0000000',
+]
+
+/**
+ * Reads a credential: long enough, and not a published one.
+ *
+ * The rule of the published value is the rule of the production
+ * deployment: a development machine may use the values of the example,
+ * and a deployment may not (spec §10.1).
+ */
+function credentialOf(
+  env: Environment,
+  name: string,
+  problems: string[],
+  production: boolean
+): string | null {
   const value = readValue(env, name)
   if (value === undefined) return null
-  if (value.length < 16) {
-    problems.push(`${name} is shorter than 16 characters`)
+  if (value.length < MINIMUM_CREDENTIAL_LENGTH) {
+    problems.push(`${name} is shorter than ${MINIMUM_CREDENTIAL_LENGTH} characters`)
+    return null
+  }
+  if (production && PUBLISHED_CREDENTIALS.includes(value.trim())) {
+    problems.push(
+      `${name} is the value of the example of the repository: it is published, and a deployment does not start with it`
+    )
     return null
   }
   return value
 }
 
 /** Reads the credentials of the tenants: a json object of slugs and tokens. */
-function tenantTokensOf(env: Environment, problems: string[]): Record<string, string> {
+function tenantTokensOf(
+  env: Environment,
+  problems: string[],
+  production: boolean
+): Record<string, string> {
   const name = 'CONSOLE_TENANT_ADMIN_TOKENS'
   const value = readValue(env, name)
   if (value === undefined) return {}
@@ -151,8 +199,16 @@ function tenantTokensOf(env: Environment, problems: string[]): Record<string, st
       problems.push(`${name} names "${slug}", which is not the slug of a tenant`)
       continue
     }
-    if (typeof token !== 'string' || token.length < 16) {
-      problems.push(`${name} holds a credential of "${slug}" that is shorter than 16 characters`)
+    if (typeof token !== 'string' || token.length < MINIMUM_CREDENTIAL_LENGTH) {
+      problems.push(
+        `${name} holds a credential of "${slug}" that is shorter than ${MINIMUM_CREDENTIAL_LENGTH} characters`
+      )
+      continue
+    }
+    if (production && PUBLISHED_CREDENTIALS.includes(token.trim())) {
+      problems.push(
+        `${name} holds a credential of "${slug}" that is the value of the example of the repository: it is published, and a deployment does not start with it`
+      )
       continue
     }
     tokens[slug] = token
@@ -176,6 +232,7 @@ export function readConfig(env: Environment): ConsoleConfig {
   if (environment !== 'development' && environment !== 'production') {
     problems.push('CONSOLE_ENVIRONMENT is neither development nor production')
   }
+  const production = environment === 'production'
 
   const publicUrlText = urlOf(env, 'CONSOLE_PUBLIC_URL', problems, true)
   const accessUrl = urlOf(env, 'CONSOLE_ACCESS_URL', problems, true)
@@ -186,11 +243,20 @@ export function readConfig(env: Environment): ConsoleConfig {
   if (!clientId) problems.push('CONSOLE_CLIENT_ID is required')
   const clientSecret = readValue(env, 'CONSOLE_CLIENT_SECRET')
   if (!clientSecret) problems.push('CONSOLE_CLIENT_SECRET is required')
+  else if (production && PUBLISHED_CREDENTIALS.includes(clientSecret.trim())) {
+    problems.push(
+      'CONSOLE_CLIENT_SECRET is the value of the example of the repository: it is published, and a deployment does not start with it'
+    )
+  }
 
   const sessionSecret = readValue(env, 'CONSOLE_SESSION_SECRET')
   if (!sessionSecret) problems.push('CONSOLE_SESSION_SECRET is required')
   else if (sessionSecret.length < 32) {
     problems.push('CONSOLE_SESSION_SECRET is shorter than 32 characters')
+  } else if (production && PUBLISHED_CREDENTIALS.includes(sessionSecret.trim())) {
+    problems.push(
+      'CONSOLE_SESSION_SECRET is the value of the example of the repository: it is published, and a deployment does not start with it'
+    )
   }
 
   const routeId = readValue(env, 'CONSOLE_ROUTE_ID') ?? 'console'
@@ -210,9 +276,9 @@ export function readConfig(env: Environment): ConsoleConfig {
     clientSecret: clientSecret ?? '',
     gatewayUrl: gatewayUrl ?? '',
     dataUrl,
-    adminToken: credentialOf(env, 'CONSOLE_ADMIN_TOKEN', problems),
-    tenantAdminTokens: tenantTokensOf(env, problems),
-    accessContextToken: credentialOf(env, 'CONSOLE_ACCESS_CONTEXT_TOKEN', problems),
+    adminToken: credentialOf(env, 'CONSOLE_ADMIN_TOKEN', problems, production),
+    tenantAdminTokens: tenantTokensOf(env, problems, production),
+    accessContextToken: credentialOf(env, 'CONSOLE_ACCESS_CONTEXT_TOKEN', problems, production),
     routeId,
     sessionSecret: sessionSecret ?? '',
     sessionTtlMs: integerOf(env, 'CONSOLE_SESSION_TTL_MS', 8 * hour, problems, {

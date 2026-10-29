@@ -432,8 +432,8 @@ jobs:
           ACCESS_PUBLIC_URL=http://127.0.0.1:18099 \
           ACCESS_DATABASE_URL=postgres://platform:platform@127.0.0.1:5432/platform \
           ACCESS_REDIS_URL=redis://127.0.0.1:6379/0 \
-          ACCESS_ADMIN_TOKEN=release-admin-token \
-          ACCESS_DECISION_TOKEN=release-access-token \
+          ACCESS_ADMIN_TOKEN=release-admin-token-of-the-release \
+          ACCESS_DECISION_TOKEN=release-access-token-of-the-release \
           ACCESS_STATE_SECRET=4f9a2c8e4f9a2c8e4f9a2c8e4f9a2c8e4f9a2c8e4f9a2c8e4f9a2c8e4f9a2c8e \
           ACCESS_SECRET_ENCRYPTION_KEY=b31e7d09b31e7d09b31e7d09b31e7d09b31e7d09b31e7d09b31e7d09b31e7d09b31e7d09 \
           ACCESS_SIGNING_KEY="$(cat access-key.pem)" \
