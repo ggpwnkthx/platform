@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * The architecture check (spec §13).
+ * The architecture check (docs/data/internals.md, Code layout).
  *
  * The check reads the imports of the source and it refuses the shapes
  * the specification forbids:

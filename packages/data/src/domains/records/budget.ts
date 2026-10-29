@@ -1,5 +1,5 @@
 /**
- * The budget of the bytes of an answer (spec §9.6).
+ * The budget of the bytes of an answer (spec §9.5).
  *
  * The contract of the API bounds the size of an answer: four mebibytes,
  * expansions included. The bound is a bound of the **resources** of the

@@ -32,7 +32,7 @@
  * identity could mint one as well. A `v4` signature is refused like any
  * other signature of an unknown version.
  *
- * The guide is in [docs/upstream-identity.md](../../docs/gateway/upstream-identity.md).
+ * The guide is in docs/gateway/upstream-identity.md.
  */
 import { base64url, compactVerify, type KeyInput } from 'jose'
 

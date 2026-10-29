@@ -13,7 +13,7 @@
  * workflow, so a violation fails the build instead of being noticed in
  * a review.
  *
- * The rules are the ones of docs/gateway/spec.md §14.3:
+ * The rules are the ones of docs/gateway/internals.md (Import rules):
  *
  * 1. A domain exposes a deliberate `index.ts`. The consumers import that
  *    entry point and not a file of the domain.

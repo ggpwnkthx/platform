@@ -1,5 +1,5 @@
 /**
- * The model of a workspace (spec §7.7).
+ * The model of a workspace (spec §7.6).
  *
  * The public entry point of the domain: the overlay that says how the
  * collections of the deployment look for a workspace, the service that

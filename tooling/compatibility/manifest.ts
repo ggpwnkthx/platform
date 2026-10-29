@@ -1,5 +1,5 @@
 /**
- * The manifest of the baseline of the platform (spec §16).
+ * The manifest of the baseline of the platform (docs/data/internals.md, Release acceptance).
  *
  * The manifest is the one place that owns the workspaces of the platform
  * and the revision that is tested against them. The harness, the

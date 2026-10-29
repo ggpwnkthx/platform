@@ -10,7 +10,7 @@ import { createHarness, WORKSPACE_ID, type Harness } from '../support/contract-h
  *
  * The wording of the log is not a contract of the release — the names of
  * the functions and the wording of the logs are implementation details
- * (§16.1 of the specification) — but the **fields** that carry the identity
+ * (§14.1 of the specification) — but the **fields** that carry the identity
  * of the caller are what an operator reads the log for, and they are
  * proved here.
  */

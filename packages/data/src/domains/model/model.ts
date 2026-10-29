@@ -1,5 +1,5 @@
 /**
- * The model of a workspace (spec §7.7).
+ * The model of a workspace (spec §7.6).
  *
  * The deployment holds the **physical** model: the tables of its
  * migrations and the manifest that names them. A workspace holds its own

@@ -10,7 +10,7 @@ import { referenceRoot } from './reference'
 import { login, request, waitFor } from './browser'
 
 /**
- * The compatibility suite (spec §15.1).
+ * The compatibility suite (docs/access/internals.md, Compatibility test).
  *
  * The gateway of the reference runs, unchanged, with its own configuration
  * and with Access in place of the two fixtures: Access is the provider of the

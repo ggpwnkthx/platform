@@ -1,5 +1,5 @@
 /**
- * The composition root (spec §13).
+ * The composition root (docs/data/internals.md, Code layout).
  *
  * The composition root is the only place that knows the concrete
  * adapters: it reads the configuration, it loads the artifacts of the

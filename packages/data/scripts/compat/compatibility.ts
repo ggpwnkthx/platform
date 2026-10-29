@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * The compatibility harness (spec §16 and §17).
+ * The compatibility harness (docs/data/internals.md, Release acceptance, and docs/data/decisions.md).
  *
  * The harness runs the **real** gateway, the **real** Access and
  * the **real** backend of this repository, against a real PostgreSQL

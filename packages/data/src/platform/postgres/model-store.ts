@@ -1,5 +1,5 @@
 /**
- * The store of the model of the workspaces (spec §7.7).
+ * The store of the model of the workspaces (spec §7.6).
  *
  * The model of a workspace is a document: it is read with the narrow
  * reader of the registry, next to the workspace itself, and it is

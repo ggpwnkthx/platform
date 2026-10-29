@@ -1,5 +1,5 @@
 /**
- * The service of the model of a workspace (spec §7.7).
+ * The service of the model of a workspace (spec §7.6).
  *
  * The service owns the changes of the logical model of a workspace: it
  * reads the model, it refuses the changes that cannot hold, it writes

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * The check of the drift of the baseline (spec §16).
+ * The check of the drift of the baseline (docs/data/internals.md, Release acceptance).
  *
  * The manifest `compatibility.json` owns the workspaces of the platform
  * and the revision that is tested against them. The documentation of the

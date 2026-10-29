@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * The mutation gate (spec §16).
+ * The mutation gate (docs/data/internals.md, Release acceptance).
  *
  * A test that passes on a correct implementation and on a broken one
  * proves nothing. The suites of this repository were written by the

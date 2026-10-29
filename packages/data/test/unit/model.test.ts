@@ -1,5 +1,5 @@
 /**
- * The model of a workspace (spec §7.7).
+ * The model of a workspace (spec §7.6).
  *
  * The model is the logical shape of the collections of a workspace, and
  * it is applied to the manifest of the deployment when the catalog of the
