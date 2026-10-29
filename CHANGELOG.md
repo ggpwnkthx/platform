@@ -10,6 +10,19 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The status and the documentation are in the foot of every page
+
+The header of every page of the console listed five places: the
+overview, the workspaces, the operators, the status and the
+documentation. The foot of every page listed the last two of them as
+well, so a reader was given the same two links twice on every page, and
+the header of a page carried the two that are not places of the console.
+
+The header carries the places of the console now — the overview, the
+workspaces and the operators — and the foot keeps the status and the
+documentation, which every reader may open. The link of the foot that
+points at the page being read says so.
+
 ### The status board names every service by its role
 
 Two of the four cards of the status board carried a word the other two

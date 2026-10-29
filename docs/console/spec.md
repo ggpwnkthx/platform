@@ -166,6 +166,8 @@ The library has two wildcards, the action `manage` and the subject `all`. The co
 
 A Data refusal is shown as-is: status, code, message, named fields, and request ID.
 
+The header of every page carries the places of the console that the reader may reach: the overview, the workspaces, and the operators. The status and the documentation are in the foot of every page instead, and every reader may open both of them.
+
 ### 6.3 Platform map
 
 The status page includes the **platform map**: request participants as lanes, and a request's exchanges as rows crossing them. Pick a request (a record, a sign-in, a grant change) and the map highlights the exchanges it crosses, in order.

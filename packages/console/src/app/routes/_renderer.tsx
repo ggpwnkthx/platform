@@ -20,6 +20,9 @@ async function Masthead(props: { section?: Section }) {
   const scope = session ? await operatorScope(c) : null
   const ability = scope ? consoleAbility(scope) : null
   const theme = getCookie(c, 'console_theme')
+  // The status and the documentation are in the foot of every page: the
+  // header carries the places of the console, and the foot the two that
+  // every reader may reach.
   const items: { href: string; label: string; section: Section; shown: boolean }[] = [
     { href: '/', label: 'Overview', section: 'home', shown: true },
     { href: '/workspaces', label: 'Workspaces', section: 'workspaces', shown: session !== null },
@@ -29,8 +32,6 @@ async function Masthead(props: { section?: Section }) {
       section: 'operators',
       shown: ability?.can(CONSOLE_ACTIONS.admin, CONSOLE_SUBJECT) ?? false,
     },
-    { href: '/status', label: 'Status', section: 'status', shown: true },
-    { href: '/docs', label: 'Documentation', section: 'docs', shown: true },
   ]
   return (
     <header class="masthead">
@@ -137,10 +138,18 @@ export default jsxRenderer(({ children, title, section, crumbs, wide }) => {
           <div>
             <span>Console {VERSION}</span>
             <nav aria-label="Footer">
-              <a class="foot-link" href="/status">
+              <a
+                class="foot-link"
+                href="/status"
+                aria-current={section === 'status' ? 'page' : undefined}
+              >
                 Status
               </a>
-              <a class="foot-link" href="/docs">
+              <a
+                class="foot-link"
+                href="/docs"
+                aria-current={section === 'docs' ? 'page' : undefined}
+              >
                 Documentation
               </a>
             </nav>

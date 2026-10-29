@@ -458,6 +458,23 @@ describe('the console', () => {
     expect(page).not.toContain('<h3>The console</h3>')
   })
 
+  test('the header carries the places of the console, and the foot the two that are always there', async () => {
+    const html = await (await new Browser().request('/')).text()
+    const header = html.slice(html.indexOf('<nav class="nav"'), html.indexOf('</nav>'))
+    expect(header).toContain('>Overview</a>')
+    expect(header).not.toContain('>Documentation</a>')
+    expect(header).not.toContain('>Status</a>')
+
+    const foot = html.slice(html.lastIndexOf('<nav aria-label="Footer">'))
+    expect(foot).toContain('href="/status"')
+    expect(foot).toContain('href="/docs"')
+  })
+
+  test('the foot marks the place the reader is on', async () => {
+    const html = await (await new Browser().request('/status')).text()
+    expect(html).toContain('href="/status" aria-current="page"')
+  })
+
   test('the sign-out ends the session', async () => {
     const browser = new Browser()
     await browser.signIn()

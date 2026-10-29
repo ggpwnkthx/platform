@@ -2045,6 +2045,11 @@ body.wide {
   color: var(--ink);
 }
 
+.foot-link[aria-current="page"] {
+  color: var(--ink);
+  font-weight: 600;
+}
+
 .card-link:hover h2 {
   color: var(--accent);
 }
