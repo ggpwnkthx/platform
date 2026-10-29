@@ -35,6 +35,29 @@ export const CONTROL_SCOPES: readonly ControlScope[] = ['read', 'operate', 'conf
 /** The shortest token the control plane accepts. */
 export const MINIMUM_TOKEN_LENGTH = 16
 
+/**
+ * The tokens that the repository publishes.
+ *
+ * The map of the example of the deployment is in the repository, and the
+ * token it holds is published: a control plane that starts with it is a
+ * control plane that anybody who reads the repository controls.
+ */
+export const PUBLISHED_CONTROL_TOKENS: readonly string[] = [
+  'replace-this-with-a-token-of-at-least-16-characters',
+]
+
+/**
+ * Reports whether a token is one of the tokens the repository publishes.
+ *
+ * A token that carries the word `replace-this` is an example of a token,
+ * whatever its length is: an operator that forgot to replace it wrote a
+ * sentence where a secret belongs.
+ */
+export function isPublishedControlToken(token: string): boolean {
+  const trimmed = token.trim()
+  return PUBLISHED_CONTROL_TOKENS.includes(trimmed) || trimmed.includes('replace-this')
+}
+
 /** The identity of the operator behind a token. */
 export interface ControlIdentity {
   /** The operator, as the token map named it. */
@@ -52,8 +75,15 @@ export type ControlTokens = ReadonlyMap<string, ControlIdentity>
  * The map is a JSON object of `{token: {operator, scope}}`. A map that
  * cannot be read stops the process: a control plane that starts with a map
  * it does not understand is a control plane that nobody controls.
+ *
+ * A production deployment refuses the tokens the repository publishes: the
+ * map of the example is in the repository, and a control plane that
+ * accepts it is a control plane that everybody controls.
  */
-export function parseControlTokens(raw: string): ControlTokens {
+export function parseControlTokens(
+  raw: string,
+  options: { production?: boolean } = {}
+): ControlTokens {
   let parsed: unknown
   try {
     parsed = JSON.parse(raw)
@@ -72,6 +102,11 @@ export function parseControlTokens(raw: string): ControlTokens {
     if (token.length < MINIMUM_TOKEN_LENGTH) {
       throw new Error(
         `a token of the control plane is shorter than ${MINIMUM_TOKEN_LENGTH} characters`
+      )
+    }
+    if (options.production && isPublishedControlToken(token)) {
+      throw new Error(
+        'a token of the control plane is the value of the example of the repository: it is published, and a deployment does not start with it'
       )
     }
     if (value === null || typeof value !== 'object' || Array.isArray(value)) {

@@ -122,7 +122,9 @@ export async function createControlRuntime(
     write: options.logSink,
   })
 
-  const tokens = parseControlTokens(await readTokens(settings))
+  const tokens = parseControlTokens(await readTokens(settings), {
+    production: settings.production,
+  })
   refuseSecrets(tokens, settings.stateUrl)
 
   const onStateError = (error: unknown): void => {
