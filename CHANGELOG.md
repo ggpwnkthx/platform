@@ -10,6 +10,60 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The trust of the forwarding headers is the trust of an address
+
+The gateway honored the forwarding headers of a peer that was inside a
+trusted range, and the deployment of the example trusted every private
+range of the network. The trust of a range is the trust of every workload
+of that range: a peer inside it chooses the host of the request, the
+address of the caller and the protocol of the request, so a workload of the
+network that was compromised could name the route that answered a request,
+could spend the budget of another caller, and could name the origin of an
+attacker and pass the cross site guard with the cookie of a signed in
+browser.
+
+The trust is narrow now. A production deployment refuses to start when a
+range covers more than sixteen addresses, and when a value of the list is
+not a range at all. A route table whose ranges are too wide is not
+published, and the write of the control plane that widens the trust is
+refused like any other invalid table. The ranges that are running are
+published in the metric `gateway_trusted_proxies` and written in the log of
+the active configuration. The example of the deployment trusts the loopback
+and nothing else, and the manifest of the cluster trusts nobody until the
+operator names the address of its ingress.
+
+### The release workflow does not put the input of a dispatch in a script
+
+The workflow of the release read the tag of a manual dispatch in the script
+of a step. An expression of the context of the event is substituted into the
+script before the shell reads it, so a value that carries a quote ends the
+assignment and runs a command of the caller. The tag now reaches the steps
+through the environment of the step, it is checked against the shape of a
+version of the platform before anything else happens, and the test of the
+platform holds that no input of the event reaches the script of a step.
+
+### The audit of the dependencies sees every advisory
+
+The gate of the continuous integration stopped the build on a critical
+advisory and let a moderate one through. Every advisory of the tree is a
+finding now, and the only exception is an advisory that the list of the
+accepted advisories names with a reason and with a day. An exception that
+is not on the list stops the build, an exception whose day is past stops
+the build as well, and an exception that the tree does not hold any more is
+reported so that it is removed. The parser of the yaml of the tree is
+raised to the version that the advisory of the library names.
+
+### The network of the namespace is closed by default
+
+The manifests of the cluster constrained the ingress of the services and
+left the egress of every pod free: a pod that was compromised in the
+namespace reached the administrative surface of the deployment and the
+databases of the other services. The policies of the services now carry
+their egress as well, the selectors of the ingress name the pods and not
+the namespace, and the composition denies every ingress and every egress in
+its namespace before the policies of the services open what each of them
+needs.
+
 ### The services refuse the credentials the repository publishes
 
 The repository publishes the credentials of its examples: the minimum
