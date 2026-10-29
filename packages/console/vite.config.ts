@@ -21,6 +21,10 @@ const ISLANDS = '/src/app/islands'
 export default defineConfig(({ command, mode }) => {
   if (mode === 'client') {
     return {
+      // The cache of Vite is at the root of the repository: the tree of
+      // the dependencies is flat, and a workspace holds no
+      // `node_modules` of its own.
+      cacheDir: '../../node_modules/.vite/console',
       build: {
         outDir: 'dist',
         emptyOutDir: true,
@@ -34,6 +38,10 @@ export default defineConfig(({ command, mode }) => {
     }
   }
   return {
+    // The cache of Vite is at the root of the repository: the tree of
+    // the dependencies is flat, and a workspace holds no
+    // `node_modules` of its own.
+    cacheDir: '../../node_modules/.vite/console',
     // The pages name the files of the build when they are built, whatever
     // the environment of the process that builds them says: a build in a
     // process whose NODE_ENV is not `production` is still a build.
