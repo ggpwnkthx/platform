@@ -52,6 +52,14 @@ services:
       - sh
       - -c
       - |
+        # The passwords of the repository are published: a deployment
+        # replaces every value of the minimum environment, and a stack
+        # that starts with one of them holds a credential that everybody
+        # knows.
+        if [ "${POSTGRES_PASSWORD}" = "platform" ] || [ "${ACCESS_APP_PASSWORD}" = "access_app" ]; then
+          echo "the passwords of the repository are published: a deployment replaces every value of .env.min" >&2
+          exit 1
+        fi
         psql "postgres://platform:${POSTGRES_PASSWORD:?the password of the server is required}@postgres:5432/platform" -v ON_ERROR_STOP=1 <<'SQL'
         create role access_app login password '${ACCESS_APP_PASSWORD:?the password of the role of Access is required}';
         grant usage, create on schema public to access_app;
@@ -130,6 +138,10 @@ services:
         condition: service_healthy
     command: ['sh', '-c', 'bun run scripts/cli/provision.ts && bun run scripts/cli/migrate.ts']
     environment:
+      # The production environment: the roles of the deployment are
+      # created with the passwords of the deployment, and a published
+      # password is refused.
+      DATA_ENVIRONMENT: production
       DATA_ADMIN_DATABASE_URL: postgres://platform:${POSTGRES_PASSWORD:?the password of the server is required}@postgres:5432/postgres
       DATA_OWNER_DATABASE_URL: postgres://platform:${POSTGRES_PASSWORD:?the password of the server is required}@postgres:5432/data
       DATA_OWNER_PASSWORD: ${DATA_OWNER_PASSWORD:?the password of the owner of the schema is required}
@@ -196,6 +208,11 @@ services:
     ports:
       - '8080:8080'
     environment:
+      # The production mode of the gateway: the refusals of a
+      # deployment (a published secret, a provider that is not served
+      # over https, a rate limit that is not set) are the rules of a
+      # production environment only.
+      NODE_ENV: production
       GATEWAY_CONFIG: /etc/platform/routes.json
       GATEWAY_HOST: 0.0.0.0
       GATEWAY_PORT: '8080'
@@ -244,6 +261,7 @@ services:
     restart: unless-stopped
     command: ['bun', 'run', 'src/control-main.ts']
     environment:
+      NODE_ENV: production
       GATEWAY_CONTROL_HOST: 0.0.0.0
       GATEWAY_CONTROL_PORT: '9090'
       GATEWAY_CONTROL_TOKENS_FILE: /etc/platform/control-tokens.json
@@ -252,7 +270,11 @@ services:
       GATEWAY_CONTROL_SHARED_STATE_KEY_PREFIX: gateway
       GATEWAY_LOG_LEVEL: ${GATEWAY_LOG_LEVEL:-info}
     volumes:
-      - ../../config/control-tokens.example.json:/etc/platform/control-tokens.json:ro
+      # The map of the tokens of the deployment. The example of the
+      # repository is the default of a development machine; a deployment
+      # points the variable at its own map, and the control plane refuses
+      # the token of the example in a production environment.
+      - ${CONTROL_TOKENS_FILE:-../../config/control-tokens.example.json}:/etc/platform/control-tokens.json:ro
     expose:
       - '9090'
     depends_on:

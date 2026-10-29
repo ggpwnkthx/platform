@@ -47,6 +47,12 @@ spec:
             - name: http
               containerPort: 8080
           env:
+            # The production mode of the gateway: the refusals of a
+            # deployment (a published secret, a provider that is not
+            # served over https, a rate limit that is not set) are the
+            # rules of a production environment only.
+            - name: NODE_ENV
+              value: production
             - name: GATEWAY_CONFIG
               value: /etc/platform/routes.json
             - name: GATEWAY_HOST

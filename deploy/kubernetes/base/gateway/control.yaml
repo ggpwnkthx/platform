@@ -49,6 +49,11 @@ spec:
             - name: control
               containerPort: 9090
           env:
+            # The production mode of the control plane: the map of
+            # the tokens of the example is refused in a production
+            # environment.
+            - name: NODE_ENV
+              value: production
             # The listener of the control plane. It binds the loopback
             # address by default; a pod is reached over the network of the
             # platform, and the service is not published to the callers.
