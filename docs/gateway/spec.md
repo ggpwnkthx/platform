@@ -1,17 +1,17 @@
 # Specification
 
-The gateway authenticates a caller against an OpenID Connect provider, asks an
-Access whether the caller may use a workspace, and forwards the request
-to the matched route's upstream. This page is normative for product behavior and
-source organization.
+The normative contract of the gateway's external behavior: the request pipeline, the route table, authentication, access decisions, headers, limits, proxying, operational interfaces and release compatibility. It is for implementers and reviewers; code that cites `§N` refers to this page, and this page wins any disagreement.
 
 Status: 1.0.0. Runtime: Bun ≥ 1.4.3 ([decisions.md](decisions.md), decision 36);
-the gateway **refuses to start** on an older runtime (§4). Listener: HTTP and
+the gateway **refuses to start** on an older runtime (§4.2). Listener: HTTP and
 WebSocket on `GATEWAY_HOST:GATEWAY_PORT` (default `0.0.0.0:8080`).
 
-Code layout and file ownership: [internals.md](internals.md#code-layout). Decisions
-behind the contract: [decisions.md](decisions.md). A recommendation in an
-implementation guide is not a requirement until it is recorded here.
+The gateway authenticates a caller against an OpenID Connect provider, asks
+Access whether the caller may use a workspace, and forwards the request to the
+matched route's upstream. Code organization is not part of the contract: it is
+in [internals.md](internals.md#code-layout). The reasons behind the contract
+are in [decisions.md](decisions.md). A recommendation in an implementation
+guide is not a requirement until it is recorded here.
 
 ---
 
@@ -102,8 +102,9 @@ Every other request runs these steps, in this order:
 10. **Cross-site guard.** Applied when the request carries the session cookie
     (§8). Refusal → `403 cross_site_request`.
 11. **Workspace check.** Read the placeholder, validate it as a UUID when
-    `requireUuid` is set, and ask Access (§6). Denial → `403
-    workspace_forbidden`; Access outage → `503 access_unavailable`.
+    `requireUuid` is set (a missing or invalid identifier → `400
+    bad_request`), and ask Access (§6). Denial → `403 workspace_forbidden`;
+    Access outage → `503 access_unavailable`.
 12. **Dispatch.** WebSocket upgrade (§10) or HTTP proxying (§11).
 
 Responses the gateway generates itself are JSON
@@ -129,6 +130,36 @@ response is handed to the runtime. In-flight requests are published as
 `gateway_active_requests`. A refused request is counted before route matching,
 on route `unmatched` with status `503`, which distinguishes it from a request
 that matched no route.
+
+### 2.5 Response codes
+
+The statuses and `error` codes the gateway generates itself on the request
+path, with the section that states each. Diagnosis by symptom:
+[troubleshooting.md](troubleshooting.md).
+
+| Status | `error` | When | Section |
+| --- | --- | --- | --- |
+| `302` | — | Login redirect for a browser without a valid session; end of login; logout. | §2.2, §2.3, §5.2 |
+| `400` | `bad_request` | The workspace identifier is missing from the path, or is not a UUID while `requireUuid` is set. | §2.3 |
+| `400` | `websocket_not_allowed` | Upgrade on a route without `websocket: true`. | §10 |
+| `400` | `login_failed` | The login callback could not be completed. | §5.2 |
+| `401` | `unauthorized` | No valid credential for the route's mode; `/metrics` with a wrong token. | §5, §12.1 |
+| `403` | `cross_site_request` | Cross-site guard refusal, including WebSocket handshakes and `/auth/logout`. | §8, §10 |
+| `403` | `workspace_forbidden` | Access answered `{"allow": false}`. | §6 |
+| `404` | `not_found` | Reserved path, another method on a gateway endpoint, `/metrics` without a token configured. | §2.2 |
+| `404` | `no_route` | No route matches host, path and method. | §2.3, §3.3 |
+| `413` | `payload_too_large` | Request body over the route's limit. | §11.2 |
+| `429` | `too_many_requests` | A rate limit or the login limiter refused; carries `retry-after`. | §9 |
+| `499` | — (empty body) | The caller went away before response headers were sent. | §11.3 |
+| `500` | `internal_error` | The caller's subject cannot be written to a header. | §7.1 |
+| `502` | `bad_gateway` | Upstream unreachable, certificate rejected, closed without final headers, `101` on the HTTP path. | §11.1.2, §11.2, §11.3 |
+| `503` | `not_ready` | No configuration has ever been loaded. | §2.3 |
+| `503` | `gateway_overloaded` | Admission or the exchange cap is full. | §2.4, §11.2 |
+| `503` | `access_unavailable` | Access could not be asked or its answer could not be read; carries `retry-after`. | §6 |
+| `503` | `too_many_connections` | `GATEWAY_WS_MAX_CONNECTIONS` reached. | §10 |
+| `503` | `identity_provider_unavailable` | `/auth/login` cannot reach the identity provider. | §5.2 |
+| `503` | `session_store_unavailable` | The login callback cannot write the session. | §5.2 |
+| `504` | `gateway_timeout` | The upstream did not answer within `responseMs`. | §11.3 |
 
 ---
 
@@ -233,8 +264,8 @@ refused (§3.2); with different methods they are two halves of one route.
 ### 3.4 Route table source
 
 `GATEWAY_CONFIG_SOURCE` selects `file` (default) or `store`. In `store` mode
-the route table lives in the shared state that already holds sessions (§4) as a
-list of **revisions**:
+the route table lives in the shared state that already holds sessions (§12.5)
+as a list of **revisions**:
 
 | Field | Meaning |
 | --- | --- |
@@ -269,54 +300,61 @@ gone disappears on its own. The control plane's `/v1/replicas` shows them
 
 ## 4. Environment
 
+Every variable, its default and whether production requires it:
+[configuration.md](configuration.md). This section states the rules the
+gateway applies to its environment.
+
+### 4.1 Validation at startup
+
 The environment is read once at startup and validated as a whole. A value that
 cannot be parsed stops the gateway: a setting that looks active but is not is a
 security hole. Log level rules: [platform operations](../platform/operations.md).
 
-The **runtime** is validated first. The gateway needs Bun ≥ 1.4.3 (decision 36)
-and stops on an older version, where these behaviors are not observable: an
-upstream's early response during an upload, cancelling the body producer,
-refusing an upstream WebSocket handshake, and upgrading the caller with
-gateway headers. Measurements: [internals.md](internals.md#runtime).
+The gateway reads `GATEWAY_CONFIG_SOURCE` to pick its route table source
+(§3.4). The shared-state URL's scheme selects the server type: Redis (a single
+server, a cluster when the URL names several hosts, or Sentinel when
+`GATEWAY_REDIS_SENTINEL_MASTER` is set) or Postgres (`postgres://` or
+`postgresql://`).
 
-Variable names never leave `src/runtime/env/`. The rest of the gateway receives
-the settings it needs, not the environment.
+### 4.2 Runtime version
 
-[.env.example](../../packages/gateway/.env.example) lists every variable with
-its default. A production deployment must set:
+The **runtime** is validated first, before the environment. The gateway needs
+Bun ≥ 1.4.3 (decision 36) and stops on an older version, where these behaviors
+are not observable: an upstream's early response during an upload, cancelling
+the body producer, refusing an upstream WebSocket handshake, and upgrading the
+caller with gateway headers. Measurements:
+[internals.md](internals.md#runtime).
 
-| Variable | Why |
+### 4.3 Production requirements
+
+In production (`NODE_ENV=production`) the gateway refuses to start unless each
+row below holds. The error names the missing variable.
+
+| Requirement | Why |
 | --- | --- |
-| `GATEWAY_SESSION_SECRET` | Signs the login state. Same value on every replica. |
-| `GATEWAY_IDENTITY_SIGNING_KEY` | Private key that signs request identities. Same key on every replica; upstreams get the public key (§7.4). |
-| `GATEWAY_OIDC_ISSUER` | Identity provider. |
-| `GATEWAY_OIDC_CLIENT_ID` | The gateway's client ID. |
-| `GATEWAY_OIDC_REDIRECT_URI` | URL the provider sends the browser back to. |
-| `GATEWAY_OIDC_CLIENT_SECRET` | Client secret. `GATEWAY_OIDC_ALLOW_PUBLIC_CLIENT=true` replaces it when the provider accepts a public client. |
-| `GATEWAY_ACCESS_URL` | Access URL. |
-| `GATEWAY_ACCESS_TOKEN` | Token the gateway authenticates to Access with. `GATEWAY_ACCESS_ALLOW_ANONYMOUS=true` replaces it when the service authenticates the gateway by other means. |
-| One rate limit | At least one of `GATEWAY_RATE_LIMIT_MAX`, `GATEWAY_RATE_LIMIT_GLOBAL_MAX`, `GATEWAY_RATE_LIMIT_PRINCIPAL_MAX` and `GATEWAY_RATE_LIMIT_TOTAL_MAX` must be non-zero. `GATEWAY_ALLOW_NO_RATE_LIMITS=true` replaces them when another layer protects the deployment. |
-| Shared state | `GATEWAY_SESSION_URL` and `GATEWAY_SHARED_STATE_URL` must name a Redis or Postgres server. A session in one replica's memory is unknown to the others, and a limit in one replica's memory limits only that replica. `GATEWAY_ALLOW_MEMORY_STATE=true` replaces them for a single-node deployment that accepts this. |
+| `GATEWAY_SESSION_SECRET` is set | Signs the login state. Same value on every replica. |
+| `GATEWAY_IDENTITY_SIGNING_KEY` is set | Private key that signs request identities. Same key on every replica; upstreams get the public key (§7.4). |
+| `GATEWAY_OIDC_ISSUER` is set | Identity provider. |
+| `GATEWAY_OIDC_CLIENT_ID` is set | The gateway's client ID. |
+| `GATEWAY_OIDC_REDIRECT_URI` is set | URL the provider sends the browser back to. |
+| `GATEWAY_OIDC_CLIENT_SECRET` is set | Client secret. `GATEWAY_OIDC_ALLOW_PUBLIC_CLIENT=true` replaces it when the provider accepts a public client. |
+| `GATEWAY_ACCESS_URL` is set | Access URL. |
+| `GATEWAY_ACCESS_TOKEN` is set | Token the gateway authenticates to Access with. `GATEWAY_ACCESS_ALLOW_ANONYMOUS=true` replaces it when the service authenticates the gateway by other means. |
+| One rate limit is on | At least one of `GATEWAY_RATE_LIMIT_MAX`, `GATEWAY_RATE_LIMIT_GLOBAL_MAX`, `GATEWAY_RATE_LIMIT_PRINCIPAL_MAX` and `GATEWAY_RATE_LIMIT_TOTAL_MAX` must be non-zero. `GATEWAY_ALLOW_NO_RATE_LIMITS=true` replaces them when another layer protects the deployment. |
+| State is shared | `GATEWAY_SESSION_URL` and `GATEWAY_SHARED_STATE_URL` must name a Redis or Postgres server. A session in one replica's memory is unknown to the others, and a limit in one replica's memory limits only that replica. `GATEWAY_ALLOW_MEMORY_STATE=true` replaces them for a single-node deployment that accepts this. |
+
+Startup also stops when an upstream client certificate is set without its key,
+or the reverse (§11.1.2).
+
+### 4.4 Control-plane environment
 
 The control plane is a separate process with its own environment (§12.7):
 `GATEWAY_CONTROL_HOST`, `GATEWAY_CONTROL_PORT`, `GATEWAY_CONTROL_TOKENS` or
 `GATEWAY_CONTROL_TOKENS_FILE`, `GATEWAY_CONTROL_STATE_URL`,
 `GATEWAY_CONTROL_KEY_PREFIX`, `GATEWAY_CONTROL_SHARED_STATE_KEY_PREFIX` and
-`GATEWAY_PROTECTED_ROUTES`. The gateway reads `GATEWAY_CONFIG_SOURCE` to pick
-its route table source (§3.4).
-
-The shared-state URL selects the server type:
-
-| URL | Server |
-| --- | --- |
-| `redis://host:6379/0` | Redis server. |
-| `redis://host-a:6379,host-b:6379/0` | Redis cluster; the hosts are its masters. |
-| `redis://host-a:26379,host-b:26379/0` with `GATEWAY_REDIS_SENTINEL_MASTER` | Redis Sentinel; master and replicas are discovered from the sentinels. |
-| `postgres://user:password@host:5432/gateway` | Postgres server. |
-| `postgresql://user:password@host:5432/gateway` | Same Postgres server. |
-
-`GATEWAY_REDIS_SENTINEL_MASTER` is the master name the sentinels agree on.
-Empty by default; leave it unset when not behind Sentinel.
+`GATEWAY_PROTECTED_ROUTES`. It compiles the tables it validates with the same
+deployment defaults as the gateway, so the table it accepts is the table the
+gateway runs.
 
 ---
 
@@ -355,6 +393,11 @@ as the callback is processed; the callback's state must equal the cookie's;
 the verifier and nonce bind the exchange to the login attempt; and the
 provider accepts the authorization code only once.
 
+When the provider cannot be reached, `/auth/login` answers `503
+identity_provider_unavailable`. A callback that cannot be completed answers
+`400 login_failed`, or `503 session_store_unavailable` when the session cannot
+be stored. The state cookie is deleted whatever the outcome.
+
 ### 5.3 Sessions
 
 A session is a server-side record. The browser holds an opaque ID of 32 random
@@ -371,8 +414,8 @@ remaining idle lifetime and the remaining maximum age, so the cookie never
 outlives its session.
 
 The store is in memory (`memory://local`) or on a Redis or Postgres server
-shared by the replicas. A multi-replica deployment needs a shared server: a
-session in one replica's memory is unknown to the others.
+shared by the replicas. A multi-replica deployment needs a shared server
+(§4.3).
 
 An unreachable store denies the caller. A store hiccup never lets anyone in.
 
@@ -446,7 +489,7 @@ cookie could fix a browser's session to an ID of its choice (§7.2).
 For each request that needs a decision, the gateway calls Access
 (protocol: §6.1):
 
-```
+```http
 POST {GATEWAY_ACCESS_URL}/v1/decisions
 Authorization: Bearer {GATEWAY_ACCESS_TOKEN}
 Content-Type: application/json
@@ -666,6 +709,8 @@ behavior): a reason that mentions a role counts as `missing_role`. The rule is
 deprecated and kept so deployments written against `1.0` keep working
 unchanged.
 
+---
+
 ## 7. Header policy
 
 ### 7.1 Request → upstream
@@ -858,7 +903,7 @@ Guide: [upstream-identity.md](upstream-identity.md).
 
 **Test vector** (pinned in `src/domains/forwarding/identity-signature.test.ts`):
 
-```
+```text
 key     = the private key of the deployment, an EC key on the curve P-256
 claims  = { subject: "user-1", email: "user@example.com",
             roles: ["admin","dev"],
@@ -1072,7 +1117,7 @@ any fails:
 
 1. the **route** still exists and still accepts WebSockets;
 2. the **session** still exists, if the connection was opened with one;
-3. the **Access** still allows the workspace, asked fresh rather than
+3. Access still allows the workspace, asked fresh rather than
    from the cache. A route without a workspace that asks Access
    about itself is asked again too, and the decision is never stale (§6.2).
 
@@ -1112,7 +1157,7 @@ The upstream URL is built from the route's base URL and the request:
    not used (§3.1).
 4. Never forward the **fragment**.
 
-```
+```text
 upstream http://app:3000        + /ws/123?x=1  →  http://app:3000/ws/123?x=1
 upstream http://app:3000/base/  + /ws/123?x=1  →  http://app:3000/base/ws/123?x=1
 upstream http://app:3000/base   + /ws/123      →  http://app:3000/base/ws/123
@@ -1324,6 +1369,8 @@ another upstream in `gateway_upstreams_skipped_total`.
 
 A WebSocket handshake goes to the **first** upstream of the route: a handshake
 is not sent twice.
+
+---
 
 ## 12. Operations
 
@@ -1638,72 +1685,16 @@ The gateway does not:
 
 ---
 
-## 14. Code organization
-
-### 14.1 Domains
-
-| Path | Owns |
-| --- | --- |
-| `src/domains/routing/` | Route identity, host and path matching, parameters, precedence, ambiguity detection. |
-| `src/domains/configuration/` | File schema, strict validation, effective defaults, immutable compiled snapshots, atomic last-good publication. |
-| `src/domains/authentication/` | Principal, mode policy, credential selection, OIDC and JWKS, browser login and logout, signed state, sessions, expiry, cookies. |
-| `src/domains/workspace-access/` | Workspace validation, Access requests and decisions, cache keys, TTL, cache adapters. |
-| `src/domains/forwarding/` | Peer and proxy trust, cross-site policy, header and cookie filtering, target URL, sanitized identity, signature. |
-| `src/domains/rate-limiting/` | Sliding windows, scopes, `retry-after`, bounded memory, shared-state counters. |
-| `src/domains/proxying/` | Exchange state, body limits, phase and idle budgets, cancellation, commitment outcomes, active-exchange registry. |
-| `src/domains/websockets/` | Slot reservations, upstream-first handshake, bridge state, buffers, keepalive, revalidation, pair registry. |
-| `src/domains/control/` | Control-plane token scopes, routes a write may not change, administrative write rules, failed-authentication counter. |
-
-### 14.2 Layers
-
-| Path | Owns |
-| --- | --- |
-| `src/main.ts` | Gateway process entry point. Starts the runtime and nothing else. |
-| `src/control-main.ts` | Control-plane process entry point. Starts the control-plane runtime and nothing else. |
-| `src/app/` | The Hono application: thin handlers, middleware, pipeline order, mapping failures to protocol responses. |
-| `src/platform/bun/` | Listener, actual peer address, outbound HTTP transport, upgrade and socket primitives. |
-| `src/platform/redis/` | Construction, TLS settings and disposal of the shared Redis clients. |
-| `src/platform/postgres/` | Construction, pool, TLS settings, schema and disposal of the shared Postgres clients. |
-| `src/runtime/` | Environment, composition root, file watcher, signals, drain. |
-| `src/observability/` | Logging, metrics and observation handles. Knows nothing else. |
-| `services/fixtures/` | Deterministic fixtures for the identity provider, Access and the upstreams. |
-| `services/` | Access reference implementation: a runnable deployment component, not a fixture. |
-| `test/` | Checks that are not a domain's unit tests. Shared helpers are in `test/support/`. |
-
-### 14.3 Dependency rules
-
-The dependency rules, the domain matrix and the gate that checks them are in
-[internals.md](internals.md#code-layout). In short: a domain is imported through its
-public entry point, a domain's core imports nothing from the framework, and the
-application uses the domains' public entry points.
-
-### 14.4 Resource ownership
-
-The runtime constructs and closes the shared clients, watchers and process
-timers. The configuration owns the last-good immutable generation; each request
-captures one generation for all its policy and forwarding decisions. An HTTP
-exchange owns its streams, phase timers and cancellation. A WebSocket pair owns
-both legs, its buffers, its keepalive timers and its slot.
-
-A single owner finalizes each exchange and each connection exactly once. A
-middleware completing is not an exchange completing.
-
----
-
-## 15. Decision log
-
-The decisions that shape the contract are in [decisions.md](decisions.md). The
-rules for that table, and for a decision that changes the contract, are in
-[platform decisions](../platform/decisions.md).
-
-## 16. Release compatibility
+## 14. Release compatibility
 
 The gateway sits on the path of every request to the applications behind it,
 and deployments write their own Access and upstreams against it. Those
 contracts are **versioned promises**; this section says which promise holds
-for which release.
+for which release. The decision log and the rules for a decision that changes
+the contract are in [decisions.md](decisions.md) and
+[platform decisions](../platform/decisions.md).
 
-### 16.1 Contracts
+### 14.1 Contracts
 
 | Contract | Defined in |
 | --- | --- |
@@ -1711,14 +1702,14 @@ for which release.
 | Access protocol | §6.1, with its conformance suite. |
 | Identity signature format | §7.4, with the [upstream-identity.md](upstream-identity.md) guide. |
 | Route table format | §3. |
-| Environment variable names | §4 and [.env.example](../../packages/gateway/.env.example). |
+| Environment variable names | §4 and [configuration.md](configuration.md) (also [.env.example](../../packages/gateway/.env.example)). |
 | Metric names | §12.1. |
 
-Everything else is an implementation detail: code organization (§14), internal
-function names, libraries, and the wording of logs and responses. Depending on
-them is not supported.
+Everything else is an implementation detail: code organization
+([internals.md](internals.md#code-layout)), internal function names, libraries,
+and the wording of logs and responses. Depending on them is not supported.
 
-### 16.2 Release promise
+### 14.2 Release promise
 
 The release version is `MAJOR.MINOR.PATCH` and is the platform's version: the
 platform has one release line, and all three services ship with it.
@@ -1731,7 +1722,7 @@ platform has one release line, and all three services ship with it.
   change with its migration. The `1.0` release fixes the contracts: after it, a
   `MINOR` release never changes one.
 
-The §16.1 contracts are **frozen** in `1.0`: they were reviewed one by one, the
+The §14.1 contracts are **frozen** in `1.0`: they were reviewed one by one, the
 needed changes were made, and the result is what a `1.0` deployment is written
 against. The next `MAJOR` release is the next one that may change them.
 
@@ -1758,7 +1749,7 @@ Rules that hold in every release, including after `1.0`:
    added; clients that check the statuses they know keep working. A response
    body keeps the field that carries the error.
 
-### 16.3 Deprecations
+### 14.3 Deprecations
 
 A deprecation is announced in the changelog, warned about in the gateway log,
 and removed in a release named in the announcement. This release's table:

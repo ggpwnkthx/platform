@@ -1,7 +1,9 @@
 # Operations
 
-How to deploy, run and recover the gateway. Platform-wide steps (first deployment, images, rollback) are in
-[platform operations](../platform/operations.md); every variable is in [Configuration](configuration.md).
+How to deploy, run, monitor and roll back the gateway in production, for operators, DBAs and security
+operations. Platform-wide steps (first deployment, images, rollback) are in
+[platform operations](../platform/operations.md), every variable is in [Configuration](configuration.md), and
+diagnosis by symptom is in [Troubleshooting](troubleshooting.md).
 
 The gateway is stateless: sessions, rate-limit windows and cached decisions live in Redis or Postgres, so you
 can replace any replica at any time. An ingress terminates TLS in front of it.
@@ -21,7 +23,7 @@ can replace any replica at any time. An ingress terminates TLS in front of it.
 
 The URL scheme picks the backend, for example `rediss://:<password>@redis:6379/0` or
 `postgres://user:<password>@postgres:5432/gateway`; cluster and Sentinel URLs are in
-[spec §4](spec.md#4-environment). Verify the server certificate with `GATEWAY_SESSION_TLS_CA` and
+[Configuration](configuration.md#shared-state). Verify the server certificate with `GATEWAY_SESSION_TLS_CA` and
 `GATEWAY_SHARED_STATE_TLS_CA`.
 
 Both backends pass the same tests. Redis is faster; Postgres roughly halves request-path throughput.
@@ -74,18 +76,30 @@ With `GATEWAY_CONFIG_SOURCE=store`, replicas watch the active route-table revisi
 empty store falls back to the `GATEWAY_CONFIG` file; an unreachable one keeps the last valid table. Writes
 are compare-and-swap on `If-Match`, and `GET /v1/replicas` lists live replicas by heartbeat.
 
-## Route policies
+### Changing the route table
 
-Per-route keys override environment defaults ([spec §3](spec.md#3-configuration-file)):
+Send the token as `Authorization: Bearer <token>` (or in `x-gateway-control-token` when the client cannot set
+`Authorization`). Reads need the `read` scope; writes need `config`.
 
-| Key | Default | Use it to |
-| --- | --- | --- |
-| `crossSite` | `navigation` | Set `strict` when the upstream changes state on a `GET`. |
-| `forwardAuthorization` | `true` | Set `false` when the upstream does not need the caller's token. |
-| `accessCacheTtlMs` | environment | Set `0` for immediate revocation. |
-| `accessStaleGraceMs` | environment | Serve the last allow decision during an Access outage. |
-| `replayMaxBytes` | environment | Cap bodies resent to the next upstream. |
-| `timeouts.upstreamAttemptMs` | environment | Budget one attempt across several upstreams; `0` disables it. |
+1. Read the active revision and table with `GET /v1/config`.
+2. Validate the new table with `POST /v1/config/validate`. The answer lists errors, conflicts, warnings and
+   the diff against the active table; `422` means the table is invalid. Nothing is written.
+3. Write it with `PUT /v1/config`, naming the revision you read in `If-Match` (with or without quotes). A
+   `409` means another write landed first (read again and retry) or the table changes a route in
+   `GATEWAY_PROTECTED_ROUTES` (leave that route unchanged).
+4. Watch `GET /v1/replicas` until every replica reports the new revision and no last error.
+5. To undo, write an older revision again with `POST /v1/config/rollback`. History is in
+   `GET /v1/config/history`, and every write is in `GET /v1/audit`.
+
+```bash
+CONTROL=http://127.0.0.1:9090
+curl -s -H "Authorization: Bearer $TOKEN" $CONTROL/v1/config | jq '.revision'          # 41
+curl -s -H "Authorization: Bearer $TOKEN" --data-binary @routes.json $CONTROL/v1/config/validate
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" -H 'If-Match: "41"' \
+  --data-binary @routes.json $CONTROL/v1/config
+curl -s -H "Authorization: Bearer $TOKEN" $CONTROL/v1/replicas
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -d '{"revision": 41}' $CONTROL/v1/config/rollback
+```
 
 ## Access
 
@@ -201,24 +215,7 @@ labels are listed in [spec §12.1](spec.md#121-health-readiness-and-metrics); lo
 To trace a request, search the logs for its `x-request-id`; request and refusal lines name the caller and
 workspace.
 
-## Runbooks
-
-| Symptom | Cause | Fix |
-| --- | --- | --- |
-| Refuses to start | Missing production variable. | Set the one the error names. |
-| `/readyz` `503`, `config.lastError` set | Broken route table. | Fix it; the last good table serves meanwhile, and a fixed file loads within a second. |
-| `/readyz` `503`, `sessionStore: unavailable` | Shared state down. | Restore it. |
-| Every request `404 no_route` | Ingress rewrites `Host`. | Send `x-forwarded-host`, or match the host the ingress sends. |
-| Browser requests `403 cross_site_request` | Same, seen through the origin. | Send `x-forwarded-host` and `x-forwarded-proto`. |
-| `503 access_unavailable` | Access down or answering garbage. | Restore it; other routes are unaffected. |
-| `gateway_access_stale_total` grows | Grace routes serve old decisions. | Restore the service; set `accessStaleGraceMs: 0` where that is unacceptable. |
-| `gateway_shared_state_errors_total` grows | Sessions fail closed (`401`/`503`), decisions are re-asked, limits follow `GATEWAY_RATE_LIMIT_FALLBACK`. | Restore the shared state. |
-| `502` on one route | Its upstream is down. | Repair it. With several upstreams, resendable requests move on. |
-| Logins fail with `503` | Identity provider down. | Restore it; existing sessions keep working. |
-| `gateway_cross_site_refusals_total` grows | A client calls from another site. | Add its origin to `GATEWAY_ALLOWED_ORIGINS`, or fix the client. |
-| WebSockets close with `1008` | Session expired, access revoked or route changed. | Nothing, unless unexpected. |
-
-### Revoking sessions
+## Revoking sessions
 
 Sessions live under `GATEWAY_SESSION_KEY_PREFIX`; logout also destroys one.
 
@@ -226,7 +223,11 @@ Sessions live under `GATEWAY_SESSION_KEY_PREFIX`; logout also destroys one.
 | --- | --- |
 | One session | `DEL <prefix>:s:<id>` |
 | One caller | `GATEWAY_SESSION_URL=redis://127.0.0.1:6379/0 bun run sessions -- --subject alice@example.test` (the provider's `sub`; prints the count removed) |
+| One caller, through the control plane | `DELETE /v1/sessions?subject=alice@example.test` with an `operate` token |
 | Whole deployment | Delete the prefix's keys (`SCAN` + `DEL`, or `FLUSHDB` if it owns the database); repeat per prefix. |
+
+To make a revocation take effect before the decision cache expires, purge the cached decisions too:
+`DELETE /v1/decisions?subject=<sub>` or `?workspace=<id>` (or both) with an `operate` token.
 
 Redis indexes sessions by subject as they are created, so older sessions are missed and expire on their own.
 In Postgres, `postgres:migrate` indexes older sessions.

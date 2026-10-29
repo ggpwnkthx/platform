@@ -1,7 +1,6 @@
 # Upstream identity
 
-How an upstream verifies the caller identity the gateway signs into forwarded headers, with code. The
-normative rules are [spec §7.1](spec.md#7-header-policy) and [§7.4](spec.md#74-identity-signature).
+How an upstream verifies the caller identity the gateway signs into forwarded headers, with TypeScript and Go code. It is for developers of upstream applications; the normative rules are [spec §7.1](spec.md#71-request-→-upstream) and [§7.4](spec.md#74-identity-signature).
 
 ## Headers
 

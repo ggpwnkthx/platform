@@ -1,38 +1,42 @@
 # Internals
 
-For gateway maintainers: code layout and import rules, capacity measurements, the runtime capabilities the
-gateway relies on, and how it is verified. Behaviour is normative in [spec.md](spec.md); ownership rules are in
-[spec §14](spec.md#14-code-organization).
+For gateway maintainers: code layout and import rules, resource ownership, the source map, how the gateway is verified, capacity measurements, the runtime capabilities it relies on, release and known gaps. None of this is external contract; behavior is normative in [spec.md](spec.md).
 
 ## Code layout
 
 The gateway is a modular monolith: one deployable, split into domains with explicit boundaries.
+`bun run architecture` checks the boundaries in the test suite and CI.
 
 | Path | Owns |
 | --- | --- |
-| `src/main.ts` | Process entry point; starts the runtime. |
-| `src/app/` | Hono application: thin handlers, middleware, pipeline order, mapping failures to answers. |
+| `src/main.ts` | Gateway process entry point. Starts the runtime and nothing else. |
+| `src/control-main.ts` | Control-plane process entry point. Starts the control-plane runtime and nothing else. |
+| `src/app/` | The Hono application: thin handlers, middleware, pipeline order, mapping failures to protocol responses. |
 | `src/domains/<domain>/` | A domain's policy, use cases, ports and unit tests. |
 | `src/domains/<domain>/adapters/` | Port implementations; only the composition root uses them. |
-| `src/platform/bun/` | Listener, peer address, outbound HTTP, socket primitives. |
-| `src/platform/redis/`, `src/platform/postgres/` | Shared-state clients: construction, pool, TLS, schema, disposal. |
+| `src/platform/bun/` | Listener, actual peer address, outbound HTTP transport, upgrade and socket primitives. |
+| `src/platform/redis/` | Construction, TLS settings and disposal of the shared Redis clients. |
+| `src/platform/postgres/` | Construction, pool, TLS settings, schema and disposal of the shared Postgres clients. |
 | `src/runtime/` | Environment, composition root, file watcher, signals, drain, running-policy log. |
-| `src/observability/` | Logging and metrics; imports nothing else. |
-| `services/` | Access reference implementation, which deployments may run. |
-| `services/fixtures/` | Deterministic provider, Access and upstream stand-ins; refuse to run in production; not in the image. |
+| `src/observability/` | Logging, metrics and observation handles. Knows nothing else. |
+| `services/` | Access reference implementation: a runnable deployment component, not a fixture. |
+| `services/fixtures/` | Deterministic identity provider, Access and upstream stand-ins; refuse to run in production; not in the image. |
 | `scripts/` | `cli/` (identity key, migrations, session revocation), `dev/` (runner, test Redis and Postgres), `gates/` (architecture, version, environment), `ops/` (load, benchmark), `support/`. |
-| `test/` | Checks other than domain unit tests; helpers in `test/support/`. |
+| `test/` | Checks that are not a domain's unit tests. Shared helpers are in `test/support/`. |
 
 ### Domains
 
-| Domain | May use |
-| --- | --- |
-| `routing`, `authentication`, `rate-limiting` | — |
-| `configuration` | `routing`, `authentication` |
-| `workspace-access` | `authentication`, `routing` |
-| `forwarding` | `authentication` |
-| `proxying`, `websockets` | `forwarding` |
-| `control` | `configuration`, `authentication`, `workspace-access` |
+| Domain | Owns | May use |
+| --- | --- | --- |
+| `src/domains/routing/` | Route identity, host and path matching, parameters, precedence, ambiguity detection. | — |
+| `src/domains/configuration/` | File schema, strict validation, effective defaults, immutable compiled snapshots, atomic last-good publication. | `routing`, `authentication` |
+| `src/domains/authentication/` | Principal, mode policy, credential selection, OIDC and JWKS, browser login and logout, signed state, sessions, expiry, cookies. | — |
+| `src/domains/workspace-access/` | Workspace validation, Access requests and decisions, cache keys, TTL, cache adapters. | `authentication`, `routing` |
+| `src/domains/forwarding/` | Peer and proxy trust, cross-site policy, header and cookie filtering, target URL, sanitized identity, signature. | `authentication` |
+| `src/domains/rate-limiting/` | Sliding windows, scopes, `retry-after`, bounded memory, shared-state counters. | — |
+| `src/domains/proxying/` | Exchange state, body limits, phase and idle budgets, cancellation, commitment outcomes, active-exchange registry. | `forwarding` |
+| `src/domains/websockets/` | Slot reservations, upstream-first handshake, bridge state, buffers, keepalive, revalidation, pair registry. | `forwarding` |
+| `src/domains/control/` | Control-plane token scopes, routes a write may not change, administrative write rules, failed-authentication counter. | `configuration`, `authentication`, `workspace-access` |
 
 ### Import rules
 
@@ -50,12 +54,13 @@ The gateway is a modular monolith: one deployable, split into domains with expli
 9. No catch-all directories (`utils`, `services`, `repositories`, `common`, …) and no import cycles, type-only
    imports included.
 10. Only the application uses Hono; only the platform uses runtime APIs.
-11. The source imports no `services/`: the reference implementation of the protocol of access and the
-    fixtures of the tests are not part of the gateway, and a file of the source that imports one puts
-    the accounts of the tests in the image.
+11. The source imports nothing from `services/`: neither the Access reference implementation nor the test
+    fixtures belong to the gateway, and a source file that imported one would put the test accounts in the
+    image.
 
-`scripts/gates/environment.ts` checks that `.env.example` and [Configuration](configuration.md) match the
-variables declared in `src/runtime/env/`, the only place variable names live.
+Environment variable names never leave `src/runtime/env/`; the rest of the gateway receives the settings it
+needs, not the environment. `scripts/gates/environment.ts` checks that `.env.example` and
+[Configuration](configuration.md) match the variables declared there.
 
 `bun run dead` runs `knip --use-tsconfig-files` and fails on any unused file, export, type or dependency. A
 domain's `index.ts` is not an entry point, so an export no consumer imports is reported, as is an export
@@ -65,7 +70,7 @@ as entries in the `knip` section of `package.json`.
 The gateway adds one rule to the [platform working rules](../platform/internals.md#working-rules): a request
 is an exchange, not a chain of middlewares.
 
-### Lifetimes
+### Resource ownership
 
 | Lifetime | Owner |
 | --- | --- |
@@ -75,7 +80,13 @@ is an exchange, not a chain of middlewares.
 | HTTP exchange | Proxying domain, with the Bun transport |
 | WebSocket pair | WebSockets domain, with the Bun socket primitives |
 
-One owner finalizes each exchange or connection exactly once ([spec §14.4](spec.md#144-resource-ownership)).
+The runtime constructs and closes the shared clients, watchers and process timers. The configuration owns the
+last-good immutable generation; each request captures one generation for all its policy and forwarding
+decisions. An HTTP exchange owns its streams, phase timers and cancellation. A WebSocket pair owns both legs,
+its buffers, its keepalive timers and its slot.
+
+A single owner finalizes each exchange and each connection exactly once. A middleware completing is not an
+exchange completing.
 
 ### Request flow
 
@@ -271,7 +282,7 @@ reference machine over loopback; an earlier run differed by a few percent.
 
 ## Runtime
 
-The gateway is written against Bun directly, so each boundary behind spec §4, §10 and §11 is proved by a
+The gateway is written against Bun directly, so each boundary behind spec §4.2, §10 and §11 is proved by a
 `test/network/` test against a real socket. Before reading its environment, `src/runtime/version.ts` stops
 the gateway on a runtime older than **Bun 1.4.3** ([decision 36](decisions.md)); `src/runtime/version.test.ts`
 tests it.
