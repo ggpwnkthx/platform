@@ -51,7 +51,7 @@ A **modular monolith**: one process, one image, one database, four independent d
 | `src/app/app.ts` | Pipeline: request id, probes, routes, unknown-path refusal, error handler. |
 | `src/app/{login,oauth,provider}.ts` | Login, token endpoint, discovery, JWKS. |
 | `src/app/decision-contract.ts`, `access-context-contract.ts` | The two read contracts. |
-| `src/app/administration/`, `src/domains/administration/` | The twelve endpoints, one file per resource (tenants, principals, groups, grants, audit); the domain also holds validation, the limiter, authentication and storage `ports/`. |
+| `src/app/administration/`, `src/domains/administration/` | The twelve endpoints of the administration and the audit that reads it, one file per resource (tenants, principals, groups, roles, grants, audit); the domain also holds validation, the limiter, authentication and storage `ports/`. |
 | `src/app/{errors,pages,metrics,endpoints,state}.ts` | Refusals, login pages, metrics, probes, request state. |
 | `src/domains/identity/` | Also login state and the provider client (other domains: §16). |
 | `src/platform/postgres/` | Pool, migrations, repositories, statement tracing, tenant scope, audit table. |
@@ -162,23 +162,23 @@ Model: login state is encrypted, authenticated and single use; codes are opaque,
 | 8 | Both client secrets are encrypted under `ACCESS_SECRET_ENCRYPTION_KEY`; without a key no tenant is written. | Fixed | `src/platform/postgres/secrets.ts` |
 | 9 | Login state: encrypted, authenticated, deleted whatever the outcome, ten minutes. | Fixed | `src/domains/identity/state.ts` |
 | 10 | Code: opaque, hashed, 60 s, single use, bound to client, redirect URI and PKCE challenge. | Fixed | `src/domains/provider/code.ts`, `src/domains/provider/exchange.ts` |
-| 11 | Database or store outage, slow provider and decision timeout all end in denial. | Fixed | `src/app/decisions.ts` |
-| 12 | Reasons go to the decision log; the contract response carries one and the gateway hides it. | Accepted | `src/app/decisions.ts` |
+| 11 | Database or store outage, slow provider and decision timeout all end in denial. | Fixed | `src/app/decision-contract.ts` |
+| 12 | Reasons go to the decision log; the contract response carries one and the gateway hides it. | Accepted | `src/app/decision-contract.ts` |
 | 13 | Image: non-`root`, no shell or build tools, base pinned by digest. | Fixed | `Dockerfile` |
 | 14 | The database password comes from the environment, never the image. | No finding | `src/runtime/env.ts` |
 | 15 | Failed-authentication bursts get `429`; counts live in the shared store, so the window is deployment-wide. | Fixed | `src/domains/administration/limiter.ts`, `src/platform/redis/store.ts` |
-| 16 | Admin bodies ≤ 64 KiB; provider calls and decisions have deadlines. | Fixed | `src/app/administration.ts`, `src/domains/identity/provider-client.ts` |
+| 16 | Admin bodies ≤ 64 KiB; provider calls and decisions have deadlines. | Fixed | `src/app/administration/`, `src/domains/identity/provider-client.ts` |
 | 17 | An unregistered gateway redirect URI is refused with `400 invalid_request` before the tenant is resolved, and never gets a code. | Fixed | `src/domains/identity/tenant.ts`, `src/app/login.ts` |
 | 18 | State cookie: `HttpOnly`, `SameSite=Lax`, `Secure` in production, path is the callback. | Fixed | `src/app/login.ts` |
-| 19 | Tenant credentials asking about another tenant's principal get "principal does not exist"; the bearer token is unscoped. | Fixed | `src/app/decisions.ts` |
+| 19 | Tenant credentials asking about another tenant's principal get "principal does not exist"; the bearer token is unscoped. | Fixed | `src/app/decision-contract.ts` |
 | 20 | Row level security on all eight tables, transaction-local scope, production refuses a bypassing role. | Fixed | `src/platform/postgres/scope.ts`, `src/platform/postgres/migrations/0003_tenant_isolation.sql` |
-| 21 | Rotation without a gap: a replaced gateway secret stays valid 24 hours; environment tokens use two variables. | Fixed | `src/app/decisions.ts`, `src/app/oauth.ts`, `src/domains/administration/service.ts`, `docs/access/spec.md` §4.3.1 |
-| 22 | The audit is a table naming the credential's fingerprint, written by the same statement as the change. | Fixed | `src/platform/postgres/audited.ts`, `src/platform/postgres/audit.ts`, `src/app/administration.ts` |
-| 23 | Server-side `statement_timeout` frees the connection at the decision deadline. | Fixed | `src/platform/postgres/postgres.ts`, `src/platform/postgres/decisions.ts` |
+| 21 | Rotation without a gap: a replaced gateway secret stays valid 24 hours; environment tokens use two variables. | Fixed | `src/app/decision-contract.ts`, `src/app/oauth.ts`, `src/domains/administration/service.ts`, `docs/access/spec.md` §4.3.1 |
+| 22 | The audit is a table naming the credential's fingerprint, written by the same statement as the change. | Fixed | `src/platform/postgres/audited.ts`, `src/platform/postgres/audit.ts`, `src/app/administration/` |
+| 23 | Server-side `statement_timeout` frees the connection at the decision deadline. | Fixed | `src/platform/postgres/postgres.ts`, `src/platform/postgres/decision-facts.ts` |
 | 24 | Permission keys are unique per `(tenant, key)`; platform catalogue permissions are shared. | Fixed | `src/domains/administration/service.ts`, `src/platform/postgres/permissions.ts` |
 | 25 | Per-tenant admin credentials: another tenant is `403 forbidden`, lists cannot be widened, the audit names the operator. | Fixed | `src/domains/administration/credentials.ts`, `src/domains/administration/service.ts`, `src/runtime/composition.ts` |
 | 26 | A tenant credential changing `shared_client` or `is_default` gets `403 forbidden`. | Fixed | `src/domains/administration/service.ts` |
-| 27 | Decision scope comes from the credential, never a row flag. | Fixed | `src/app/decisions.ts` |
+| 27 | Decision scope comes from the credential, never a row flag. | Fixed | `src/app/decision-contract.ts` |
 | 28 | The guard pins the resolved address and calls it with the original `Host` and certificate check, defeating DNS rebinding. | Fixed | `src/platform/bun/address.ts`, `src/platform/bun/http.ts` |
 | 29 | Only failed calls spend the limiter budget, so attackers cannot lock out the token holder. | Fixed | `src/domains/administration/service.ts`, `src/domains/administration/limiter.ts` |
 | 30 | Headers: `x-content-type-options`, `x-frame-options`, `referrer-policy` everywhere; `content-security-policy` on refusal pages; `cache-control: no-store` on tokens. | Fixed | `src/app/app.ts`, `src/app/oauth.ts` |

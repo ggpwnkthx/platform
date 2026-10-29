@@ -174,8 +174,8 @@ export function createAccessApp(dependencies: AccessDependencies): Hono<AccessEn
   // The metrics of the service.
   app.get('/metrics', async (context) => await metricsHandler(context, dependencies))
 
-  // The administration of the platform: twelve endpoints, and they are the
-  // whole surface.
+  // The administration of the platform: twelve endpoints and the audit
+  // that reads it, and they are the whole surface.
   app.post('/v1/admin/tenants', async (context) => await tenantHandler(context, dependencies))
   app.get('/v1/admin/tenants', async (context) => await tenantsHandler(context, dependencies))
   app.post('/v1/admin/users', async (context) => await principalHandler(context, dependencies))

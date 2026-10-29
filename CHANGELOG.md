@@ -10,6 +10,17 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The code of the documentation points at the files that are there
+
+The internals of Access named files that the administration and the
+decisions have not for a while: the decisions live in
+`src/app/decision-contract.ts`, the administration in
+`src/app/administration/` and the facts of the decisions in
+`src/platform/postgres/decision-facts.ts`. The table of the files and
+the working rules point at the files that are there, and the twelve
+endpoints of the administration are named with the audit that reads
+them.
+
 ### The copy buttons of the code blocks are an island
 
 The islands of the console were listed without the copy buttons of the
