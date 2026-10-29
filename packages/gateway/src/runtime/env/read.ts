@@ -38,18 +38,84 @@ export function parseLogLevel(value: string | undefined, fallback: LogLevel = 'i
 const MINIMUM_SECRET_BYTES = 32
 
 /**
+ * The variables of the gateway that carry a credential.
+ *
+ * The names are the vocabulary of the credentials of the deployment: the
+ * test of the platform reads the list and asks the gateway to refuse
+ * every value of the repository that the list names.
+ */
+export const CREDENTIAL_VARIABLES: readonly string[] = [
+  'GATEWAY_SESSION_SECRET',
+  'GATEWAY_ACCESS_TOKEN',
+  'GATEWAY_OIDC_CLIENT_SECRET',
+  'GATEWAY_METRICS_TOKEN',
+  'GATEWAY_IDENTITY_SIGNING_KEY',
+  'GATEWAY_IDENTITY_SIGNING_KEY_BASE64',
+  'GATEWAY_UPSTREAM_TLS_KEY',
+  'GATEWAY_UPSTREAM_TLS_KEY_BASE64',
+]
+
+/**
  * The secrets that are published in the repository.
  *
  * They are the values of the example of the development machine and the
  * values of the deployment of the example: a gateway that starts with one
  * of them holds a secret that everybody knows.
+ *
+ * The list holds every value of the published files that the gateway
+ * reads: the minimum environment of the repository (`.env.min`), the
+ * example of the development machine and the example of the deployment.
+ * A value that is published and that is not on this list is a value a
+ * deployment may start with, and the test of the platform proves that
+ * every published value is on the list of the service that reads it.
  */
-const PUBLISHED_SECRETS: readonly string[] = [
+export const PUBLISHED_SECRETS: readonly string[] = [
   'dev-state-secret-of-the-development-0001',
   'dev-session-secret-of-the-development-1',
   'dev-access-token-0000000',
   'example-access-token-0000000',
+  'example-admin-token-0000000',
+  'example-metrics-token-0000000',
+  'example-client-secret-0000000',
+  // The secret of the sessions of the minimum environment of the
+  // repository: it is published, and a deployment that keeps it holds a
+  // credential that everybody knows.
+  '9e2f7c1d4b6a8035d1c9f2e7b5a4d083',
 ]
+
+/**
+ * Reports whether a value is one of the secrets the repository publishes.
+ *
+ * The rule is the same for every value: the comparison is exact, and the
+ * value is trimmed because a value that is read from a file or from a
+ * variable may carry the spaces of the operator.
+ */
+export function isPublishedSecret(value: string): boolean {
+  return PUBLISHED_SECRETS.includes(value.trim())
+}
+
+/**
+ * The number of bytes of a secret.
+ *
+ * A secret is handed over as a hexadecimal string, as a base64 string or
+ * as a passphrase: the three are counted the way they are read, so a 32
+ * byte secret is 64 hexadecimal characters and 44 base64 characters.
+ *
+ * The rule is the rule of Access and of the console: a gateway and an
+ * Access that count a secret differently do not agree on what a strong
+ * secret is, and the deployment that follows the stricter of the two
+ * reads a secret that the other one accepts.
+ */
+export function secretBytes(value: string): number {
+  const trimmed = value.trim()
+  if (/^[0-9a-fA-F]+$/.test(trimmed) && trimmed.length % 2 === 0) {
+    return trimmed.length / 2
+  }
+  if (/^[A-Za-z0-9+/]+={0,2}$/.test(trimmed) && trimmed.length % 4 === 0) {
+    return Buffer.from(trimmed, 'base64').length
+  }
+  return Buffer.byteLength(trimmed, 'utf8')
+}
 
 /**
  * Reports whether a secret is one repeated character.
@@ -80,10 +146,10 @@ function checkSecret(
   const trimmed = value.trim()
   // The published value is named first: it is the precise reason why the
   // secret is refused, whatever its length is.
-  if (PUBLISHED_SECRETS.includes(trimmed) || isRepeatedCharacterSecret(trimmed)) {
+  if (isPublishedSecret(trimmed) || isRepeatedCharacterSecret(trimmed)) {
     return `${name} is the value of the example of the repository: it is published, and a deployment does not start with it`
   }
-  const bytes = Buffer.byteLength(trimmed, 'utf8')
+  const bytes = secretBytes(trimmed)
   if (bytes < MINIMUM_SECRET_BYTES) {
     return `${name} must be at least ${MINIMUM_SECRET_BYTES} bytes long: ${role}`
   }
@@ -165,6 +231,25 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
     production
   )
   if (accessToken) weak.push(accessToken)
+  // The secret of the client is a credential of the deployment: the
+  // provider accepts the code of a browser with it, and anybody who
+  // holds it acts as the gateway towards the provider.
+  const clientSecret = checkSecret(
+    'GATEWAY_OIDC_CLIENT_SECRET',
+    parsed.GATEWAY_OIDC_CLIENT_SECRET,
+    'it authenticates the gateway towards the identity provider',
+    production
+  )
+  if (clientSecret) weak.push(clientSecret)
+  // The token of the metrics is a bearer token: it opens the endpoint of
+  // the metrics of the deployment to whoever holds it.
+  const metricsToken = checkSecret(
+    'GATEWAY_METRICS_TOKEN',
+    parsed.GATEWAY_METRICS_TOKEN,
+    'it is the bearer token that opens the metrics of the gateway',
+    production
+  )
+  if (metricsToken) weak.push(metricsToken)
   if (weak.length > 0) {
     throw new Error(`the environment is invalid: ${weak.join('; ')}`)
   }

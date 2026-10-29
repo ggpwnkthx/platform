@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { parseLogLevel, readEnv } from './index'
+import { parseLogLevel, readEnv, secretBytes } from './index'
 
 describe('the environment of the gateway', () => {
   test('the defaults are the ones of the specification', () => {
@@ -113,7 +113,7 @@ describe('the environment of a production deployment', () => {
     GATEWAY_IDENTITY_SIGNING_KEY: '-----BEGIN PRIVATE KEY-----\nkey\n-----END PRIVATE KEY-----\n',
     GATEWAY_OIDC_ISSUER: 'https://dex.example.com/dex',
     GATEWAY_OIDC_CLIENT_ID: 'gateway',
-    GATEWAY_OIDC_CLIENT_SECRET: 'client-secret',
+    GATEWAY_OIDC_CLIENT_SECRET: 'the-client-secret-of-the-production-deployment',
     GATEWAY_OIDC_REDIRECT_URI: 'https://gateway.example.com/auth/callback',
     GATEWAY_ACCESS_URL: 'https://access.example.com',
     GATEWAY_ACCESS_TOKEN: 'the-access-token-of-the-production-deployment',
@@ -204,6 +204,54 @@ describe('the environment of a production deployment', () => {
     expect(() =>
       readEnv({ ...production, GATEWAY_ACCESS_TOKEN: 'dev-access-token-0000000' })
     ).toThrow(/GATEWAY_ACCESS_TOKEN is the value of the example/)
+  })
+
+  test('the client of the provider and the token of the metrics are credentials of the deployment', () => {
+    // The secret of the client authenticates the gateway towards the
+    // provider: anybody who holds it acts as the gateway.
+    expect(() =>
+      readEnv({ ...production, GATEWAY_OIDC_CLIENT_SECRET: 'example-client-secret-0000000' })
+    ).toThrow(/GATEWAY_OIDC_CLIENT_SECRET is the value of the example/)
+    expect(() => readEnv({ ...production, GATEWAY_OIDC_CLIENT_SECRET: 'a-short-secret' })).toThrow(
+      /GATEWAY_OIDC_CLIENT_SECRET must be at least 32 bytes/
+    )
+    // The token of the metrics opens the endpoint of the metrics.
+    expect(() =>
+      readEnv({ ...production, GATEWAY_METRICS_TOKEN: 'example-metrics-token-0000000' })
+    ).toThrow(/GATEWAY_METRICS_TOKEN is the value of the example/)
+    expect(() => readEnv({ ...production, GATEWAY_METRICS_TOKEN: 'a-short-token' })).toThrow(
+      /GATEWAY_METRICS_TOKEN must be at least 32 bytes/
+    )
+    // A development machine may use the values of the examples.
+    const development = readEnv({
+      ...production,
+      NODE_ENV: 'development',
+      GATEWAY_OIDC_CLIENT_SECRET: 'example-client-secret-0000000',
+      GATEWAY_METRICS_TOKEN: 'example-metrics-token-0000000',
+    })
+    expect(development.oidc.clientSecret).toBe('example-client-secret-0000000')
+  })
+
+  test('the secret of the sessions of the minimum environment is refused', () => {
+    // The value is published in `.env.min`: a deployment that keeps it
+    // holds a secret that everybody knows.
+    expect(() =>
+      readEnv({ ...production, GATEWAY_SESSION_SECRET: '9e2f7c1d4b6a8035d1c9f2e7b5a4d083' })
+    ).toThrow(/GATEWAY_SESSION_SECRET is the value of the example/)
+  })
+
+  test('a hexadecimal secret is counted the way it is read', () => {
+    // Thirty-two hexadecimal characters are sixteen bytes: the rule is
+    // the rule of Access and of the console, and the three services
+    // agree on what a strong secret is.
+    expect(secretBytes('9e2f7c1d4b6a8035d1c9f2e7b5a4d083')).toBe(16)
+    expect(secretBytes('a'.repeat(64))).toBe(32)
+    expect(secretBytes('a-passphrase-of-the-deployment')).toBe(30)
+    // Sixteen bytes of hexadecimal are refused, even though the string is
+    // thirty-two characters long.
+    expect(() =>
+      readEnv({ ...production, GATEWAY_SESSION_SECRET: '9e2f7c1d4b6a8035d1c9f2e7b5a4d08' })
+    ).toThrow(/GATEWAY_SESSION_SECRET must be at least 32 bytes/)
   })
 
   test('a secret of one repeated character is refused', () => {
