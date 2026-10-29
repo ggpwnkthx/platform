@@ -29,6 +29,13 @@
         "@electric-sql/pglite": "0.5.11",
       },
     },
+    "packages/cli": {
+      "name": "@platform/cli",
+      "version": "1.0.0",
+      "bin": {
+        "platformctl": "./src/main.ts",
+      },
+    },
     "packages/console": {
       "name": "@platform/console",
       "version": "1.0.0",
@@ -280,6 +287,8 @@
     "@pinojs/redact": ["@pinojs/redact@0.4.0", "", {}, "sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg=="],
 
     "@platform/access": ["@platform/access@workspace:packages/access"],
+
+    "@platform/cli": ["@platform/cli@workspace:packages/cli"],
 
     "@platform/console": ["@platform/console@workspace:packages/console"],
 

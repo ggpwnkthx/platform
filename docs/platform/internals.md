@@ -21,7 +21,8 @@ platform/
 │   ├── gateway/          gateway
 │   ├── access/           Access
 │   ├── data/             Data
-│   └── console/          console, the platform's interface (HonoX)
+│   ├── console/          console, the platform's interface (HonoX)
+│   └── cli/              the command line of the platform (platformctl)
 ```
 
 A workspace is a directory with its own `package.json`; one root `bun install` installs them all against `bun.lock`. `tooling/` is a library only (version checks, import-boundary checks, the compatibility baseline, the development PostgreSQL); the commands that use it live in `scripts/` directories.
@@ -73,6 +74,20 @@ The console is a [HonoX](https://github.com/honojs/honox) app built with Vite. I
 | `src/main.ts` | The process: serves the build, or the sources through Vite in development |
 
 The core imports neither the interface nor HonoX, and no module is in an import cycle. `packages/console/scripts/architecture.ts` checks this with `tooling/web-architecture.ts`.
+
+## Command line workspace
+
+The command line is a client of the three services, and it holds no policy of its own. It has no dependency, and it needs nothing but the runtime.
+
+| Path | Contents |
+| --- | --- |
+| `src/domains/` | Core: the contexts of a deployment, the calls to the contracts, the refusals and their statuses, the login |
+| `src/app/` | Interface: the reading of the words of the reader, the dispatcher, the help, the formats of the answer |
+| `src/platform/` | Adapters implementing the domains' ports: the transport, the files of the machine, the browser, the callback, the randomness |
+| `src/runtime/` | The commands of the registry and the composition of the ports |
+| `src/main.ts` | The process: reads the words of the reader and ends with the status of the command |
+
+The core imports neither the interface nor the adapters, and no module is in an import cycle. `packages/cli/scripts/architecture.ts` checks this with the same engine as the console.
 
 ## Working rules
 

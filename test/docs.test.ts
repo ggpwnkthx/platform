@@ -34,7 +34,7 @@ const docs = join(root, 'docs')
 const SKIPPED = ['node_modules', '.git', '.pg', '.access', 'dist', 'coverage']
 
 /** The directories of the documentation, and the service each one holds. */
-const DIRECTORIES = ['platform', 'gateway', 'access', 'data', 'console']
+const DIRECTORIES = ['platform', 'gateway', 'access', 'data', 'console', 'cli']
 
 /** Every markdown file of a directory, recursively. */
 async function filesOf(directory: string): Promise<string[]> {

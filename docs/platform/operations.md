@@ -95,6 +95,7 @@ Every service exposes Prometheus metrics on `/metrics`. The gateway and Access r
 | Data image | `ghcr.io/ggpwnkthx/data:<version>` |
 | Binaries | Assets of the tag's GitHub release |
 | Data typed client | `data-backend-client-<version>.tgz`, and the package registry |
+| Command line | `platformctl-<version>-<platform>.tar.gz`, an asset of the tag |
 
 ```bash
 docker pull ghcr.io/ggpwnkthx/gateway:1.0.0

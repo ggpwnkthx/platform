@@ -1,0 +1,22 @@
+{
+  "name": "@platform/cli",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The command line of the platform: a client of the gateway, Access and Data, and the operator commands of a deployment.",
+  "bin": {
+    "platformctl": "./src/main.ts"
+  },
+  "scripts": {
+    "start": "bun run src/main.ts",
+    "build": "bun build --compile --minify --outfile dist/platformctl src/main.ts",
+    "test": "bun test test",
+    "typecheck": "tsc --noEmit",
+    "architecture": "bun run scripts/architecture.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "engines": {
+    "bun": ">=1.4.3"
+  }
+}
