@@ -120,6 +120,8 @@ ACCESS_DATABASE_URL=postgres://… bun run scripts/ops/load.ts --requests 20000 
 
 Each `--max-*` option fails the run when that percentile exceeds it, `--min-per-second` when throughput is below it; without them the script only reports. CI thresholds sit far above the targets because runners are shared: they catch a changed plan, a dropped index or a policy-table scan.
 
+The gate of the tenant decision holds a higher percentile than the gate of the platform decision, because the statement of a tenant costs about a third more: the scope of a tenant is a transaction, and the transaction is the cost. The two gates catch the same defects.
+
 | Target | Value | Shape |
 | --- | --- | --- |
 | Decision `p50` / `p99` | ≤ 3 ms / ≤ 20 ms | One principal, a hundred grants |
