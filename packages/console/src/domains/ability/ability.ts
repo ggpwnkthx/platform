@@ -26,7 +26,7 @@ import {
   type RawRuleFrom,
 } from '@casl/ability'
 import type { CollectionMetadata } from '../data'
-import type { OperatorScope } from '../operators'
+import { CONSOLE_KEYS, type OperatorScope } from '../operators'
 
 /** The subject of the capabilities of the console itself. */
 export const CONSOLE_SUBJECT = 'console'
@@ -88,6 +88,28 @@ export function abilityOf(rules: readonly AbilityRule[]): ConsoleAbility {
  */
 export function consoleRules(scope: OperatorScope): AbilityRule[] {
   const rules: AbilityRule[] = []
+  // The refusals come first and the grants after them: a later rule wins,
+  // so a refusal only speaks where no grant holds.
+  rules.push(
+    {
+      inverted: true,
+      action: CONSOLE_ACTIONS.status,
+      subject: CONSOLE_SUBJECT,
+      reason: `The detail of the status needs the key ${CONSOLE_KEYS.status}, and Access gives you none on the route of the console.`,
+    },
+    {
+      inverted: true,
+      action: CONSOLE_ACTIONS.admin,
+      subject: CONSOLE_SUBJECT,
+      reason: `The administration needs the key ${CONSOLE_KEYS.admin}, and Access gives you none on the route of the console.`,
+    },
+    {
+      inverted: true,
+      action: CONSOLE_ACTIONS.platform,
+      subject: CONSOLE_SUBJECT,
+      reason: `Every tenant is administered with the key ${CONSOLE_KEYS.platform}, and Access gives you none on the route of the console.`,
+    }
+  )
   if (scope.status) {
     rules.push({ action: CONSOLE_ACTIONS.status, subject: CONSOLE_SUBJECT })
   }
@@ -123,25 +145,71 @@ export function consoleAbility(scope: OperatorScope): ConsoleAbility {
 export function collectionRules(collection: CollectionMetadata): AbilityRule[] {
   const rules: AbilityRule[] = []
   const actions = new Set(collection.actions)
+  const subject = collection.key
   if (actions.has('read')) {
-    rules.push({
-      action: 'read',
-      subject: collection.key,
-      ...fieldsOf(collection.readableFields),
-    })
+    rules.push({ action: 'read', subject, ...fieldsOf(collection.readableFields) })
   }
   for (const action of ['create', 'update'] as const) {
     if (!actions.has(action)) continue
-    rules.push({
-      action,
-      subject: collection.key,
-      ...fieldsOf(collection.writableFields),
-    })
+    rules.push({ action, subject, ...fieldsOf(collection.writableFields) })
   }
   if (actions.has('delete')) {
-    rules.push({ action: 'delete', subject: collection.key })
+    rules.push({ action: 'delete', subject })
+  }
+
+  // The refusals, with their reasons. They follow the grants, and an
+  // inverted rule with fields refuses those fields alone: the action
+  // itself stays granted.
+  for (const action of COLLECTION_ACTIONS) {
+    if (!actions.has(action)) {
+      rules.push({
+        inverted: true,
+        action,
+        subject,
+        reason: `Data's policies do not let you ${VERBS[action]} records of ${collection.label}.`,
+      })
+    }
+  }
+  const named = collection.fields.map((field) => field.name)
+  const hidden = named.filter((name) => !collection.readableFields.includes(name))
+  if (actions.has('read') && hidden.length > 0) {
+    rules.push({
+      inverted: true,
+      action: 'read',
+      subject,
+      fields: hidden,
+      reason: `Data's policies hide this field of ${collection.label} from you.`,
+    })
+  }
+  const fixed = named.filter((name) => !collection.writableFields.includes(name))
+  for (const action of ['create', 'update'] as const) {
+    if (!actions.has(action) || fixed.length === 0) continue
+    rules.push({
+      inverted: true,
+      action,
+      subject,
+      fields: fixed,
+      reason:
+        action === 'create'
+          ? `Data's policies do not let you set this field when you create a record of ${collection.label}: it gets its default.`
+          : `Data's policies do not let you change this field of ${collection.label}.`,
+    })
   }
   return rules
+}
+
+/** The actions on the records of a collection. */
+const COLLECTION_ACTIONS = ['read', 'create', 'update', 'delete'] as const
+
+/** An action on the records of a collection. */
+type CollectionAction = (typeof COLLECTION_ACTIONS)[number]
+
+/** The verb of an action, as a sentence says it. */
+const VERBS: Record<CollectionAction, string> = {
+  read: 'read',
+  create: 'create',
+  update: 'change',
+  delete: 'delete',
 }
 
 /** The ability of a collection of a workspace, for the caller. */
@@ -181,4 +249,66 @@ export function administersOwnTenant(ability: ConsoleAbility): boolean {
  */
 function fieldsOf(names: readonly string[]): { fields: string[] } {
   return { fields: names.length > 0 ? [...names] : [NO_FIELD] }
+}
+
+/** The reason a refusal is shown with, when no rule of the ability names one. */
+const NO_RULE = 'Nothing the services answered gives you this.'
+
+/**
+ * Why the ability refuses an action, or null when it allows it.
+ *
+ * The reason is the one of the rule that decides: the library finds it.
+ * An action that no rule names at all has the general reason.
+ */
+export function reasonOf(
+  ability: ConsoleAbility,
+  action: string,
+  subject: string,
+  field?: string
+): string | null {
+  if (ability.can(action, subject, field)) return null
+  const rule = ability.relevantRuleFor(action, subject, field)
+  return rule?.inverted && rule.reason ? rule.reason : NO_RULE
+}
+
+/** An answer of the ability: whether it allows, and why not. */
+export interface Allowance {
+  readonly allowed: boolean
+  readonly reason: string | null
+}
+
+/** What the caller may do with a collection: its actions, and each field. */
+export interface CollectionAccess {
+  readonly actions: Readonly<Record<CollectionAction, Allowance>>
+  readonly fields: readonly {
+    readonly name: string
+    readonly label: string
+    readonly read: Allowance
+    readonly create: Allowance
+    readonly update: Allowance
+  }[]
+}
+
+/** The access of the caller to a collection, as a grid draws it. */
+export function collectionAccessOf(collection: CollectionMetadata): CollectionAccess {
+  const ability = collectionAbility(collection)
+  const answer = (action: string, field?: string): Allowance => {
+    const reason = reasonOf(ability, action, collection.key, field)
+    return { allowed: reason === null, reason }
+  }
+  return {
+    actions: {
+      read: answer('read'),
+      create: answer('create'),
+      update: answer('update'),
+      delete: answer('delete'),
+    },
+    fields: collection.fields.map((field) => ({
+      name: field.name,
+      label: field.label ?? field.name,
+      read: answer('read', field.name),
+      create: answer('create', field.name),
+      update: answer('update', field.name),
+    })),
+  }
 }

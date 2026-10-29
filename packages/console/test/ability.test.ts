@@ -13,9 +13,11 @@ import {
   administersOwnTenant,
   abilityFor,
   collectionAbility,
+  collectionAccessOf,
   CONSOLE_ACTIONS,
   CONSOLE_SUBJECT,
   consoleAbility,
+  reasonOf,
 } from '../src/domains/ability'
 import type { CollectionMetadata } from '../src/domains/data'
 import { scopeOf } from '../src/domains/operators'
@@ -125,5 +127,58 @@ describe('the ability of a collection', () => {
     // of `all`.
     expect(ability.can('manage', 'posts')).toBe(false)
     expect(ability.can('read', 'all')).toBe(false)
+  })
+})
+
+describe('the reasons of a refusal', () => {
+  const field = (name: string) => ({ name, type: 'string', required: false, nullable: true })
+  const posts = collection({
+    actions: ['read', 'update'],
+    readableFields: ['title', 'status'],
+    writableFields: ['title'],
+    fields: [field('title'), field('status'), field('secret')],
+  })
+
+  test('an action the metadata does not name says so, and an allowed one says nothing', () => {
+    const ability = collectionAbility(posts)
+    expect(reasonOf(ability, 'read', 'posts')).toBeNull()
+    expect(reasonOf(ability, 'delete', 'posts')).toBe(
+      "Data's policies do not let you delete records of Posts."
+    )
+    expect(reasonOf(ability, 'create', 'posts', 'title')).toContain('create records of Posts')
+  })
+
+  test('a field says whether it is hidden or fixed, and the action stays allowed', () => {
+    const ability = collectionAbility(posts)
+    expect(ability.can('update', 'posts')).toBe(true)
+    expect(reasonOf(ability, 'update', 'posts', 'title')).toBeNull()
+    expect(reasonOf(ability, 'update', 'posts', 'status')).toContain('do not let you change')
+    expect(reasonOf(ability, 'read', 'posts', 'secret')).toContain('hide this field')
+  })
+
+  test('a refusal of the console names the key it needs', () => {
+    const ability = consoleAbility(scopeOf('acme', [], credentials))
+    expect(reasonOf(ability, CONSOLE_ACTIONS.admin, CONSOLE_SUBJECT)).toContain('console.admin')
+    const operator = consoleAbility(scopeOf('acme', ['console.admin'], credentials))
+    expect(reasonOf(operator, CONSOLE_ACTIONS.admin, CONSOLE_SUBJECT)).toBeNull()
+    expect(reasonOf(operator, CONSOLE_ACTIONS.platform, CONSOLE_SUBJECT)).toContain(
+      'console.platform'
+    )
+  })
+
+  test('the grid of a collection holds every action and every field', () => {
+    const access = collectionAccessOf(posts)
+    expect(access.actions.read.allowed).toBe(true)
+    expect(access.actions.delete).toEqual({
+      allowed: false,
+      reason: "Data's policies do not let you delete records of Posts.",
+    })
+    expect(
+      access.fields.map((f) => [f.name, f.read.allowed, f.create.allowed, f.update.allowed])
+    ).toEqual([
+      ['title', true, false, true],
+      ['status', true, false, false],
+      ['secret', false, false, false],
+    ])
   })
 })
