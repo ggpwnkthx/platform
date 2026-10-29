@@ -451,6 +451,19 @@ jobs:
           docker build -f ${{ matrix.path }}/Dockerfile --target fixtures -t gateway-fixtures:ci .
           docker run --rm --entrypoint sh gateway-fixtures:ci -c 'ls node_modules/oidc-provider'
 
+      - name: the role of Access is not a superuser
+        if: matrix.workspace == 'access'
+        # A production deployment of Access refuses to start with a role
+        # that bypasses the isolation of the tenants (spec §3.10), and the
+        # role of the service of PostgreSQL is a superuser. The role of
+        # the service is created here, the way a deployment creates the
+        # role of its own secret store.
+        run: |
+          psql "postgres://platform:platform@127.0.0.1:5432/platform" -v ON_ERROR_STOP=1 <<'SQL'
+          create role access_ci login password 'ci-access-app-password';
+          grant usage, create on schema public to access_ci;
+          SQL
+
       - name: the image of Access starts and answers its probes
         if: matrix.workspace == 'access'
         run: |
@@ -459,7 +472,7 @@ jobs:
           openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/access-key.pem 2>/dev/null
           docker run -d --name access -p 8081:8081 \
             --add-host host.docker.internal:host-gateway \
-            -e ACCESS_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
+            -e ACCESS_DATABASE_URL=postgres://access_ci:ci-access-app-password@host.docker.internal:5432/platform \
             -e ACCESS_REDIS_URL=redis://host.docker.internal:6379/0 \
             -e ACCESS_ISSUER=https://access.example.com \
             -e ACCESS_ADMIN_TOKEN=ci-admin-token-of-the-build \
@@ -505,6 +518,34 @@ jobs:
             exit 1
           fi
 
+      - name: the roles of Data are provisioned
+        if: matrix.workspace == 'data'
+        # The service of Data separates the roles of a deployment: the
+        # owner of the schema, the role of the api, the reader of the
+        # registry, the role of the deliveries and the role of the
+        # retention. The roles are provisioned here, the way a deployment
+        # provisions them, and the api is started with the role of the
+        # api: a role that bypasses the isolation of the rows makes the
+        # service refuse to be ready.
+        run: |
+          DATA_ADMIN_DATABASE_URL=postgres://platform:platform@127.0.0.1:5432/platform \
+          DATA_OWNER_PASSWORD=ci-data-owner-password-0001 \
+          DATA_RUNTIME_PASSWORD=ci-data-runtime-password-01 \
+          DATA_REGISTRY_PASSWORD=ci-data-registry-password-1 \
+          DATA_DELIVERY_PASSWORD=ci-data-delivery-password-1 \
+          DATA_MAINTENANCE_PASSWORD=ci-data-maintenance-password \
+          DATA_DATABASE_NAME=data \
+            bun run --cwd packages/data provision
+
+      - name: the schema of Data is migrated
+        # The migrations of the deployment are applied by the owner of
+        # the schema, the way a deployment applies them: the api never
+        # alters the schema.
+        if: matrix.workspace == 'data'
+        run: |
+          DATA_DATABASE_URL=postgres://data_owner:ci-data-owner-password-0001@127.0.0.1:55433/data \
+            bun run --cwd packages/data migrate
+
       - name: the image of Data starts and answers its probes
         if: matrix.workspace == 'data'
         run: |
@@ -517,8 +558,8 @@ jobs:
             -e DATA_ENVIRONMENT=development \
             -e DATA_HOST=0.0.0.0 -e DATA_PORT=8082 \
             -e DATA_PROCESS_ROLE=api \
-            -e DATA_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
-            -e DATA_REGISTRY_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
+            -e DATA_DATABASE_URL=postgres://data_runtime:ci-data-runtime-password-01@host.docker.internal:5432/data \
+            -e DATA_REGISTRY_DATABASE_URL=postgres://data_registry:ci-data-registry-password-1@host.docker.internal:5432/data \
             -e DATA_SCHEMA_BUNDLE_FILE=/app/packages/data/manifests/schema.json \
             -e DATA_POLICY_BUNDLE_FILE=/app/packages/data/manifests/policies.json \
             -e DATA_GATEWAY_BINDINGS_FILE=/etc/data/bindings.json \
@@ -547,8 +588,8 @@ jobs:
             -e DATA_ENVIRONMENT=development \
             -e DATA_HOST=0.0.0.0 -e DATA_PORT=8082 \
             -e DATA_PROCESS_ROLE=api \
-            -e DATA_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
-            -e DATA_REGISTRY_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
+            -e DATA_DATABASE_URL=postgres://data_runtime:ci-data-runtime-password-01@host.docker.internal:5432/data \
+            -e DATA_REGISTRY_DATABASE_URL=postgres://data_registry:ci-data-registry-password-1@host.docker.internal:5432/data \
             -e DATA_SCHEMA_BUNDLE_FILE=/app/packages/data/manifests/schema.json \
             -e DATA_POLICY_BUNDLE_FILE=/app/packages/data/manifests/policies.json \
             -e DATA_GATEWAY_BINDINGS_FILE=/etc/data/bindings.json \
