@@ -44,6 +44,18 @@ export const CONTAINER_IMAGE = 'docker.io/library/postgres'
 const RUNTIMES = ['docker', 'podman']
 
 /**
+ * The way out of a machine that has no runtime of containers.
+ *
+ * A machine that has the binaries of PostgreSQL does not need a runtime
+ * of containers: the server of the development machine starts with the
+ * binaries, and the container is the fallback of a machine that has
+ * none.
+ */
+const WITHOUT_CONTAINER =
+  'A machine that has the binaries of PostgreSQL does not need a runtime of containers: ' +
+  'the server of the development machine starts with them.'
+
+/**
  * The runtime of the containers of the development machine.
  *
  * The environment names it, and the machine that names nothing is
@@ -418,7 +430,8 @@ export async function startPostgresContainer(
   if (!answers(runtimeName())) {
     throw new Error(
       `the runtime of the containers is needed to start the PostgreSQL ${major} of the development machine, ` +
-        `and ${runtimeName()} is not on it. The runtimes the platform knows are ${RUNTIMES.join(' and ')}.`
+        `and ${runtimeName()} is not on it. The runtimes the platform knows are ${RUNTIMES.join(' and ')}, ` +
+        `and PLATFORM_CONTAINER_RUNTIME names the runtime of the run. ${WITHOUT_CONTAINER}`
     )
   }
 
@@ -460,7 +473,7 @@ export async function startPostgresContainer(
     throw new Error(
       `the container of the PostgreSQL ${major} did not start: ${started.output}. ` +
         `The runtime of the containers is ${runtimeName()}: the platform knows ${RUNTIMES.join(' and ')}, ` +
-        'and PLATFORM_CONTAINER_RUNTIME names the runtime of the run.'
+        `and PLATFORM_CONTAINER_RUNTIME names the runtime of the run. ${WITHOUT_CONTAINER}`
     )
   }
 

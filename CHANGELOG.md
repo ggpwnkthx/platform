@@ -53,6 +53,20 @@ the gateway, and `services/` is not the source of the gateway: a file
 of `src/` could import a fixture of it, and the gate would have said
 nothing. The rule is written now, and the gate refuses the import.
 
+### The tests of the platform run without a server
+
+The contract suite of Data needs a real PostgreSQL server, because the
+rules it proves are the rules of the database, and the suite starts one
+itself — from the binaries of the machine, or from a container. A
+machine that has neither was left with a red suite and a message that
+named the container runtime and nothing else.
+
+`bun run test:fast` runs everything that does not need a server: the
+tests of the platform, the suites of the gateway, of Access and of the
+console, and the unit and architecture suites of Data. The message of a
+server that will not start names the binaries of PostgreSQL now, and
+the way out of a machine that has them.
+
 ### The status and the documentation are in the foot of every page
 
 The header of every page of the console listed five places: the

@@ -29,6 +29,7 @@
     "build:console": "bun run --cwd packages/console build",
     "control:gateway": "bun run --cwd packages/gateway control",
     "test": "bun run test:platform && bun run --workspaces test",
+    "test:fast": "bun run test:platform && bun run --cwd packages/gateway test && bun run --cwd packages/access test && bun run --cwd packages/console test && bun run --cwd packages/data test:fast",
     "test:platform": "bun test test/*.test.ts",
     "test:gateway": "bun run --cwd packages/gateway test",
     "test:access": "bun run --cwd packages/access test",

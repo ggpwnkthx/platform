@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit",
     "architecture": "bun run scripts/gates/architecture.ts",
     "test": "bun test test/unit test/contract test/architecture",
+    "test:fast": "bun test test/unit test/architecture",
     "test:unit": "bun test test/unit",
     "test:contract": "bun test test/contract",
     "test:integration": "bun test test/integration",
