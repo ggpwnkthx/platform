@@ -3,6 +3,7 @@
 # The version of the runtime and the revision of the build are labels of the
 # image: an operator has to know what is running without reading the logs.
 ARG BUN_VERSION=1.4.3
+ARG BUN_DIGEST=sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349437206c6b0b7422373
 ARG VERSION=1.0.0
 ARG REVISION=unknown
 
@@ -13,9 +14,17 @@ ARG REVISION=unknown
 # the installer reads them, and the tree of the workspace is the tree of
 # the image.
 #
+# The installer is told to install **one** workspace and to lay the tree
+# out **flat** (`--filter` and `--linker=hoisted`). The default layout of
+# Bun is a farm of symbolic links that point into a store at the root of
+# the tree, and a tree of links is a tree that breaks when the image
+# copies one part of it: the image of the gateway held the links of the
+# workspace and not the store they point at, and the process refused to
+# start with `ENOENT reading "node_modules/chokidar"`.
+#
 # The development dependencies (the fixtures of the tests) are not part of
 # the image of the gateway.
-FROM oven/bun:${BUN_VERSION}-alpine AS runtime-deps
+FROM oven/bun:${BUN_VERSION}-alpine@${BUN_DIGEST} AS runtime-deps
 WORKDIR /app
 COPY package.json bun.lock ./
 COPY packages/gateway/package.json ./packages/gateway/
@@ -23,7 +32,7 @@ COPY packages/access/package.json ./packages/access/
 COPY packages/data/package.json ./packages/data/
 COPY packages/data/packages/client/package.json ./packages/data/packages/client/
 COPY packages/console/package.json ./packages/console/
-RUN bun install --frozen-lockfile --production && \
+RUN bun install --frozen-lockfile --production --filter '@platform/gateway' --linker=hoisted && \
     rm -rf /root/.bun/install/cache
 
 # ------------------------------------------------------------------- fixtures
@@ -35,7 +44,7 @@ RUN bun install --frozen-lockfile --production && \
 #
 # This stage is never used for the gateway. It refuses to start in an
 # environment that is marked as production.
-FROM oven/bun:${BUN_VERSION}-alpine AS fixtures
+FROM oven/bun:${BUN_VERSION}-alpine@${BUN_DIGEST} AS fixtures
 WORKDIR /app/packages/gateway
 ENV NODE_ENV=development
 # The fixtures need the development dependencies (the identity provider is
@@ -61,7 +70,7 @@ CMD ["services/fixtures/oidc-provider.ts"]
 # the gateway: it is the service the gateway asks about the workspaces, and
 # a deployment that has its own does not need this one. The implementation
 # uses nothing but the runtime, so the image carries no dependency.
-FROM oven/bun:${BUN_VERSION}-alpine AS access-service
+FROM oven/bun:${BUN_VERSION}-alpine@${BUN_DIGEST} AS access-service
 WORKDIR /app/packages/gateway
 ENV NODE_ENV=production
 
@@ -77,11 +86,13 @@ CMD ["services/access-service.ts"]
 # The control plane is a separate process. It is the same code and the same
 # dependencies, and it is compiled into a binary of its own for the
 # deployments that run a binary and not the sources.
-FROM oven/bun:${BUN_VERSION}-alpine AS control-binary
+FROM oven/bun:${BUN_VERSION}-alpine@${BUN_DIGEST} AS control-binary
 WORKDIR /app/packages/gateway
 ENV NODE_ENV=production
 
-COPY --from=runtime-deps /app/packages/gateway/node_modules ./node_modules
+# The dependencies are at the root of the tree: the resolution of a module
+# walks the parents of the file, and the root is a parent of the workspace.
+COPY --from=runtime-deps /app/node_modules /app/node_modules
 COPY packages/gateway/src ./src
 COPY packages/gateway/package.json ./
 
@@ -97,7 +108,7 @@ ENTRYPOINT ["/app/bin/gateway-control"]
 #
 # The production image contains the gateway and nothing else. The fixtures
 # with their known accounts and their static policies are not copied into it.
-FROM oven/bun:${BUN_VERSION}-alpine AS runtime
+FROM oven/bun:${BUN_VERSION}-alpine@${BUN_DIGEST} AS runtime
 WORKDIR /app/packages/gateway
 
 ARG VERSION
@@ -114,7 +125,9 @@ ENV NODE_ENV=production \
     GATEWAY_PORT=8080 \
     GATEWAY_CONTROL_PORT=9090
 
-COPY --from=runtime-deps /app/packages/gateway/node_modules ./node_modules
+# The dependencies are at the root of the tree: the resolution of a module
+# walks the parents of the file, and the root is a parent of the workspace.
+COPY --from=runtime-deps /app/node_modules /app/node_modules
 COPY packages/gateway/src ./src
 COPY packages/gateway/config ./config
 COPY packages/gateway/package.json ./

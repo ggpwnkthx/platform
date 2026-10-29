@@ -212,6 +212,20 @@ jobs:
       - name: install
         run: bun install --frozen-lockfile
 
+      - name: the databases of the tests
+        # The service of PostgreSQL creates one database, the one of the
+        # environment. The tests of a workspace run in a database of
+        # their own, so that they never share a row with another suite:
+        # the database is created here, before the first test runs.
+        run: |
+          for database in access gateway; do
+            psql "postgres://platform:platform@127.0.0.1:5432/platform" -tAc \
+              "select 1 from pg_database where datname = '$database'" | grep -q 1 || \
+              psql "postgres://platform:platform@127.0.0.1:5432/platform" \
+                -v ON_ERROR_STOP=1 \
+                -c "create database $database"
+          done
+
       - name: the atomic operations of the shared state
         if: matrix.workspace == 'gateway'
         run: bun test --cwd packages/gateway test/integration
@@ -694,9 +708,14 @@ jobs:
         run: bun test --cwd packages/gateway test/interop
         env:
           GATEWAY_TEST_DEX_ISSUER: http://localhost:5556/dex
-          GATEWAY_TEST_DEX_CLIENT_ID: platform-ci
-          GATEWAY_TEST_DEX_CLIENT_SECRET: platform-ci-secret
-          GATEWAY_TEST_DEX_EMAIL: alice@platform.test
+          # The credentials are the ones of the provider of the tests:
+          # `deploy/dex/config.ci.yaml` registers the client `gateway-ci`
+          # and the account `alice@gateway.test`. The names here and the
+          # names there are one fact, and the test is refused when they
+          # differ.
+          GATEWAY_TEST_DEX_CLIENT_ID: gateway-ci
+          GATEWAY_TEST_DEX_CLIENT_SECRET: gateway-ci-secret
+          GATEWAY_TEST_DEX_EMAIL: alice@gateway.test
           GATEWAY_TEST_DEX_PASSWORD: alice-password
 
   load:

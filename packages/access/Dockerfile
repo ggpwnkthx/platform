@@ -17,6 +17,14 @@ ARG REVISION=unknown
 # the installer reads them, and the tree of the workspace is the tree of
 # the image.
 #
+# The installer is told to install **one** workspace and to lay the tree
+# out **flat** (`--filter` and `--linker=hoisted`). The default layout of
+# Bun is a farm of symbolic links that point into a store at the root of
+# the tree, and a tree of links is a tree that breaks when the image
+# copies one part of it: the image held the links of the workspace and
+# not the store they point at, and the process refused to start with
+# `ENOENT reading "node_modules/<package>"`.
+#
 # The development dependencies (the types of the tests) are not part of the
 # image of the service.
 FROM oven/bun:${BUN_VERSION}-alpine@${BUN_DIGEST} AS runtime-deps
@@ -27,7 +35,7 @@ COPY packages/access/package.json ./packages/access/
 COPY packages/data/package.json ./packages/data/
 COPY packages/data/packages/client/package.json ./packages/data/packages/client/
 COPY packages/console/package.json ./packages/console/
-RUN bun install --frozen-lockfile --production && \
+RUN bun install --frozen-lockfile --production --filter '@platform/access' --linker=hoisted && \
     rm -rf /root/.bun/install/cache
 
 # ------------------------------------------------------------------- runtime
@@ -50,7 +58,9 @@ ENV ACCESS_ENVIRONMENT=production \
     ACCESS_HOST=0.0.0.0 \
     ACCESS_PORT=8081
 
-COPY --from=runtime-deps /app/packages/access/node_modules ./node_modules
+# The dependencies are at the root of the tree: the resolution of a module
+# walks the parents of the file, and the root is a parent of the workspace.
+COPY --from=runtime-deps /app/node_modules /app/node_modules
 COPY packages/access/src ./src
 COPY packages/access/package.json ./
 

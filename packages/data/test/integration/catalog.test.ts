@@ -98,19 +98,34 @@ describe('the catalog of the workspaces', () => {
     }
   })
 
-  test('the role of the api may not write the registry', async () => {
+  test('the role of the api writes the registry of its own workspace only', async () => {
+    // The api role writes the registry: registering a collection is an
+    // operator command that a workspace administrator performs through
+    // the API (spec §7.5), and the command runs with the role of the
+    // api. The isolation is not the absence of the grant: it is the
+    // scope of the row. The role writes the registry of the workspace
+    // it is scoped to, and never the registry of another one.
     await runtime.query('begin')
     try {
       await runtime.query(
         `select set_config('data.tenant_id', $1, true), set_config('data.workspace_id', $2, true)`,
         [TENANT_ID, WORKSPACE_ID]
       )
+      // The registry of the workspace of the scope is written.
+      await runtime.query(
+        `insert into platform.collection_registry
+           (workspace_id, tenant_id, collection_key, table_name, schema_version, enabled)
+         values ($1::uuid, $2::uuid, 'categories', 'data.categories', 'articles-v1', true)`,
+        [WORKSPACE_ID, TENANT_ID]
+      )
+      // The registry of another workspace is not: the row level
+      // security of the table refuses it.
       await expect(
         runtime.query(
           `insert into platform.collection_registry
              (workspace_id, tenant_id, collection_key, table_name, schema_version, enabled)
            values ($1::uuid, $2::uuid, 'categories', 'data.categories', 'articles-v1', true)`,
-          [WORKSPACE_ID, TENANT_ID]
+          [OTHER_WORKSPACE_ID, OTHER_TENANT_ID]
         )
       ).rejects.toThrow()
     } finally {

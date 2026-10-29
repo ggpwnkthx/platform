@@ -229,14 +229,14 @@ against them ([spec §1.1](spec.md#11-integration-baseline)).
       "path": "packages/gateway",
       "source": {
         "repository": "https://github.com/ggpwnkthx/platform.git",
-        "commit": "d3cdb48b79c3962e66bf51d8f386132baff824b7"
+        "commit": "dc3d421a5f490594fe012d04eaaef21733736563"
       }
     },
     "access": {
       "path": "packages/access",
       "source": {
         "repository": "https://github.com/ggpwnkthx/platform.git",
-        "commit": "d3cdb48b79c3962e66bf51d8f386132baff824b7"
+        "commit": "dc3d421a5f490594fe012d04eaaef21733736563"
       }
     },
     "data": {

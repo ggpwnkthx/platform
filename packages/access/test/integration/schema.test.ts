@@ -131,7 +131,9 @@ describe('the schema of Access', () => {
          and table_name in ('${MIGRATIONS_TABLE}', '${AUDIT_TABLE}')
        order by table_name`
     )
-    expect(rows.map((row) => row.table_name)).toEqual([AUDIT_TABLE, MIGRATIONS_TABLE])
+    // The order is the order of the names: `access_schema_migrations`
+    // comes before `admin_audit`, and the query sorts the names.
+    expect(rows.map((row) => row.table_name)).toEqual([MIGRATIONS_TABLE, AUDIT_TABLE])
   })
 
   test('the empty scope is the scope of the platform in every policy', async () => {

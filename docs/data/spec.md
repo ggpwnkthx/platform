@@ -32,8 +32,8 @@ and the revision of the repository that is tested against them.
 
 | Workspace | Path | The revision it is tested against |
 | --- | --- | --- |
-| The gateway | `packages/gateway` | `d3cdb48b79c3962e66bf51d8f386132baff824b7` |
-| Access | `packages/access` | `d3cdb48b79c3962e66bf51d8f386132baff824b7` |
+| The gateway | `packages/gateway` | `dc3d421a5f490594fe012d04eaaef21733736563` |
+| Access | `packages/access` | `dc3d421a5f490594fe012d04eaaef21733736563` |
 | Data | `packages/data` | the tree of the run |
 
 <!-- compatibility-baseline:end -->

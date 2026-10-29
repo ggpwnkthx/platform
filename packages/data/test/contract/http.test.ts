@@ -59,7 +59,9 @@ describe('the operational endpoints', () => {
   })
 
   test('the description of the API holds the probes of the service', async () => {
-    const response = await harness.raw(`/ws/${WORKSPACE_ID}/v1/openapi.json`)
+    // The request is signed: every data path needs the signed identity
+    // of the gateway (spec §4.2), and the description is one of them.
+    const response = await harness.request(`/ws/${WORKSPACE_ID}/v1/openapi.json`)
     expect(response.status).toBe(200)
     const document = await json(response)
     expect(document.paths['/healthz']).toBeTruthy()

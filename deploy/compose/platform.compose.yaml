@@ -246,8 +246,14 @@ secrets:
   # The public half of the pair of the identity signature. The private
   # half is in the environment of the gateway: it is never in a file of
   # the repository.
+  #
+  # The file is the one the development machine generates, and it is not
+  # in the repository: the pair is written by `bun run scripts/dev-keys.ts`.
+  # The path is a variable, like it is in every other stack, so that a
+  # deployment that mounts the key of its own secret manager names it
+  # here and not in the source of the repository.
   identity-signing-public-key:
-    file: ../secrets/identity-signing.public.pem
+    file: ${GATEWAY_IDENTITY_PUBLIC_KEY:-../secrets/identity-signing.public.pem}
 
 volumes:
   pg-data:
