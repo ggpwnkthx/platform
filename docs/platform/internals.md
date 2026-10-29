@@ -112,6 +112,10 @@ Each workspace adds its own domain rules to these:
 
 Every version is pinned exactly; Dependabot opens the pull request that moves one.
 
+The tree of the dependencies is **flat**: `bunfig.toml` sets `linker = "hoisted"`, so every dependency is installed at the root of the repository and a workspace holds no `node_modules` of its own. The resolution of a module walks the parents of the file, and the root is a parent of the workspace, so a workspace resolves its dependencies at the root.
+
+The layout is the same decision as the one the images make: an image copies the root `node_modules` alone, and a tree of links that points into a store the image does not copy breaks the process at its start with `ENOENT reading "node_modules/<package>"`. The development machine and the image of a package hold the same tree now.
+
 Each workspace's `Dockerfile` builds with the **repository root** as context, because dependencies come from the root lockfile:
 
 ```bash
