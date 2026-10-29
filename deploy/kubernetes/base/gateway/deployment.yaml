@@ -144,11 +144,23 @@ spec:
               value: "true"
             # The ranges of the ingress: the forwarding headers of a request
             # are only trusted from them. The ranges name the proxies of the
-            # deployment, and they should be as narrow as the cluster allows:
-            # a range that covers the addresses of the callers trusts every
-            # one of them to write the headers of the chain.
+            # deployment, and they should be as narrow as the cluster
+            # allows: a range that covers a network trusts every workload of
+            # that network, and a workload of the network that chooses the
+            # host of the request chooses the route that handles it.
+            #
+            # The gateway refuses to start in production with a range that
+            # covers more than sixteen addresses. Name the address of the
+            # ingress of the deployment, or the small range it lives in:
+            #
+            #   - name: GATEWAY_TRUSTED_PROXIES
+            #     value: 10.0.0.1/32
+            #
+            # An empty value trusts nobody: the address of the peer is then
+            # the address of the caller, and the host of the request is the
+            # one of the `Host` header.
             - name: GATEWAY_TRUSTED_PROXIES
-              value: 10.0.0.0/8
+              value: ""
             # The number of the proxies that are in front of the gateway: the
             # ingress of the cluster is one.
             - name: GATEWAY_TRUSTED_PROXY_HOPS

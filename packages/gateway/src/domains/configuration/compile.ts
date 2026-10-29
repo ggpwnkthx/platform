@@ -38,6 +38,29 @@ export type CompileResult =
   | { ok: false; errors: string[]; conflicts: string[] }
 
 /**
+ * The options of the compilation of a table.
+ */
+export interface CompileTableOptions {
+  /**
+   * The ranges of the environment.
+   *
+   * They replace the ranges of the file when the environment names them.
+   */
+  trustedProxies?: string[]
+  /** True when the environment names the ranges of the trusted proxies. */
+  trustedProxiesConfigured?: boolean
+  /**
+   * The check of the ranges of the trusted proxies.
+   *
+   * The check belongs to the runtime: it knows the rule of the trust of a
+   * deployment, and the domain of the configuration may not depend on the
+   * domain of the forwarding. The check answers the problems of the
+   * ranges, and a table whose ranges have a problem is refused.
+   */
+  validateTrustedProxies?: (ranges: readonly string[]) => string[]
+}
+
+/**
  * Compiles a route table.
  *
  * The errors are the ones of the schema of the table: a field that is
@@ -54,15 +77,27 @@ export type CompileResult =
 export function compileTable(
   raw: unknown,
   defaults: EnvironmentDefaults,
-  trustedProxies: string[] = [],
-  trustedProxiesConfigured: boolean = false
+  options: CompileTableOptions = {}
 ): CompileResult {
+  const trustedProxies = options.trustedProxies ?? []
+  const trustedProxiesConfigured = options.trustedProxiesConfigured ?? false
   let config: GatewayConfigFile
   try {
     config = parseConfig(raw)
   } catch (error) {
     const details = error instanceof ConfigValidationError ? error.details : [String(error)]
     return { ok: false, errors: details, conflicts: [] }
+  }
+
+  // The ranges of the trusted proxies are checked before the table is
+  // published: a table that trusts a whole network is a table that is not
+  // published at all.
+  const effectiveProxies = trustedProxiesConfigured
+    ? [...trustedProxies]
+    : [...config.trustedProxies]
+  const problems = options.validateTrustedProxies?.(effectiveProxies) ?? []
+  if (problems.length > 0) {
+    return { ok: false, errors: problems, conflicts: [] }
   }
 
   const routes = compileRoutes(config.routes, config.defaults, defaults)
@@ -83,7 +118,7 @@ export function compileTable(
     table: {
       routes,
       reservedPaths: [...config.reservedPaths],
-      trustedProxies: trustedProxiesConfigured ? [...trustedProxies] : [...config.trustedProxies],
+      trustedProxies: effectiveProxies,
     },
   }
 }

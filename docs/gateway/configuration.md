@@ -169,8 +169,14 @@ WebSocket upstreams always use plain http ([spec §11.1.2](spec.md#1112-upstream
 | `GATEWAY_COOKIE_SECURE` | `true` in production | `Secure` attribute on cookies. |
 | `GATEWAY_ALLOWED_ORIGINS` | — | Origins allowed besides the gateway's own, comma-separated. |
 | `GATEWAY_CSRF_STRICT` | `false` | Also refuse cross-site navigations. Routes opt in with `crossSite: "strict"` ([spec §8](spec.md#8-cross-site-requests)). |
-| `GATEWAY_TRUSTED_PROXIES` | — | CIDR ranges whose forwarding headers are trusted, comma-separated. When set, replaces the file's `trustedProxies`. |
+| `GATEWAY_TRUSTED_PROXIES` | — | CIDR ranges whose forwarding headers are trusted, comma-separated. When set, replaces the file's `trustedProxies`. A range of a production deployment covers at most sixteen addresses ([spec §7.3](spec.md#73-forwarding-headers-and-client-address)). |
 | `GATEWAY_TRUSTED_PROXY_HOPS` | `1` | Number of trusted proxies in front (1–16) ([spec §7.3](spec.md#73-forwarding-headers-and-client-address)). |
+
+> [!NOTE]
+> The cross site guard reads `Sec-Fetch-Site` and `Origin`. A request that carries **neither** header is allowed, whatever its method: a client that is not a browser never sends them. Every browser of the last years sends `Origin` on a state changing request and `Sec-Fetch-Site` on every request, and a page of another site cannot drop them. A deployment that wants the guard to refuse the case as well turns `GATEWAY_CSRF_STRICT` on.
+
+> [!IMPORTANT]
+> The trust of a range is the trust of every workload of that range: a peer that is inside it chooses the host of the request, the address of the caller and the protocol of the request, and with them the route that handles the request, the budget of the caller and the comparison of the origin. Name the addresses of the proxies of the deployment and nothing else. A production gateway refuses to start with a range that covers more than sixteen addresses, and it publishes the ranges it trusts in `gateway_trusted_proxies` and in the log of the active configuration.
 
 ## Limits
 

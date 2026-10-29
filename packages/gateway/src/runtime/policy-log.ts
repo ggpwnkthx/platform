@@ -30,6 +30,14 @@ export function logActiveConfiguration(logger: Logger, snapshot: ConfigurationSn
     routes: description.routeCount,
   })
 
+  // The trust of the forwarding headers: a peer that is inside one of the
+  // ranges chooses the host of the request, the address of the caller and
+  // the protocol of the request. The operator reads the trust of the
+  // deployment here.
+  logger.info('the trust of the forwarding headers is active', {
+    trustedProxies: description.trustedProxies,
+  })
+
   for (const route of description.routes) {
     logger.info('the route is active', {
       routeId: route.id,

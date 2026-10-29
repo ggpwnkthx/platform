@@ -56,6 +56,11 @@ services:
       # The ranges of the proxies of the stack: the network of docker and
       # the loopback of the host. The variable replaces the ranges of the
       # configuration file.
+      #
+      # This is a development machine: the trust of a range is the trust of
+      # every workload of that range, and a production deployment refuses a
+      # range that covers more than sixteen addresses (the stack of the
+      # deployment trusts nobody by default).
       GATEWAY_TRUSTED_PROXIES: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1/32,::1/128
       # One proxy is in front of the gateway: the port of the host.
       GATEWAY_TRUSTED_PROXY_HOPS: 1

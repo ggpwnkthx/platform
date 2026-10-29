@@ -74,6 +74,14 @@ export interface ControlServiceOptions {
   trustedProxies?: string[]
   /** True when the environment names the ranges of the trusted proxies. */
   trustedProxiesConfigured?: boolean
+  /**
+   * The check of the ranges of the trusted proxies.
+   *
+   * The rule of the trust belongs to the runtime, and a write of the
+   * control plane that widens the trust of the deployment is a write that
+   * is refused like any other invalid table.
+   */
+  validateTrustedProxies?: (ranges: readonly string[]) => string[]
   /** The window of the failures of the authentication, in milliseconds. */
   failureWindowMs?: number
 }
@@ -95,6 +103,7 @@ export class ControlService {
   #defaults: EnvironmentDefaults
   #trustedProxies: string[]
   #trustedProxiesConfigured: boolean
+  #validateTrustedProxies?: (ranges: readonly string[]) => string[]
   #failureWindowMs: number
 
   constructor(options: ControlServiceOptions) {
@@ -107,6 +116,7 @@ export class ControlService {
     this.#defaults = options.defaults
     this.#trustedProxies = options.trustedProxies ?? []
     this.#trustedProxiesConfigured = options.trustedProxiesConfigured ?? false
+    this.#validateTrustedProxies = options.validateTrustedProxies
     this.#failureWindowMs = options.failureWindowMs ?? 60_000
   }
 
@@ -161,12 +171,13 @@ export class ControlService {
    * before it writes it.
    */
   async validate(table: unknown): Promise<ConfigValidation> {
-    const result = compileTable(
-      table,
-      this.#defaults,
-      this.#trustedProxies,
-      this.#trustedProxiesConfigured
-    )
+    const result = compileTable(table, this.#defaults, {
+      trustedProxies: this.#trustedProxies,
+      trustedProxiesConfigured: this.#trustedProxiesConfigured,
+      ...(this.#validateTrustedProxies
+        ? { validateTrustedProxies: this.#validateTrustedProxies }
+        : {}),
+    })
     const active = await this.activeConfig()
     const diff = diffTables(active.table, table)
     if (!result.ok) {
@@ -202,12 +213,13 @@ export class ControlService {
     address: string
     request: unknown
   }): Promise<ConfigWriteOutcome> {
-    const compiled = compileTable(
-      input.table,
-      this.#defaults,
-      this.#trustedProxies,
-      this.#trustedProxiesConfigured
-    )
+    const compiled = compileTable(input.table, this.#defaults, {
+      trustedProxies: this.#trustedProxies,
+      trustedProxiesConfigured: this.#trustedProxiesConfigured,
+      ...(this.#validateTrustedProxies
+        ? { validateTrustedProxies: this.#validateTrustedProxies }
+        : {}),
+    })
     if (!compiled.ok) {
       return {
         ok: false,

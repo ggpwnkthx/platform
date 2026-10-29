@@ -352,4 +352,33 @@ describe('the environment of a production deployment', () => {
     })
     expect(settings.sharedState.url).toBe('redis://cache:6379/1')
   })
+
+  test('the trust of the forwarding headers is the trust of an address', () => {
+    // A peer that is inside a trusted range chooses the host of the
+    // request, the address of the caller and the protocol of the request.
+    // A range that covers a private network trusts every workload of that
+    // network, and a production deployment refuses it.
+    expect(() => readEnv({ ...production, GATEWAY_TRUSTED_PROXIES: '10.0.0.0/8' })).toThrow(
+      /GATEWAY_TRUSTED_PROXIES names ranges that are too wide/
+    )
+    expect(() => readEnv({ ...production, GATEWAY_TRUSTED_PROXIES: '192.168.0.0/16' })).toThrow(
+      /GATEWAY_TRUSTED_PROXIES names ranges that are too wide/
+    )
+    // The range of the proxies of a deployment is inside the bound.
+    const settings = readEnv({ ...production, GATEWAY_TRUSTED_PROXIES: '10.0.0.4/32,::1/128' })
+    expect(settings.network.trustedProxies).toEqual(['10.0.0.4/32', '::1/128'])
+  })
+
+  test('a range of the trusted proxies that cannot be read is refused', () => {
+    // A value that cannot be read matches nothing: the proxy it names is
+    // not trusted, and the deployment believes it is.
+    expect(() => readEnv({ ...production, GATEWAY_TRUSTED_PROXIES: 'not-a-range' })).toThrow(
+      /GATEWAY_TRUSTED_PROXIES names values that are not ranges/
+    )
+  })
+
+  test('a development machine may trust a whole network', () => {
+    const settings = readEnv({ GATEWAY_TRUSTED_PROXIES: '10.0.0.0/8' })
+    expect(settings.network.trustedProxies).toEqual(['10.0.0.0/8'])
+  })
 })

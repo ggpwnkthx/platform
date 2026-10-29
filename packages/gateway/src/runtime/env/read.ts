@@ -6,6 +6,7 @@
  * the message names the variable, so the operator knows what to fix.
  */
 import { randomBytes } from 'node:crypto'
+import { invalidRanges, MAX_TRUSTED_PROXY_ADDRESSES, wideRanges } from '../../domains/forwarding'
 import type { RateLimitFallbackMode } from '../../domains/rate-limiting'
 import { isSharedStateUrl } from '../shared-state'
 import { ControlEnvSchema, EnvSchema, pemOf } from './schema'
@@ -279,6 +280,27 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
     throw new Error(
       'at least one rate limit must be set in a production environment (GATEWAY_RATE_LIMIT_MAX, GATEWAY_RATE_LIMIT_GLOBAL_MAX, GATEWAY_RATE_LIMIT_PRINCIPAL_MAX or GATEWAY_RATE_LIMIT_TOTAL_MAX), or GATEWAY_ALLOW_NO_RATE_LIMITS=true when the deployment is protected by another layer'
     )
+  }
+
+  // The trust of the forwarding headers is the trust of an address: a peer
+  // that is inside a trusted range chooses the host of the request, the
+  // address of the caller and the protocol of the request. A range that
+  // covers a whole private network is the trust of every workload of the
+  // network, so a production deployment names the ranges of its proxies and
+  // nothing else.
+  if (production) {
+    const unreadable = invalidRanges(parsed.GATEWAY_TRUSTED_PROXIES)
+    if (unreadable.length > 0) {
+      throw new Error(
+        `GATEWAY_TRUSTED_PROXIES names values that are not ranges: ${unreadable.join(', ')}. A value that cannot be read matches nothing, so the proxy it names is not trusted`
+      )
+    }
+    const wide = wideRanges(parsed.GATEWAY_TRUSTED_PROXIES)
+    if (wide.length > 0) {
+      throw new Error(
+        `GATEWAY_TRUSTED_PROXIES names ranges that are too wide: ${wide.join(', ')}. The trust of a proxy covers at most ${MAX_TRUSTED_PROXY_ADDRESSES} addresses, and a range that covers a whole network trusts every workload of that network: name the addresses of the proxies of the deployment instead`
+      )
+    }
   }
 
   // The state the replicas share lives in the session server when that one

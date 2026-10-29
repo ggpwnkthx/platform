@@ -465,6 +465,36 @@ describe('the publication of a configuration', () => {
     expect(configuration.snapshot?.trustedProxies).toEqual(['192.168.0.0/16'])
   })
 
+  test('a table whose ranges of the trusted proxies have a problem is refused', () => {
+    // The rule of the trust belongs to the runtime, and the store refuses a
+    // table whose ranges do not pass it: the running generation stays the
+    // one that was running.
+    const configuration = new ConfigurationStore({
+      source: '/etc/platform/routes.json',
+      defaultMaxBodyBytes: 1_048_576,
+      trustedProxies: ['10.0.0.0/8'],
+      trustedProxiesConfigured: true,
+      validateTrustedProxies: (ranges) =>
+        ranges.includes('10.0.0.0/8') ? ['the range "10.0.0.0/8" is too wide'] : [],
+    })
+    const result = configuration.apply(baseConfig())
+    expect(result.ok).toBe(false)
+    expect(configuration.snapshot).toBeNull()
+    expect(configuration.lastError?.details.join(' ')).toContain('too wide')
+  })
+
+  test('a table whose ranges of the trusted proxies pass the check is published', () => {
+    const configuration = new ConfigurationStore({
+      source: '/etc/platform/routes.json',
+      defaultMaxBodyBytes: 1_048_576,
+      trustedProxies: ['10.0.0.4/32'],
+      trustedProxiesConfigured: true,
+      validateTrustedProxies: () => [],
+    })
+    expect(configuration.apply(baseConfig()).ok).toBe(true)
+    expect(configuration.snapshot?.trustedProxies).toEqual(['10.0.0.4/32'])
+  })
+
   test('the paths of the gateway are reserved', () => {
     const configuration = store()
     configuration.apply(baseConfig())

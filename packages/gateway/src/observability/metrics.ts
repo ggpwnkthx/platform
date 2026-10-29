@@ -188,6 +188,16 @@ export interface Observer {
    * request was counted in the window of the process.
    */
   recordRateLimitFallback(scope: string): void
+  /**
+   * The ranges of the trusted proxies are published.
+   *
+   * The trust of the deployment is the trust of an address: a peer that is
+   * inside a trusted range chooses the host of the request, the address of
+   * the caller and the protocol of the request. The ranges are therefore
+   * published, so an operator sees the trust of the deployment in the
+   * metrics and not only in the configuration.
+   */
+  setTrustedProxies(ranges: readonly string[]): void
   /** The metrics, in the Prometheus text exposition format. */
   render(): Promise<string>
   /** The content type of the exposition format. */
@@ -217,6 +227,7 @@ export class MetricsStore implements Observer {
   #rateLimitFallbacks: Counter<'scope'>
   #upstreamFailures: Counter
   #upstreamsSkipped: Counter
+  #trustedProxies: Gauge<'range'>
   /** The routes that are tracked individually. */
   #routes = new Set<string>()
 
@@ -344,6 +355,12 @@ export class MetricsStore implements Observer {
       help: 'The times an upstream was skipped because it failed recently.',
       registers: [this.#registry],
     })
+    this.#trustedProxies = new Gauge({
+      name: 'gateway_trusted_proxies',
+      help: 'The ranges of the proxies whose forwarding headers the gateway trusts.',
+      labelNames: ['range'],
+      registers: [this.#registry],
+    })
   }
 
   requestStarted(): void {
@@ -438,6 +455,15 @@ export class MetricsStore implements Observer {
 
   recordUpstreamSkipped(): void {
     this.#upstreamsSkipped.inc()
+  }
+
+  setTrustedProxies(ranges: readonly string[]): void {
+    // The ranges of the previous generation are dropped: the metric holds
+    // the trust that is running and not the trust that ran.
+    this.#trustedProxies.reset()
+    for (const range of ranges) {
+      this.#trustedProxies.set({ range }, 1)
+    }
   }
 
   async render(): Promise<string> {

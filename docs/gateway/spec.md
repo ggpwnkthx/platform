@@ -176,7 +176,7 @@ whole when invalid; it is never half-applied.
     "timeouts": { "responseMs": 5000, "firstByteMs": 30000, "bodyMs": 300000 },
     "maxBodyBytes": 10485760
   },
-  "trustedProxies": ["10.0.0.0/8"],
+  "trustedProxies": ["10.0.0.4/32"],
   "reservedPaths": [],
   "routes": [
     {
@@ -205,7 +205,7 @@ Top level (each `defaults.*` value applies to routes that declare none):
 | `defaults.accessCacheTtlMs` | Lifetime of a cached access decision (§6). Default: the environment's value. |
 | `defaults.accessStaleGraceMs` | Access outage grace (§6.2). Default: the environment's value. |
 | `defaults.replayMaxBytes` | Largest body that may be resent to a second upstream (§11.4). Default: the environment's value. |
-| `trustedProxies` | Ranges whose forwarding headers are honored (§7.3). `GATEWAY_TRUSTED_PROXIES` replaces them when set. |
+| `trustedProxies` | Ranges whose forwarding headers are honored (§7.3). `GATEWAY_TRUSTED_PROXIES` replaces them when set. A range of a production deployment covers at most sixteen addresses (§7.3). |
 | `reservedPaths` | Paths the gateway keeps for itself, in addition to §2.2. |
 | `routes` | At least one route. |
 
@@ -342,6 +342,7 @@ row below holds. The error names the missing variable.
 | `GATEWAY_ACCESS_TOKEN` is set | Token the gateway authenticates to Access with. `GATEWAY_ACCESS_ALLOW_ANONYMOUS=true` replaces it when the service authenticates the gateway by other means. |
 | One rate limit is on | At least one of `GATEWAY_RATE_LIMIT_MAX`, `GATEWAY_RATE_LIMIT_GLOBAL_MAX`, `GATEWAY_RATE_LIMIT_PRINCIPAL_MAX` and `GATEWAY_RATE_LIMIT_TOTAL_MAX` must be non-zero. `GATEWAY_ALLOW_NO_RATE_LIMITS=true` replaces them when another layer protects the deployment. |
 | State is shared | `GATEWAY_SESSION_URL` and `GATEWAY_SHARED_STATE_URL` must name a Redis or Postgres server. A session in one replica's memory is unknown to the others, and a limit in one replica's memory limits only that replica. `GATEWAY_ALLOW_MEMORY_STATE=true` replaces them for a single-node deployment that accepts this. |
+| The trust of the proxies is narrow | Every range of `GATEWAY_TRUSTED_PROXIES` (or of the file's `trustedProxies` when the environment names none) must be a range that covers at most sixteen addresses. The trust of a range is the trust of every workload of that range: a peer inside it chooses the host of the request, the address of the caller and the protocol of the request (§7.3). A value that is not a range is refused as well: it matches nothing, and the proxy it names is not trusted. |
 
 Startup also stops when an upstream client certificate is set without its key,
 or the reverse (§11.1.2).
@@ -807,6 +808,16 @@ address it saw, so the chain ends with one entry per proxy, and anything a
 client injected sits to the left of those. `GATEWAY_TRUSTED_PROXY_HOPS`
 (default 1) is the number of proxies; the caller's address is the entry that
 many positions from the right.
+
+**The trust of a range is the trust of every workload of that range.** A peer
+that is inside a trusted range chooses the host of the request, the address
+of the caller and the protocol of the request, so a range that covers a
+private network lets every workload of that network act as a proxy. A
+production deployment therefore **refuses to start** when a trusted range
+covers more than sixteen addresses, or when a value of the list is not a
+range; a development machine may name a whole network. The ranges that are
+running are published in `gateway_trusted_proxies` and written in the log of
+the active configuration.
 
 The caller's address is therefore **never an entry a client chose**. The
 trusted ranges only decide whether the peer is a proxy, so even a caller whose
@@ -1423,6 +1434,7 @@ is not sent twice.
 | `gateway_access_duration_seconds` | `route` | Latency of calls that reached Access (cache hits are not counted). |
 | `gateway_bytes_in_total`, `gateway_bytes_out_total` | — | Bytes actually transferred. |
 | `gateway_active_requests` | — | Requests in flight. |
+| `gateway_trusted_proxies` | `range` | The ranges of the proxies whose forwarding headers the gateway trusts (§7.3). |
 | `gateway_config_reloads_total` | `result` | Configuration reloads. |
 | `gateway_rate_limited_total` | — | Requests refused by the limiter. |
 | `gateway_rate_limit_fallback_total` | `scope` | Requests counted in-process because the shared-state windows could not be read (§9). |

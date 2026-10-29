@@ -252,9 +252,11 @@ Give gateway pods a grace period longer than `GATEWAY_SHUTDOWN_TIMEOUT_MS` (15 s
 The ingress terminates TLS for the gateway's public hosts, the Access issuer and the console. For the gateway, turn buffering off, pass WebSocket upgrades, leave paths alone and send `x-forwarded-host` when it rewrites `Host`; the full settings table and an nginx example are in [gateway ingress](../gateway/operations.md#ingress). Then tell the gateway which addresses to trust:
 
 ```bash
-GATEWAY_TRUSTED_PROXIES=10.0.0.0/8
+GATEWAY_TRUSTED_PROXIES=10.0.0.4/32
 GATEWAY_TRUSTED_PROXY_HOPS=2   # a load balancer plus an ingress
 ```
+
+Name the addresses of the proxies of the deployment, and nothing else. The trust of a range is the trust of every workload of that range: a peer that is inside it chooses the host of the request, the address of the caller and the protocol of the request, so a range that covers a network lets every workload of that network impersonate a caller. A production gateway refuses to start with a range that covers more than sixteen addresses, and it publishes the ranges it trusts in the metrics (`gateway_trusted_proxies`).
 
 `ACCESS_ISSUER` must be the address that both browsers and the gateway use, so publish Access under exactly that URL.
 

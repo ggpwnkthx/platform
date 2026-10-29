@@ -37,6 +37,7 @@ import {
 } from '../domains/workspace-access/adapters'
 import { createLogger, type Logger } from '../observability'
 import { logActiveConfiguration } from './policy-log'
+import { trustedProxyProblems } from './trusted-proxies'
 import { MetricsStore, type Observer } from '../observability'
 import { FetchAccessTransport } from '../platform/bun/access-transport'
 import { createWebSocketHandlers } from '../platform/bun/client-upgrade'
@@ -303,10 +304,18 @@ export async function createRuntime(
     defaultAccessStaleGraceMs: settings.access.staleGraceMs,
     trustedProxies: settings.network.trustedProxies,
     trustedProxiesConfigured: settings.network.trustedProxiesConfigured,
+    // The trust of the forwarding headers is the trust of an address: a
+    // production deployment trusts the proxies it names and nothing else.
+    validateTrustedProxies: settings.production ? trustedProxyProblems : undefined,
     // The policy that is running is written in the log: the route table
     // and the environment are large, and an operator has to be able to see
     // what the gateway does without reading the two.
-    onPublished: (snapshot) => logActiveConfiguration(logger, snapshot),
+    onPublished: (snapshot) => {
+      logActiveConfiguration(logger, snapshot)
+      // The ranges of the trust are published: an operator sees the trust
+      // of the deployment without reading the configuration.
+      observer.setTrustedProxies(snapshot.trustedProxies)
+    },
   })
 
   // The failure of the shared state is reported once per outage.

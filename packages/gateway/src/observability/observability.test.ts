@@ -136,4 +136,17 @@ describe('the labels of the metrics', () => {
     expect(body).not.toContain('workspaceId')
     expect(body).not.toContain('subject')
   })
+
+  test('the trust of the forwarding headers is published', async () => {
+    const metrics = new MetricsStore()
+    metrics.setTrustedProxies(['10.0.0.4/32', '::1/128'])
+    let body = await metrics.render()
+    expect(body).toContain('gateway_trusted_proxies{range="10.0.0.4/32"} 1')
+    expect(body).toContain('gateway_trusted_proxies{range="::1/128"} 1')
+    // The trust of the generation that ran is not the trust that runs.
+    metrics.setTrustedProxies(['10.0.0.5/32'])
+    body = await metrics.render()
+    expect(body).toContain('gateway_trusted_proxies{range="10.0.0.5/32"} 1')
+    expect(body).not.toContain('gateway_trusted_proxies{range="10.0.0.4/32"}')
+  })
 })

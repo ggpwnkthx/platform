@@ -100,6 +100,13 @@ export interface ConfigurationDescription {
   source: string
   /** The number of the routes. */
   routeCount: number
+  /**
+   * The ranges of the proxies whose forwarding headers are trusted.
+   *
+   * The trust of the deployment is the trust of an address, and an
+   * operator reads it here.
+   */
+  trustedProxies: string[]
   /** The routes, in the order of the precedence of the matcher. */
   routes: RouteDescription[]
   /** The settings that are permissive. */
@@ -219,6 +226,7 @@ export function describeConfiguration(snapshot: ConfigurationSnapshot): Configur
     revision: snapshot.revision,
     source: snapshot.source,
     routeCount: routes.length,
+    trustedProxies: [...snapshot.trustedProxies],
     routes,
     warnings,
   }

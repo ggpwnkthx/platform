@@ -56,6 +56,81 @@ function parseRange(value: string): Range | null {
 }
 
 /**
+ * The largest number of addresses the trust of a proxy may cover.
+ *
+ * The trust of a forwarding header is the trust of an address: a peer that
+ * is inside the trusted range chooses the host of the request, the address
+ * of the caller and the protocol of the request. A range that covers a
+ * whole private network is therefore the trust of every workload of the
+ * network, and not the trust of a proxy.
+ *
+ * The bound is sixteen addresses: an ingress is one or two pods, and the
+ * range of a deployment that names them is a handful of addresses.
+ */
+export const MAX_TRUSTED_PROXY_ADDRESSES = 16
+
+/**
+ * The shortest prefix an IPv4 range may have to be inside the bound.
+ *
+ * A /28 covers sixteen addresses, a /24 covers two hundred and fifty six.
+ */
+const MINIMUM_IPV4_PREFIX = 28
+
+/**
+ * The shortest prefix an IPv6 range may have to be inside the bound.
+ *
+ * A /124 covers sixteen addresses.
+ */
+const MINIMUM_IPV6_PREFIX = 124
+
+/**
+ * Reports whether a range is covered by the bound of the trust.
+ *
+ * A range that cannot be parsed is not a range: it is reported by
+ * `invalidRanges` and not by this function, so an operator reads two
+ * different reasons.
+ */
+export function isWideRange(value: string): boolean {
+  const range = parseRange(value)
+  if (!range) return false
+  const minimum = range.family === 'ipv4' ? MINIMUM_IPV4_PREFIX : MINIMUM_IPV6_PREFIX
+  return range.prefix < minimum
+}
+
+/**
+ * Reports whether a value is a range the gateway can read.
+ *
+ * A value that is not a range matches nothing: it is dropped, and the
+ * proxy it was meant to name is not trusted. A deployment that does not
+ * know it has a typo in its trust believes it is protected by a proxy that
+ * is not there.
+ */
+export function isRange(value: string): boolean {
+  return parseRange(value) !== null
+}
+
+/**
+ * The ranges of a list that are too wide to be trusted.
+ *
+ * The list is the list of the ranges of the deployment, and the answer is
+ * the ranges an operator has to narrow: the message of the refusal names
+ * them.
+ */
+export function wideRanges(ranges: readonly string[]): string[] {
+  return ranges.filter((range) => isWideRange(range))
+}
+
+/**
+ * The ranges of a list that are not ranges.
+ *
+ * They are named apart from the wide ones: a value that cannot be read is
+ * a typo of the operator and not a trust that is too wide.
+ */
+export function invalidRanges(ranges: readonly string[]): string[] {
+  return ranges.filter((range) => !isRange(range))
+}
+
+/**
  * Reports whether an address is covered by one of the given ranges.
  *
  * A range is a CIDR range (`10.0.0.0/8`) or a single address

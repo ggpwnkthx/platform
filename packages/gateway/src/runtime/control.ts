@@ -30,6 +30,7 @@ import { createLogger, type Logger } from '../observability'
 import { startListener, type StartedListener } from '../platform/bun/listener'
 import { connectSharedState } from './composition'
 import type { ControlSettings } from './env'
+import { trustedProxyProblems } from './trusted-proxies'
 import { VERSION } from './version'
 
 /** The runtime of the control plane. */
@@ -199,6 +200,9 @@ export async function createControlRuntime(
     defaults: settings.defaults,
     trustedProxies: settings.trustedProxies,
     trustedProxiesConfigured: settings.trustedProxiesConfigured,
+    // A write of the control plane that widens the trust of the
+    // deployment is a write that is refused.
+    validateTrustedProxies: trustedProxyProblems,
   })
 
   const state = { draining: false }

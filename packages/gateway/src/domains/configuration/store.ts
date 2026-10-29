@@ -113,6 +113,14 @@ export interface ConfigurationStoreOptions {
    * deployment.
    */
   trustedProxiesConfigured?: boolean
+  /**
+   * The check of the ranges of the trusted proxies.
+   *
+   * The runtime owns the rule of the trust of a deployment, and it hands
+   * the check to the store: a table whose ranges have a problem is not
+   * published, and the running generation stays the one that was running.
+   */
+  validateTrustedProxies?: (ranges: readonly string[]) => string[]
 }
 
 /**
@@ -130,6 +138,7 @@ export class ConfigurationStore {
   #defaults: EnvironmentDefaults
   #trustedProxies: string[]
   #trustedProxiesConfigured: boolean
+  #validateTrustedProxies?: (ranges: readonly string[]) => string[]
   #onPublished?: (snapshot: ConfigurationSnapshot) => void
 
   constructor(options: ConfigurationStoreOptions) {
@@ -142,6 +151,7 @@ export class ConfigurationStore {
     }
     this.#trustedProxies = options.trustedProxies ?? []
     this.#trustedProxiesConfigured = options.trustedProxiesConfigured ?? false
+    this.#validateTrustedProxies = options.validateTrustedProxies
     this.#onPublished = options.onPublished
   }
 
@@ -177,12 +187,13 @@ export class ConfigurationStore {
    * valid leaves the running one untouched.
    */
   apply(raw: unknown): ReloadResult {
-    const result = compileTable(
-      raw,
-      this.#defaults,
-      this.#trustedProxies,
-      this.#trustedProxiesConfigured
-    )
+    const result = compileTable(raw, this.#defaults, {
+      trustedProxies: this.#trustedProxies,
+      trustedProxiesConfigured: this.#trustedProxiesConfigured,
+      ...(this.#validateTrustedProxies
+        ? { validateTrustedProxies: this.#validateTrustedProxies }
+        : {}),
+    })
     if (!result.ok) {
       const details = [...result.errors, ...result.conflicts]
       this.#error = {

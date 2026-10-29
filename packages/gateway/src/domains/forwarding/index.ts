@@ -14,6 +14,12 @@ export { resolveForwardingContext } from './context'
 export type { ForwardingContext } from './context'
 
 export {
+  MAX_TRUSTED_PROXY_ADDRESSES,
+  invalidRanges,
+  wideRanges,
+} from './network'
+
+export {
   IdentityNotWritableError,
   asymmetricIdentityKey,
   canonicalIdentityPayload,
