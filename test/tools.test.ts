@@ -40,6 +40,7 @@ const KNOWN_TOP_LEVEL = [
   'SECURITY.md',
   'biome.json',
   'bun.lock',
+  'bunfig.toml',
   'compatibility.json',
   'deploy',
   'docs',

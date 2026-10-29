@@ -1,0 +1,22 @@
+# The layout of the tree of the dependencies.
+#
+# The default layout of Bun is a farm of symbolic links: every workspace
+# holds its own `node_modules`, and every package of it is a link that
+# points into a store at the root of the tree. The layout of the
+# development machine is then the layout of the image: the image of the
+# gateway copies the root of the tree and the links of the workspace
+# without the store they point at, and the process refuses to start with
+# `ENOENT reading "node_modules/chokidar"`.
+#
+# The layout of a flat tree (`--linker=hoisted`) puts every dependency at
+# the root of the tree and leaves the workspaces without a directory of
+# their own. The resolution of a module walks the parents of the file, and
+# the root is a parent of the workspace: a workspace that has no
+# `node_modules` of its own resolves its dependencies at the root, which
+# is where the image copies them from.
+#
+# The image of the packages already lays the tree out flat: the flag is
+# in the Dockerfiles. This file is the same decision for the machine that
+# develops the platform.
+[install]
+linker = "hoisted"
