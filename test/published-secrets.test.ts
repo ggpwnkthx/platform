@@ -289,4 +289,21 @@ describe('the published credentials of the repository', () => {
       true
     )
   })
+
+  test('no image of the platform carries the fixtures of the repository', () => {
+    // The fixtures of the development machine are published on purpose:
+    // they are the credentials of a development machine, and a deployment
+    // that mounts them holds a credential that everybody knows. An image
+    // that carries them gives that credential to every deployment that
+    // pulls the image, so the images copy the source of their service and
+    // nothing else.
+    const images = ['gateway', 'access', 'data', 'console'].map((service) =>
+      join(root, 'packages', service, 'Dockerfile')
+    )
+    for (const image of images) {
+      const content = readFileSync(image, 'utf8')
+      expect(content).not.toContain('deploy/fixtures')
+      expect(content).not.toContain('fixtures/secrets')
+    }
+  })
 })
