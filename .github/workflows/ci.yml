@@ -355,6 +355,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: install
+        # The roles of Data and the migrations of its schema are applied
+        # by the operator commands of the workspace, and they run on the
+        # runner: the runtime and the dependencies of the workspace are
+        # needed. The tree of the dependencies is not in the context of
+        # the build (`.dockerignore` holds it out), so the images are
+        # built from the tree of the repository alone.
+        run: bun install --frozen-lockfile
+
       - name: the build of the image
         run: docker build -f ${{ matrix.path }}/Dockerfile -t ${{ matrix.workspace }}:ci .
 
@@ -381,17 +394,12 @@ jobs:
           # public key of it, and a production deployment has to set it.
           openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 \
             -out "$RUNNER_TEMP/identity-key.pem"
-          {
-            echo "GATEWAY_IDENTITY_SIGNING_KEY<<EOF"
-            cat "$RUNNER_TEMP/identity-key.pem"
-            echo "EOF"
-          } >> "$GITHUB_ENV"
           # The state of the deployment is shared: the image reaches the
           # Redis of the job through the host of the runner.
           docker run -d --name gateway -p 8080:8080 \
             --add-host host.docker.internal:host-gateway \
             -e GATEWAY_SESSION_SECRET=ci-secret \
-            -e GATEWAY_IDENTITY_SIGNING_KEY \
+            -e GATEWAY_IDENTITY_SIGNING_KEY="$(cat "$RUNNER_TEMP/identity-key.pem")" \
             -e GATEWAY_OIDC_ISSUER=https://dex.example.com/dex \
             -e GATEWAY_OIDC_CLIENT_ID=platform \
             -e GATEWAY_OIDC_CLIENT_SECRET=ci-client-secret \
