@@ -9,7 +9,6 @@
 
 import { createAccessApp, createAccessHandler } from '../app/app'
 import type { AdminCredential } from '../domains/administration'
-import type { AccessContextCredential } from '../app/access-context-contract'
 import { LoginService, ProviderClient, createStateCipher } from '../domains/identity'
 import type { TenantOfLogin } from '../domains/identity'
 import { CodeService, ProviderService } from '../domains/provider'
@@ -48,6 +47,7 @@ import {
   type Database,
   type SecretCipher,
 } from '../platform/postgres'
+import { parseAccessContextCredentials } from './access-context-credentials'
 import type { RuntimeSettings } from './env'
 import { drain as drainRuntime } from './lifecycle'
 import { VERSION } from './version'
@@ -406,7 +406,7 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
     // The access context contract: the same tables of the policy, read
     // with the complete set of the keys of the grants.
     accessContexts: new AccessContextRepository(traced),
-    accessContextCredentials: readAccessContextCredentials(settings.access.contextTokens),
+    accessContextCredentials: parseAccessContextCredentials(settings.access.contextTokens),
     metricsToken: settings.metrics.token,
     // The administration of the platform: the twelve endpoints of the
     // specification, and nothing else.
@@ -533,42 +533,6 @@ function readAdminCredentials(raw: string | undefined): AdminCredential[] {
         ? value.operator.trim()
         : null
     credentials.push({ token, tenant: value.tenant.trim(), operator })
-  }
-  return credentials
-}
-
-/**
- * Reads the credentials of the access context contract.
- *
- * The value is a json object: every key is a bearer token and every
- * value holds the tenants the token may ask about. A malformed value
- * stops the service: a credential that is not understood is a credential
- * that is not scoped.
- */
-function readAccessContextCredentials(raw: string | undefined): AccessContextCredential[] {
-  if (!raw || raw.trim().length === 0) return []
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    throw new Error('ACCESS_CONTEXT_TOKENS must be a json object')
-  }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('ACCESS_CONTEXT_TOKENS must be a json object')
-  }
-  const credentials: AccessContextCredential[] = []
-  for (const [token, scope] of Object.entries(parsed as Record<string, unknown>)) {
-    if (token.length < 16) {
-      throw new Error('a credential of the access context is at least 16 characters long')
-    }
-    if (scope === null) {
-      credentials.push({ token, tenants: null })
-      continue
-    }
-    if (!Array.isArray(scope) || scope.some((entry) => typeof entry !== 'string')) {
-      throw new Error('the scope of a credential of the access context is a list of tenants')
-    }
-    credentials.push({ token, tenants: scope as string[] })
   }
   return credentials
 }

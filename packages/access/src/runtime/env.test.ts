@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { readEnv, secretBytes } from './env'
+import { isPublishedSecret, readEnv, secretBytes } from './env'
 
 /** The environment of a production deployment, with every secret. */
 const PRODUCTION: Record<string, string> = {
@@ -269,6 +269,66 @@ describe('the environment of Access', () => {
     expect(secretBytes('a'.repeat(43) + '=')).toBe(32)
     expect(secretBytes('secret-passphrase-32-bytes-long!')).toBe(32)
     expect(secretBytes('secret-passphrase-31-bytes-long')).toBe(31)
+  })
+})
+
+describe('the credentials of the access context', () => {
+  test('the values of the examples are published', () => {
+    // The list is the vocabulary of the published values of the service:
+    // the test of the platform reads it and asks Access to refuse every
+    // value of the repository that it holds.
+    expect(isPublishedSecret('development-access-context-token-0001')).toBe(true)
+    expect(isPublishedSecret('the-secret-of-the-deployment')).toBe(false)
+  })
+
+  test('a credential that the repository publishes is refused in production', () => {
+    expect(() =>
+      readEnv({
+        ...PRODUCTION,
+        ACCESS_CONTEXT_TOKENS: '{"development-access-context-token-0001":null}',
+      })
+    ).toThrow(/ACCESS_CONTEXT_TOKENS holds a credential that is the value of the example/)
+  })
+
+  test('a credential of the contract is at least thirty-two bytes in production', () => {
+    expect(() =>
+      readEnv({ ...PRODUCTION, ACCESS_CONTEXT_TOKENS: '{"a-short-credential":null}' })
+    ).toThrow(/ACCESS_CONTEXT_TOKENS holds a credential of 18 bytes/)
+  })
+
+  test('a credential of every tenant has to be said out loud', () => {
+    // The scope `null` reads the context of every tenant of the
+    // platform: it is a choice of the deployment and never the default.
+    expect(() =>
+      readEnv({
+        ...PRODUCTION,
+        ACCESS_CONTEXT_TOKENS: '{"the-credential-of-the-platform-0001":null}',
+      })
+    ).toThrow(/ACCESS_CONTEXT_ALLOW_PLATFORM_TOKEN/)
+    const settings = readEnv({
+      ...PRODUCTION,
+      ACCESS_CONTEXT_TOKENS: '{"the-credential-of-the-platform-0001":null}',
+      ACCESS_CONTEXT_ALLOW_PLATFORM_TOKEN: 'true',
+    })
+    expect(settings.access.contextTokens).toContain('the-credential-of-the-platform-0001')
+  })
+
+  test('a credential that is scoped to its tenants is accepted', () => {
+    const settings = readEnv({
+      ...PRODUCTION,
+      ACCESS_CONTEXT_TOKENS:
+        '{"the-credential-of-the-tenant-000001":["6a1f5f0e-4f36-4a51-9b3d-2f6f0f6f2b11"]}',
+    })
+    expect(settings.access.contextTokens).toContain('the-credential-of-the-tenant-000001')
+  })
+
+  test('a development machine may use the values of the examples', () => {
+    const settings = readEnv({
+      ...PRODUCTION,
+      ACCESS_ENVIRONMENT: 'development',
+      ACCESS_CONTEXT_TOKENS: '{"development-access-context-token-0001":null}',
+    })
+    expect(settings.access.contextTokens).toContain('development-access-context-token-0001')
   })
 })
 

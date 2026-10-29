@@ -15,6 +15,10 @@ import { readFileSync } from 'node:fs'
 import { z } from 'zod'
 import type { LogLevel } from '../observability'
 import { parseLogLevel } from '../observability'
+import {
+  type AccessContextCredentialScope,
+  parseAccessContextCredentials,
+} from './access-context-credentials'
 
 /** The environment the process runs in. */
 type Environment = 'development' | 'production'
@@ -187,6 +191,26 @@ const MINIMUM_TOKEN_BYTES = 16
 const MINIMUM_PLATFORM_TOKEN_BYTES = 32
 
 /**
+ * The variables of Access that carry a credential.
+ *
+ * The names are the vocabulary of the credentials of the deployment: the
+ * test of the platform reads the list and asks Access to refuse every
+ * value of the repository that the list names.
+ */
+export const CREDENTIAL_VARIABLES: readonly string[] = [
+  'ACCESS_ADMIN_TOKEN',
+  'ACCESS_PREVIOUS_ADMIN_TOKEN',
+  'ACCESS_DECISION_TOKEN',
+  'ACCESS_PREVIOUS_DECISION_TOKEN',
+  'ACCESS_METRICS_TOKEN',
+  'ACCESS_CONTEXT_TOKENS',
+  'ACCESS_STATE_SECRET',
+  'ACCESS_SECRET_ENCRYPTION_KEY',
+  'ACCESS_SIGNING_KEY',
+  'ACCESS_PREVIOUS_SIGNING_KEY',
+]
+
+/**
  * The values of the file of examples.
  *
  * A deployment that copies the example of a development machine into a
@@ -213,6 +237,13 @@ const EXAMPLE_SECRETS: readonly string[] = [
   'dev-encryption-key-of-the-development-01',
   'example-admin-token-0000000',
   'example-access-token-0000000',
+  // The credential of the access context of the minimum environment of
+  // the repository: it is published, and a deployment that keeps it
+  // lets anybody read the context of every tenant.
+  'development-access-context-token-0001',
+  // The two secrets of the minimum environment of the repository.
+  '0f7c1d9a4b2e6835a9c4d7e1b3f5a8c2',
+  '3b9d5f1e7a0c48269d1e5f8b3c7a2d046',
 ]
 
 /**
@@ -273,6 +304,7 @@ const EnvSchema = z.object({
   ACCESS_DECISION_TOKEN: z.string().optional(),
   ACCESS_PREVIOUS_DECISION_TOKEN: z.string().optional(),
   ACCESS_CONTEXT_TOKENS: z.string().optional(),
+  ACCESS_CONTEXT_ALLOW_PLATFORM_TOKEN: z.enum(['true', 'false']).optional(),
   ACCESS_METRICS_TOKEN: z.string().optional(),
 
   ACCESS_STATE_SECRET: z.string().optional(),
@@ -334,6 +366,17 @@ function isPrivateKeyPem(value: string): boolean {
 function isExampleSecret(value: string): boolean {
   const trimmed = value.trim()
   return EXAMPLE_SECRETS.includes(trimmed)
+}
+
+/**
+ * Reports whether a value is one of the secrets the repository publishes.
+ *
+ * The rule is the same for every value: the comparison is exact, and the
+ * value is trimmed because a value that is read from a file may carry
+ * the spaces of the operator.
+ */
+export function isPublishedSecret(value: string): boolean {
+  return isExampleSecret(value)
 }
 
 /**
@@ -586,6 +629,42 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
     problems.push(
       'ACCESS_PREVIOUS_DECISION_TOKEN is set without ACCESS_DECISION_TOKEN: the token it replaced is still accepted on POST /v1/decisions, and the shared secret of the deployment is not gone'
     )
+  }
+
+  // The credentials of the access context are credentials of the
+  // deployment: they are bearer tokens that open the context of the
+  // principals to whoever holds them. They are strong, and they are not
+  // the values of the examples (spec §9.2).
+  if (production && parsed.ACCESS_CONTEXT_TOKENS) {
+    let credentials: AccessContextCredentialScope[] = []
+    try {
+      credentials = parseAccessContextCredentials(parsed.ACCESS_CONTEXT_TOKENS)
+    } catch (error) {
+      problems.push(
+        `ACCESS_CONTEXT_TOKENS is not readable: ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
+    for (const credential of credentials) {
+      const bytes = secretBytes(credential.token)
+      if (bytes < MINIMUM_PLATFORM_TOKEN_BYTES) {
+        problems.push(
+          `ACCESS_CONTEXT_TOKENS holds a credential of ${bytes} bytes: a credential of the access context must be at least ${MINIMUM_PLATFORM_TOKEN_BYTES} bytes long`
+        )
+      }
+      if (isExampleSecret(credential.token) || isRepeatedCharacterSecret(credential.token)) {
+        problems.push(
+          'ACCESS_CONTEXT_TOKENS holds a credential that is the value of the example of a development machine: it is published, and a deployment does not start with it'
+        )
+      }
+      // A credential whose scope is null reads the context of every
+      // tenant of the platform. It is a choice of the deployment and
+      // never the default: the deployment says it out loud.
+      if (credential.tenants === null && !parsed.ACCESS_CONTEXT_ALLOW_PLATFORM_TOKEN) {
+        problems.push(
+          'ACCESS_CONTEXT_TOKENS holds a credential whose scope is null: it reads the context of every tenant of the platform. Set ACCESS_CONTEXT_ALLOW_PLATFORM_TOKEN=true when the deployment means it, or scope the credential to the tenants it reads'
+        )
+      }
+    }
   }
 
   if (problems.length > 0) {
