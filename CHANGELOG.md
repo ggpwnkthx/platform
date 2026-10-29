@@ -20,6 +20,15 @@ workspace, and the matrix kept them after the console was one: four
 jobs of the eight failed on every push, and the gate of the platform
 was red before it said anything about the platform.
 
+### The reference verifier and the fixtures of the gateway are run
+
+Two suites were outside every path of every job. The reference
+verifier of the upstream identity is the file an upstream copies to
+trust the identity of the gateway, and the ports of the fixtures of the
+gateway are the ports the tests take. Both were green on the machine of
+their author and nowhere else. The script of the tests of the gateway
+names them now, and they run with the rest.
+
 ### The status and the documentation are in the foot of every page
 
 The header of every page of the console listed five places: the

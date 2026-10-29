@@ -235,7 +235,13 @@ describe('the coverage of the continuous integration', () => {
     )
     expect(found).toHaveLength(1)
     expect(found[0]?.directory).toBe(join(repository, 'packages', 'gateway'))
-    expect(found[0]?.paths).toEqual(['src', 'test/contract', 'test/architecture'])
+    expect(found[0]?.paths).toEqual([
+      'src',
+      'test/contract',
+      'test/architecture',
+      'examples',
+      'services',
+    ])
   })
 
   test('the continuous integration runs the suites of the network of the gateway', () => {
