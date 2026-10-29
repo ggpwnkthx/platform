@@ -142,6 +142,56 @@ export interface RuntimeSettings {
 /** The smallest size of a cursor key, in bytes. */
 export const MINIMUM_CURSOR_KEY_BYTES = 32
 
+/**
+ * The variables of Data that carry a credential.
+ *
+ * The names are the vocabulary of the credentials of the deployment: the
+ * test of the platform reads the list and asks Data to refuse every value
+ * of the repository that the list names.
+ */
+export const CREDENTIAL_VARIABLES: readonly string[] = [
+  'DATA_ACCESS_CONTEXT_TOKEN_FILE',
+  'DATA_CURSOR_KEY_FILE',
+  'DATA_METRICS_TOKEN_FILE',
+  'DATA_OWNER_PASSWORD',
+  'DATA_RUNTIME_PASSWORD',
+  'DATA_REGISTRY_PASSWORD',
+  'DATA_DELIVERY_PASSWORD',
+  'DATA_MAINTENANCE_PASSWORD',
+]
+
+/**
+ * The secrets that the repository publishes.
+ *
+ * The files of the fixtures of the development machine are in the
+ * repository: the credential of the access context and the key of the
+ * cursors are published, and a deployment that mounts them holds a
+ * credential that everybody knows.
+ */
+export const PUBLISHED_SECRETS: readonly string[] = [
+  'development-access-context-token-0001',
+  'cu1IBGmHyRF8rfNnCkftxqTEZCrJTZFqRb5DxVhMQWI=',
+  // The passwords of the roles of the minimum environment of the
+  // repository: they are published, and a deployment that keeps them
+  // gives the credentials of the roles to everybody who reads the
+  // repository.
+  'dev-owner-password-0001',
+  'dev-runtime-password-0001',
+  'dev-registry-password-0001',
+  'dev-delivery-password-0001',
+  'dev-maintenance-password-0001',
+]
+
+/**
+ * Reports whether a value is one of the secrets the repository publishes.
+ *
+ * The comparison is exact, and the value is trimmed because a value that
+ * is read from a file may carry the spaces of the operator.
+ */
+export function isPublishedSecret(value: string): boolean {
+  return PUBLISHED_SECRETS.includes(value.trim())
+}
+
 /** The environment as a record of strings. */
 export type Env = Record<string, string | undefined>
 
@@ -316,6 +366,11 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
       'DATA_ACCESS_CONTEXT_TOKEN_FILE',
       problems
     )
+    if (credential && production && isPublishedSecret(credential)) {
+      problems.push(
+        'DATA_ACCESS_CONTEXT_TOKEN_FILE holds a credential that the repository publishes: it is a credential that everybody knows, and a deployment does not start with it'
+      )
+    }
   } else {
     problems.push(
       'DATA_ACCESS_CONTEXT_TOKEN_FILE must be set: it names the access context credential'
@@ -331,6 +386,11 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
     if (key && Buffer.byteLength(key, 'utf8') < MINIMUM_CURSOR_KEY_BYTES) {
       problems.push(
         `DATA_CURSOR_KEY_FILE must hold at least ${MINIMUM_CURSOR_KEY_BYTES} bytes: it signs the cursors`
+      )
+    }
+    if (key && production && isPublishedSecret(key)) {
+      problems.push(
+        'DATA_CURSOR_KEY_FILE holds a key that the repository publishes: it signs the cursors of every caller, and a deployment does not start with it'
       )
     }
   }

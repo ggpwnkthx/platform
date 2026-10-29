@@ -21,16 +21,28 @@
  */
 
 import { Client } from 'pg'
+import { isPublishedSecret } from '../../src/runtime/config'
 
 /** The roles of the deployment. */
 const ROLES = ['data_owner', 'data_runtime', 'data_registry', 'data_delivery', 'data_maintenance']
 
-/** The password of a role, from the environment. */
+/**
+ * The password of a role, from the environment.
+ *
+ * The password is the credential of a role of the deployment: it is
+ * strong, and a production deployment refuses the values the repository
+ * publishes. A role whose password everybody knows is a role that every
+ * body may read.
+ */
 function passwordOf(name: string): string {
-  const value = process.env[`DATA_${name.replace('data_', '').toUpperCase()}_PASSWORD`]
+  const variable = `DATA_${name.replace('data_', '').toUpperCase()}_PASSWORD`
+  const value = process.env[variable]
   if (!value || value.length < 16) {
+    throw new Error(`${variable} must be set and it is at least 16 characters`)
+  }
+  if (process.env.DATA_ENVIRONMENT === 'production' && isPublishedSecret(value)) {
     throw new Error(
-      `DATA_${name.replace('data_', '').toUpperCase()}_PASSWORD must be set and it is at least 16 characters`
+      `${variable} is the value of the example of the repository: it is published, and a deployment does not start with it`
     )
   }
   return value
