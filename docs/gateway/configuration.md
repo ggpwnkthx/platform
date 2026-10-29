@@ -24,7 +24,7 @@ These route-table keys override an environment default for one route
 | --- | --- | --- | --- |
 | `maxBodyBytes` | `defaults.maxBodyBytes` | `GATEWAY_MAX_BODY_BYTES` | Raise or lower the body limit of one route. |
 | `crossSite` | `navigation` | `GATEWAY_CSRF_STRICT` | Set `strict` when the upstream changes state on a `GET`. |
-| `forwardAuthorization` | `true` | — | Set `false` when the upstream does not need the caller's token. |
+| `forwardAuthorization` | `false` | — | Set `true` when the upstream needs the caller's token. |
 | `accessCacheTtlMs` | environment | `GATEWAY_ACCESS_CACHE_TTL_MS` | Set `0` for immediate revocation. |
 | `accessStaleGraceMs` | environment | `GATEWAY_ACCESS_STALE_GRACE_MS` | Serve the last allow decision during an Access outage. |
 | `replayMaxBytes` | environment | `GATEWAY_REPLAY_MAX_BYTES` | Cap bodies resent to the next upstream. |

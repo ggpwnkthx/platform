@@ -216,7 +216,7 @@ The signature binds the request target and the identity. It does not bind the bo
 
 Data MUST NOT create a second browser session or reimplement Access login. The caller's headers and cookies are never used to resolve data permissions.
 
-Gateway routes SHOULD set `forwardAuthorization: false` when the upstream does not need the caller's bearer token. Data MUST NOT log forwarded credentials.
+Gateway routes MUST NOT forward the caller's bearer token (`forwardAuthorization` is `false` by default, and Data verifies the signed identity of the gateway instead). Data MUST NOT log forwarded credentials.
 
 The principal is the Access principal UUID the gateway carries as its subject. The e-mail is an optional display value. Forwarded roles are optional diagnostic context and MUST NOT determine data access.
 

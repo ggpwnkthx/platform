@@ -230,8 +230,12 @@ export const DefaultsSchema = z.strictObject({
   /**
    * Whether the `Authorization` header of the caller is forwarded to the
    * upstreams of the routes that do not say otherwise.
+   *
+   * The default is **false**: the header is a credential of the caller,
+   * and a route that does not need it does not receive it. A route that
+   * needs it asks for it by name (spec §7.1).
    */
-  forwardAuthorization: z.boolean().default(true),
+  forwardAuthorization: z.boolean().default(false),
   /**
    * The default lifetime of a cached decision of access.
    *

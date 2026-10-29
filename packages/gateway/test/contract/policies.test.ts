@@ -40,6 +40,16 @@ function routes(context: { upstreamA: string; upstreamB: string }): unknown[] {
       forwardAuthorization: false,
     },
     {
+      // The route that needs the credential of the caller asks for it by
+      // name: the default of the routes is to keep it out of the trust
+      // domain of the upstream (spec §7.1).
+      id: 'credential-api',
+      match: { host: 'credential.gateway.test', path: '/' },
+      upstream: context.upstreamA,
+      auth: { mode: 'jwt' },
+      forwardAuthorization: true,
+    },
+    {
       id: 'workspace-api',
       match: { host: 'workspace.gateway.test', path: '/ws/{workspaceId}/' },
       upstream: context.upstreamA,
@@ -106,10 +116,25 @@ describe('the policies of a route', () => {
     expect(response.status).toBe(200)
   })
 
-  test('the token of the caller reaches the upstream by default', async () => {
+  test('the token of the caller does not reach the upstream by default', async () => {
+    // The credential of the caller stays in the trust domain of the
+    // gateway: a route that does not need it does not receive it
+    // (spec §7.1).
     const token = await harness.token()
     const response = await fetch(`${harness.gatewayUrl}/echo`, {
       headers: { host: 'api.gateway.test', authorization: `Bearer ${token}` },
+    })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { headers: Record<string, string> }
+    expect(body.headers.authorization).toBeUndefined()
+    // The identity of the caller still reaches the upstream.
+    expect(body.headers['x-gateway-user']).toBe('user-alice')
+  })
+
+  test('a route that needs the token asks for it', async () => {
+    const token = await harness.token()
+    const response = await fetch(`${harness.gatewayUrl}/echo`, {
+      headers: { host: 'credential.gateway.test', authorization: `Bearer ${token}` },
     })
     expect(response.status).toBe(200)
     const body = (await response.json()) as { headers: Record<string, string> }

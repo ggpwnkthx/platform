@@ -201,7 +201,7 @@ Top level (each `defaults.*` value applies to routes that declare none):
 | `defaults.timeouts` | Phase budgets (§11.2). |
 | `defaults.maxBodyBytes` | Body limit. |
 | `defaults.crossSite` | Cross-site policy (§8). Default `navigation`. |
-| `defaults.forwardAuthorization` | Whether the caller's `Authorization` header is forwarded upstream (§7.1). Default `true`. |
+| `defaults.forwardAuthorization` | Whether the caller's `Authorization` header is forwarded upstream (§7.1). Default `false`: the credential of the caller stays in the trust domain of the gateway. |
 | `defaults.accessCacheTtlMs` | Lifetime of a cached access decision (§6). Default: the environment's value. |
 | `defaults.accessStaleGraceMs` | Access outage grace (§6.2). Default: the environment's value. |
 | `defaults.replayMaxBytes` | Largest body that may be resent to a second upstream (§11.4). Default: the environment's value. |
@@ -725,11 +725,13 @@ standard `forwarded` header, and the identity headers `x-gateway-user`,
 `x-forwarded-email`, `x-forwarded-groups`, `x-remote-user`, `x-remote-email`.
 Every header named by `Connection` is removed as well.
 
-**`Authorization`** is forwarded unchanged by default. It is not a gateway
-identity header, and the upstream is a platform application the operator
-chose. Forwarding it puts the upstream in that credential's trust domain, so a
-route that does not need it sets `forwardAuthorization: false`. Either way, the
-caller's identity reaches the upstream in the headers below and the signature.
+**`Authorization`** is **not** forwarded by default. It is a credential of the
+caller, and forwarding it puts the upstream in that credential's trust domain: a
+compromised upstream would hold a credential it may replay. The default is
+therefore `forwardAuthorization: false`, and a route whose upstream really needs
+the credential asks for it by name (`forwardAuthorization: true`). Either way,
+the caller's identity reaches the upstream in the headers below and the
+signature.
 
 **`Cookie`** is rewritten: the gateway's cookies (`gateway_session`,
 `gateway_oidc_state`) are removed and application cookies are kept. Cookies are
