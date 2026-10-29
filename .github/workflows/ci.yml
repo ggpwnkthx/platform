@@ -43,6 +43,8 @@ jobs:
             path: packages/data
           - workspace: console
             path: packages/console
+          - workspace: cli
+            path: packages/cli
     steps:
       - uses: actions/checkout@v7
 

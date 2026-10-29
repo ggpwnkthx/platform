@@ -251,6 +251,79 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  cli:
+    name: the binary of the CLI for ${{ matrix.platform }}
+    needs: version
+    runs-on: ubuntu-latest
+    strategy:
+      # One platform that fails does not hide the state of the others.
+      fail-fast: false
+      matrix:
+        platform:
+          - 'linux-x64'
+          - 'linux-x64-musl'
+          - 'linux-arm64'
+          - 'darwin-x64'
+          - 'darwin-arm64'
+          - 'windows-x64'
+          - 'windows-arm64'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.tag }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: install the dependencies of the platform
+        run: bun install --frozen-lockfile --production
+
+      - name: compile
+        run: |
+          set -euo pipefail
+          version="${{ needs.version.outputs.version }}"
+          platform="${{ matrix.platform }}"
+          target="bun-${{ matrix.platform }}"
+          bundle="dist/platformctl-${version}-${platform}"
+          mkdir -p "$bundle"
+          case "$target" in
+            bun-windows-*) binary="${bundle}/platformctl.exe" ;;
+            *) binary="${bundle}/platformctl" ;;
+          esac
+          # The CLI has no dependency and no artifact of a deployment:
+          # it is a client, and it reads the state of the deployment
+          # through the contracts of the services.
+          bun build packages/cli/src/main.ts --compile \
+            --target="$target" \
+            --outfile "$binary"
+          ls -la "$bundle"
+
+      - name: the binary of the CLI answers its help
+        if: matrix.platform == 'linux-x64'
+        run: |
+          set -euo pipefail
+          version="${{ needs.version.outputs.version }}"
+          cd "dist/platformctl-${version}-linux-x64"
+          ./platformctl --help | head -5
+          ./platformctl version
+          echo "the binary of the CLI starts and answers"
+
+      - name: the archive of the CLI
+        run: |
+          set -euo pipefail
+          version="${{ needs.version.outputs.version }}"
+          platform="${{ matrix.platform }}"
+          (cd dist && tar -czf "platformctl-${version}-${platform}.tar.gz" "platformctl-${version}-${platform}")
+          tar -tzf "dist/platformctl-${version}-${platform}.tar.gz"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: platformctl-${{ matrix.platform }}
+          path: dist/platformctl-*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
   smoke:
     name: the binary of ${{ matrix.service }} starts and serves
     needs: [version, binaries]
@@ -421,7 +494,7 @@ jobs:
 
   release:
     name: the release of the binaries
-    needs: [version, binaries, smoke]
+    needs: [version, binaries, cli, smoke]
     runs-on: ubuntu-latest
     permissions:
       # The release of the tag is created here.
@@ -458,6 +531,11 @@ jobs:
           The platform, as standalone executables: the gateway, Access
           and Data. The runtime is inside every
           binary: nothing else has to be installed.
+
+          The command line of the platform, `platformctl`, is published
+          as an archive of its own for every supported platform. It is a
+          client of the three services, and it needs nothing but the
+          archives of the services and the addresses of a deployment.
 
           | Platform | Archive of the gateway | Archive of Access | Archive of Data |
           | --- | --- | --- | --- |

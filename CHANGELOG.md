@@ -10,6 +10,24 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The platform has a command line
+
+The `platformctl` program is a client of the gateway, Access and Data:
+it asks a service a question and it shows the answer the service gave.
+It holds no policy of its own, it never reaches a database, and it has
+no dependency beyond the runtime.
+
+The command line reads the route table through the control plane of the
+gateway, administers the tenants, the principals and the grants of
+Access, and reads and writes the records of a workspace through the
+gateway. A command that changes something asks before it changes, and
+the status of its process tells a script what happened: a refusal of a
+policy is not a crash of the client.
+
+The profiles of the deployments live in the file of the configuration of
+the machine, and the environment of the shell overrides them. The
+credential of the caller lives in a file only its owner can read.
+
 ### The registry reader reads the labels of the workspace
 
 The exception of the registry was written with three columns, and the

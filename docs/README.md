@@ -1,6 +1,6 @@
 # Documentation
 
-Documentation for the platform's gateway, Access, Data and console. Follow the reading path below, or jump to an area. Each service's spec is normative: where another page disagrees, the spec wins.
+Documentation for the platform's gateway, Access, Data, console and command line. Follow the reading path below, or jump to an area. Each service's spec is normative: where another page disagrees, the spec wins.
 
 ## Reading path
 
@@ -19,5 +19,6 @@ Documentation for the platform's gateway, Access, Data and console. Follow the r
 | [Access](access/README.md) | Signs callers in at each tenant's provider, maps them to principals, answers the gateway's decisions |
 | [Data](data/README.md) | Workspace data behind data policies: collections, records, audit, events |
 | [Console](console/README.md) | The web interface for data, administration, status and these docs |
+| [Command line](cli/README.md) | The client of the three services: profiles, login, route table, tenants, records |
 
 Within each area, pages are grouped the same way: an overview, guides, reference (spec, API, configuration), and internals for maintainers.

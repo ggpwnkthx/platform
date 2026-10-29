@@ -26,6 +26,7 @@ Start at [`docs/`](docs/README.md).
 | Access | [docs/access/](docs/access/README.md) |
 | Data | [docs/data/](docs/data/README.md) |
 | Console | [docs/console/](docs/console/README.md) |
+| Command line | [docs/cli/](docs/cli/README.md) |
 
 ## Repository layout
 

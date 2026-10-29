@@ -27,6 +27,7 @@ import {
   RELEASE_VERSION,
   type VersionFinding,
   type VersionSource,
+  versionOfPackage,
 } from '../tooling/version'
 
 /**
@@ -131,6 +132,14 @@ export const PLATFORM_VERSION_SOURCES: readonly VersionSource[] = [
     read: (content) => /export const VERSION = '(.+)'/.exec(content)?.[1]?.trim() ?? null,
   },
   {
+    path: 'packages/cli/package.json',
+    read: (content) => versionOfPackage(content),
+  },
+  {
+    path: 'packages/cli/src/runtime/version.ts',
+    read: (content) => /export const VERSION = '(.+)'/.exec(content)?.[1]?.trim() ?? null,
+  },
+  {
     path: 'CHANGELOG.md',
     // The latest release of the changelog: the first heading of a version.
     read: (content) => /^##\s+(\d+\.\d+\.\d+)/m.exec(content)?.[1]?.trim() ?? null,
@@ -148,6 +157,10 @@ export const PLATFORM_VERSION_SOURCES: readonly VersionSource[] = [
   },
   {
     path: 'docs/data/spec.md',
+    read: (content) => /^Status:\s*(\d+\.\d+\.\d+)/m.exec(content)?.[1] ?? null,
+  },
+  {
+    path: 'docs/cli/spec.md',
     read: (content) => /^Status:\s*(\d+\.\d+\.\d+)/m.exec(content)?.[1] ?? null,
   },
   {
