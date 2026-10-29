@@ -10,8 +10,17 @@
  * the same for every reader of the console.
  */
 
+import type { Context } from 'hono'
+import { getCookie } from 'hono/cookie'
 import { assets, documents } from 'virtual:documentation'
-import { renderOf, type Rendered, type Tree } from '../domains/documentation'
+import {
+  renderOf,
+  type Rendered,
+  type Role,
+  roleOf,
+  rolesOf,
+  type Tree,
+} from '../domains/documentation'
 
 /** The documentation of the platform, as the console holds it. */
 export const DOCUMENTATION: Tree = { documents, assets }
@@ -33,4 +42,21 @@ export function renderedOf(path: string): Rendered | null {
   const rendered = renderOf(document)
   read.set(path, rendered)
   return rendered
+}
+
+/** The roles of the documentation, read once from the role pages. */
+export const ROLES: readonly Role[] = rolesOf(DOCUMENTATION)
+
+/**
+ * The cookie that keeps the role a reader reads the documentation as.
+ *
+ * It is a preference of the reader, like the theme: it names a role page
+ * and nothing else, it grants nothing, and a reader without it reads the
+ * documentation as everyone.
+ */
+export const ROLE_COOKIE = 'console_docs_role'
+
+/** The role the reader chose, when the cookie names one that exists. */
+export function readerRoleOf(c: Context): Role | null {
+  return roleOf(ROLES, getCookie(c, ROLE_COOKIE))
 }

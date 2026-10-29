@@ -32,4 +32,20 @@ export {
   titleOf,
   type Tree,
 } from './tree'
-export { resolveOf, sourceUrlOf, urlOf } from './url'
+export {
+  type Role,
+  type RoleLink,
+  type RoleSection,
+  type RoleEntry,
+  roleNeighboursOf,
+  roleOf,
+  rolesFor,
+  rolesOf,
+} from './roles'
+export {
+  resolveOf,
+  roleChoiceUrlOf,
+  sourceUrlOf,
+  targetOf,
+  urlOf,
+} from './url'

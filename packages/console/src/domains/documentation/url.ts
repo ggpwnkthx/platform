@@ -27,6 +27,17 @@ export function urlOf(path: string): string {
   return `${PLACE}/${path}`
 }
 
+/**
+ * The address that makes the reader read the documentation as a role,
+ * then shows a page of it: the page the reader was on, or the home. The
+ * role `all` reads as everyone.
+ */
+export function roleChoiceUrlOf(role: string, to: string | null): string {
+  const query = new URLSearchParams({ role })
+  if (to) query.set('to', to)
+  return `${PLACE}?${query.toString()}`
+}
+
 /** The url of a file of the repository, at the tag of this version. */
 export function sourceUrlOf(source: string): string {
   return `${REPOSITORY}/blob/v${VERSION}/${source}`
@@ -41,20 +52,45 @@ export function sourceUrlOf(source: string): string {
  * becomes the address of that document.
  */
 export function resolveOf(tree: Tree, from: string, href: string): string {
-  if (href === '') return urlOf(pathOf(from))
+  const target = targetOf(tree, from, href)
+  if (target.kind === 'web') return target.href
+  if (target.kind === 'repository') return `${sourceUrlOf(target.path)}${target.anchor}`
+  return `${urlOf(target.path)}${target.anchor}`
+}
+
+/**
+ * What a link of a document points at.
+ *
+ * - `document`: a document of the documentation, by its path (`gateway/spec`);
+ * - `asset`: a file of the documentation that is not a document (`platform/atlas.html`);
+ * - `repository`: any other file of the repository, by its path in the repository;
+ * - `web`: a url.
+ *
+ * The anchor keeps its `#`, and is empty when the link names none.
+ */
+export type Target =
+  | {
+      readonly kind: 'document' | 'asset' | 'repository'
+      readonly path: string
+      readonly anchor: string
+    }
+  | { readonly kind: 'web'; readonly href: string }
+
+/** The target of a link of the document at `from` (a path of the repository). */
+export function targetOf(tree: Tree, from: string, href: string): Target {
   // A link that names a url is a link of the web, and not of the
   // documentation.
-  if (/^[a-z]+:/i.test(href) || href.startsWith('//')) return href
+  if (/^[a-z]+:/i.test(href) || href.startsWith('//')) return { kind: 'web', href }
   const hash = href.indexOf('#')
   const target = hash === -1 ? href : href.slice(0, hash)
   const anchor = hash === -1 ? '' : href.slice(hash)
-  if (target === '') return `${urlOf(pathOf(from))}${anchor}`
+  if (target === '') return { kind: 'document', path: pathOf(from), anchor }
   const resolved = resolvePath(from, target)
   const document = tree.documents.find((item) => item.source === resolved)
-  if (document) return `${urlOf(document.path)}${anchor}`
+  if (document) return { kind: 'document', path: document.path, anchor }
   const asset = tree.assets.find((item) => item.source === resolved)
-  if (asset) return `${urlOf(asset.path)}${anchor}`
-  return `${sourceUrlOf(resolved)}${anchor}`
+  if (asset) return { kind: 'asset', path: asset.path, anchor }
+  return { kind: 'repository', path: resolved, anchor }
 }
 
 /**

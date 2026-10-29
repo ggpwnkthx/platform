@@ -186,13 +186,29 @@ export type Tier = 'overview' | 'guides' | 'reference' | 'internals'
 const TIERS: Record<Exclude<Tier, 'overview'>, readonly string[]> = {
   guides: [
     'quickstart',
+    'concepts',
     'getting-started',
+    'user-guide',
+    'usage',
     'development',
+    'modeling',
+    'client',
     'operations',
     'upstream-identity',
-    'client',
     'troubleshooting',
     'security',
+    // The task guides of `docs/guides/`, in the order a deployment meets them.
+    'deploy-the-platform',
+    'onboard-a-tenant',
+    'manage-access',
+    'put-a-service-behind-the-gateway',
+    'build-an-app-on-data',
+    'monitor-the-platform',
+    'troubleshoot-a-request',
+    'rotate-secrets',
+    'back-up-and-restore',
+    'upgrade-and-roll-back',
+    'respond-to-an-incident',
   ],
   reference: ['spec', 'api', 'configuration'],
   internals: ['internals', 'decisions'],
@@ -207,6 +223,10 @@ const LABELS: Record<string, string> = {
   internals: 'Internals',
   decisions: 'Decision log',
   quickstart: 'Quickstart',
+  concepts: 'Concepts',
+  'user-guide': 'User guide',
+  usage: 'Usage',
+  modeling: 'Modeling',
   'getting-started': 'Getting started',
   development: 'Development',
   operations: 'Operations',
@@ -214,6 +234,12 @@ const LABELS: Record<string, string> = {
   client: 'Client',
   troubleshooting: 'Troubleshooting',
   security: 'Security',
+  dba: 'DBA',
+  sysops: 'SysOps',
+  secops: 'SecOps',
+  developer: 'Developer',
+  maintainer: 'Maintainer',
+  'end-user': 'Console user',
 }
 
 /** A group of documents: the documents of one directory. */
@@ -238,10 +264,13 @@ export interface Group {
 const TITLES: Record<string, string> = {
   '': 'Overview',
   platform: 'Platform',
+  roles: 'By role',
+  guides: 'Guides',
   gateway: 'Gateway',
   access: 'Access',
   data: 'Data',
   console: 'Console',
+  cli: 'Command line',
 }
 
 /** The order of the groups: the directories of `TITLES`, then any other, by name. */

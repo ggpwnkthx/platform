@@ -5,6 +5,11 @@
  * frame: the sidebar, the outline, and links to the previous and next
  * pages. Files of the documentation that are not markdown (the atlas)
  * are served as they are.
+ *
+ * The page knows the reader's role. It names the roles that read it —
+ * each a way to read the documentation as that role — and when the
+ * reader's role reads it, the previous and next pages follow the role's
+ * reading order instead of the directories.
  */
 
 import { createRoute } from 'honox/factory'
@@ -17,15 +22,24 @@ import {
   navigatesItself,
   neighboursOf,
   outlineOf,
+  type Role,
+  roleChoiceUrlOf,
+  roleNeighboursOf,
+  rolesFor,
   sourceUrlOf,
   tierOf,
   titleOf,
   urlOf,
 } from '../../../domains/documentation'
-import { DOCUMENTATION, renderedOf } from '../../documentation'
+import { DOCUMENTATION, readerRoleOf, renderedOf, ROLES } from '../../documentation'
 
 /** A link to the previous or next page. */
-function PagerLink(props: { document: Document | null; direction: 'previous' | 'next' }) {
+function PagerLink(props: {
+  document: Document | null
+  direction: 'previous' | 'next'
+  /** What the page is part of: its area, or the role whose order is walked. */
+  group?: string
+}) {
   if (!props.document) return <span />
   return (
     <a class={`doc-pager-link ${props.direction}`} href={urlOf(props.document.path)}>
@@ -33,7 +47,7 @@ function PagerLink(props: { document: Document | null; direction: 'previous' | '
         {props.direction === 'previous' ? '← Previous' : 'Next →'}
       </span>
       <span class="doc-pager-title">{labelOf(props.document)}</span>
-      <span class="doc-pager-group">{titleOf(props.document.directory)}</span>
+      <span class="doc-pager-group">{props.group ?? titleOf(props.document.directory)}</span>
     </a>
   )
 }
@@ -50,7 +64,12 @@ export default createRoute(async (c) => {
   const groupIndex = DOCUMENTATION.documents.find(
     (item) => item.directory === document.directory && item.path.endsWith('README')
   )
-  const { previous, next } = neighboursOf(DOCUMENTATION, document.path)
+  const role = readerRoleOf(c)
+  const walk = role ? roleNeighboursOf(DOCUMENTATION, role, document.path) : null
+  const { previous, next } = walk ?? neighboursOf(DOCUMENTATION, document.path)
+  const pagerGroup = walk && role ? `${role.title} · ${walk.position} of ${walk.total}` : undefined
+  const readers = rolesFor(ROLES, document.path)
+  const pageRole: Role | null = ROLES.find((item) => item.page.path === document.path) ?? null
   const tree = DOCUMENTATION
   const tier = tierOf(document)
   return c.render(
@@ -59,6 +78,8 @@ export default createRoute(async (c) => {
       current={document.path}
       outline={outlineOf(body)}
       inlineOutline={!navigatesItself(rendered)}
+      roles={ROLES}
+      role={role}
     >
       <article class="doc-article">
         <header class="doc-head">
@@ -67,6 +88,11 @@ export default createRoute(async (c) => {
               <li>
                 <a href="/docs">Documentation</a>
               </li>
+              {role && walk && role.page.path !== document.path ? (
+                <li>
+                  <a href={urlOf(role.page.path)}>{role.title}</a>
+                </li>
+              ) : null}
               <li>
                 {groupIndex && groupIndex.path !== document.path ? (
                   <a href={urlOf(groupIndex.path)}>{group}</a>
@@ -92,14 +118,45 @@ export default createRoute(async (c) => {
               <Inlines inlines={lede} tree={tree} from={document.source} />
             </p>
           ) : null}
+          {pageRole && pageRole.id !== role?.id ? (
+            <p class="doc-role-banner">
+              <a class="doc-path-primary" href={roleChoiceUrlOf(pageRole.id, document.path)}>
+                Read the documentation as {pageRole.title} →
+              </a>
+              <span class="muted">
+                {' '}
+                The sidebar, the home and the previous and next links then follow this page.
+              </span>
+            </p>
+          ) : null}
+          {readers.length > 0 ? (
+            <p class="doc-readers">
+              <span class="doc-readers-label">Read by</span>
+              {readers.map((reader) =>
+                reader.id === role?.id ? (
+                  <span class="doc-chip is-current" aria-current="true">
+                    {reader.title}
+                  </span>
+                ) : (
+                  <a
+                    class="doc-chip"
+                    href={roleChoiceUrlOf(reader.id, document.path)}
+                    title={`Read the documentation as ${reader.title}`}
+                  >
+                    {reader.title}
+                  </a>
+                )
+              )}
+            </p>
+          ) : null}
         </header>
         <div class="doc">
           <DocumentBlocks blocks={body} tree={tree} from={document.source} />
         </div>
         <footer class="doc-foot">
           <nav class="doc-pager" aria-label="Previous and next pages">
-            <PagerLink document={previous} direction="previous" />
-            <PagerLink document={next} direction="next" />
+            <PagerLink document={previous} direction="previous" group={pagerGroup} />
+            <PagerLink document={next} direction="next" group={pagerGroup} />
           </nav>
           <p class="doc-source">
             <a href={sourceUrlOf(document.source)}>View source on GitHub</a>

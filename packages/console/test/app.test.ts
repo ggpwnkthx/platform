@@ -475,6 +475,43 @@ describe('the console', () => {
     expect(html).toContain('href="/status" aria-current="page"')
   })
 
+  test('a reader chooses a role, and the documentation follows it until they change it', async () => {
+    const browser = new Browser()
+    const choose = await browser.request('/docs?role=sysops&to=gateway%2Foperations')
+    expect(choose.status).toBe(303)
+    expect(choose.headers.get('location')).toBe('/docs/gateway/operations')
+    const cookie = choose.headers
+      .getSetCookie()
+      .find((line) => line.startsWith('console_docs_role='))
+    expect(cookie).toContain('console_docs_role=sysops')
+    expect(cookie).toContain('HttpOnly')
+    expect(cookie).toContain('Path=/docs')
+
+    const home = await (await browser.request('/docs')).text()
+    expect(home).toContain('Reading as')
+    expect(home).toContain('<h1>Platform operator</h1>')
+
+    const page = await (await browser.request('/docs/gateway/operations')).text()
+    expect(page).toContain('<a href="/docs/roles/sysops">Platform operator</a>')
+    expect(page).toContain('Platform operator · ')
+
+    const forget = await browser.request('/docs?role=all')
+    expect(forget.headers.get('location')).toBe('/docs')
+    const after = await (await browser.request('/docs')).text()
+    expect(after).toContain('Choose your role')
+  })
+
+  test('the choice of a role follows only a page of the documentation, and an unknown role is ignored', async () => {
+    const browser = new Browser()
+    const away = await browser.request('/docs?role=sysops&to=https%3A%2F%2Fexample.com')
+    expect(away.headers.get('location')).toBe('/docs')
+    const unknown = await new Browser().request('/docs?role=nobody')
+    expect(unknown.status).toBe(303)
+    expect(
+      unknown.headers.getSetCookie().some((line) => line.startsWith('console_docs_role='))
+    ).toBe(false)
+  })
+
   test('the sign-out ends the session', async () => {
     const browser = new Browser()
     await browser.signIn()
