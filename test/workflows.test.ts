@@ -306,3 +306,56 @@ describe('the release of the workflows', () => {
     expect(findings).toEqual([])
   })
 })
+
+describe('the inputs of the workflows', () => {
+  test('an input of the event never reaches the script of a step', async () => {
+    // An expression of the context of the event is substituted into the
+    // script before the shell reads it: a value that carries a quote ends
+    // the assignment and runs a command of the caller. The inputs of a
+    // dispatch are the values a caller chooses, so they are passed through
+    // the environment of the step and read as variables.
+    const files = (await readdir(WORKFLOWS)).filter((name) => name.endsWith('.yml'))
+    expect(files.length).toBeGreaterThan(0)
+
+    const findings: string[] = []
+    for (const file of files) {
+      const content = await readFile(join(WORKFLOWS, file), 'utf8')
+      const workflow = parseAllDocuments(content)[0]!.toJS() as {
+        jobs: Record<string, { steps?: Step[] }>
+      }
+      for (const [jobName, job] of Object.entries(workflow.jobs ?? {})) {
+        for (const step of job.steps ?? []) {
+          if (!step.run) continue
+          for (const match of step.run.matchAll(/\$\{\{([^}]*)\}\}/g)) {
+            const expression = match[1]!.trim()
+            if (!expression.startsWith('github.event.')) continue
+            findings.push(
+              `${file}: the job ${jobName} writes "${expression}" in the script of a step`
+            )
+          }
+        }
+      }
+    }
+    expect(findings).toEqual([])
+  })
+
+  test('the tag of a dispatch is checked before it is used', async () => {
+    // The tag of a dispatch is a value a caller chooses: it is checked
+    // against the shape of a version of the platform before it reaches a
+    // shell, and the check is the first step of the job.
+    const findings: string[] = []
+    for (const name of RELEASES) {
+      const content = await readFile(join(WORKFLOWS, name), 'utf8')
+      if (!content.includes('the tag of the release is well formed')) {
+        findings.push(`${name}: the tag of the dispatch is not checked`)
+        continue
+      }
+      if (
+        !/RELEASE_TAG: \$\{\{ github\.event\.inputs\.tag \|\| github\.ref_name \}\}/.test(content)
+      ) {
+        findings.push(`${name}: the tag of the dispatch does not reach the environment of a step`)
+      }
+    }
+    expect(findings).toEqual([])
+  })
+})
