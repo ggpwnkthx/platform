@@ -14,7 +14,9 @@
       "!**/bun.lock",
       "!**/.pg",
       "!**/.tmp",
-      "!**/.access"
+      "!**/.access",
+      "!**/deploy/config/*.local.json",
+      "!**/deploy/secrets"
     ]
   },
   "linter": {

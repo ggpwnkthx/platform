@@ -67,6 +67,19 @@ console, and the unit and architecture suites of Data. The message of a
 server that will not start names the binaries of PostgreSQL now, and
 the way out of a machine that has them.
 
+### The checks of the style leave the files of the machine out
+
+The formatter and the linter read the whole tree, and the tree of a
+development machine holds files that the repository does not: the route
+table of the machine, the bindings of the machine and the secrets of the
+machine. They are written by the scripts of the development, they are
+ignored by the repository, and the check of the format refused one of
+them on the machine of its author.
+
+The formatter and the linter leave the files of the machine out now,
+the way they already leave the tree of the dependencies and the state of
+the machine out.
+
 ### The status and the documentation are in the foot of every page
 
 The header of every page of the console listed five places: the
