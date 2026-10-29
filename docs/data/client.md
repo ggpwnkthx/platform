@@ -1,7 +1,6 @@
 # Typed client
 
-`@data-backend/client` calls the v1 [API](api.md) through the gateway. Authorization and concurrency
-refusals reach you as typed errors; nothing is hidden.
+How to install and use `@data-backend/client`, the typed client for the v1 [API](api.md) of Data. It is for developers writing Bun or Node code that calls Data through the gateway; authorization and concurrency refusals reach you as typed errors and are never hidden.
 
 ## Install
 
@@ -13,12 +12,9 @@ bun add https://github.com/ggpwnkthx/platform/releases/download/v1.0.0/data-back
 ```
 
 > [!NOTE]
-> `bun add github:ggpwnkthx/platform` installs the repository root, which is the **service**, not the
-> client.
+> `bun add github:ggpwnkthx/platform` installs the repository root, which is the **service**, not the client.
 
-The client runs on Bun and Node and has no dependencies. Client `1.x` works with any deployment
-`1.y` where `y >= x`: within a major, a deployment never removes a path or changes an answer's
-meaning.
+The client runs on Bun and Node and has no dependencies. Client `1.x` works with any deployment `1.y` where `y >= x` ([spec §13](spec.md#13-versions-and-compatibility)).
 
 ## Construct
 
@@ -40,8 +36,7 @@ const client = new DataClient({
 | `fetch` | Transport; defaults to global `fetch`. |
 | `signal` | Cancels calls. |
 
-The client never signs requests, stores Access credentials or logs in. Your credentials
-travel in the transport, and the gateway turns them into a signed identity.
+The client never signs a request, stores Access credentials or logs in. Your credentials travel in the transport, and the gateway turns them into a signed identity.
 
 ## Methods
 
@@ -62,7 +57,7 @@ travel in the transport, and the gateway turns them into a signed identity.
 
 ## Write
 
-Creation needs an idempotency key; update and delete need the current validator.
+A create needs an idempotency key; an update or delete needs the current validator.
 
 ```ts
 const created = await client.create(
@@ -76,13 +71,11 @@ const updated = await client.update('articles', created.id, { title: 'Revised' }
 // updated.etag validates the new version
 ```
 
-On `412 PRECONDITION_FAILED`, read the record again and reapply your change
-([Reads and validators](api.md#reads-and-validators)).
+On `412 PRECONDITION_FAILED`, read the record again and reapply your change ([spec §9.4](spec.md#94-reads-and-validators)).
 
 ## Versions
 
-Rollback is a write: it needs the current validator, policies authorize it like an update, and the
-record moves to the next version number ([Record versions](api.md#record-versions)).
+A rollback is a write: it needs the current validator, the policies authorize it like an update, and the record moves to the next version number ([spec §9.8](spec.md#98-record-versions)).
 
 ```ts
 const versions = await client.versions('articles', created.id)
@@ -99,7 +92,7 @@ for await (const rows of client.listAll('articles', { limit: 100 })) {
 }
 ```
 
-Stop the loop to bound the traversal. Pages are not a snapshot: concurrent changes alter later pages.
+Break out of the loop to bound the traversal. Later pages reflect concurrent changes, because pages are not a snapshot.
 
 ## Collection types
 
@@ -112,11 +105,9 @@ const client = new DataClient<Collections>({ baseUrl, workspaceId })
 const page = await client.list('articles')   // typed article rows
 ```
 
-Without a map, rows are `RecordValue` and keys are plain strings. Collection names and field types
-follow the deployment manifest, outside the client's major version.
+Without a map, rows are `RecordValue` and keys are plain strings. Collection names and field types follow the deployment manifest, outside the client's major version.
 
-In this repository the generator writes `packages/client/src/deployment.ts`; another deployment writes
-a file of the same shape in its own repository:
+In this repository the generator writes `packages/client/src/deployment.ts`; another deployment writes a file of the same shape in its own repository:
 
 ```bash
 bun run scripts/dev/generate-client.ts          # write the file
@@ -125,8 +116,7 @@ bun run scripts/dev/generate-client.ts --check  # fail on a stale file
 
 ## Errors
 
-Every failure throws `ApiError` with the service code, status, message, field details and request
-ID. Switch on the code ([Error codes](api.md#error-codes)):
+Every failure throws `ApiError` with the service code, status, message, field details and request ID. Switch on the code ([spec §9.7](spec.md#97-errors)):
 
 ```ts
 import { ApiError } from '@data-backend/client'
@@ -148,5 +138,4 @@ try {
 | minor | A new method or option; existing code keeps working. |
 | major | An answer's shape, a method name or an option's meaning changes. |
 
-`bun run check:client-package` packs the client with the release command, installs the tarball in a
-consumer outside the repository, imports it by its public name and calls the API under Bun and Node.
+`bun run check:client-package` packs the client with the release command, installs the tarball in a consumer outside the repository, imports it by its public name and calls the API under Bun and Node.

@@ -1,7 +1,6 @@
-# API contract
+# API reference
 
-The stable v1 HTTP surface of Data: what clients may rely on and what a change costs. The
-[specification](spec.md#9-http-api) is normative; this page changes only with a major client version.
+The v1 HTTP endpoints of Data, with example requests and answers for each. It is for developers who call Data directly; the rules every endpoint obeys are normative in [spec §9](spec.md#9-http-api), and the [typed client](client.md) wraps the same calls.
 
 ## Endpoints
 
@@ -28,80 +27,106 @@ The stable v1 HTTP surface of Data: what clients may rely on and what a change c
 | `/ws/{workspaceId}/v1/openapi.json` | `GET` | The API description. |
 | `/healthz`, `/readyz`, `/metrics` | `GET` | Deployment probes. Not routed through workspace authorization. |
 
-- The backend receives the whole request path ([spec §3](spec.md#3-topology)).
-- A path not listed does not exist: a deferred capability answers `404 NOT_FOUND`, never a placeholder.
-  An unknown method on a listed path answers `405` with `Allow`.
-- Every data path needs the gateway's signed identity. There is no login endpoint, token endpoint or
-  session.
-- `/me` answers the principal, tenant, route and `workspace` as `{ "id", "slug", "displayName" }`;
-  `slug` and `displayName` are `null` when the registry holds none.
+A path missing from this table does not exist. Every workspace path is called through the gateway, which turns your session into the signed identity Data verifies; a direct call answers `401 UNAUTHENTICATED`.
 
-## Envelopes
+## Headers
 
-| Answer | Shape |
-| --- | --- |
-| List | `{ "data": [...], "meta": { "limit", "nextCursor", "count"? } }` |
-| Record | `{ "data": { ... } }`, with the record's validator in the `etag` header |
-| Creation | `201`, `{ "data": { "id", "version" } }`, with the record's location in the `location` header |
-| Aggregate | `{ "data": [...], "meta": { "limit", "groups", "truncated" } }` |
-| Error | `{ "error": { "code", "message", "details"? }, "requestId" }` |
-| Every answer | `x-request-id` header, equal to an error's `requestId` |
-| Sensitive or permission-dependent answer | `Cache-Control: no-store` |
-
-## Error codes
-
-Switch on the code, never the message. A code's status is fixed within a major version; the OpenAPI
-document publishes every code.
-
-| Status | Codes |
-| --- | --- |
-| `400` | `INVALID_REQUEST`, `INVALID_QUERY`, `INVALID_CURSOR`, `INVALID_PRECONDITION` |
-| `401` | `UNAUTHENTICATED` |
-| `403` | `FORBIDDEN` |
-| `404` | `NOT_FOUND` |
-| `409` | `CONFLICT`, `IDEMPOTENCY_CONFLICT`, `OPERATION_IN_PROGRESS`, `CURSOR_STALE` |
-| `412` | `PRECONDITION_FAILED` |
-| `413` | `PAYLOAD_TOO_LARGE` |
-| `422` | `VALIDATION_FAILED`, `INVALID_REFERENCE`, `RESULT_TOO_LARGE` |
-| `428` | `PRECONDITION_REQUIRED` |
-| `429` | `TOO_MANY_REQUESTS` |
-| `500` | `INTERNAL_ERROR` |
-| `503` | `AUTHORIZATION_UNAVAILABLE`, `DATABASE_UNAVAILABLE`, `OVERLOADED`, `DRAINING` |
-| `504` | `DEADLINE_EXCEEDED` |
-
-| Cause | Answer |
-| --- | --- |
-| Lock not granted in time | `409 CONFLICT` |
-| Constraint violated | `409 CONFLICT` or `422 VALIDATION_FAILED` |
-| Statement over budget | `504 DEADLINE_EXCEEDED` |
-| Database unreachable | `503 DATABASE_UNAVAILABLE` |
-| Tenant holds all of its room | `429 TOO_MANY_REQUESTS` with `Retry-After`. The room is the whole process unless `DATA_MAX_IN_FLIGHT_REQUESTS_PER_TENANT` is set (multi-tenant deployments set it). |
-| Refusal by policy | `403 FORBIDDEN` only: never the refusing policy, never whether the principal or the grant was unknown |
-| Anything else | `500 INTERNAL_ERROR`, always a service defect |
-
-The message is a safe summary, and `details` name only fields the caller may write or query. Answers
-never carry stack traces, SQL text, constraint names, raw Access reasons or other tenants'
-identifiers.
-
-## Query parameters
-
-| Parameter | Applies to | Meaning |
+| Header | Direction | Use |
 | --- | --- | --- |
-| `fields` | list | Projection, at most 50. Default: the union of the policies' readable fields, plus `id` and `version`. |
-| `filter` | list, aggregate | URL-encoded JSON filter. |
-| `search` | list, aggregate | Collection text search, at most 256 characters. |
-| `sort` | list | Up to three fields, `-field` for descending. Default: `id` ascending. |
-| `limit` | list | Page size: default 50, max 200. |
-| `cursor` | list | Next-page cursor. |
-| `include` | list | Relations to expand, at most 5. |
-| `include_count` | list | Return the row count. Default false. |
-| `group_by` | aggregate | Grouping fields, at most 3. |
-| `metrics` | aggregate | `sum:field`, `avg:field`, `min:field`, `max:field`, at most 10. The row count is always returned. |
-| `limit` | aggregate | Max groups: default 100, max 1000. |
+| `cookie` or `authorization` | request | Your gateway credential. Data never reads it; the gateway does. |
+| `content-type: application/json` | request | Required on every write body. |
+| `idempotency-key` | request | Required on `POST /items/{collection}` ([spec §9.6](spec.md#96-creation-and-idempotency)). |
+| `if-match` | request | The current validator, required on `PATCH`, `DELETE` and rollback ([spec §9.4](spec.md#94-reads-and-validators)). |
+| `x-request-id` | answer | Correlation identifier, equal to an error's `requestId`. |
+| `etag` | answer | A record's or version's validator. |
+| `location` | answer | Where a created record lives. |
+| `idempotency-replayed: true` | answer | The answer is a stored receipt. |
+| `retry-after` | answer | Seconds to wait, on `409 OPERATION_IN_PROGRESS` and `429 TOO_MANY_REQUESTS`. |
+| `cache-control: no-store` | answer | On every sensitive or permission-dependent answer. |
+| `allow` | answer | The methods of a path, on `405`. |
 
-Unknown and repeated parameters are refused. The raw query string is at most 16 KiB.
+The answer envelopes are listed in [spec §9.1](spec.md#91-conventions-and-endpoints).
 
-## Filter grammar
+## Identity
+
+### Who am I
+
+```http
+GET /ws/22222222-2222-4222-8222-222222222222/v1/me
+cookie: gateway_session=...
+```
+
+```json
+{
+  "data": {
+    "principalId": "11111111-1111-4111-8111-111111111111",
+    "tenantId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "workspaceId": "22222222-2222-4222-8222-222222222222",
+    "workspace": {
+      "id": "22222222-2222-4222-8222-222222222222",
+      "slug": "acme",
+      "displayName": null
+    },
+    "routeId": "data-api",
+    "apiVersion": "v1"
+  }
+}
+```
+
+A principal without a grant in the workspace gets `403 FORBIDDEN` here too.
+
+## Schema
+
+### Read the schema
+
+`GET /schema` describes every collection you may use; `GET /schema/{collection}` answers one entry, or `404 NOT_FOUND`. What it holds and hides is in [spec §9.2](spec.md#92-schema-metadata).
+
+```http
+GET /ws/22222222-2222-4222-8222-222222222222/v1/schema/articles
+```
+
+```json
+{
+  "data": {
+    "key": "articles",
+    "label": "Articles",
+    "schemaVersion": "articles-v1",
+    "actions": ["read", "create", "update", "delete"],
+    "readableFields": ["title", "body", "status"],
+    "writableFields": ["title", "body", "status"],
+    "filterableFields": ["title", "status"],
+    "fields": [
+      { "name": "title", "type": "string", "required": true, "nullable": false, "maxLength": 240 }
+    ],
+    "relations": [{ "name": "category", "target": "categories", "type": "many-to-one" }]
+  }
+}
+```
+
+The answer to `GET /schema` wraps such entries in `collections`, next to `apiVersion`, `schemaVersion`, `policyBundleVersion` and `limits`. The `limits` object announces the API bounds:
+
+```json
+{
+  "maxLimit": 200,
+  "defaultLimit": 50,
+  "maxSelectedFields": 50,
+  "maxSortFields": 3,
+  "maxIncludes": 5,
+  "maxRelatedRowsPerRoot": 100,
+  "maxRelatedRowsPerResponse": 1000,
+  "maxResponseBytes": 4194304,
+  "maxRecordBodyBytes": 262144,
+  "maxFilterDepth": 5,
+  "maxFilterLeaves": 50,
+  "maxFilterValues": 100
+}
+```
+
+## Records
+
+### List records
+
+Parameters: `fields`, `filter`, `search`, `sort`, `limit`, `cursor`, `include`, `include_count` ([spec §9.3](spec.md#93-query-parameters-and-filters)). The filter is URL-encoded JSON:
 
 ```json
 {
@@ -112,63 +137,90 @@ Unknown and repeated parameters are refused. The raw query string is at most 16 
 }
 ```
 
-| Operator | Takes |
-| --- | --- |
-| `_and`, `_or` | A non-empty array of filter objects. |
-| `_not` | One filter object, which it negates. |
-| `_eq`, `_neq`, `_lt`, `_lte`, `_gt`, `_gte` | One non-null value of the field's type. |
-| `_in`, `_nin` | 1 to 100 values of the field's type. |
-| `_is_null` | The only way to compare with null. |
+```http
+GET /ws/22222222-2222-4222-8222-222222222222/v1/items/articles?fields=title,status&sort=-title&limit=2&include_count=true
+```
 
-| Rule | Detail |
-| --- | --- |
-| Size | Depth at most 5, at most 50 leaf predicates. `{}` adds no caller predicate. |
-| Types | Operators are checked against the field type. Values are bound parameters; identifiers come from the validated manifest. |
-| Not supported | Dotted relation filters, JSON path expressions, arbitrary functions, SQL wildcards. |
-| Negation | Three-valued logic: negating unknown gives unknown, so a negated comparison never matches a null value. |
-| Usable fields | The intersection of the collection's read policies. Filtering or sorting by another field is `400 INVALID_QUERY`. |
+```json
+{
+  "data": [
+    { "id": "44444444-4444-4444-8444-444444444444", "version": 2, "title": "Launch notes", "status": "draft" }
+  ],
+  "meta": { "limit": 2, "nextCursor": null, "count": 1 }
+}
+```
 
-## Lists and cursors
+Pass `meta.nextCursor` back as `cursor` for the next page; it is `null` on the last one. Cursor lifetime, staleness and the 4 MiB answer budget are in [spec §9.5](spec.md#95-lists-and-cursors).
 
-| Rule | Detail |
-| --- | --- |
-| Consistency | Rows and count are read in one read-only snapshot, with the same predicates and filter. |
-| Answer size | At most 4 MiB encoded, expansions included. Over it: `422 RESULT_TOO_LARGE` and no partial page; no success byte is sent before the answer is complete. |
-| Expansions | Depth 1; 100 related rows per root record; 1000 per answer. |
-| Cursor binding | Opaque and signed. Binds principal, tenant, workspace, collection, route, filter, fields, sort, expansions, count option, limit, position, schema version, policy bundle version and the caller's permission fingerprint. Never an authorization credential. |
-| Cursor lifetime | 15 minutes. |
-| Tampered cursor, or one from another request | `400 INVALID_CURSOR` |
-| Expired cursor, or schema, bundle or permissions changed since issue | `409 CURSOR_STALE` |
-| Later pages | Each page gets a fresh context and the current policies. Pages are not a snapshot: concurrent inserts, updates and deletes change later pages. |
+### Read a record
 
-## Reads and validators
+```http
+GET /ws/22222222-2222-4222-8222-222222222222/v1/items/articles/44444444-4444-4444-8444-444444444444
+```
 
-A record read returns every field readable for that row, plus `id` and `version`. It takes no query
-parameters (`fields`, `include` or any other is `400 INVALID_QUERY`); use the list for a projection.
+```http
+HTTP/1.1 200 OK
+etag: "sha256:<lowercase hex digest>"
+cache-control: no-store
+```
 
-The strong `ETag` is `"sha256:<lowercase hex digest>"` over the canonical bytes: keys sorted
-recursively, array order kept, no insignificant whitespace. The bytes include the version, so any
-change invalidates the validator.
+```json
+{ "data": { "id": "44444444-4444-4444-8444-444444444444", "version": 2, "title": "Launch notes", "body": null, "status": "draft" } }
+```
 
-`PATCH` and `DELETE` require a current validator:
+The read takes no query parameter. Keep the `etag`: it is the validator a later write sends.
 
-| Condition | Answer |
-| --- | --- |
-| No `If-Match` | `428 PRECONDITION_REQUIRED` |
-| Weak, wildcard, malformed or multiple validator | `400 INVALID_PRECONDITION` |
-| Current authorized representation differs | `412 PRECONDITION_FAILED` |
-| Record missing or no longer readable | `404 NOT_FOUND` |
-| Success, `PATCH` | The new canonical representation and its `ETag`. |
-| Success, `DELETE` | `204`, no body. |
+### Create a record
 
-An update needs a read policy and the action's complete write policy. Every update increments the
-version, even when no value changes; an empty `PATCH` is invalid.
+```http
+POST /ws/22222222-2222-4222-8222-222222222222/v1/items/articles
+content-type: application/json
+idempotency-key: 7d0c2a4e-first-article
+
+{ "title": "Launch notes", "body": "Initial content." }
+```
+
+```http
+HTTP/1.1 201 Created
+location: /ws/22222222-2222-4222-8222-222222222222/v1/items/articles/44444444-4444-4444-8444-444444444444
+```
+
+```json
+{ "data": { "id": "44444444-4444-4444-8444-444444444444", "version": 1 } }
+```
+
+The answer is a receipt, not the record. A missing or malformed key answers `400 INVALID_REQUEST`. Retrying with the same key and body returns the same receipt with `idempotency-replayed: true`; the other outcomes are in [spec §9.6](spec.md#96-creation-and-idempotency).
+
+### Update a record
+
+```http
+PATCH /ws/22222222-2222-4222-8222-222222222222/v1/items/articles/44444444-4444-4444-8444-444444444444
+content-type: application/json
+if-match: "sha256:<lowercase hex digest>"
+
+{ "title": "Revised" }
+```
+
+The answer is `200` with the new representation in `data` and its new `etag`. Omitted fields stay unchanged, and an empty body is invalid. The precondition answers (`428`, `400`, `412`, `404`) are in [spec §9.4](spec.md#94-reads-and-validators).
+
+### Delete a record
+
+```http
+DELETE /ws/22222222-2222-4222-8222-222222222222/v1/items/articles/44444444-4444-4444-8444-444444444444
+if-match: "sha256:<lowercase hex digest>"
+```
+
+The answer is `204` with no body. Deletion is hard; a collection with history keeps a tombstone.
 
 ## Record versions
 
-History is optional per collection ([spec §11.6](spec.md#116-record-version-history)): the manifest
-declares the versions table and a reviewed migration creates it. It holds the non-current versions; a
-deleted record keeps a tombstone, the image of its last version.
+These paths answer `404 NOT_FOUND` for a collection without history. The rules are in [spec §9.8](spec.md#98-record-versions) and [§11.6](spec.md#116-record-version-history).
+
+### List versions
+
+```http
+GET /ws/22222222-2222-4222-8222-222222222222/v1/items/articles/44444444-4444-4444-8444-444444444444/versions
+```
 
 ```json
 {
@@ -184,48 +236,31 @@ deleted record keeps a tombstone, the image of its last version.
 }
 ```
 
-| Request | Behavior |
-| --- | --- |
-| Version list | Newest first, at most 200; older versions are omitted. Unreadable versions are absent. |
-| One version | Canonical representation with a strong `ETag`. The database applies the read predicates to the version image as to the record; ungranted fields are omitted; an unreadable version is `404 NOT_FOUND`. |
-| Rollback body | Exactly `{ "version": 2 }`: one property, a positive integer. Anything else is `400 INVALID_REQUEST`. |
-| Rollback effect | An ordinary write under the same policies as any update: it restores the differing fields, and the record gets the next version number, never an earlier one. |
-| Rollback validator | `If-Match` names the current state: the record's validator, or its tombstone's if deleted. A deleted record is restored from the image, with the version after the tombstone's. |
-| Collection without history | All three version paths answer `404 NOT_FOUND`. |
+### Read a version
 
-Rollback answers:
+`GET .../items/{collection}/{id}/versions/{version}` answers the version's canonical representation in `data`, with its own `etag`, exactly like a record read.
 
-| Condition | Answer |
-| --- | --- |
-| No `If-Match` | `428 PRECONDITION_REQUIRED` |
-| Weak, wildcard, malformed or multiple validator | `400 INVALID_PRECONDITION` |
-| Current record state differs | `412 PRECONDITION_FAILED` |
-| Version missing or not readable | `404 NOT_FOUND` |
-| Record already holds that version | `409 CONFLICT` |
-| Deployment policies forbid the write | `403 FORBIDDEN` |
+### Roll back
 
-## Creation and idempotency
+```http
+POST /ws/22222222-2222-4222-8222-222222222222/v1/items/articles/44444444-4444-4444-8444-444444444444/rollback
+content-type: application/json
+if-match: "sha256:<lowercase hex digest>"
 
-| Rule | Detail |
-| --- | --- |
-| Key | `POST` requires `Idempotency-Key`: 1 to 128 ASCII letters, digits, periods, underscores or hyphens. Opaque input, not an authority. |
-| Key scope | Principal, tenant, workspace, route and endpoint. |
-| Fingerprint | Method, path and validated body, stored with the key. |
-| Atomicity | Key claim, insert, audit entry, event, deliveries and receipt commit together. A rolled-back transaction leaves no receipt and no effect. |
-| Same key, same body | The original receipt with `Idempotency-Replayed: true`; nothing is created. The replay authenticates again, needs a currently applicable create capability, and never replays field values. |
-| Same key, different body | `409 IDEMPOTENCY_CONFLICT` |
-| Concurrent duplicate | Waits within the request budget; unresolved after two seconds, `409 OPERATION_IN_PROGRESS` with `Retry-After: 1`. |
-| Retention | Receipts last at least 24 hours. After that, the key starts a new operation: deduplication is not permanent. |
-| Later change | Deleting or changing the record neither changes its receipt nor recreates it. |
-
-A creation answers a receipt, not the record. Fetch the record separately if authorized; a receipt
-never grants a read.
-
-```json
-{ "data": { "id": "44444444-4444-4444-8444-444444444444", "version": 1 } }
+{ "version": 2 }
 ```
 
-## Aggregates and search
+The answer is `200` with the record's new representation and `etag`. The record moves to the next version number.
+
+## Aggregates
+
+### Aggregate a collection
+
+Parameters: `group_by`, `metrics`, `filter`, `search`, `limit` ([spec §9.9](spec.md#99-aggregates-and-search)).
+
+```http
+GET /ws/22222222-2222-4222-8222-222222222222/v1/aggregate/articles?group_by=status&metrics=sum:amount
+```
 
 ```json
 {
@@ -236,55 +271,110 @@ never grants a read.
 }
 ```
 
-| Rule | Detail |
-| --- | --- |
-| Aggregate rows | The rows the matching list reads: same scope, read predicates and caller filter. Not a privileged query path ([spec §9](spec.md#9-http-api)). |
-| Group and metric fields | Must be fields the caller may filter and sort by. A function undefined for the field's type is `400 INVALID_QUERY`. |
-| Integer sums and averages | Decimals, exactly as the database returns them. |
-| Group order | By the group fields; `truncated` says some groups were not returned. |
-| `search` | Database text search over the manifest's searchable fields and search configuration; the caller supplies only the text. Combines with the filter, and a list's count counts the results. |
-| Hidden field in search | `403 FORBIDDEN` |
-| Search in policies | Never: search is not a filter operator ([decision 23](decisions.md#23-search-is-a-query-parameter-not-a-filter-operator)). |
+## Model
 
-## Metadata, model and audit
+The model endpoints read and change the workspace model ([spec §7.6](spec.md#76-workspace-model)). Reads need `data.model.read` or `data.model.write`; writes need `data.model.write`. A refused change answers `400 INVALID_REQUEST`, an unknown collection, field or relation `404 NOT_FOUND`, and a concurrent change `409 CONFLICT`.
 
-| Path | Returns | Requires |
+### Read the model
+
+`GET /model` answers the model version, content digest, served schema version, the served collections with their fields and relations, and the deployment collections not served yet, plus `writable`: whether you hold `data.model.write`.
+
+### Register a collection
+
+```http
+POST /ws/22222222-2222-4222-8222-222222222222/v1/model/collections
+content-type: application/json
+
+{ "key": "articles" }
+```
+
+The answer is `201` with `{ "data": { "registered": true } }`. `DELETE /model/collections/{collection}` removes the collection from the workspace and answers `{ "data": { "registered": false } }`.
+
+### Change a collection
+
+`PATCH /model/collections/{collection}` takes `label` and `description`, and answers `{ "data": { "version": 3 } }` with the new model version.
+
+### Change fields
+
+```http
+POST /ws/22222222-2222-4222-8222-222222222222/v1/model/collections/articles/fields
+content-type: application/json
+
+{ "name": "title", "label": "Headline", "required": true, "maxLength": 120 }
+```
+
+| Request | Body | Answer |
 | --- | --- | --- |
-| `/schema` | Collections where the caller holds an applicable action policy; a collection may be write-only, its records unreadable. Each carries key, label, schema version, supported actions, readable and writable fields with bounds, filterable and sortable fields, visible relations, policy bundle version and API limits. Never SQL identifiers, row predicates, secrets, subscriber configuration, Access grants or studio instructions. | At least one applicable action policy |
-| `/model` | Model version, content digest, served schema version, served collections with fields and relations, and deployment collections not served yet. | `data.model.read` or `data.model.write` |
-| `/audit` | Metadata of committed mutations, paged with `limit` and a cursor: identifiers and changed field names, never values. Not a revision history. | `data.audit.read`, granted on its own, not implied by editing records |
+| Add a field (`POST .../fields`) | `name` plus attributes | `201`, the new model version |
+| Change a field (`PATCH .../fields/{field}`) | attributes | `200`, the new model version |
+| Remove a field (`DELETE .../fields/{field}`) | none | `200`, the new model version |
+| Move a field (`POST .../fields/{field}/move`) | `{ "direction": "up" }` or `"down"` | `200`, the new model version |
 
-The deployment holds the **physical** model; a workspace model is a **logical** overlay on it, applied
-in realtime whenever the workspace's catalog is resolved. Model rules and the version a model write
-carries: [spec §7.6](spec.md#76-workspace-model).
+Field attributes are `type`, `required`, `nullable`, `label`, `description`, `enum`, `default`, `minimum`, `maximum`, `minLength` and `maxLength`. The field must name a column of the collection's table, and its type must stay the column's.
 
-## Stability
+### Change relations
 
-| Not stable | Instead |
-| --- | --- |
-| Deployment artifacts: manifest, policy bundle, tables and column identifiers | Read schema metadata. |
-| Metadata content: fields, labels, relations, permissions | Only the metadata shape is stable. |
-| Metrics, logs, refusal reasons | A refusal is `403 FORBIDDEN` and nothing else. |
-
-Change rules:
-
-1. A change clients depend on is **major**: a new path version or a new client major. The path version
-   is bumped only when the old one cannot be kept, and the old one stays for at least one release.
-2. Changes are announced in the [changelog](../../CHANGELOG.md).
-3. A contract change amends the specification and lands with a check that proves it.
-4. Error codes are never removed and never change meaning; an unused code stays and answers nothing.
-5. Bounds may only grow, and never for a request a client already sends: a page of 50 stays 50.
-
-| Item | Version | Where |
+| Request | Body | Answer |
 | --- | --- | --- |
-| Service | `1.0.0` | `/healthz` (`version`), the image label, the package version. |
-| API | `v1` | Every data route path. |
-| Client | `1.0.0` | `packages/client/package.json` and the release tarball. |
-| Access context contract | `1` | Access discovery. |
-| Gateway signature | `v5` | The identity header. Legacy `v4` is a migration path, declared with `DATA_LEGACY_IDENTITY`; refused by default. |
-| Manifest format | `1` | The manifest's `version`. |
-| Policy bundle format | `1` | The bundle's `version`. |
+| Add a relation (`POST .../relations`) | `name`, `target`, `type`, `field`, optional `label` and `description` | `201`, the new model version |
+| Change a relation (`PATCH .../relations/{relation}`) | `target`, `type`, `field`, optional `label` and `description` | `200`, the new model version |
+| Remove a relation (`DELETE .../relations/{relation}`) | none | `200`, the new model version |
 
-Access and gateway contracts are platform contracts; the integration baseline is the
-repository revision in [`compatibility.json`](../../compatibility.json), and
-`bun run check:compatibility` proves docs and workflows agree with it.
+`type` is `many-to-one` or `one-to-many`.
+
+## Audit
+
+### Read the audit
+
+Needs `data.audit.read`. Parameters: `limit` (default 50, at most 200) and `cursor`.
+
+```http
+GET /ws/22222222-2222-4222-8222-222222222222/v1/audit?limit=1
+```
+
+```json
+{
+  "data": [
+    {
+      "id": "66666666-6666-4666-8666-666666666666",
+      "occurredAt": "2026-10-21T16:00:00.000Z",
+      "principalId": "11111111-1111-4111-8111-111111111111",
+      "tenantId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "workspaceId": "22222222-2222-4222-8222-222222222222",
+      "routeId": "data-api",
+      "requestId": "request-123",
+      "source": "gateway",
+      "collection": "articles",
+      "recordId": "44444444-4444-4444-8444-444444444444",
+      "action": "update",
+      "resultVersion": 2,
+      "changedFields": ["title"],
+      "policyBundleVersion": "<digest>",
+      "policyId": "update-articles-own"
+    }
+  ],
+  "meta": { "limit": 1, "nextCursor": "<cursor>" }
+}
+```
+
+## OpenAPI description
+
+`GET /ws/{workspaceId}/v1/openapi.json` answers the versioned OpenAPI document, which lists every path and error code. It needs the same signed identity and positive context as any workspace path.
+
+## Probes
+
+`/healthz`, `/readyz` and `/metrics` are for the deployment, not for clients. Their answers are in [spec §15.1](spec.md#151-probes-and-metrics).
+
+## Errors
+
+```json
+{
+  "error": {
+    "code": "PRECONDITION_FAILED",
+    "message": "The record changed since the validator was issued."
+  },
+  "requestId": "request-123"
+}
+```
+
+Switch on `error.code`. Every code and its status are in [spec §9.7](spec.md#97-errors); fixes for common ones are in [Troubleshooting](troubleshooting.md).
