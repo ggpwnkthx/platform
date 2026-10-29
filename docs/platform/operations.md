@@ -1,6 +1,16 @@
 # Operations
 
-Deploy and run the three services together: images, secrets, first deployment, probes and rollback. Each service's environment, alerts and runbooks are on its own page: [Gateway](../gateway/operations.md), [Access](../access/operations.md), [Data](../data/operations.md), [Console](../console/operations.md).
+How to deploy and run the whole platform: deployments, environment conventions, secrets, the first deployment, addresses, probes, metrics, artifacts, versions and rollback. It is for operators; each service's own environment, alerts and runbooks are on its pages, listed under [Service pages](#service-pages).
+
+## Service pages
+
+| Service | Operations | Environment variables |
+| --- | --- | --- |
+| Gateway | [Gateway operations](../gateway/operations.md) | [Gateway configuration](../gateway/configuration.md) |
+| Access | [Access operations](../access/operations.md) | [Access spec: environment](../access/spec.md#4-environment) |
+| Data | [Data operations](../data/operations.md) | [Data configuration](../data/configuration.md) |
+| Console | [Console operations](../console/operations.md) | [Console configuration](../console/configuration.md) |
+| CLI | [CLI usage](../cli/usage.md) | [CLI spec: profiles](../cli/spec.md#3-profiles) |
 
 ## Deployments
 
@@ -10,21 +20,23 @@ Deploy and run the three services together: images, secrets, first deployment, p
 | Access | `ghcr.io/ggpwnkthx/access` | `8081` | `ACCESS_*` | PostgreSQL for its eight tables; Redis for login codes |
 | Data | `ghcr.io/ggpwnkthx/data` | `8082` | `DATA_*` | PostgreSQL for business data |
 
-The gateway also runs a **control plane**, the deployment's administrative surface: same image, different command, port `9090`, never routed through the gateway. The console has no published image; see [console operations](../console/operations.md). Compose stacks and Kubernetes manifests: [deploy/README.md](../../deploy/README.md).
+The gateway also runs a **control plane**, the deployment's administrative surface. It uses the same image with a different command, listens on port `9090`, and is never routed through the gateway.
 
-## Environment
+The console has no published image; see [console operations](../console/operations.md). Compose stacks and Kubernetes manifests are described in [deploy/README.md](../../deploy/README.md).
 
-Each service reads its environment once at startup and validates it as a whole: it reports every problem before refusing, and any value it cannot parse stops the service. The one exception is the log level: a typo there must not keep a deployment down.
+## Environment conventions
 
-## Secrets
+Every service reads its environment once at startup and validates it as a whole. It reports every problem before it refuses to start, and any value it cannot parse stops it. The one exception is the log level, because a typo there must not keep a deployment down.
 
-Every service accepts a secret as a file named by a `*_FILE` variable (`ACCESS_SIGNING_KEY_FILE`, `DATA_CURSOR_KEY_FILE`, `DATA_ACCESS_CONTEXT_TOKEN_FILE`, …). Mount your secret manager's files and point those variables at them. Who holds which secret: [Security](security.md#secrets).
+## Secrets as files
+
+Access and Data accept a secret as a file named by a `*_FILE` variable (`ACCESS_SIGNING_KEY_FILE`, `DATA_CURSOR_KEY_FILE`, `DATA_ACCESS_CONTEXT_TOKEN_FILE`, …). Mount the files your secret manager provides and point those variables at them. The gateway reads its secrets from the environment, except the control plane's token map, which can come from `GATEWAY_CONTROL_TOKENS_FILE`; the production Compose files take those variables from the shell environment or the `--env-file` you pass. [Security: secrets](security.md#secrets) lists who holds which secret.
 
 ## First deployment
 
-Each command's manual is in its service's docs. Deployments that run the images run the same commands in the same order.
+Run these steps in order. Each command's manual is in its service's docs, and deployments that run the images run the same commands in the same order.
 
-1. **Secrets.** In production, mount your secret manager's files ([Secrets](#secrets)). `bun run scripts/dev-keys.ts` generates development keys. [`.env.min`](../../.env.min) lists the variables a stack refuses to start without.
+1. **Secrets.** In production, mount your secret manager's files ([Secrets as files](#secrets-as-files)). `bun run scripts/dev-keys.ts` generates development keys. [`.env.min`](../../.env.min) lists the variables a stack refuses to start without.
 2. **Database roles.** Create Data's separated roles once, with server-administrator credentials: `bun run --cwd packages/data provision`.
 3. **Schema.** Apply migrations with the schema owner's credentials, never the API's: `bun run --cwd packages/data migrate`.
 4. **Workspace.** Register the workspace, the unit of access control. Data reads it before a principal's context exists:
@@ -37,8 +49,8 @@ Each command's manual is in its service's docs. Deployments that run the images 
    ```
 
 5. **Tenant, principals and grants.** Create them only through Access's administration API; see [Access operations](../access/operations.md). The cutover suite rehearses these calls.
-6. **Route table.** The gateway reads it from a file (`GATEWAY_CONFIG`) or from shared state where the control plane writes revisions. Format: [gateway spec](../gateway/spec.md) §3. Deployment config: `deploy/config/routes.json`.
-7. **Stack.**
+6. **Route table.** The gateway reads it from a file (`GATEWAY_CONFIG`) or from shared state, where the control plane writes revisions. The format is in the [gateway spec: configuration file](../gateway/spec.md#3-configuration-file); the deployment's table is `deploy/config/routes.json`.
+7. **Stack.** Start the production stack:
 
    ```bash
    docker compose --env-file .env.min \
@@ -53,7 +65,7 @@ Each command's manual is in its service's docs. Deployments that run the images 
    curl -sS http://localhost:8082/healthz
    ```
 
-   An answer proves the caller is authenticated, Access allows the workspace, and Data returns the row.
+   A successful answer proves three things at once: the caller is authenticated, Access allows the workspace, and Data returns the row.
 
 ## Addresses
 
@@ -65,7 +77,7 @@ Each command's manual is in its service's docs. Deployments that run the images 
 | Access (from Data) | `DATA_ACCESS_URL` |
 | Gateway bindings | `DATA_GATEWAY_BINDINGS_FILE` |
 
-The gateway works with **any** conforming identity provider, Access and upstream; the bundled services are not the only options.
+The bundled services are not the only options: the gateway works with **any** conforming identity provider, Access and upstream.
 
 ## Probes
 
@@ -74,7 +86,7 @@ The gateway works with **any** conforming identity provider, Access and upstream
 | `GET /healthz` | Always `200`: the process is alive. |
 | `GET /readyz` | `200` when the service can serve requests, `503` otherwise. |
 
-Readiness reports `ready`, `draining` or `not-ready`, and depends on:
+Readiness reports `ready`, `draining` or `not-ready`. What it depends on:
 
 | Service | Ready when |
 | --- | --- |
@@ -84,7 +96,7 @@ Readiness reports `ready`, `draining` or `not-ready`, and depends on:
 
 ## Metrics
 
-Every service exposes Prometheus metrics on `/metrics`. The gateway and Access require a bearer token, and the endpoint is absent without one; Data reads its token from a file. Metric names are in each service's docs.
+Every service exposes Prometheus metrics on `/metrics`. The gateway and Access require a bearer token, and without one configured the endpoint does not exist. Data reads its token from a file. Metric names are listed in each service's docs.
 
 ## Images and binaries
 
@@ -95,7 +107,7 @@ Every service exposes Prometheus metrics on `/metrics`. The gateway and Access r
 | Data image | `ghcr.io/ggpwnkthx/data:<version>` |
 | Binaries | Assets of the tag's GitHub release |
 | Data typed client | `data-backend-client-<version>.tgz`, and the package registry |
-| Command line | `platformctl-<version>-<platform>.tar.gz`, an asset of the tag |
+| CLI | `platformctl-<version>-<platform>.tar.gz`, an asset of the tag |
 
 ```bash
 docker pull ghcr.io/ggpwnkthx/gateway:1.0.0
@@ -103,21 +115,21 @@ docker pull ghcr.io/ggpwnkthx/access:1.0.0
 docker pull ghcr.io/ggpwnkthx/data:1.0.0
 ```
 
-Each release builds its images once, publishes them with provenance and an SBOM, and runs every release gate against that build's **digest**. Pin the digest in deployments.
+Each release builds its images once, publishes them with provenance and an SBOM, and runs every release gate against that build's **digest**. Pin the digest in your deployments.
 
-Binaries embed the runtime; nothing else needs installing. Access archive includes its schema migrations next to the executable; Data archive includes its manifests and migrations.
+Binaries embed the runtime, so nothing else needs installing. The Access archive includes its schema migrations next to the executable; the Data archive includes its manifests and migrations.
+
+## Versions
+
+A release carries all three images at the same version. A deployment may run them at different versions; the [compatibility baseline](internals.md#compatibility) shows which combinations are proven.
 
 ## Rollback
 
-Images are tagged with the release tag and the version. To roll back, deploy the previous release's image:
+Images are tagged with both the release tag and the version. To roll back, deploy the previous release's image:
 
 ```bash
 docker pull ghcr.io/ggpwnkthx/gateway:<previous version>
 ```
 
 > [!WARNING]
-> Rolling back Data image does not roll back its schema. Migrations are applied by the operator command; see [Data operations](../data/operations.md).
-
-## Versions
-
-A release carries all three images at the same version. A deployment may run them at different versions; the [compatibility baseline](internals.md#compatibility) shows which combinations are proven.
+> Rolling back the Data image does not roll back its schema. Migrations are applied by the operator command; see [Data operations](../data/operations.md).
