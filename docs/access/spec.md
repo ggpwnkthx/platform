@@ -707,6 +707,9 @@ A principal may use a workspace on a route when at least one grant satisfies **a
 
 A grant on one workspace or route does not grant another. A grant with neither workspace nor route covers the whole tenant.
 
+> [!IMPORTANT]
+> The rule is coarse on purpose, and an operator has to know it. A grant that names a workspace and **no route** holds on **every route** of that workspace, and the permission of the grant is not compared with the permission a route asks for: any live grant of the workspace authorizes the route. A deployment whose routes ask for different permissions therefore names the route in every grant that is not meant to cover all of them, and the console shows the routes a grant covers.
+
 A **group** grant holds for every member and nobody else. A principal removed from the group loses access at the next decision: membership is read from the table, never from a token.
 
 A **role** grant (§3.6) gives the subject the role's permissions and those of the roles it names. The same statement expands roles transitively: a role that names a role that names a permission holds that permission.
