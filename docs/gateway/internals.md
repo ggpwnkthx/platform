@@ -50,6 +50,9 @@ The gateway is a modular monolith: one deployable, split into domains with expli
 9. No catch-all directories (`utils`, `services`, `repositories`, `common`, …) and no import cycles, type-only
    imports included.
 10. Only the application uses Hono; only the platform uses runtime APIs.
+11. The source imports no `services/`: the reference implementation of the protocol of access and the
+    fixtures of the tests are not part of the gateway, and a file of the source that imports one puts
+    the accounts of the tests in the image.
 
 `scripts/gates/environment.ts` checks that `.env.example` and [Configuration](configuration.md) match the
 variables declared in `src/runtime/env/`, the only place variable names live.

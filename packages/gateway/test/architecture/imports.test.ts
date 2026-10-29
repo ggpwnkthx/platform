@@ -192,6 +192,32 @@ describe('the rules of the import boundaries', () => {
     ])
     expect(violations.map((violation) => violation.rule)).toContain('domain-entry-uses-adapter')
   })
+
+  test('the source imports no directory that is not part of the service', () => {
+    const violations = checkArchitecture([
+      source('src/app/app.ts', "import { start } from '../../services/access-service'\n"),
+    ])
+    expect(violations.map((violation) => violation.rule)).toEqual([
+      'source-imports-forbidden-directory',
+    ])
+  })
+
+  test('the refusal does not need the file to be there', () => {
+    const violations = checkArchitecture([
+      source('src/app/app.ts', "import { port } from '../../services/fixtures/port'\n"),
+    ])
+    expect(violations.map((violation) => violation.rule)).toEqual([
+      'source-imports-forbidden-directory',
+    ])
+  })
+
+  test('the source imports the directories of the service', () => {
+    const violations = checkArchitecture([
+      source('src/app/app.ts', "import { app } from '../domains/routing'\n"),
+      source('src/domains/routing/index.ts', 'export const app = 1\n'),
+    ])
+    expect(violations).toEqual([])
+  })
 })
 
 describe('the location of a file', () => {

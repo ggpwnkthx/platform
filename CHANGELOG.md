@@ -40,6 +40,19 @@ that no job names is not a suite that no job runs.
 
 The gate is `bun run coverage:check`.
 
+### The source of the gateway imports no directory that is not the service
+
+The `services/` directory of the gateway holds the reference
+implementation of the protocol of access — a service a deployment may
+run — and the fixtures of the tests, which carry accounts with known
+passwords. Neither of them is part of the gateway, and the image of the
+gateway carries the reference implementation alone.
+
+Nothing said so. The gate of the import boundaries reads the source of
+the gateway, and `services/` is not the source of the gateway: a file
+of `src/` could import a fixture of it, and the gate would have said
+nothing. The rule is written now, and the gate refuses the import.
+
 ### The status and the documentation are in the foot of every page
 
 The header of every page of the console listed five places: the

@@ -34,6 +34,9 @@
  * 12. There are no catch-all directories and no import cycles.
  * 13. The framework of the application belongs to the application and the
  *     api of the runtime belongs to the platform of the runtime.
+ * 14. The source imports no directory that is not part of the service:
+ *     the reference implementation of the protocol of access and the
+ *     fixtures of the tests are not part of the gateway.
  *
  * The rules themselves are the engine of `tooling/architecture.ts`, and
  * the matrix below is what makes them the rules of the gateway.
@@ -90,6 +93,11 @@ export const RULES: ArchitectureRules = {
     'shared',
     'misc',
   ],
+  // The directory of the reference implementation of the protocol of
+  // access and of the fixtures of the tests. The gateway is not the
+  // access service, and a fixture that carries accounts with known
+  // passwords is not part of the image of the gateway.
+  forbiddenImportDirectories: ['services'],
 }
 
 /** The location of a file in the layers of the source of the gateway. */

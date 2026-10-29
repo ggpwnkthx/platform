@@ -88,6 +88,18 @@ export interface ArchitectureRules {
   /** The directories that collect unrelated behaviour and are therefore refused. */
   readonly forbiddenDirectories: readonly string[]
   /**
+   * The directories of the workspace that the source may not import.
+   *
+   * A directory that holds a service of its own, or the doubles of the
+   * services, is not part of the source: a file of the source that
+   * imports one puts the accounts of the tests, or a second service,
+   * in the image of the service.
+   *
+   * The refusal does not need the target to be a file of the tree: the
+   * specifier alone says which directory it names.
+   */
+  readonly forbiddenImportDirectories?: readonly string[]
+  /**
    * The file that reads the environment of the process, when the
    * environment is read in the runtime only.
    *
@@ -199,6 +211,20 @@ function inside(path: string, directory: string): boolean {
 }
 
 /**
+ * The path a relative specifier names, whether the file is there or not.
+ *
+ * The path is relative to the root of the workspace, and it is the path
+ * of the file the specifier names, whatever the extension of the file
+ * is. A specifier that leaves the workspace names nothing.
+ */
+function targetOf(from: string, specifier: string): string | null {
+  const base = resolve(dirname(join(process.cwd(), from)), specifier)
+  const normalized = relative(process.cwd(), base).replace(/\\/g, '/')
+  if (normalized.startsWith('..')) return null
+  return normalized
+}
+
+/**
  * Checks the import boundaries of a set of source files.
  *
  * The function is pure: it takes the files and the rules and returns the
@@ -232,6 +258,18 @@ export function checkArchitecture(files: SourceFile[], rules: ArchitectureRules)
           }
         }
         continue
+      }
+
+      // A directory that the source may not import is refused, and the
+      // refusal does not need the target to be a known file: the
+      // specifier alone says which directory it names.
+      for (const directory of rules.forbiddenImportDirectories ?? []) {
+        const target = targetOf(file.path, specifier)
+        if (!target || !inside(target, directory)) continue
+        report(
+          'source-imports-forbidden-directory',
+          `the source may not import "${directory}", which is not part of the service ("${specifier}")`
+        )
       }
 
       const resolved = resolveRelative(file.path, specifier, known)
