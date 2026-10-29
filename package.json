@@ -41,6 +41,7 @@
     "architecture": "bun run --workspaces architecture",
     "dead": "knip",
     "evidence:check": "bun run scripts/check-evidence.ts",
+    "coverage:check": "bun run scripts/check-coverage.ts",
     "versions": "bun run scripts/version.ts",
     "repositories:check": "bun run scripts/check-repositories.ts",
     "vocabulary:check": "bun run scripts/check-vocabulary.ts",

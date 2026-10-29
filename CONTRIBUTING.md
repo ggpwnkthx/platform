@@ -22,7 +22,7 @@ Each service's spec defines its behavior. A behavior change updates the spec in 
 
 - Spec, docs and changelog updated for any behavior change
 - `bun run typecheck`, `bun run lint`, `bun run format:check` pass
-- `bun run architecture`, `bun run dead`, `bun run versions`, `bun run repositories:check`, `bun run deploy:check` pass
+- `bun run architecture`, `bun run dead`, `bun run versions`, `bun run repositories:check`, `bun run deploy:check`, `bun run coverage:check` pass
 - `bun run test` and `bun run compatibility` pass
 
 All commands, integration test setup and run modes: [Development](docs/platform/development.md). The compatibility suite needs no network: [Compatibility](docs/platform/internals.md#compatibility).

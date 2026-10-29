@@ -155,6 +155,14 @@ jobs:
         # the paths are there and that the tests are run.
         run: bun run evidence:check
 
+      - name: the continuous integration runs every test of the platform
+        # The evidence of the decisions proves that the tests a decision
+        # cites are run. The check of the coverage proves it for every
+        # test of the repository, and it proves that the jobs of the
+        # continuous integration point at workspaces that are there: a
+        # gate that is wrong is a gate that is worth nothing.
+        run: bun run coverage:check
+
   integration:
     name: the shared state of ${{ matrix.workspace }}
     runs-on: ubuntu-latest

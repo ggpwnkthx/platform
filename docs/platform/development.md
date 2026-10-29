@@ -173,6 +173,7 @@ Root commands cover every workspace:
 | `bun run versions` | Check the platform version matches everywhere |
 | `bun run repositories:check` | Check the platform names only its own repository and three images |
 | `bun run deploy:check` | Check `deploy/` is consistent |
+| `bun run coverage:check` | Check every job of the continuous integration points at a workspace that is there, and that every test of the repository runs in one |
 | `bun run test` | Platform tests, then every workspace's tests |
 | `bun run compatibility` | Run the three services together ([Compatibility](internals.md#compatibility)) |
 | `bun run atlas` | Open the [atlas](atlas.html) |

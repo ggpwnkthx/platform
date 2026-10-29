@@ -29,6 +29,17 @@ gateway are the ports the tests take. Both were green on the machine of
 their author and nowhere else. The script of the tests of the gateway
 names them now, and they run with the rest.
 
+### The coverage of the continuous integration is checked
+
+A check reads the workflows and it proves that every job of a matrix
+points at a workspace that is there, and that every test file of the
+repository runs in a job of the continuous integration. The suite of the
+harness of the compatibility runs in a job that names the harness and
+not the suite, and the harness is read for the suite it runs: a suite
+that no job names is not a suite that no job runs.
+
+The gate is `bun run coverage:check`.
+
 ### The status and the documentation are in the foot of every page
 
 The header of every page of the console listed five places: the

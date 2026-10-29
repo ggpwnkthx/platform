@@ -20,6 +20,11 @@
  * set of the test files it holds. The rule of the runtime is the one of
  * bun: a file is a test file when its name carries `.test.`, `_test.`,
  * `.spec.` or `_spec.`.
+ *
+ * A harness of the compatibility runs a suite of a workspace, and the
+ * suite is written down in the harness and nowhere else. The harness is
+ * read for it, so that a suite the continuous integration runs through a
+ * harness is a suite the coverage knows about.
  */
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
@@ -310,6 +315,139 @@ export function preloadedFiles(repository: string): string[] {
 }
 
 /**
+ * The directories of the repository that hold no test of the platform.
+ *
+ * The tree of the dependencies, the builds and the states of the
+ * machines are not part of the platform: a file that carries the name
+ * of a test in one of them is not a test of the platform.
+ */
+const NOT_SOURCE = ['node_modules', 'dist', '.git', '.pg', '.tmp', 'coverage']
+
+/**
+ * The test files of the whole repository.
+ *
+ * The whole repository, and not only the workspaces: a test that lives
+ * outside a workspace is a test of the platform, and the tests of the
+ * platform itself live in `test/`.
+ */
+export function repositoryTestFiles(repository: string): string[] {
+  const found: string[] = []
+  const walk = (directory: string): void => {
+    if (!existsSync(directory)) return
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (NOT_SOURCE.includes(entry.name)) continue
+      const path = join(directory, entry.name)
+      if (entry.isDirectory()) {
+        walk(path)
+        continue
+      }
+      if (TEST_FILE.test(entry.name)) found.push(path)
+    }
+  }
+  walk(repository)
+  return found.map((path) => relative(repository, path).split('\\').join('/')).sort()
+}
+
+/**
+ * The name of the constant of the command of a harness.
+ */
+const HARNESS_COMMAND = 'DEFAULT_COMMAND'
+
+/**
+ * The suites of the harnesses of the compatibility.
+ *
+ * A harness prepares a reference and runs a suite against it. The suite
+ * is a command of the workspace, and the harness is the only place it is
+ * written down: the job of the continuous integration runs the harness,
+ * and the suite runs with it, but no job names the suite.
+ *
+ * The harness is read for it. A harness whose command cannot be read is
+ * a suite that the coverage of the continuous integration cannot prove,
+ * and the check of the coverage says so rather than passing it over.
+ */
+export interface HarnessSuite {
+  /** The path of the harness, relative to the root of the repository. */
+  readonly path: string
+  /** The directory of the workspace of the harness. */
+  readonly directory: string
+  /** The paths of the tests the suite runs. */
+  readonly paths: readonly string[]
+  /** True when the command of the harness could not be read. */
+  readonly unreadable: boolean
+}
+
+/**
+ * The paths of the harnesses of the compatibility.
+ *
+ * A harness of the compatibility lives in the workspace it tests, and
+ * the workspaces are the directories of `packages/`.
+ */
+export function harnessPaths(repository: string): string[] {
+  const packages = join(repository, 'packages')
+  if (!existsSync(packages)) return []
+  const found: string[] = []
+  for (const entry of readdirSync(packages, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const path = join(packages, entry.name, 'scripts', 'compat', 'compatibility.ts')
+    if (existsSync(path)) found.push(path)
+  }
+  return found.sort()
+}
+
+/**
+ * The command of the suite of a harness.
+ *
+ * The command is a constant of the harness, and the harness declares it
+ * with the name the constant carries. A harness that declares no
+ * command runs no test: it runs a scenario of its own, and the
+ * acceptance of the platform is such a harness.
+ *
+ * The answer is undefined when the harness names the constant and the
+ * command cannot be read: the constant was renamed, or it was written
+ * in a shape the reader does not know.
+ */
+export function harnessCommandOf(content: string): string[] | undefined {
+  if (!content.includes(HARNESS_COMMAND)) return undefined
+  const match = new RegExp(`export const ${HARNESS_COMMAND}\\s*=\\s*\\[([^\\]]*)\\]`).exec(content)
+  if (!match) return undefined
+  const words: string[] = []
+  for (const quoted of match[1]!.matchAll(/["']([^"']+)["']/g)) words.push(quoted[1] ?? '')
+  return words.length > 0 ? words : undefined
+}
+
+/**
+ * The suites of the harnesses of the compatibility.
+ */
+export function harnessSuites(repository: string): HarnessSuite[] {
+  const found: HarnessSuite[] = []
+  for (const path of harnessPaths(repository)) {
+    const directory = resolve(path, '..', '..', '..')
+    const relativePath = relative(repository, path).split('\\').join('/')
+    const content = readFileSync(path, 'utf8')
+    const words = harnessCommandOf(content)
+    if (!words) {
+      // A harness that names the constant and that the reader cannot
+      // read is a harness whose suite is unknown: it is reported, and
+      // not assumed to hold no test.
+      found.push({
+        path: relativePath,
+        directory,
+        paths: [],
+        unreadable: content.includes(HARNESS_COMMAND),
+      })
+      continue
+    }
+    if (words[0] !== 'bun' || words[1] !== 'test') {
+      found.push({ path: relativePath, directory, paths: [], unreadable: false })
+      continue
+    }
+    const { paths } = testPaths(words.slice(2))
+    found.push({ path: relativePath, directory, paths, unreadable: false })
+  }
+  return found
+}
+
+/**
  * The test files that the continuous integration runs.
  *
  * The result is the set of the paths of the files, relative to the root
@@ -318,7 +456,13 @@ export function preloadedFiles(repository: string): string[] {
 export function coveredTests(repository: string, workflows: string): Set<string> {
   const covered = new Set<string>()
   const commands = commandsOf(workflows)
-  for (const command of testCommandsOf(commands, repository)) {
+  const suites: TestCommand[] = [
+    ...testCommandsOf(commands, repository),
+    ...harnessSuites(repository)
+      .filter((suite) => !suite.unreadable && suite.paths.length > 0)
+      .map((suite) => ({ directory: suite.directory, paths: [...suite.paths] })),
+  ]
+  for (const command of suites) {
     for (const path of command.paths) {
       const target = resolve(command.directory, path)
       const files = path.includes('*')
