@@ -293,7 +293,16 @@ export function preloadedFiles(repository: string): string[] {
   const found: string[] = []
   const walk = (directory: string): void => {
     if (!existsSync(directory)) return
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    let entries: ReturnType<typeof readdirSync>
+    try {
+      entries = readdirSync(directory, { withFileTypes: true })
+    } catch {
+      // A directory the process may not read holds no preload of the
+      // tests: the walk goes on, and the gate reads the rest of the
+      // repository.
+      return
+    }
+    for (const entry of entries) {
       if (entry.name === 'node_modules' || entry.name === '.git') continue
       const path = join(directory, entry.name)
       if (entry.isDirectory()) {
