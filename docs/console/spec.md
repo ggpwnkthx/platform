@@ -47,7 +47,7 @@ The request ID is the caller's `x-request-id` if it matches `^[A-Za-z0-9._-]{1,1
 
 ### 2.2 Origin of state-changing requests
 
-Every `POST` must come from a console page: the browser's `Origin` must be the console's origin, or the request is refused with `403` before the session is read. A request with no `Origin` is accepted only if it also has no `Sec-Fetch-Site`; a client sending neither is not a browser, and the console is not a public API.
+Every request that may change something — any method but `GET`, `HEAD` and `OPTIONS` — must come from a console page: the browser's `Origin` must be the console's public origin or the origin of the address the request reached, or the request is refused with `403` before the session is read. A request with no `Origin` is accepted when it carries no `Sec-Fetch-Site`, or one that says `same-origin`; a `Sec-Fetch-Site` that names another site is refused even without an `Origin`. A client that sends neither is not a browser, and the console is not a public API.
 
 `GET`, `HEAD` and `OPTIONS` are not guarded: they change nothing.
 

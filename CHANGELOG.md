@@ -10,6 +10,15 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The guard of the forms takes the origin of the address the request reached
+
+The specification of the console guarded the POST alone, and it accepted
+a request that carried no Origin and no Sec-Fetch-Site. The guard of the
+code refuses every method that may change something, it accepts the
+origin of the address the request reached beside the public origin of
+the console, and a Sec-Fetch-Site that names another site is refused
+even without an Origin. The specification says what the code does now.
+
 ### The console reaches the access service itself
 
 The deployment called the console a client behind the gateway, and the
