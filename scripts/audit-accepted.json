@@ -1,0 +1,8 @@
+[
+  {
+    "package": "@hono/node-server",
+    "advisory": "https://github.com/advisories/GHSA-rmxm-3fg6-px4f",
+    "reason": "The dependency is the dev server of the console: it is not in the image of the console and it never answers a request of a deployment. The advisory is fixed in the 2.x line only, and @hono/vite-dev-server still depends on the 1.x line (0.26.1 is the last version), so the fix waits for that dependency. The way out of it is the move of @hono/vite-dev-server to the 2.x line.",
+    "until": "2026-12-31"
+  }
+]

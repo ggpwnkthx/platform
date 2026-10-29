@@ -59,7 +59,12 @@ jobs:
         # The dependencies are pinned to an exact version, and a pinned
         # version does not move by itself: the scan of the tree is what
         # says that the version that is pinned is not a known one.
-        run: bun audit --audit-level=high
+        #
+        # Every advisory is a finding, and the only exception is an
+        # advisory that the list of the accepted advisories names with a
+        # reason and with a day: the exceptions of the tree are visible,
+        # and an exception that nobody looked at again stops the build.
+        run: bun run audit
 
       - name: the types
         run: bun run --cwd ${{ matrix.path }} typecheck

@@ -40,6 +40,7 @@
     "format:check": "biome format .",
     "dead": "knip",
     "versions": "bun run scripts/version.ts",
+    "audit": "bun run scripts/audit.ts",
     "repositories:check": "bun run scripts/check-repositories.ts",
     "vocabulary:check": "bun run scripts/check-vocabulary.ts",
     "docs:check": "bun run scripts/check-docs.ts",
@@ -58,9 +59,12 @@
     "@types/pg": "8.23.1",
     "knip": "6.42.1",
     "typescript": "5.9.3",
-    "yaml": "2.8.1"
+    "yaml": "2.8.3"
   },
   "engines": {
     "bun": ">=1.4.3"
+  },
+  "overrides": {
+    "yaml": "2.8.3"
   }
 }
