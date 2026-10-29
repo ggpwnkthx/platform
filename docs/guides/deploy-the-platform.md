@@ -38,16 +38,16 @@ Create every secret once, in your secret manager, before any process starts. Eac
 | --- | --- | --- | --- |
 | Identity signing key pair | `GATEWAY_IDENTITY_SIGNING_KEY` (private half); the Data binding's `publicKeyFile` (public half) | `bun run --cwd packages/gateway identity:key`, then `identity:key --public` for the public half | P-256 PEM, one key for every gateway replica; only the gateway's deployment holds the private half |
 | Gateway session secret | `GATEWAY_SESSION_SECRET` | The gateway pages give no generator or length | One value for every gateway replica |
-| Control-plane token map | `GATEWAY_CONTROL_TOKENS_FILE` | A JSON file `{token: {operator, scope}}`, see `deploy/config/control-tokens.example.json` | Tokens of 16 characters or more, one scope each, never equal to another secret |
+| Control-plane token map | `GATEWAY_CONTROL_TOKENS_FILE` | A JSON file `{token: {operator, scope}}`, see `deploy/config/control-tokens.example.json` | Tokens of 16 characters or more, one scope each, never equal to another secret; the map of the example is refused in production |
 | Access state secret and encryption key | `ACCESS_STATE_SECRET`, `ACCESS_SECRET_ENCRYPTION_KEY` | `openssl rand -base64 32` | At least 32 bytes as decoded; the state secret is shared by every Access replica |
 | Access signing key | `ACCESS_SIGNING_KEY`, `ACCESS_SIGNING_KID` | `openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048` | Pick a key ID such as `access-1` |
 | Access administration token | `ACCESS_ADMIN_TOKEN`, or per-operator credentials in `ACCESS_ADMIN_TOKENS` | Random value | At least 16 bytes in production |
 | Decision token | `ACCESS_DECISION_TOKEN` at Access and `GATEWAY_ACCESS_TOKEN` at the gateway, the same value | Random value | Optional and deprecated at Access; see [Access spec: gateway credentials](../access/spec.md#88-gateway-credentials) |
-| Access context credential | A key of `ACCESS_CONTEXT_TOKENS` at Access; the file named by `DATA_ACCESS_CONTEXT_TOKEN_FILE` at Data | Random value | At least 16 characters, scoped to tenant UUIDs or `null` |
+| Access context credential | A key of `ACCESS_CONTEXT_TOKENS` at Access; the file named by `DATA_ACCESS_CONTEXT_TOKEN_FILE` at Data | Random value | At least 32 bytes in production, scoped to tenant UUIDs; a scope of `null` needs `ACCESS_CONTEXT_ALLOW_PLATFORM_TOKEN=true` |
 | Data cursor key | `DATA_CURSOR_KEY_FILE` | Random bytes | At least 32 bytes |
-| Metrics tokens | `GATEWAY_METRICS_TOKEN`, `ACCESS_METRICS_TOKEN`, `DATA_METRICS_TOKEN_FILE` | Random values | Without one, that service serves no metrics |
+| Metrics tokens | `GATEWAY_METRICS_TOKEN`, `ACCESS_METRICS_TOKEN`, `DATA_METRICS_TOKEN_FILE` | Random values | Without one, that service serves no metrics; the token of the gateway is at least 32 bytes in production |
 | Database role passwords | `DATA_OWNER_PASSWORD`, `DATA_RUNTIME_PASSWORD`, `DATA_REGISTRY_PASSWORD`, `DATA_DELIVERY_PASSWORD`, `DATA_MAINTENANCE_PASSWORD`; the Access role's password | Random values | Read by the provisioning commands, never printed |
-| Console session secret and client secret | `CONSOLE_SESSION_SECRET`, `CONSOLE_CLIENT_SECRET` | Random values | The session secret is at least 32 characters |
+| Console session secret and client secret | `CONSOLE_SESSION_SECRET`, `CONSOLE_CLIENT_SECRET` | Random values | The session secret is at least 32 characters, the client secret at least 16 |
 
 How each service takes a secret differs:
 
@@ -56,7 +56,9 @@ How each service takes a secret differs:
 - The gateway's [configuration](../gateway/configuration.md#files) lists a file form only for the control-plane token map; its other secrets come from the environment your secret store fills, and keys also accept a `_BASE64` form.
 - The console reads only environment variables ([console configuration](../console/configuration.md#variables)).
 
-`bun run scripts/dev-keys.ts` and the values in [`.env.min`](../../.env.min) are for development and trials only; the three services refuse example values in production, and a token of the platform is at least thirty-two bytes long.
+`bun run scripts/dev-keys.ts` and the values in [`.env.min`](../../.env.min) are for development and trials only. Every service refuses the values the repository publishes in production, and the stacks refuse the published passwords of the database and the map of the example of the control plane ([published values](../platform/security.md#published-values)). A token of the platform is at least thirty-two bytes long.
+
+The stacks of the deployment put the services in their production environment: the gateway reads `NODE_ENV=production`, and Access and Data read their own environment variable. A deployment that leaves them out runs the rules of a development machine, and the rules of a development machine let a published credential through.
 
 ### 3. Create the database roles
 

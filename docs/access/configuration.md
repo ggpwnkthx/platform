@@ -41,8 +41,11 @@ Development values are in [`packages/access/.env.example`](../../packages/access
 | `ACCESS_PREVIOUS_DECISION_TOKEN` | none | optional | The token the current one replaced. Accepted until the deployment removes it (§4.3.1); refused at start when `ACCESS_DECISION_TOKEN` is not set. |
 | `ACCESS_CONTEXT_TOKENS` | none | optional | Access context credentials (§9): a JSON object of bearer tokens and the tenants each may ask about ([format](#access-context-credentials)). Needed only by a deployment that serves a data backend. |
 | `ACCESS_METRICS_TOKEN` | none | optional | Bearer token for `GET /metrics`. Without it the endpoint is not served. |
+| `ACCESS_CONTEXT_ALLOW_PLATFORM_TOKEN` | none | optional | Says that a credential of the access context may act for every tenant. Without it, a credential whose scope is `null` stops the service at start ([format](#access-context-credentials)). |
 
 In production the five single-token variables (`ACCESS_ADMIN_TOKEN`, `ACCESS_PREVIOUS_ADMIN_TOKEN`, `ACCESS_DECISION_TOKEN`, `ACCESS_PREVIOUS_DECISION_TOKEN`, `ACCESS_METRICS_TOKEN`) must hold at least 16 bytes, counted as written (§4.1). The tokens inside the two JSON maps must be at least 16 characters in every environment.
+
+In production the credentials of the access context are credentials of the deployment: each of them must hold at least 32 bytes, counted as decoded, and none of them may be a value the repository publishes (§4.1).
 
 ### Secrets and keys
 
@@ -122,6 +125,10 @@ Each token is at least 16 characters. A value that is not a JSON object, a scope
 ```
 
 Each token is at least 16 characters. A value that is not a JSON object, or a scope that is neither `null` nor a list of strings, stops the service at start.
+
+In production each token is at least 32 bytes, counted as decoded, and none of them may be a value the repository publishes (§4.1): the credential of the contract is a credential of the platform, and a published one lets anybody read the context of the principals.
+
+A scope of `null` is a credential that may ask about every tenant of the platform. It is a choice of the deployment and never the default: the deployment says it out loud with `ACCESS_CONTEXT_ALLOW_PLATFORM_TOKEN=true`, and the service refuses to start without it.
 
 ## Files the service reads
 

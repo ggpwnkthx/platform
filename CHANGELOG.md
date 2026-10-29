@@ -10,6 +10,48 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The services refuse the credentials the repository publishes
+
+The repository publishes the credentials of its examples: the minimum
+environment of the root, the example of each service, the fixtures of the
+development machine and the map of the control plane. A deployment that
+kept one of them ran with a credential that everybody knows, and the
+services did not agree on which ones they refused. The gateway refused
+four values and accepted the rest, Access refused the tokens of the
+administration and accepted the credential of the access context, the
+console refused the tokens of the administration and accepted its client
+secret and its session secret, and the control plane refused nothing.
+
+Every service refuses a published value now, in the environment where it
+reads one. The rule is the same everywhere: the value is published, it is
+short, or it is one repeated character. The gateway measures a secret the
+way Access and the console measure it, so the three services agree on
+what a strong secret is, and the client secret of the provider and the
+token of the metrics are credentials of the deployment like the others.
+
+The stacks of the deployment refuse the passwords of the database, and the
+control plane refuses the map of the example in production. A credential of
+the access context that acts for every tenant is a choice of the deployment
+and never the default: the deployment says it out loud with
+`ACCESS_CONTEXT_ALLOW_PLATFORM_TOKEN=true`.
+
+The test of the platform reads the published files of the repository and
+asks every service to refuse every value it publishes. A value that is
+published and that no service refuses fails the build.
+
+### The stacks of the deployment put the gateway in production
+
+The stacks of the deployment put Access and Data in their production
+environment, and they left the gateway in the environment of a development
+machine. The rules of a production deployment were therefore off in a
+production stack: the gateway accepted a published secret, allowed a
+provider that is not served over https and a cookie that is not `Secure`,
+and did not ask for a rate limit.
+
+The gateway reads `NODE_ENV=production` in the stacks of the deployment,
+in the compose files and in the kubernetes base, and the control plane
+reads it as well.
+
 ### The root commands name the platform once
 
 The root of the repository named every workspace twice: once in the

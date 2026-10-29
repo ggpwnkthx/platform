@@ -48,6 +48,22 @@ one is required: [spec §4.3](spec.md#43-production-requirements).
 
 `gateway-control` always requires `GATEWAY_CONTROL_STATE_URL`.
 
+## Credentials
+
+In production the gateway refuses to start when a credential is short, is one repeated character, or is a
+value the repository publishes ([spec §4.3](spec.md#43-production-requirements)). The rule covers
+`GATEWAY_SESSION_SECRET`, `GATEWAY_ACCESS_TOKEN`, `GATEWAY_OIDC_CLIENT_SECRET` and `GATEWAY_METRICS_TOKEN`.
+
+| Variable | Rule in production |
+| --- | --- |
+| `GATEWAY_SESSION_SECRET` | At least 32 bytes, counted as decoded (64 hexadecimal characters, 44 base64 characters). |
+| `GATEWAY_ACCESS_TOKEN` | At least 32 bytes, counted as decoded. |
+| `GATEWAY_OIDC_CLIENT_SECRET` | At least 32 bytes, counted as decoded. |
+| `GATEWAY_METRICS_TOKEN` | At least 32 bytes, counted as decoded. |
+
+The values of `.env.min`, of the examples and of the fixtures are published: the gateway refuses them, and
+so does the control plane with the token of the map of the example.
+
 ## Listener and route table
 
 | Variable | Default | Effect |

@@ -323,7 +323,9 @@ Tokens are compared in constant time, read from the environment and never logged
 
 **A bearer token is at least 16 bytes.** `ACCESS_ADMIN_TOKEN`, `ACCESS_PREVIOUS_ADMIN_TOKEN`, `ACCESS_DECISION_TOKEN`, `ACCESS_PREVIOUS_DECISION_TOKEN` and `ACCESS_METRICS_TOKEN` are measured in the bytes they are compared in, since length is the first thing an attacker tries. Production refuses to start when a token is shorter (§4.4). Signing and encryption secrets are 32 bytes (§4.4).
 
-**Example values are not secrets.** Production refuses to start when a secret is a value from `.env.example` or one repeated character (`000…0`, `111…1`, `aaaa…`), whatever its length. The example is published, so any deployment that copied it is exposed.
+**Example values are not secrets.** Production refuses to start when a secret is a value from `.env.example` or one repeated character (`000…0`, `111…1`, `aaaa…`), whatever its length. The example is published, so any deployment that copied it is exposed. The rule covers every credential of the deployment: the tokens, the two secrets, the key of the signing and the credentials of the access context (§9.2).
+
+**A credential of the access context is a credential of the platform.** In production each credential of `ACCESS_CONTEXT_TOKENS` is at least 32 bytes, counted as decoded, and none of them is a published value. A credential whose scope is `null` acts for every tenant of the platform: the deployment says so out loud with `ACCESS_CONTEXT_ALLOW_PLATFORM_TOKEN=true`, and the service refuses to start without it.
 
 ### 4.2 Signing key
 
@@ -385,6 +387,7 @@ Production also refuses to start when:
 
 - a secret is shorter than 32 bytes, counted as decoded (64 hex characters, 44 base64 characters);
 - a bearer token is shorter than **16 bytes**, or a secret is an example or one-character value (§4.1);
+- a credential of the access context is shorter than **32 bytes**, is a published value, or acts for every tenant without `ACCESS_CONTEXT_ALLOW_PLATFORM_TOKEN` (§4.1, §9.2);
 - the database role is a superuser or has `BYPASSRLS`, since the database does not enforce tenant isolation for it (§3.10). The message names the role and the fix.
 
 The log level is the only value that never stops the service: a typo in it must not keep a deployment down.

@@ -346,6 +346,19 @@ row below holds. The error names the missing variable.
 Startup also stops when an upstream client certificate is set without its key,
 or the reverse (§11.1.2).
 
+**A published value is not a secret.** In production the gateway refuses to
+start when a credential is a value the repository publishes — the values of
+`.env.min`, of the examples and of the fixtures — or one repeated character,
+whatever its length is. The repository is public, and a deployment that keeps
+one of its values holds a credential that everybody knows. The credentials the
+rule covers are `GATEWAY_SESSION_SECRET`, `GATEWAY_ACCESS_TOKEN`,
+`GATEWAY_OIDC_CLIENT_SECRET` and `GATEWAY_METRICS_TOKEN`.
+
+**The strength of a secret.** A secret is at least 32 bytes, counted as it is
+read: 64 hexadecimal characters, 44 base64 characters, or a passphrase of 32
+characters. The rule is the rule of Access and of the console, and the three
+services agree on what a strong secret is.
+
 ### 4.4 Control-plane environment
 
 The control plane is a separate process with its own environment (§12.7):
@@ -355,6 +368,13 @@ The control plane is a separate process with its own environment (§12.7):
 `GATEWAY_PROTECTED_ROUTES`. It compiles the tables it validates with the same
 deployment defaults as the gateway, so the table it accepts is the table the
 gateway runs.
+
+**A published token is not a token.** In production the control plane refuses
+to start when the map of its tokens holds a token the repository publishes —
+the map of the example, `deploy/config/control-tokens.example.json` — or a
+token that carries the words `replace-this`. A deployment points
+`GATEWAY_CONTROL_TOKENS_FILE` at its own map, and the map of the example is a
+map of a development machine.
 
 ---
 

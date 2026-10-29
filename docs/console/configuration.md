@@ -19,7 +19,7 @@ For development, [`packages/console/.env.example`](../../packages/console/.env.e
 | `CONSOLE_PORT` | | `8083` | Listener port, 1 to 65535. |
 | `CONSOLE_PUBLIC_URL` | yes | | URL browsers use. Must be https in production unless `CONSOLE_COOKIE_SECURE=false`. The login callback is `{CONSOLE_PUBLIC_URL}/auth/callback` and must be one of the tenant's `clientRedirectUris`. |
 | `CONSOLE_ACCESS_URL` | yes | | Access base URL, as the console reaches it. Browsers use the endpoints in its discovery document. |
-| `CONSOLE_CLIENT_ID`, `CONSOLE_CLIENT_SECRET` | yes | | The console's client at Access. |
+| `CONSOLE_CLIENT_ID`, `CONSOLE_CLIENT_SECRET` | yes | | The console's client at Access. The secret is at least 16 characters. |
 | `CONSOLE_GATEWAY_URL` | yes | | Gateway base URL, as the console reaches it. Workspace data is read at `{url}/ws/{id}/v1/…`; the host is the host of the Data route. |
 | `CONSOLE_DATA_URL` | | | Data base URL, for status-board probes only. |
 | `CONSOLE_ACCESS_CONTEXT_TOKEN` | | | Read-only access context credential. Without it, administration is open to nobody. |
@@ -40,6 +40,9 @@ For development, [`packages/console/.env.example`](../../packages/console/.env.e
 | --- | --- |
 | URLs (`CONSOLE_PUBLIC_URL`, `CONSOLE_ACCESS_URL`, `CONSOLE_GATEWAY_URL`, `CONSOLE_DATA_URL`) | Must parse as an `http` or `https` URL. Trailing slashes are dropped. |
 | Administration and access context credentials | At least 16 characters, per Access's rule. |
+| `CONSOLE_CLIENT_SECRET` | At least 16 characters. |
+| `CONSOLE_SESSION_SECRET` | At least 32 characters. |
+| Published values | In production, a value the repository publishes is refused: the example of the console holds the values of its client secret and of its session secret, and a deployment that keeps them holds a credential that everybody knows. |
 | `CONSOLE_TENANT_ADMIN_TOKENS` | A JSON object (not an array). Each key must be a tenant slug matching `^[a-z0-9-]{2,63}$`; each value must be a string of at least 16 characters. |
 | Integers | Whole numbers within the bounds in the table above. |
 

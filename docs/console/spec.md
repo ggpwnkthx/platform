@@ -236,6 +236,8 @@ The console validates its environment once at startup and reports **every** prob
 
 A production console must refuse to start unless `CONSOLE_PUBLIC_URL` is https or the deployment explicitly accepts plain http with `CONSOLE_COOKIE_SECURE=false`, because serving cookies in the clear would expose operator sessions.
 
+A production console must refuse to start when a credential is a value the repository publishes — the example of the console holds the values of its client secret and of its session secret — or is shorter than the rule of its kind (16 characters for the client secret and the credentials of the administration, 32 for the session secret). Every value of the repository is public, and a deployment that keeps one of them runs with a credential that anybody may use.
+
 ---
 
 ## 9. Out of scope

@@ -92,7 +92,8 @@ The log level is `DATA_LOG_LEVEL` ([Process](#process)).
 With `DATA_ENVIRONMENT=production`, startup also refuses:
 
 1. a `DATA_DATABASE_URL` or `DATA_REGISTRY_DATABASE_URL` on a remote host without an `sslmode=` parameter (use `sslmode=require`); the hosts `127.0.0.1`, `localhost`, `::1` and `postgres` count as local,
-2. a `DATA_ACCESS_URL` that does not start with `https://`.
+2. a `DATA_ACCESS_URL` that does not start with `https://`,
+3. a credential that the repository publishes: the file of the access context or the file of the cursor key that holds a value of `deploy/fixtures/secrets` is refused, and so is a password of a role that the repository publishes. The repository is public, and a deployment that mounts the fixtures holds a credential that everybody knows.
 
 Role privileges, schema drift and the access context version are checked by readiness in every environment ([Operations](operations.md#probes)).
 

@@ -43,6 +43,25 @@ The console's own credentials (client secret, access context token, administrati
 > [!IMPORTANT]
 > Whenever a service can read a secret from a file, the secret is a file, never an environment value. Anything that can read a process's environment can read a secret stored there.
 
+## Published values
+
+The repository publishes the credentials of its examples: the minimum environment of the root, the example of
+each service, the fixtures of the development machine and the map of the control plane. A deployment that
+keeps one of them holds a credential that everybody knows.
+
+Every service refuses a published value in a production environment, and says which variable it is:
+
+| Service | Rule |
+| --- | --- |
+| Gateway | Refuses `GATEWAY_SESSION_SECRET`, `GATEWAY_ACCESS_TOKEN`, `GATEWAY_OIDC_CLIENT_SECRET` and `GATEWAY_METRICS_TOKEN` when they are short, are one repeated character, or are a value of the repository |
+| Access | Refuses the same, plus the credentials of the access context and the two secrets of the signing and of the encryption |
+| Data | Refuses the credential of the access context, the key of the cursors and the passwords of the roles when they are a value of the repository |
+| Console | Refuses the client secret, the session secret and the credentials of the administration when they are a value of the repository |
+| Control plane | Refuses the map of the example of the deployment |
+
+The test of the platform reads the published files of the repository and asks every service to refuse every
+value it publishes: a value that is published and that no service refuses fails the build.
+
 ## Least privilege
 
 Each service connects to its database with a role that cannot do another role's work:
