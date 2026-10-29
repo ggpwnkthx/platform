@@ -461,9 +461,10 @@ In order:
 7. execute the scoped domain operation.
 
 The registry lookup before the context is a narrow bootstrap exception. Its SQL role may select only
-`id`, `tenant_id` and `status` from the registry, and a reader policy allows that projection before
-tenant scope is established. Its adapter exposes only lookup by exact UUID: it cannot enumerate or
-run arbitrary queries, and it has no access to business tables.
+`id`, `tenant_id`, `status`, `slug` and `display_name` from the registry — the labels of a resource
+the reader already reaches — and a reader policy allows that projection before tenant scope is
+established. Its adapter exposes only lookup by exact UUID: it cannot enumerate or run arbitrary
+queries, and it has no access to business tables.
 
 The workspace catalog is read in the same statement as the workspace registry: the registry is on
 every request's path, and a second round trip would double the work of the deployment's smallest

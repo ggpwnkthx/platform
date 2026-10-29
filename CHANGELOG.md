@@ -10,6 +10,14 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The registry reader reads the labels of the workspace
+
+The exception of the registry was written with three columns, and the
+migration of the names of the workspace grants five: `id`, `tenant_id`,
+`status`, `slug` and `display_name`. The specification of Data, the
+decisions of the platform and the operations of the deployment name the
+five columns of the exception now.
+
 ### The code of the documentation points at the files that are there
 
 The internals of Access named files that the administration and the

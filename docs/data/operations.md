@@ -114,7 +114,7 @@ release. Drain old replicas first if a schema change breaks compatibility.
 | --- | --- |
 | `data_owner` | Own schemas and tables, migrate, write the registry, back up and restore. |
 | `data_runtime` | Scoped business data, audit appends, events, receipts. No DDL, deliveries or history edits. |
-| `data_registry` | Select `id`, `tenant_id`, `status` from the registry. |
+| `data_registry` | Select `id`, `tenant_id`, `status`, `slug`, `display_name` from the registry. |
 | `data_delivery` | Claim and finish deliveries in every workspace. No business records. |
 | `data_maintenance` | Delete history past retention. No business writes. |
 

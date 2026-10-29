@@ -90,9 +90,10 @@ revisions stay in the release notes as historical evidence.
 
 ### 11. The workspace is read before the context exists
 
-The registry reader may select three columns of one table and only look a workspace up by exact id,
-because the tenant is needed before the principal's context exists. It is the specification's
-narrowest exception and touches no business table.
+The registry reader may select five columns of one table (`id`, `tenant_id`, `status`, `slug` and
+`display_name`) and only look a workspace up by exact id, because the tenant is needed before the
+principal's context exists. It is the specification's narrowest exception and touches no business
+table.
 
 ### 12. Events and audit are written by the domain in the mutation's transaction
 
