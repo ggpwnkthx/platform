@@ -1,6 +1,6 @@
 # Operations
 
-Deploy, configure, monitor, repair and cut tenants over to Access. Behavior is in [spec.md](spec.md), endpoints in [api.md](api.md), and procedures shared by all services in [platform operations](../platform/operations.md).
+How to run Access in production: requirements, deployment, the first tenant, monitoring, secret rotation, backup and restore, tuning, hardening and tenant cutover. It is written for operators, DBAs and security engineers; behavior is in the [specification](spec.md), endpoints in [API](api.md), variables in [Configuration](configuration.md), symptoms in [Troubleshooting](troubleshooting.md), and procedures shared by all services in [platform operations](../platform/operations.md).
 
 ## Requirements
 
@@ -16,9 +16,9 @@ Deploy, configure, monitor, repair and cut tenants over to Access. Behavior is i
 | Tenant gateway credentials, scoped to the tenant | Tenant registration (§3.1) |
 | Shared decision token: **optional, deprecated**, unscoped | `ACCESS_DECISION_TOKEN` |
 
-All variables are in §4 and, with local values, in `.env.example`. With `ACCESS_ENVIRONMENT=production` the service refuses to start if any of the eight required variables is missing, and names every problem at once.
+With `ACCESS_ENVIRONMENT=production` the service refuses to start if any of the eight required variables is missing, and names every problem at once (§4.4). The full list, with defaults, is in [Configuration](configuration.md#variables); local values are in `.env.example`.
 
-Once every gateway presents tenant credentials, leave `ACCESS_DECISION_TOKEN` unset and the bearer scheme is refused (§8.8). `ACCESS_PREVIOUS_DECISION_TOKEN` without `ACCESS_DECISION_TOKEN` is refused, since the old shared secret would stay valid.
+Once every gateway presents tenant credentials, leave `ACCESS_DECISION_TOKEN` unset and the bearer scheme is refused (§8.8). Setting `ACCESS_PREVIOUS_DECISION_TOKEN` without `ACCESS_DECISION_TOKEN` stops the start, since the old shared secret would stay valid.
 
 ### Database role
 
@@ -34,7 +34,7 @@ The repository is tested on PostgreSQL 18 (embedded `pglite` is 18.6). The servi
 
 ### Replica environment
 
-```
+```bash
 ACCESS_ENVIRONMENT=production
 ACCESS_HOST=0.0.0.0
 ACCESS_PORT=8081
@@ -52,7 +52,7 @@ ACCESS_SIGNING_KID=access-1
 ACCESS_LOG_LEVEL=info
 ```
 
-Give secrets as files, for example `ACCESS_SIGNING_KEY_FILE=/run/secrets/access-signing-key.pem`, so a private key never passes through a shell. The trailing newline is stripped; setting both forms is an error, and an unreadable file stops the service (§4.5).
+Give secrets as files, for example `ACCESS_SIGNING_KEY_FILE=/run/secrets/access-signing-key.pem`, so a private key never passes through a shell ([secrets in files](configuration.md#secrets-in-files)).
 
 ### Image
 
@@ -65,7 +65,11 @@ docker build -f packages/access/Dockerfile -t access:$(git rev-parse --short HEA
 docker image inspect access:<tag> --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
 ```
 
-Promote one **digest** from development to staging to production, by rolling replacement gated on readiness. A replica drains on `SIGTERM` (§12.4): give it a 10 s grace period and let the rollout wait for the pod to be gone. To roll back, redeploy the previous digest; migrations are backward compatible for one release. Rehearse it:
+### Deploy and roll back
+
+Promote one **digest** from development to staging to production, by rolling replacement gated on readiness. A replica drains on `SIGTERM` (§12.4): give it a 10 s grace period and let the rollout wait for the pod to be gone.
+
+To roll back, redeploy the previous digest; migrations are backward compatible for one release. Rehearse it:
 
 ```bash
 kubectl -n platform rollout undo deployment/platform-access
@@ -74,67 +78,63 @@ kubectl -n platform rollout status deployment/platform-access
 
 ## First tenant
 
-1. **Register the tenant** with its provider and gateway (upsert by slug):
-   ```bash
-   export ACCESS=https://access.example.com
-   curl -sS -X POST $ACCESS/v1/admin/tenants \
-     -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" \
-     -H "content-type: application/json" \
-     -d '{"slug":"acme","displayName":"Acme Inc","issuer":"https://login.acme.example",
-          "idpClientId":"access-acme","idpClientSecret":"…",
-          "idpRedirectUri":"https://access.example.com/oauth/tenant/callback",
-          "emailDomain":"acme.example","clientId":"gateway-acme","clientSecret":"…","clientRedirectUris":["https://gateway-acme.example.com/auth/callback"]}'
-   ```
+1. **Register the tenant** with its provider and gateway (upsert by slug, [`POST /v1/admin/tenants`](api.md#post-v1admintenants)).
 2. **Register principals**, one per external identity ([`POST /v1/admin/users`](api.md#post-v1adminusers)).
 3. **Create grants**, one per permission on a workspace and route ([`PUT /v1/admin/grants`](api.md#put-v1admingrants)).
-4. **Configure the gateway**; values must match character for character (§13.2):
-   ```
-   GATEWAY_OIDC_ISSUER=https://access.example.com
-   GATEWAY_OIDC_CLIENT_ID=gateway-acme
-   GATEWAY_OIDC_CLIENT_SECRET=the-secret-of-the-gateway
-   GATEWAY_OIDC_REDIRECT_URI=https://gateway-acme.example.com/auth/callback
-   GATEWAY_ACCESS_URL=https://access.example.com
-   GATEWAY_ACCESS_TOKEN=the-access-token-of-the-Access
-   GATEWAY_SESSION_SECRET=the-secret-of-the-sessions
-   GATEWAY_IDENTITY_SIGNING_KEY=the-private-key-of-the-deployment
-   ```
-   The last two are the gateway's own; gateway `1.0.0` and later refuse to start in production without them.
-5. **Check** with the twelve calls of the session:
-   ```bash
-   ACCESS_URL=https://access.example.com ACCESS_ADMIN_TOKEN=… bun run scripts/cli/admin-smoke.ts
-   ```
+4. **Configure the gateway**; values must match character for character (§13.2). The last two variables below are the gateway's own; gateway `1.0.0` and later refuse to start in production without them.
+5. **Check** with the twelve calls of the session (`scripts/cli/admin-smoke.ts`).
+
+Step 1:
+
+```bash
+export ACCESS=https://access.example.com
+curl -sS -X POST $ACCESS/v1/admin/tenants \
+  -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"slug":"acme","displayName":"Acme Inc","issuer":"https://login.acme.example",
+       "idpClientId":"access-acme","idpClientSecret":"…",
+       "idpRedirectUri":"https://access.example.com/oauth/tenant/callback",
+       "emailDomain":"acme.example","clientId":"gateway-acme","clientSecret":"…","clientRedirectUris":["https://gateway-acme.example.com/auth/callback"]}'
+```
+
+Step 4:
+
+```bash
+GATEWAY_OIDC_ISSUER=https://access.example.com
+GATEWAY_OIDC_CLIENT_ID=gateway-acme
+GATEWAY_OIDC_CLIENT_SECRET=the-secret-of-the-gateway
+GATEWAY_OIDC_REDIRECT_URI=https://gateway-acme.example.com/auth/callback
+GATEWAY_ACCESS_URL=https://access.example.com
+GATEWAY_ACCESS_TOKEN=the-access-token-of-the-Access
+GATEWAY_SESSION_SECRET=the-secret-of-the-sessions
+GATEWAY_IDENTITY_SIGNING_KEY=the-private-key-of-the-deployment
+```
+
+Step 5:
+
+```bash
+ACCESS_URL=https://access.example.com ACCESS_ADMIN_TOKEN=… bun run scripts/cli/admin-smoke.ts
+```
 
 ## Monitoring
 
 `GET /readyz` gates rolling replacement: `503` when the database is down or migrations are missing, `503 {"status":"draining"}` during a drain. `GET /healthz` is liveness. Metrics are at `/metrics` behind `ACCESS_METRICS_TOKEN` (§12.2).
 
-| # | Alert | Expression | For | Meaning |
-| --- | --- | --- | --- | --- |
-| 1 | Denial rate | `rate(access_decisions_total{result="deny"}[5m]) / rate(access_decisions_total[5m]) > 0.2` | 10 min | A tenant grants nothing, or an attack; reasons are in the decision log. |
-| 2 | Decision latency | `histogram_quantile(0.99, rate(access_decision_duration_seconds_bucket[5m])) > 0.02` | 5 min | Target is 20 ms at `p99`. |
-| 3 | Login failures | `rate(access_logins_total{result!="success"}[10m]) > 0.1` | 10 min | Provider down, tenant disabled, or state refused. |
-| 4 | Store failures | `rate(access_store_errors_total[5m]) > 0` | 5 min | Database or store unreachable. |
-| 5 | Pool saturation | `pg_stat_activity_count{application_name='access'} > 7` | 5 min | Pool at 70 % of 10. |
-| 6 | Schema older than code | New replicas stay `503 not-ready`; the start log names an unknown migration | 5 min | Refused schema (§3.8); not a metric. |
-| 7 | Admin refusals | `rate(access_admin_requests_total{status="401"}[5m]) > 0` | 5 min | Token guessing; five failures get `429`. |
-| 8 | Readiness | `probe_success{job="access"} == 0` | 2 min | Database down, or draining. |
+| # | Alert | Expression | For | Meaning | Runbook |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Denial rate | `rate(access_decisions_total{result="deny"}[5m]) / rate(access_decisions_total[5m]) > 0.2` | 10 min | A tenant grants nothing, or an attack; reasons are in the decision log. | [Decisions denied](troubleshooting.md#decisions-denied) |
+| 2 | Decision latency | `histogram_quantile(0.99, rate(access_decision_duration_seconds_bucket[5m])) > 0.02` | 5 min | Target is 20 ms at `p99`. | [Decision timeouts and outages](troubleshooting.md#decision-timeouts-and-outages) |
+| 3 | Login failures | `rate(access_logins_total{result!="success"}[10m]) > 0.1` | 10 min | Provider down, tenant disabled, or state refused. | [Failed logins](troubleshooting.md#failed-logins) |
+| 4 | Store failures | `rate(access_store_errors_total[5m]) > 0` | 5 min | Database or store unreachable. | [Decision timeouts and outages](troubleshooting.md#decision-timeouts-and-outages) |
+| 5 | Pool saturation | `pg_stat_activity_count{application_name='access'} > 7` | 5 min | Pool at 70 % of 10. | [Tuning](#tuning) |
+| 6 | Schema older than code | New replicas stay `503 not-ready`; the start log names an unknown migration | 5 min | Refused schema (§3.8); not a metric. | [Start refusals](troubleshooting.md#start-refusals) |
+| 7 | Admin refusals | `rate(access_admin_requests_total{status="401"}[5m]) > 0` | 5 min | Token guessing; five failures get `429`. | [Administration refusals](troubleshooting.md#administration-refusals) |
+| 8 | Readiness | `probe_success{job="access"} == 0` | 2 min | Database down, or draining. | [Decision timeouts and outages](troubleshooting.md#decision-timeouts-and-outages) |
 
 Platform metrics cover four more: replicas not ready, pod memory (200 MB), the ingress certificate, and the last dump's age.
 
 > [!IMPORTANT]
 > Alerts never restart replicas: a replica that cannot reach the database fails again, and restarts hide the cause. A person follows the runbook.
-
-## Runbooks
-
-| Symptom | Check | Fix |
-| --- | --- | --- |
-| One tenant's logins get `502 upstream_unavailable` | `curl -sS -o /dev/null -w '%{http_code}\n' https://login.acme.example/.well-known/openid-configuration`, also from a pod | Wait: other tenants work, and logins resume once the provider is back (caches last ten minutes). Don't raise `ACCESS_IDP_TIMEOUT_MS` (5 s). |
-| Readiness `503 not-ready`; decisions `503 service_unavailable` and the gateway denies | `pg_isready -h "$ACCESS_DATABASE_HOST" -p 5432 -U access_app -d platform` | Restore the database. Replicas start only once it answers. Decisions are never cached. |
-| Logins fail at the exchange; decisions work | `redis-cli -u "$ACCESS_REDIS_URL" ping` | Restore the store; callers retry. Only a single node may set `ACCESS_ALLOW_MEMORY_STATE=true` (codes die with the process). |
-| Start stops: `the role "<role>" of the database bypasses the isolation of the tenants` | `psql "$ACCESS_DATABASE_URL" -c "select rolname, rolsuper, rolbypassrls from pg_roles where rolname = current_user"` | Point `ACCESS_DATABASE_URL` at a [non-superuser owner role](#database-role) and roll. Never add `BYPASSRLS`. |
-| One tenant's logins fail after registration | `curl -sS $ACCESS/v1/admin/tenants -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"` | Repeat the [create call](api.md#post-v1admintenants) with the right issuer, client id or redirect URI; wait ten minutes or roll for the cache. A client id owned by another tenant gets `409 conflict`. |
-| Warning `the service cannot issue a token: it has no signing key`; JWKS empty | Environment | Set `ACCESS_SIGNING_KEY` and `ACCESS_SIGNING_KID`, roll. |
-| Slow | `access_decision_duration_seconds`; `access_store_errors_total`; log `the statement is slow` (over 50 ms); `pg_stat_activity` | Fix the slow dependency. |
 
 ## Rotating secrets
 
@@ -148,6 +148,8 @@ ACCESS_NEW_SECRET_ENCRYPTION_KEY=the-new-key bun run scripts/cli/rotate-secrets.
 **Signing key.** Generate one (`openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048`). Move the old key to `ACCESS_PREVIOUS_SIGNING_KEY` and `ACCESS_PREVIOUS_SIGNING_KID`, set the new one, and roll; the JWKS publishes both. After five minutes, remove the previous key and roll.
 
 **State secret.** Change it and roll; in-flight logins restart.
+
+**Tenant gateway secret.** Send the new `clientSecret` with [`POST /v1/admin/tenants`](api.md#post-v1admintenants) first, then change the gateway's `GATEWAY_OIDC_CLIENT_SECRET` within 24 hours; the old secret keeps working until then (§4.3.1).
 
 **Admin and decision tokens** rotate rolling (§4.3.1):
 
@@ -169,7 +171,13 @@ pg_restore --dbname=access_restore --no-owner --no-privileges \
   --exit-on-error access-20260108T100000Z.dump
 ```
 
-Store dumps outside the pod. Each quarter, and before changing the backup process, rehearse a restore outside production: no error; tables and the `grants` indexes present (`select indexname from pg_indexes where tablename = 'grants'`); the current release starts on it with `ACCESS_ENVIRONMENT=development` and applies no migration. Targets: recovery point 24 h, recovery time 2 h. An older dump restores with its schema, and the runner applies the missing migrations (tracked in `access_schema_migrations`).
+Store dumps outside the pod. Targets: recovery point 24 h, recovery time 2 h. An older dump restores with its schema, and the runner applies the missing migrations (tracked in `access_schema_migrations`).
+
+Each quarter, and before changing the backup process, rehearse a restore outside production and check that:
+
+1. the restore reports no error;
+2. the tables and the `grants` indexes are present (`select indexname from pg_indexes where tablename = 'grants'`);
+3. the current release starts on it with `ACCESS_ENVIRONMENT=development` and applies no migration.
 
 ## Tuning
 
@@ -205,17 +213,17 @@ Switching a tenant changes four gateway settings: issuer, client id, client secr
 
 ## Shadow comparison
 
-```
+```bash
 OLD_ACCESS_URL=https://old-access.example.com OLD_ACCESS_TOKEN=… \
 ACCESS_URL=https://access.example.com ACCESS_DECISION_TOKEN=… \
 bun run scripts/compat/shadow.ts --requests decisions.jsonl
 ```
 
-Each line of `decisions.jsonl` is `{"subject":"…","workspaceId":"…","routeId":"…","roles":[]}`. The tool asks both services, reports differences per subject and workspace with a fingerprint that makes a recurring set recognisable, and **exits non-zero while any difference remains**. Only the old service's hard-coded decisions may differ; anything else is a bug here. It never writes to either service.
+Each line of `decisions.jsonl` is `{"subject":"…","workspaceId":"…","routeId":"…","roles":[]}`. The tool asks both services, reports differences per subject and workspace with a fingerprint that makes a recurring set recognisable, and **exits non-zero while any difference remains**. Only the old service's hard-coded decisions may differ; anything else is a bug in Access. It never writes to either service.
 
 ## Tenant cutover
 
-Gates for every phase: `bun run test:compat` green, [alerts](#monitoring) silent, zero shadow differences.
+Gates for every phase: `bun run test:compat` green, [alerts](#monitoring) silent, zero shadow differences. `test/compatibility/cutover.test.ts` rehearses these phases against the reference gateway ([Internals](internals.md#compatibility-test)).
 
 **Staging.**
 
@@ -223,10 +231,10 @@ Gates for every phase: `bun run test:compat` green, [alerts](#monitoring) silent
 2. Register principals, keyed by the provider's `sub` (§6.2), in one batch (§10.4).
 3. Create grants in one batch (§10.6), copying the first ones from the old service.
 4. Run the shadow for a day.
-5. Point the staging gateway at this service.
-6. A browser logs in and reaches a staging upstream; gateway metrics count this service's decisions.
+5. Point the staging gateway at Access.
+6. A browser logs in and reaches a staging upstream; gateway metrics count the decisions Access makes.
 
-**Production.** Record the gateway's configuration and apply it once on staging to prove the rollback. Repeat the steps, switch, and watch login refusals, latency and denials for a day. Roll back by restoring the gateway configuration; this service keeps its data.
+**Production.** Record the gateway's configuration and apply it once on staging to prove the rollback. Repeat the steps, switch, and watch login refusals, latency and denials for a day. Roll back by restoring the gateway configuration; Access keeps its data.
 
 Never during cutover: gateway code changes, data migration from the old service, gateway session changes, schema changes.
 
@@ -235,3 +243,5 @@ Never during cutover: gateway code changes, data migration from the old service,
 - [ ] The twelve calls of the session answer (`scripts/cli/admin-smoke.ts`).
 - [ ] Signing key is the environment's; the gateway uses the same issuer.
 - [ ] Gateway rollback written down; dashboards watched the first day.
+
+Cutover problems are covered in [Troubleshooting](troubleshooting.md#tenant-cutover-problems).

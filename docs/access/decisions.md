@@ -1,10 +1,10 @@
 # Decisions
 
-Design decisions behind Access contract, with evidence. [spec.md](spec.md) is normative; [platform decisions](../platform/decisions.md) defines this table and when a decision changes the contract.
+The design decisions behind the Access contract, each with the evidence that backs it. It is written for maintainers; the [specification](spec.md) is normative, and [platform decisions](../platform/decisions.md) defines this table and when a decision changes the contract.
 
 | # | Question | Decision | Stated in | Status | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Where does multi-tenancy live? | In Access, never in the gateway. A gateway keeps one provider and one deployment of Access, so one gateway deployment serves one tenant. | §1.4 | resolved | `src/domains/identity/tenant.ts`, `test/contract/shared-client.test.ts` |
+| 1 | Where does multi-tenancy live? | In Access, never in the gateway. A gateway keeps one provider and one Access deployment, so one gateway deployment serves one tenant. | §1.4 | resolved | `src/domains/identity/tenant.ts`, `test/contract/shared-client.test.ts` |
 | 2 | Is Access an OpenID Connect provider or client? | Both: a client of each tenant's provider and a provider for the gateway. The gateway does not need to know. | — | resolved | `src/domains/provider/service.ts`, `src/domains/provider/discovery.ts` |
 | 3 | What keys an identity mapping? | `(tenant, subject)`. Never the e-mail: it is mutable and not an identity. | §6.2 | resolved | `src/domains/identity/mapping.ts`, `test/contract/login.test.ts` |
 | 4 | Is a principal created at first login? | Only when the tenant has `auto_provision = true`, and then with no grant: login succeeds, access does not. | §6.4 | resolved | `src/domains/identity/mapping.ts`, `test/contract/login.test.ts` |

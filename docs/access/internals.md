@@ -1,12 +1,12 @@
 # Internals
 
-For maintainers: how Access's code is organised, how the compatibility suite works, what was measured, the security review, and what a release must satisfy. Behavior is in [spec.md](spec.md); running it is in [Operations](operations.md).
+How the Access code is organised, how it is tested, how the compatibility suite works, what was measured, the security review, and what a release must satisfy. It is written for maintainers; behavior is in the [specification](spec.md) and running the service is in [Operations](operations.md).
 
 ## Code layout
 
-A **modular monolith**: one process, one image, one database, four independent domains. CI fails on any import that crosses a boundary.
+A **modular monolith**: one process, one image, one database, four independent domains. CI fails on any import that crosses a boundary (`bun run architecture`).
 
-```
+```text
    the browser ─┐
                 ├─►  src/app/       the HTTP surface: thin handlers, one pipeline
    the gateway ─┘        │
@@ -46,6 +46,12 @@ A **modular monolith**: one process, one image, one database, four independent d
 
 | Path | Owns |
 | --- | --- |
+| `src/main.ts` | Process entry point. |
+| `src/domains/identity/` | Provider token validation, principal mapping, tenant resolution, login state and the provider client. |
+| `src/domains/authorization/` | The decision rule, grant reads, reasons. |
+| `src/domains/administration/` | The twelve endpoints, body validation, auditing every change. |
+| `src/domains/provider/` | The tokens Access issues, the JWKS, the discovery document, code exchange. |
+| `src/observability/` | Logs, metrics, secret comparison. |
 | `src/runtime/env.ts` | Environment schema and validation; the only reader of `process.env`. |
 | `src/runtime/composition.ts`, `lifecycle.ts` | Wiring; listener and drain deadline. |
 | `src/app/app.ts` | Pipeline: request id, probes, routes, unknown-path refusal, error handler. |
@@ -53,16 +59,15 @@ A **modular monolith**: one process, one image, one database, four independent d
 | `src/app/decision-contract.ts`, `access-context-contract.ts` | The two read contracts. |
 | `src/app/administration/`, `src/domains/administration/` | The twelve endpoints of the administration and the audit that reads it, one file per resource (tenants, principals, groups, roles, grants, audit); the domain also holds validation, the limiter, authentication and storage `ports/`. |
 | `src/app/{errors,pages,metrics,endpoints,state}.ts` | Refusals, login pages, metrics, probes, request state. |
-| `src/domains/identity/` | Also login state and the provider client (other domains: §16). |
 | `src/platform/postgres/` | Pool, migrations, repositories, statement tracing, tenant scope, audit table. |
 | `src/platform/redis/`, `src/platform/bun/` | Code store; listener, request and response, address guard. |
-| `scripts/` | `cli/` (smoke test, secret rotation, decision plan), `compat/` (shadow comparison, compatibility runner), `gates/` (architecture, release version), `ops/` (load), `support/`. |
+| `scripts/` | `cli/` (smoke test, secret rotation, decision plan, database provisioning), `compat/` (shadow comparison, compatibility runner), `gates/` (architecture, release version), `ops/` (load), `support/`. |
+| `scripts/compat/compatibility.ts` | The compatibility suite runner. Outside the application: no `src/` file imports it, and the service depends on no package of the reference. |
+| `compatibility.json` | The platform workspaces and the tested revision ([Compatibility suite](#compatibility-suite)). At the repository root. |
 
 **Flows.** Login follows §5.4. A decision (`POST /v1/decisions`) authenticates the gateway, runs one statement over users, tenants, grants, permissions and groups under `ACCESS_DECISION_TIMEOUT_MS`, and answers `{"allow", "reason"}`. A concept spanning three layers has three files: the HTTP **contract** (`src/app/decision-contract.ts`), the **rule** (`src/domains/authorization/decision.ts`) and the **facts** the rule reads (`src/platform/postgres/decision-facts.ts`). Storage never decides; the domain never sees SQL.
 
 **Data model** (§3). Every domain table carries `tenant_id`, and foreign keys are composite `(id, tenant_id)`, so the schema stops a grant naming another tenant's principal. Row level security scopes every statement by the transaction-local `access.tenant_id` (§3.10). Grants are the policy: permission, workspace, route, expiry. `admin_audit`, like the migrations table, is infrastructure and holds no domain row.
-
-**Tests** are listed in §15. `bun run test` needs neither the reference gateway nor a sibling directory.
 
 **Working rules**, beyond the [platform rules](../platform/internals.md#working-rules):
 
@@ -71,11 +76,68 @@ A **modular monolith**: one process, one image, one database, four independent d
 3. Failure is denial everywhere; the service never guesses toward allowing.
 4. Back every decision with a measurement, a test or a provider document.
 
+## Tests
+
+The rule that every rule needs a test is in [platform internals](../platform/internals.md#working-rules).
+
+| Kind | Where | What it proves |
+| --- | --- | --- |
+| Unit | `src/domains/*/*.test.ts` | Provider token validation, mapping, the decision rule, tenant resolution. |
+| Contract | `test/contract/` | The whole flow against Access fixtures: browser login, code exchange, decision, the twelve administrative endpoints, the audit, secret rotation. |
+| Integration | `test/integration/` | Decisions against real PostgreSQL and Redis, tenant isolation, migrations, the statement deadline, the decision rule against randomly built policies. |
+| Compatibility | `test/compatibility/` | **The unchanged gateway against Access.** The gateway reference's fixtures are replaced by Access, and the gateway's contract suite runs against it. |
+| Architecture | `test/architecture/` | Import boundaries, the absence of deferred features, the documented routes and counts, and every `§` reference. |
+| Tooling | `test/tooling/` | The compatibility suite runner: the reference pin, the checkout sources, and the refusals. |
+
+`bun run test` runs units, contracts and boundaries, and needs neither the reference gateway nor a sibling directory. `bun run test:integration` runs the integration tests.
+
+### Documentation tests
+
+`test/architecture/` also holds the documentation to the code, so a docs change can fail the build:
+
+| Test | Holds |
+| --- | --- |
+| `routes.test.ts` | Every route registered in `src/app/app.ts` appears as `METHOD /path` in `docs/access/api.md` or `docs/access/operations.md`, and every such pattern in those two files is a real route. |
+| `counts.test.ts` | Every phrase that counts the administration (the twelve administrative endpoints, the twelve calls of the session) uses the number of routes the code registers. |
+| `spec-references.test.ts` | Every `§N` in the code, the tests and `docs/access/` names a heading of `docs/access/spec.md`. |
+| `version.test.ts` | The release version agrees across the files listed in [Release and delivery](#release-and-delivery). |
+
+The root `bun run api:check` also compares the endpoints named in `api.md` with the routes and the OpenAPI description.
+
+### Databases in tests
+
+Tests run on the embedded database by default. A workflow with a server sets `ACCESS_TEST_DATABASE_URL`, and the same tests run against it. The repository is developed and tested against **PostgreSQL 18**: the development compose file, the CI jobs and the release gates run it, and the embedded PostgreSQL is that version.
+
+### Compatibility test
+
+The gateway starts with its own configuration, with its fixtures replaced by Access:
+
+```text
+GATEWAY_OIDC_ISSUER   = the issuer of Access
+GATEWAY_OIDC_CLIENT_ID= the client id of the tenant
+GATEWAY_ACCESS_URL    = the base url of Access
+GATEWAY_ACCESS_TOKEN  = the access token of Access
+```
+
+The suite asserts that:
+
+1. a browser logs in at the tenant's provider and returns to the gateway with a session;
+2. the gateway writes the `x-gateway-user`, `x-gateway-email` and `x-gateway-roles` headers with the principal's values;
+3. a request with a grant on the workspace is forwarded, and one without is refused with `403 workspace_forbidden`;
+4. a revoked grant is refused within the gateway's cache TTL;
+5. the gateway's metrics count the denial as `missing_role`.
+
+A second file, `test/compatibility/cutover.test.ts`, **rehearses a tenant cutover** ([Operations](operations.md#tenant-cutover)), playing the runbook phases against the reference gateway: register the tenant, its principal and its grant; a browser logs in and reaches an upstream; revoke the grant and access ends; switch the tenant again without registering anything.
+
+**The gateway is never modified for these tests.** A test that needs a gateway change is refused: the compatibility test exists to prove none is needed.
+
 ## Compatibility suite
 
-`bun run --cwd packages/access test:compat` runs the platform gateway, unchanged, against Access (§15.1, §15.2). The reference is `packages/gateway/` at the commit pinned in the root `compatibility.json` ([platform compatibility](../platform/internals.md#compatibility) describes the manifest). The runner validates it strictly: `version` `2`, the platform repository, only the three known workspaces, and a 40-hex commit (no branch) for a reference.
+`bun run --cwd packages/access test:compat` runs the platform gateway, unchanged, against Access. The reference is the platform's `packages/gateway/` workspace at the repository's revision, pinned in the root `compatibility.json`, the one place that names the workspaces ([platform compatibility](../platform/internals.md#compatibility) describes the manifest). The runner validates it strictly: `version` `2`, the platform repository, only the three known workspaces, and a 40-hex commit (no branch) for a reference.
 
-The runner reads the manifest from the repository root, clones the gateway at the pinned commit (from the local repository when it holds the commit, so no network), installs its dependencies, checks its tracked files, runs `bun test test/compatibility` with the path in `ACCESS_GATEWAY_PATH`, and checks the reference is still unchanged. Its last line names the tested commit: `the compatibility suite passed against the gateway at <commit> …`.
+The runner (`scripts/compat/compatibility.ts`, `bun run test:compat`) is the only way the reference is prepared. A developer-prepared reference (`ACCESS_GATEWAY_PATH`) is checked and never written to; one that carries changes is refused with the reason. To test a published gateway revision, name a repository and a **full commit id**: a branch, tag, short hash or placeholder is refused, because a moving reference cannot be tested twice. A suite run against another revision proves nothing.
+
+The runner reads the manifest from the repository root, clones the gateway at the pinned commit (from the local repository when it holds the commit, so no network), installs its dependencies, checks its tracked files, runs `bun test test/compatibility` with the path in `ACCESS_GATEWAY_PATH` (the suite runs the gateway as a process in its own directory), and checks the reference is still unchanged. Its last line names the tested commit: `the compatibility suite passed against the gateway at <commit> …`.
 
 `bun run compatibility` runs it with the workspace tests and platform acceptance. Plain `bun test` also collects the suite, which then fails with instructions; use `bun run test` day to day.
 
@@ -113,14 +175,14 @@ The blocking `compatibility` CI job runs `bun run compatibility` and checks all 
 
 `scripts/ops/load.ts` measures the production decision statement through the service's repository with the deployment deadline. It runs on every CI build against the job's PostgreSQL; numbers are in the build log. Only measured numbers are published.
 
-```
+```bash
 ACCESS_DATABASE_URL=postgres://… bun run scripts/ops/load.ts --requests 20000 --concurrency 100 \
   --max-p50-ms=25 --max-p95-ms=50 --max-p99-ms=100 --min-per-second=100
 ```
 
 Each `--max-*` option fails the run when that percentile exceeds it, `--min-per-second` when throughput is below it; without them the script only reports. CI thresholds sit far above the targets because runners are shared: they catch a changed plan, a dropped index or a policy-table scan.
 
-The gate of the tenant decision holds a higher percentile than the gate of the platform decision, because the statement of a tenant costs about a third more: the scope of a tenant is a transaction, and the transaction is the cost. The two gates catch the same defects.
+The tenant-decision gate allows a higher percentile than the platform-decision gate, because a tenant-scoped statement runs inside a transaction and costs about a third more. Both gates catch the same defects.
 
 | Target | Value | Shape |
 | --- | --- | --- |
@@ -199,7 +261,7 @@ Someone who did not write the service checks each item; every answer is a test, 
 
 | Area | Item | Answer |
 | --- | --- | --- |
-| Correctness | Every spec rule has a test | §15; `bun run test`, `bun run test:compat`. |
+| Correctness | Every spec rule has a test | [Tests](#tests); `bun run test`, `bun run test:compat`. |
 | Correctness | Compatibility suite passes, gateway diff empty | `test/compatibility/gateway.test.ts`; CI checks the reference; the release reruns it on the published image. |
 | Correctness | Migrations apply empty and on the previous release | `test/integration/migrations.test.ts`: idempotent, refuses an unknown migration. |
 | Correctness | Dependency failures deny, tested really down | Database down, decision timeout, unreachable provider, store down. |

@@ -1,11 +1,13 @@
 # HTTP API
 
-Every Access endpoint with its request, response, errors and a `curl` example. The rules behind them are in [spec.md](spec.md), cited as `§N`.
+Every Access endpoint with its request, response, errors and a `curl` example, ending with a tenant's whole session in twelve calls. It is written for developers and operators who call Access; the rules behind each endpoint are in the [specification](spec.md), cited as `§N`.
 
 ## Conventions
 
 - Bodies are JSON. Errors are `{"error": "<code>", "message": "<text>"}`, except the token endpoint, which uses the OAuth shape `{"error": "<code>", "error_description": "<text>"}`.
-- Every response carries `x-request-id` (the client's own value if it sent a valid one), `x-content-type-options: nosniff`, `x-frame-options: DENY` and `referrer-policy: no-referrer` (§5).
+- Every response carries `x-request-id` (the client's own value if it sent a valid one), `x-content-type-options: nosniff`, `x-frame-options: DENY` and `referrer-policy: no-referrer` (§5.6).
+- The examples use `https://access.example.com`; replace it with your `ACCESS_PUBLIC_URL` ([Configuration](configuration.md)).
+- When a call fails, look the status and error code up in [Troubleshooting](troubleshooting.md).
 
 ## Probes
 
@@ -25,7 +27,7 @@ curl -sS https://access.example.com/metrics -H "authorization: Bearer $ACCESS_ME
 
 ### `GET /openapi.json`
 
-The OpenAPI description of the served paths and response shapes; the API check compares it with the routes.
+The OpenAPI description of the served paths and response shapes. The repository's API check (`bun run api:check`) compares it with the registered routes.
 
 ## OpenID Connect provider
 
@@ -43,7 +45,7 @@ The OpenAPI description of the served paths and response shapes; the API check c
 | `tenant` | Only when the tenant's client is `shared_client`. |
 | `login_hint` | Optional. An e-mail, used only when the client is shared. |
 
-Response: `302` to the tenant's provider, or `400 invalid_request` (no tenant, bad parameters) or `403 tenant_disabled`.
+Response: `302` to the tenant's provider, `400 invalid_request` (no tenant, bad parameters, unregistered `redirect_uri`) or `403 tenant_disabled`.
 
 ### `GET /oauth/tenant/callback`
 
@@ -53,7 +55,7 @@ Where the tenant's provider returns the browser with `code` and `state`. Respons
 
 Exchanges the code for tokens; the client authenticates with `client_secret_basic`.
 
-```
+```http
 POST /oauth/token
 Authorization: Basic {client_id}:{client_secret}
 Content-Type: application/x-www-form-urlencoded
@@ -107,7 +109,7 @@ curl -sS https://access.example.com/oauth/userinfo -H "authorization: Bearer $AC
 
 ### `POST /v1/decisions`
 
-```
+```http
 POST /v1/decisions
 Authorization: Bearer {ACCESS_DECISION_TOKEN}
 Content-Type: application/json
@@ -148,7 +150,7 @@ A data-owning service reads a principal's complete capabilities for a workspace 
 
 Contract discovery, used by consumers as a readiness check.
 
-```
+```http
 GET /v1/access-context
 Authorization: Bearer {access context credential}
 ```
@@ -163,7 +165,7 @@ Authorization: Bearer {access context credential}
 
 A principal's context.
 
-```
+```http
 POST /v1/access-context
 Authorization: Bearer {access context credential}
 Content-Type: application/json
@@ -206,7 +208,7 @@ Unknown or mistyped fields are refused; the body is at most 64 KiB.
 
 ## Administration
 
-Twelve endpoints under `/v1/admin`, plus `GET /v1/admin/audit`, all with `Authorization: Bearer <credential>`. The credential is `ACCESS_ADMIN_TOKEN` or one from `ACCESS_ADMIN_TOKENS` (§4.6); a tenant credential acts only for its tenant, and naming another is `403 forbidden`. Limits, pagination, error codes and auditing: §10.1.
+The twelve administrative endpoints live under `/v1/admin`, next to `GET /v1/admin/audit`; every call sends `Authorization: Bearer <credential>`. The credential is `ACCESS_ADMIN_TOKEN` or one from `ACCESS_ADMIN_TOKENS` (§4.6); a tenant credential acts only for its tenant, and naming another is `403 forbidden`. Limits, pagination, error codes and auditing: §10.1.
 
 ### `POST /v1/admin/tenants`
 
@@ -448,7 +450,7 @@ curl -sS -X DELETE https://access.example.com/v1/admin/grants/d3e4… \
   -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" -i
 ```
 
-```
+```http
 HTTP/1.1 204 No Content
 ```
 
@@ -648,7 +650,7 @@ curl -sS "https://access.example.com/v1/admin/audit?tenant=acme&limit=20" \
 | `offset` | Optional. Default `0`. |
 | `format` | Optional. `json` (default), or `csv` / `jsonl` for an export. Anything else: `400 invalid_request`. |
 
-Actions: `tenant.created`, `tenant.updated`, `principal.created`, `principal.updated`, `group.created`, `group.updated`, `grant.created`, `grant.updated`, `grant.revoked`, `role.created`, `role.updated`, `role.removed`.
+Actions: `tenant.created`, `tenant.updated`, `principal.created`, `principal.updated`, `group.created`, `group.updated`, `grant.created`, `grant.updated`, `grant.revoked`, `role.created`, `role.updated`, `role.removed`, and for a role's memberships `role.permission.granted`, `role.permission.revoked`, `role.role.nested`, `role.role.unnested`.
 
 ```json
 {
@@ -695,7 +697,7 @@ id,at,action,targetId,tenant,operator,address,requestId
 
 ## Session in twelve calls
 
-The twelve calls of the session take a tenant from registration to revocation, using each administration endpoint once. Requires `curl` and `jq`.
+The twelve calls of the session take a tenant from registration to revocation, using each administration endpoint once. You need `curl` and `jq`.
 
 ```bash
 export ACCESS=https://access.example.com
