@@ -100,7 +100,7 @@ export function compose(config: ConsoleConfig, stores?: Stores): Services {
     probes: async () => {
       const itself: ServiceStatus = {
         id: 'console',
-        name: 'The console',
+        name: 'Console',
         state: 'up',
         version: VERSION,
         health: null,
@@ -109,7 +109,7 @@ export function compose(config: ConsoleConfig, stores?: Stores): Services {
       }
       const others = await Promise.all(
         [
-          { id: 'gateway' as const, name: 'The gateway', url: config.gatewayUrl },
+          { id: 'gateway' as const, name: 'Gateway', url: config.gatewayUrl },
           { id: 'access' as const, name: 'Access', url: config.accessUrl },
           { id: 'data' as const, name: 'Data', url: config.dataUrl },
         ].map((target) => probeService(target, { timeoutMs: config.probeTimeoutMs }))

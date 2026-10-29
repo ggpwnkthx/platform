@@ -10,6 +10,17 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The status board names every service by its role
+
+Two of the four cards of the status board carried a word the other two
+did not: the gateway and the console were "The gateway" and "The
+console" beside the "Access" and the "Data" of the other two. The word
+read as part of the name of the service rather than as part of the
+sentence, and the board was the last list of the platform that said it.
+
+The board names them by their role now, like every other list of the
+platform does.
+
 ### The services are named by their role: Gateway, Access, Data, Console
 
 Two of the four pieces of the platform carried a word the other two did

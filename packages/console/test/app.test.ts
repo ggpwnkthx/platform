@@ -449,6 +449,15 @@ describe('the console', () => {
     expect(operator.services.find((service) => service.id === 'access')?.version).toBe('1.0.0')
   })
 
+  test('the status board names every service by its role', async () => {
+    const page = await (await new Browser().request('/status')).text()
+    for (const name of ['Gateway', 'Access', 'Data', 'Console']) {
+      expect(page).toContain(`<h3>${name}</h3>`)
+    }
+    expect(page).not.toContain('<h3>The gateway</h3>')
+    expect(page).not.toContain('<h3>The console</h3>')
+  })
+
   test('the sign-out ends the session', async () => {
     const browser = new Browser()
     await browser.signIn()
