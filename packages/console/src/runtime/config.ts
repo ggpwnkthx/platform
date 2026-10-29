@@ -129,6 +129,21 @@ function integerOf(
 const MINIMUM_CREDENTIAL_LENGTH = 16
 
 /**
+ * The variables of the console that carry a credential.
+ *
+ * The names are the vocabulary of the credentials of the deployment: the
+ * test of the platform reads the list and asks the console to refuse
+ * every value of the repository that the list names.
+ */
+export const CREDENTIAL_VARIABLES: readonly string[] = [
+  'CONSOLE_CLIENT_SECRET',
+  'CONSOLE_SESSION_SECRET',
+  'CONSOLE_ADMIN_TOKEN',
+  'CONSOLE_ACCESS_CONTEXT_TOKEN',
+  'CONSOLE_TENANT_ADMIN_TOKENS',
+]
+
+/**
  * The credentials that are published in the repository.
  *
  * They are the values of the example of the development machine and the
@@ -143,7 +158,24 @@ const PUBLISHED_CREDENTIALS: readonly string[] = [
   'dev-access-token-0000000',
   'example-admin-token-0000000',
   'example-access-token-0000000',
+  // The two secrets of the example of the console: the secret of the
+  // client of the tenant and the secret of the sessions. They are
+  // published, and a deployment that keeps them holds a credential that
+  // everybody knows.
+  'dev-gateway-client-secret-00001',
+  'dev-console-session-secret-of-the-dev-01',
 ]
+
+/**
+ * Reports whether a value is one of the credentials the repository
+ * publishes.
+ *
+ * The comparison is exact, and the value is trimmed because a value that
+ * is read from a file may carry the spaces of the operator.
+ */
+export function isPublishedCredential(value: string): boolean {
+  return PUBLISHED_CREDENTIALS.includes(value.trim())
+}
 
 /**
  * Reads a credential: long enough, and not a published one.
@@ -172,7 +204,6 @@ function credentialOf(
   }
   return value
 }
-
 /** Reads the credentials of the tenants: a json object of slugs and tokens. */
 function tenantTokensOf(
   env: Environment,
@@ -205,7 +236,7 @@ function tenantTokensOf(
       )
       continue
     }
-    if (production && PUBLISHED_CREDENTIALS.includes(token.trim())) {
+    if (production && isPublishedCredential(token.trim())) {
       problems.push(
         `${name} holds a credential of "${slug}" that is the value of the example of the repository: it is published, and a deployment does not start with it`
       )
@@ -243,7 +274,11 @@ export function readConfig(env: Environment): ConsoleConfig {
   if (!clientId) problems.push('CONSOLE_CLIENT_ID is required')
   const clientSecret = readValue(env, 'CONSOLE_CLIENT_SECRET')
   if (!clientSecret) problems.push('CONSOLE_CLIENT_SECRET is required')
-  else if (production && PUBLISHED_CREDENTIALS.includes(clientSecret.trim())) {
+  else if (clientSecret.length < MINIMUM_CREDENTIAL_LENGTH) {
+    problems.push(
+      `CONSOLE_CLIENT_SECRET is shorter than ${MINIMUM_CREDENTIAL_LENGTH} characters: it authenticates the console towards Access`
+    )
+  } else if (production && isPublishedCredential(clientSecret)) {
     problems.push(
       'CONSOLE_CLIENT_SECRET is the value of the example of the repository: it is published, and a deployment does not start with it'
     )
@@ -253,7 +288,7 @@ export function readConfig(env: Environment): ConsoleConfig {
   if (!sessionSecret) problems.push('CONSOLE_SESSION_SECRET is required')
   else if (sessionSecret.length < 32) {
     problems.push('CONSOLE_SESSION_SECRET is shorter than 32 characters')
-  } else if (production && PUBLISHED_CREDENTIALS.includes(sessionSecret.trim())) {
+  } else if (production && isPublishedCredential(sessionSecret)) {
     problems.push(
       'CONSOLE_SESSION_SECRET is the value of the example of the repository: it is published, and a deployment does not start with it'
     )

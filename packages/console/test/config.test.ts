@@ -69,5 +69,27 @@ describe('the configuration of the console', () => {
 
   test('a credential shorter than the rule of Access is refused', () => {
     expect(() => readConfig({ ...BASE, CONSOLE_ADMIN_TOKEN: 'too-short' })).toThrow(ConfigError)
+    expect(() => readConfig({ ...BASE, CONSOLE_CLIENT_SECRET: 'too-short' })).toThrow(ConfigError)
+  })
+
+  test('the secrets of the example of the console are refused in production', () => {
+    // The two secrets of the example of the repository are published: a
+    // deployment that keeps them holds a credential that everybody knows.
+    expect(() =>
+      readConfig({ ...BASE, CONSOLE_CLIENT_SECRET: 'dev-gateway-client-secret-00001' })
+    ).toThrow(/CONSOLE_CLIENT_SECRET is the value of the example of the repository/)
+    expect(() =>
+      readConfig({ ...BASE, CONSOLE_SESSION_SECRET: 'dev-console-session-secret-of-the-dev-01' })
+    ).toThrow(/CONSOLE_SESSION_SECRET is the value of the example of the repository/)
+  })
+
+  test('a development machine may use the values of the example', () => {
+    const config = readConfig({
+      ...BASE,
+      CONSOLE_ENVIRONMENT: 'development',
+      CONSOLE_CLIENT_SECRET: 'dev-gateway-client-secret-00001',
+      CONSOLE_SESSION_SECRET: 'dev-console-session-secret-of-the-dev-01',
+    })
+    expect(config.clientSecret).toBe('dev-gateway-client-secret-00001')
   })
 })
