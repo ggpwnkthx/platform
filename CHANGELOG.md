@@ -10,6 +10,15 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The console reaches the access service itself
+
+The deployment called the console a client behind the gateway, and the
+picture of the platform showed the browser reaching the gateway. The
+browser reaches the console on its own address: the console signs the
+caller in against Access itself, and it reads the data through the
+gateway, like any other client. The deployment and the picture of the
+platform say so now.
+
 ### The matrix of the continuous integration names the workspaces that are there
 
 The matrix of the types, the boundaries and the tests named eight

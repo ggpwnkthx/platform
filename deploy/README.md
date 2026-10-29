@@ -45,7 +45,7 @@ docker compose -f deploy/compose/platform.compose.yaml up --build
 kubectl apply -k deploy/kubernetes/overlays/platform
 ```
 
-**The console** is a client deployed behind the gateway, not one of the three services. It has no published image: build it from `packages/console/Dockerfile`. Its stack is `deploy/compose/console.compose.yaml`.
+**The console** is a client of the platform, not one of the three services, and it is not an upstream of the gateway: the browser reaches the console directly, and the console reaches Data through the gateway, like any other client. It has no published image: build it from `packages/console/Dockerfile`. Its stack is `deploy/compose/console.compose.yaml`.
 
 Both approaches use the same services, ports and environment variable names. A standalone service finds the others through environment variables (`GATEWAY_ACCESS_URL`, `DATA_ACCESS_URL`); the composition uses network service names.
 

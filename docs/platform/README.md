@@ -5,16 +5,17 @@ Three HTTP services and a web console, kept as workspaces of one repository: one
 ## How it fits
 
 ```
-clients ──▶ Gateway ──▶ Data ──▶ PostgreSQL
-               │              │
-               │              └──▶ Access (access context)
-               └─────────────────▶ Access (login and decisions)
+browser ──▶ Console ──▶ Gateway ──▶ Data ──▶ PostgreSQL
+                │           │            │
+                │           │            └──▶ Access (access context)
+                │           └───────────────▶ Access (login and decisions)
+                └──────────────────────────▶ Access (login and administration)
 ```
 
-- **Gateway**: the only service callers reach. It authenticates the caller (OIDC with PKCE for browsers, bearer tokens for API clients), asks Access, and forwards the request with the caller's identity signed as a JWS. It fails closed: no answer means refusal. It has no domain model.
+- **Gateway**: the only service an API caller reaches. It authenticates the caller (OIDC with PKCE for browsers, bearer tokens for API clients), asks Access, and forwards the request with the caller's identity signed as a JWS. It fails closed: no answer means refusal. It has no domain model.
 - **Access**: an OIDC broker and access decision service. It signs callers in at each tenant's identity provider, maps them to principals, issues its own tokens to the gateway, and answers its decisions. It holds tenants, principals, groups, grants and the administration audit.
 - **Data**: a headless, permission-aware data API. It owns workspaces, collections, data policies, records, audit and version history, and committed events. It verifies the gateway's signature and asks Access for the caller's access context.
-- **Console**: the web interface, a client of the three that decides nothing itself.
+- **Console**: the web interface, a client of the three that decides nothing itself. The browser reaches it on its own address; it signs the caller in against Access itself and reads the data through the gateway.
 
 The services are separate processes and deployments that talk only over HTTP; no workspace imports another's source.
 
