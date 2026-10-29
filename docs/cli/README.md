@@ -1,45 +1,65 @@
 # Command line
 
-`platformctl` is the command line of the platform. It is a client of the
-gateway, Access and Data: it asks a service a question, and it shows the
-answer the service gave. It holds no policy of its own, and it never
-reaches a database.
+`platformctl` is the platform's command line: operators and developers use it to check a deployment, publish route tables, administer Access and work with workspace records. This page explains what it is and where to read next.
 
-The CLI has two faces, and they are told apart by what they touch:
+## What it does
 
-| Face | What it talks to | Examples |
+The CLI is a client of the gateway, Access and Data. It sends a service a request and shows the service's answer. It holds no policy of its own, never reaches a database, and has no dependency beyond the Bun runtime.
+
+It has two kinds of commands, told apart by what they touch:
+
+| Kind | Talks to | Examples |
 | --- | --- | --- |
-| Client commands | The HTTP contracts of the services | `platformctl data items list notes`, `platformctl access grants put …` |
-| Operator commands of a deployment | The state of the deployment, from the machine of the operator | `platformctl routes apply ./routes.json` |
+| Client commands | The services' HTTP contracts | `platformctl data items list notes`, `platformctl access grants put …` |
+| Deployment operator commands | The deployment's state, from the operator's machine | `platformctl routes apply ./routes.json` |
 
-Every command of the second face goes through the same contracts as the
-first one: the administration of the gateway is the control plane, a
-process of its own, and the CLI is one of its clients like any other.
+Operator commands use the same kind of contract as client commands. Gateway administration is the control plane, a separate process, and the CLI is one of its clients like any other.
 
-## Reading path
+## Where it sits
 
-1. [Specification](spec.md) — the commands, the answer, the statuses of the process, the safety of a write.
-2. [Operations](operations.md) — the profiles, the login, the everyday work of an operator.
+```text
+platformctl ──> gateway ──> Data          data commands, with the caller's token
+            ──> control plane             routes, sessions
+            ──> Access                    login, whoami, access commands
+```
 
-## The groups
+## Command groups
 
-| Group | What it holds |
+| Group | Covers |
 | --- | --- |
-| `context` | The profiles of the deployments and the files of the CLI |
-| `routes` | The route table of the gateway, through its control plane |
-| `sessions` | The sessions of the callers and the decisions they wait for |
-| `access` | The tenants, the principals, the grants, the roles and the decisions of Access |
-| `data` | The records, the model and the audit of a workspace |
+| `context` | Deployment profiles and the CLI's own files |
+| `routes` | The gateway's route table, through its control plane |
+| `sessions` | Callers' sessions and their cached decisions |
+| `access` | Access tenants, principals, grants, groups, roles, audit and decisions |
+| `data` | A workspace's records, model and audit |
 
-The commands of the root are `login`, `logout`, `whoami`, `status`,
-`version` and `doctor`.
+The root commands are `login`, `logout`, `whoami`, `status`, `version` and `doctor`.
 
-## A first run
+## Key concepts
+
+| Concept | Meaning | Defined in |
+| --- | --- | --- |
+| Profile | The addresses, workspace, tenant and client of one deployment, stored on your machine | [spec §3](spec.md#3-profiles) |
+| Credential | Your token after `platformctl login`, readable only by you | [spec §4](spec.md#4-sign-in) |
+| Exit status | A number from `0` to `8` that tells a script what happened | [spec §6.2](spec.md#62-exit-status) |
+
+## Find your way
+
+| To | Read |
+| --- | --- |
+| Install it, set up a profile, sign in, script it | [Usage](usage.md) |
+| Know every command, option, format and exit status | [Specification](spec.md) |
+| Change its code | [Workspace README](../../packages/cli/README.md) |
+
+From a checkout of the repository, try it with:
 
 ```bash
 bun run --cwd packages/cli status
 bun run --cwd packages/cli --help
 ```
 
-The published binary carries the runtime inside it and needs nothing
-else: see [Operations](operations.md).
+The published binary carries the runtime inside it and needs nothing else; see [Usage](usage.md#install).
+
+## Status
+
+Version 1.0.0. The code lives in [`packages/cli/`](../../packages/cli/).
