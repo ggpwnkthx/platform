@@ -82,11 +82,15 @@ describe('the isolation of the tenants', () => {
       await database.transaction(async (client) => {
         await client.query(`set role access_isolation_test`)
 
+        // A statement that was not given a scope sees nothing: the
+        // scope is never the default, and a statement that forgot its
+        // scope does not read the platform (spec §3.10).
         const everyone = await client.query<{ count: number }>(
           `select count(*)::int as count from users`
         )
-        expect(everyone[0]?.count).toBe(2)
+        expect(everyone[0]?.count).toBe(0)
 
+        await client.query(`select set_config('access.scope', 'tenant', true)`)
         await client.query(`select set_config('access.tenant_id', $1, true)`, [acme])
         const users = await client.query<{ tenant_id: string }>(`select tenant_id from users`)
         const tenants = await client.query<{ slug: string }>(`select slug from tenants`)
@@ -103,13 +107,14 @@ describe('the isolation of the tenants', () => {
     }
   })
 
-  test('the statements of the platform work on a connection that has run a scoped statement', async () => {
+  test('the scope of the platform is explicit on a connection that has run a scoped statement', async () => {
     // The pool of a deployment reuses its connections, and PostgreSQL
     // leaves the placeholder of the scope on a connection that has run a
     // scoped statement: the placeholder is empty, and it is empty for
-    // the rest of the life of the connection. The empty scope is the
-    // scope of the platform: a statement of the platform on such a
-    // connection sees the platform, and it may write it.
+    // the rest of the life of the connection. The scope of the platform
+    // is **asked for by name**: a statement that does not ask for it
+    // sees nothing, and the statement of the platform that asks for it
+    // sees the platform and may write it.
     //
     // Without the rule, the administration of the platform stops working
     // on the second call, on the connection of the pool that served the
@@ -131,15 +136,29 @@ describe('the isolation of the tenants', () => {
       await session.transaction(async (client) => {
         await client.query(`set role access_scope_leak_test`)
         // The scope of a tenant, for the transaction that asks for it.
+        await client.query(`select set_config('access.scope', 'tenant', true)`)
         await client.query(`select set_config('access.tenant_id', $1, true)`, [acme])
         await client.query(`select count(*)::int as count from users`)
         await client.query(`reset role`)
       })
 
-      // The scope of the platform, on the same connection: the rows of
-      // the platform are there.
+      // A statement that does not ask for a scope, on the same
+      // connection: the placeholder of the scope is empty, and the
+      // statement sees nothing.
       await session.transaction(async (client) => {
         await client.query(`set role access_scope_leak_test`)
+        const nobody = await client.query<{ count: number }>(
+          `select count(*)::int as count from users`
+        )
+        expect(nobody[0]?.count).toBe(0)
+        await client.query(`reset role`)
+      })
+
+      // The scope of the platform, asked for by name, on the same
+      // connection: the rows of the platform are there.
+      await session.transaction(async (client) => {
+        await client.query(`set role access_scope_leak_test`)
+        await client.query(`select set_config('access.scope', 'platform', true)`)
         const everyone = await client.query<{ count: number }>(
           `select count(*)::int as count from users`
         )
@@ -151,6 +170,7 @@ describe('the isolation of the tenants', () => {
       // of the table lets it through.
       await session.transaction(async (client) => {
         await client.query(`set role access_scope_leak_test`)
+        await client.query(`select set_config('access.scope', 'platform', true)`)
         await client.query(`insert into users (tenant_id, external_subject) values ($1, $2)`, [
           acme,
           'the-subject-of-the-leak',

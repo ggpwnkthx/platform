@@ -35,9 +35,11 @@ export type {
   Role,
   RoleFilter,
   RoleStore,
+  Scope,
   Tenant,
   TenantStore,
 } from './ports'
+export { platformScope, scopeOf, tenantScope } from './ports'
 export {
   GrantBatchBody,
   GrantBody,

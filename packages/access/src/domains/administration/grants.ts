@@ -18,7 +18,8 @@ import type {
   Role,
 } from './ports'
 import { change, type AuditEntry } from './audit'
-import { refuseOutsideScope, tenantOf } from './scope'
+import { platformScope, tenantScope } from './ports'
+import { refuseOutsideScope, statementScope, tenantOf } from './scope'
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, liveOf, wholeNumber } from './values'
 
 /**
@@ -134,7 +135,11 @@ export async function upsertGrant(
 
   let subjectId: string
   if (userId !== null) {
-    const principal = await options.principals.findById(userId)
+    // The principal is read in the scope of the platform: the answer
+    // tells the caller that the principal belongs to another tenant, and
+    // it does not tell it anything about the principal itself
+    // (spec §10.6).
+    const principal = await options.principals.findById(userId, platformScope())
     if (!principal) {
       throw new AdministrationError('not_found', 'the principal does not exist')
     }
@@ -196,6 +201,7 @@ export async function upsertGrant(
       expiresAt: registration.expiresAt,
       grantedBy: registration.grantedBy,
     },
+    tenantScope(tenant.id),
     change('grant.updated', tenant.slug, context)
   )
   if (!grant) {
@@ -258,14 +264,18 @@ export async function revokeGrant(
   id: string,
   context: AuditContext
 ): Promise<AuditEntry> {
-  const existing = await options.grants.findById(id)
+  const existing = await options.grants.findById(id, platformScope())
   if (!existing) {
     throw new AdministrationError('not_found', 'the grant does not exist')
   }
   // A credential of a tenant revokes the grants of that tenant and
   // nothing else.
   refuseOutsideScope(scope, existing.tenant)
-  await options.grants.revoke(id, change('grant.revoked', existing.tenant, context))
+  await options.grants.revoke(
+    id,
+    await statementScope(options, scope),
+    change('grant.revoked', existing.tenant, context)
+  )
   return { action: 'grant.revoked', id, tenant: existing.tenant }
 }
 
@@ -285,13 +295,14 @@ async function resolvePermission(
   tenantId: string,
   key: string
 ): Promise<Permission> {
-  const catalogue = await options.permissions.findCataloguePermission(key)
+  const scope = tenantScope(tenantId)
+  const catalogue = await options.permissions.findCataloguePermission(key, scope)
   if (catalogue) return catalogue
 
   const own = await options.permissions.findByTenantAndKey(tenantId, key)
   if (own) return own
 
-  return await options.permissions.createOrFind({ tenantId, key })
+  return await options.permissions.createOrFind({ tenantId, key }, scope)
 }
 
 /**

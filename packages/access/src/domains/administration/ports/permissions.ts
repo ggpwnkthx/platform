@@ -6,6 +6,8 @@
  * PostgreSQL and nothing about the shape of the rows.
  */
 
+import type { Scope } from './scope'
+
 /** A permission of the platform. */
 export interface Permission {
   id: string
@@ -18,14 +20,20 @@ export interface Permission {
 
 /** The storage of the permissions. */
 export interface PermissionStore {
-  /** The permission of the catalogue of the platform. */
-  findCataloguePermission(key: string): Promise<Permission | null>
+  /**
+   * The permission of the catalogue of the platform.
+   *
+   * The scope is the scope of the call: the catalogue is shared by every
+   * tenant, and the statement reads it in the scope of the call
+   * (spec §3.10).
+   */
+  findCataloguePermission(key: string, scope: Scope): Promise<Permission | null>
   /** The permission of a tenant. */
   findByTenantAndKey(tenantId: string, key: string): Promise<Permission | null>
   /** The permission of a key, whatever the tenant that owns it. */
-  findByKey(key: string): Promise<Permission | null>
+  findByKey(key: string, scope: Scope): Promise<Permission | null>
   /** Creates a permission. */
-  create(registration: { tenantId: string | null; key: string }): Promise<Permission>
+  create(registration: { tenantId: string | null; key: string }, scope: Scope): Promise<Permission>
   /**
    * Creates a permission, or reads the one that is already there.
    *
@@ -33,5 +41,8 @@ export interface PermissionStore {
    * of the same key, and two calls of the same tenant may create it at
    * the same time.
    */
-  createOrFind(registration: { tenantId: string | null; key: string }): Promise<Permission>
+  createOrFind(
+    registration: { tenantId: string | null; key: string },
+    scope: Scope
+  ): Promise<Permission>
 }

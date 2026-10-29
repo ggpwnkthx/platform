@@ -7,6 +7,7 @@
  */
 
 import type { ChangeAudit } from './audit'
+import type { Scope } from './scope'
 
 /** The status of a principal. */
 export type PrincipalStatus = 'active' | 'disabled'
@@ -62,8 +63,13 @@ export interface PrincipalPage {
 
 /** The storage of the principals. */
 export interface PrincipalStore {
-  /** The principal of an id. */
-  findById(id: string): Promise<Principal | null>
+  /**
+   * The principal of an id.
+   *
+   * The scope is the scope of the call: the principal of another tenant
+   * is not a principal the statement may read (spec §3.10).
+   */
+  findById(id: string, scope: Scope): Promise<Principal | null>
   /** The principal of an external identity of a tenant. */
   findByExternalSubject(tenantId: string, externalSubject: string): Promise<Principal | null>
   /**
@@ -86,6 +92,7 @@ export interface PrincipalStore {
   update(
     id: string,
     changes: { email?: string | null; displayName?: string | null; status?: PrincipalStatus },
+    scope: Scope,
     audit: ChangeAudit
   ): Promise<Principal | null>
   /** The principals that match a filter, and their number. */

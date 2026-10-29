@@ -11,6 +11,7 @@ import { AdministrationError } from './errors'
 import type { AdministrationOptions } from './options'
 import type { AuditContext, Group, GroupFilter, GroupPage, GroupRegistration } from './ports'
 import { change, type AuditEntry } from './audit'
+import { tenantScope } from './ports'
 import { refuseOutsideScope, tenantOf } from './scope'
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, wholeNumber } from './values'
 
@@ -127,6 +128,7 @@ export async function upsertGroup(
       displayName: registration.displayName,
       memberIds: members,
     },
+    tenantScope(tenant.id),
     change('group.updated', tenant.slug, context)
   )
   if (!group) {

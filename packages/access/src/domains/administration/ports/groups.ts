@@ -7,6 +7,7 @@
  */
 
 import type { ChangeAudit } from './audit'
+import type { Scope } from './scope'
 
 /** The filter of the list of the groups. */
 export interface GroupFilter {
@@ -81,6 +82,7 @@ export interface GroupStore {
   update(
     id: string,
     changes: { displayName?: string | null; memberIds?: string[] },
+    scope: Scope,
     audit: ChangeAudit
   ): Promise<Group | null>
 }

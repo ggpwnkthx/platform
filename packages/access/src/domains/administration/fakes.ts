@@ -32,6 +32,7 @@ import type {
   RoleFilter,
   RolePage,
   RoleStore,
+  Scope,
   Tenant,
   TenantStore,
   TenantSummary,
@@ -128,7 +129,7 @@ class FakePrincipals implements PrincipalStore {
 
   constructor(private readonly tenants: FakeTenants) {}
 
-  async findById(id: string): Promise<Principal | null> {
+  async findById(id: string, _scope?: Scope): Promise<Principal | null> {
     return this.rows.find((row) => row.id === id) ?? null
   }
 
@@ -172,6 +173,7 @@ class FakePrincipals implements PrincipalStore {
   async update(
     id: string,
     changes: { email?: string | null; displayName?: string | null; status?: 'active' | 'disabled' },
+    _scope?: Scope,
     _audit?: ChangeAudit
   ): Promise<Principal | null> {
     const principal = this.rows.find((row) => row.id === id)
@@ -204,7 +206,7 @@ class FakePrincipals implements PrincipalStore {
 class FakePermissions implements PermissionStore {
   readonly rows: Permission[] = []
 
-  async findCataloguePermission(key: string): Promise<Permission | null> {
+  async findCataloguePermission(key: string, _scope?: Scope): Promise<Permission | null> {
     return this.rows.find((row) => row.tenantId === null && row.key === key) ?? null
   }
 
@@ -212,11 +214,14 @@ class FakePermissions implements PermissionStore {
     return this.rows.find((row) => row.tenantId === tenantId && row.key === key) ?? null
   }
 
-  async findByKey(key: string): Promise<Permission | null> {
+  async findByKey(key: string, _scope?: Scope): Promise<Permission | null> {
     return this.rows.find((row) => row.key === key) ?? null
   }
 
-  async create(registration: { tenantId: string | null; key: string }): Promise<Permission> {
+  async create(
+    registration: { tenantId: string | null; key: string },
+    _scope?: Scope
+  ): Promise<Permission> {
     const permission: Permission = {
       id: `permission-${this.rows.length + 1}`,
       tenantId: registration.tenantId,
@@ -228,7 +233,10 @@ class FakePermissions implements PermissionStore {
     return permission
   }
 
-  async createOrFind(registration: { tenantId: string | null; key: string }): Promise<Permission> {
+  async createOrFind(
+    registration: { tenantId: string | null; key: string },
+    _scope?: Scope
+  ): Promise<Permission> {
     const existing = this.rows.find(
       (row) => row.tenantId === registration.tenantId && row.key === registration.key
     )
@@ -248,7 +256,7 @@ class FakeGrants implements GrantStore {
     private readonly roles: FakeRoles
   ) {}
 
-  async findById(id: string): Promise<Grant | null> {
+  async findById(id: string, _scope?: Scope): Promise<Grant | null> {
     return this.rows.find((row) => row.id === id) ?? null
   }
 
@@ -315,6 +323,7 @@ class FakeGrants implements GrantStore {
   async update(
     id: string,
     changes: { expiresAt?: Date | null; grantedBy?: string | null },
+    _scope?: Scope,
     _audit?: ChangeAudit
   ): Promise<Grant | null> {
     const grant = this.rows.find((row) => row.id === id)
@@ -323,7 +332,7 @@ class FakeGrants implements GrantStore {
     return grant
   }
 
-  async revoke(id: string, _audit?: ChangeAudit): Promise<Grant | null> {
+  async revoke(id: string, _scope?: Scope, _audit?: ChangeAudit): Promise<Grant | null> {
     const grant = this.rows.find((row) => row.id === id)
     if (!grant) return null
     grant.revokedAt = new Date('2026-01-08T11:00:00.000Z')
@@ -390,6 +399,7 @@ class FakeGroups implements GroupStore {
   async update(
     id: string,
     changes: { displayName?: string | null; memberIds?: string[] },
+    _scope?: Scope,
     _audit?: ChangeAudit
   ): Promise<Group | null> {
     const group = this.rows.find((row) => row.id === id)
@@ -462,7 +472,7 @@ class FakeRoles implements RoleStore {
     return row ? this.#row(row) : null
   }
 
-  async findById(id: string): Promise<Role | null> {
+  async findById(id: string, _scope?: Scope): Promise<Role | null> {
     const row = this.rows.find((entry) => entry.id === id)
     return row ? this.#row(row) : null
   }
@@ -516,6 +526,7 @@ class FakeRoles implements RoleStore {
   async update(
     id: string,
     changes: { displayName?: string | null; description?: string | null },
+    _scope?: Scope,
     _audit?: ChangeAudit
   ): Promise<Role | null> {
     const role = this.rows.find((row) => row.id === id)
@@ -525,7 +536,7 @@ class FakeRoles implements RoleStore {
     return this.#row(role)
   }
 
-  async remove(id: string, _audit?: ChangeAudit): Promise<boolean> {
+  async remove(id: string, _scope?: Scope, _audit?: ChangeAudit): Promise<boolean> {
     const index = this.rows.findIndex((row) => row.id === id)
     if (index < 0) return false
     this.rows.splice(index, 1)
@@ -537,6 +548,7 @@ class FakeRoles implements RoleStore {
   async grantPermission(
     roleId: string,
     permissionId: string,
+    _scope?: Scope,
     _audit?: ChangeAudit
   ): Promise<boolean> {
     const held = this.permissions.get(roleId)
@@ -548,6 +560,7 @@ class FakeRoles implements RoleStore {
   async revokePermission(
     roleId: string,
     permissionId: string,
+    _scope?: Scope,
     _audit?: ChangeAudit
   ): Promise<boolean> {
     const held = this.permissions.get(roleId)
@@ -555,20 +568,30 @@ class FakeRoles implements RoleStore {
     return held.delete(permissionId)
   }
 
-  async nest(roleId: string, childRoleId: string, _audit?: ChangeAudit): Promise<boolean> {
+  async nest(
+    roleId: string,
+    childRoleId: string,
+    _scope?: Scope,
+    _audit?: ChangeAudit
+  ): Promise<boolean> {
     const held = this.nested.get(roleId)
     if (!held) return false
     held.add(childRoleId)
     return true
   }
 
-  async unnest(roleId: string, childRoleId: string, _audit?: ChangeAudit): Promise<boolean> {
+  async unnest(
+    roleId: string,
+    childRoleId: string,
+    _scope?: Scope,
+    _audit?: ChangeAudit
+  ): Promise<boolean> {
     const held = this.nested.get(roleId)
     if (!held) return false
     return held.delete(childRoleId)
   }
 
-  async descendants(roleId: string): Promise<string[]> {
+  async descendants(roleId: string, _scope?: Scope): Promise<string[]> {
     const keys: string[] = []
     const seen = new Set<string>()
     const walk = (id: string): void => {
@@ -584,7 +607,7 @@ class FakeRoles implements RoleStore {
     return keys
   }
 
-  async expand(roleId: string): Promise<string[]> {
+  async expand(roleId: string, _scope?: Scope): Promise<string[]> {
     const keys = new Set<string>()
     const ids = new Set<string>()
     const walk = (id: string): void => {
@@ -600,7 +623,7 @@ class FakeRoles implements RoleStore {
     return [...keys].sort()
   }
 
-  async countGrants(roleId: string): Promise<number> {
+  async countGrants(roleId: string, _scope?: Scope): Promise<number> {
     const role = this.rows.find((row) => row.id === roleId)
     if (!role || !this.grants) return 0
     return this.grants.rows.filter((row) => row.role === role.key).length

@@ -6,10 +6,10 @@
  * administration, and it is read by the decision of a principal.
  */
 
-import { withTenantScope } from './scope'
+import { withScope, withTenantScope } from './scope'
 import { auditedCte } from './audited'
 import type { SqlClient } from './database'
-import type { ChangeAudit } from '../../domains/administration'
+import type { ChangeAudit, Scope } from '../../domains/administration'
 
 /** The row of a group. */
 export interface GroupRow {
@@ -95,12 +95,22 @@ export class GroupRepository {
     return rows[0] ? toRow(rows[0]) : null
   }
 
-  /** The group of an id. */
-  async findById(id: string): Promise<GroupRow | null> {
-    const rows = await this.db.query<GroupRecord>(
-      `select ${COLUMNS} from groups join tenants on tenants.id = groups.tenant_id
+  /**
+   * The group of an id.
+   *
+   * The scope is the scope of the call: a group of another tenant is not
+   * a group the statement may read (spec §3.10).
+   */
+  async findById(id: string, scope: Scope): Promise<GroupRow | null> {
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<GroupRecord>(
+          `select ${COLUMNS} from groups join tenants on tenants.id = groups.tenant_id
        where groups.id = $1`,
-      [id]
+          [id]
+        )
     )
     return rows[0] ? toRow(rows[0]) : null
   }
@@ -165,15 +175,20 @@ export class GroupRepository {
   async create(input: NewGroup, audit?: ChangeAudit | null): Promise<GroupRow> {
     const params: unknown[] = [input.tenantId, input.key, input.displayName ?? null, input.members]
     const audited = auditedCte('inserted', params, audit)
-    const rows = await this.db.query<GroupRecord>(
-      `with inserted as (
+    const rows = await withTenantScope(
+      this.db,
+      input.tenantId,
+      async (client) =>
+        await client.query<GroupRecord>(
+          `with inserted as (
          insert into groups (tenant_id, key, display_name, members)
          values ($1, $2, $3, $4)
          returning id, tenant_id, key, display_name, members, created_at, updated_at
        )${audited}
        select inserted.*, tenants.slug as tenant_slug
        from inserted join tenants on tenants.id = inserted.tenant_id`,
-      params
+          params
+        )
     )
     return toRow(rows[0]!)
   }
@@ -191,6 +206,7 @@ export class GroupRepository {
   async update(
     id: string,
     input: { displayName?: string | null; members?: string[] },
+    scope: Scope,
     audit?: ChangeAudit | null
   ): Promise<GroupRow | null> {
     const assignments: string[] = []
@@ -215,14 +231,19 @@ export class GroupRepository {
     // parameters of the audit are always the last five.
     const idParam = params.length
     const audited = auditedCte('updated', params, audit)
-    const rows = await this.db.query<GroupRecord>(
-      `with updated as (
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<GroupRecord>(
+          `with updated as (
          update groups set ${assignments.join(', ')} where id = $${idParam}
          returning id, tenant_id, key, display_name, members, created_at, updated_at
        )${audited}
        select updated.*, tenants.slug as tenant_slug
        from updated join tenants on tenants.id = updated.tenant_id`,
-      params
+          params
+        )
     )
     return rows[0] ? toRow(rows[0]) : null
   }

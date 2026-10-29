@@ -12,6 +12,7 @@
  */
 
 import type { ChangeAudit } from './audit'
+import type { Scope } from './scope'
 
 /** A role of the policy. */
 export interface Role {
@@ -70,8 +71,13 @@ export interface RolePage {
 export interface RoleStore {
   /** The role of a key, in the scope of a tenant. */
   findByKey(tenantId: string, key: string): Promise<Role | null>
-  /** The role of an id. */
-  findById(id: string): Promise<Role | null>
+  /**
+   * The role of an id.
+   *
+   * The scope is the scope of the call: the role of another tenant is not
+   * a role the statement may read (spec §3.10).
+   */
+  findById(id: string, scope: Scope): Promise<Role | null>
   /** The roles that match a filter, and their number. */
   list(filter: RoleFilter): Promise<RolePage>
   /**
@@ -93,10 +99,11 @@ export interface RoleStore {
   update(
     id: string,
     changes: { displayName?: string | null; description?: string | null },
+    scope: Scope,
     audit: ChangeAudit
   ): Promise<Role | null>
   /** Removes a role, and writes the row of its audit with it. */
-  remove(id: string, audit: ChangeAudit): Promise<boolean>
+  remove(id: string, scope: Scope, audit: ChangeAudit): Promise<boolean>
   /**
    * Gives a permission to a role.
    *
@@ -104,13 +111,23 @@ export interface RoleStore {
    * key of the permission in the tenant, and creates it when it does not
    * exist.
    */
-  grantPermission(roleId: string, permissionId: string, audit: ChangeAudit): Promise<boolean>
+  grantPermission(
+    roleId: string,
+    permissionId: string,
+    scope: Scope,
+    audit: ChangeAudit
+  ): Promise<boolean>
   /** Takes a permission away from a role. */
-  revokePermission(roleId: string, permissionId: string, audit: ChangeAudit): Promise<boolean>
+  revokePermission(
+    roleId: string,
+    permissionId: string,
+    scope: Scope,
+    audit: ChangeAudit
+  ): Promise<boolean>
   /** Makes a role name another role. */
-  nest(roleId: string, childRoleId: string, audit: ChangeAudit): Promise<boolean>
+  nest(roleId: string, childRoleId: string, scope: Scope, audit: ChangeAudit): Promise<boolean>
   /** Makes a role name another role no more. */
-  unnest(roleId: string, childRoleId: string, audit: ChangeAudit): Promise<boolean>
+  unnest(roleId: string, childRoleId: string, scope: Scope, audit: ChangeAudit): Promise<boolean>
   /**
    * The keys of the roles the role names, the nested ones included.
    *
@@ -118,11 +135,11 @@ export interface RoleStore {
    * names itself holds itself forever, and the decision would never
    * answer.
    */
-  descendants(roleId: string): Promise<string[]>
+  descendants(roleId: string, scope: Scope): Promise<string[]>
   /**
    * The keys of the permissions the role holds, the nested ones included.
    */
-  expand(roleId: string): Promise<string[]>
+  expand(roleId: string, scope: Scope): Promise<string[]>
   /** The number of the grants that name the role. */
-  countGrants(roleId: string): Promise<number>
+  countGrants(roleId: string, scope: Scope): Promise<number>
 }

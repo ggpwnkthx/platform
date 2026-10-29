@@ -24,6 +24,7 @@ import {
 } from '../platform/redis/store'
 import type { AccessDependencies } from '../app/dependencies'
 import { createAdministrationService } from './adapters'
+import { platformScope } from '../domains/administration'
 import { createLogger, MetricsStore, type Logger, type Observer } from '../observability'
 import { startListener, type StartedListener } from '../platform/bun/listener'
 import {
@@ -215,7 +216,7 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
     },
     principals: {
       findById: async (id: string) => {
-        const principal = await repositories.users.findById(id)
+        const principal = await repositories.users.findById(id, platformScope())
         if (!principal) return null
         return {
           id: principal.id,
@@ -342,7 +343,7 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
     store: codeStore,
     principals: {
       findById: async (id: string) => {
-        const principal = await repositories.users.findById(id)
+        const principal = await repositories.users.findById(id, platformScope())
         if (!principal) return null
         return {
           id: principal.id,

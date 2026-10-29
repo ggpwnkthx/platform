@@ -67,7 +67,7 @@ A **modular monolith**: one process, one image, one database, four independent d
 
 **Flows.** Login follows §5.4. A decision (`POST /v1/decisions`) authenticates the gateway, runs one statement over users, tenants, grants, permissions and groups under `ACCESS_DECISION_TIMEOUT_MS`, and answers `{"allow", "reason"}`. A concept spanning three layers has three files: the HTTP **contract** (`src/app/decision-contract.ts`), the **rule** (`src/domains/authorization/decision.ts`) and the **facts** the rule reads (`src/platform/postgres/decision-facts.ts`). Storage never decides; the domain never sees SQL.
 
-**Data model** (§3). Every domain table carries `tenant_id`, and foreign keys are composite `(id, tenant_id)`, so the schema stops a grant naming another tenant's principal. Row level security scopes every statement by the transaction-local `access.tenant_id` (§3.10). Grants are the policy: permission, workspace, route, expiry. `admin_audit`, like the migrations table, is infrastructure and holds no domain row.
+**Data model** (§3). Every domain table carries `tenant_id`, and foreign keys are composite `(id, tenant_id)`, so the schema stops a grant naming another tenant's principal. Row level security scopes every statement by the transaction-local `access.scope` and `access.tenant_id`; a statement with no scope sees nothing, and the scope of the platform is asked for by name (§3.10). Grants are the policy: permission, workspace, route, expiry. `admin_audit`, like the migrations table, is infrastructure and holds no domain row.
 
 **Working rules**, beyond the [platform rules](../platform/internals.md#working-rules):
 

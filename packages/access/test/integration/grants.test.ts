@@ -6,6 +6,7 @@ import {
   UserRepository,
   type Database,
 } from '../../src/platform/postgres'
+import { tenantScope } from '../../src/domains/administration'
 import { seedPermission, seedTenant } from '../fixtures/tenant'
 import { openTestDatabase } from './database'
 
@@ -89,7 +90,7 @@ describe('the grants of Access', () => {
     const live = await grants.findLiveByUser(userId)
     expect(live.some((row) => row.id === created.id)).toBe(true)
 
-    await grants.revoke(created.id)
+    await grants.revoke(created.id, tenantScope(tenantId))
     const after = await grants.findLiveByUser(userId)
     expect(after.some((row) => row.id === created.id)).toBe(false)
   })
@@ -102,13 +103,13 @@ describe('the grants of Access', () => {
       permissionId,
       routeId: 'kept',
     })
-    const revoked = await grants.revoke(created.id)
+    const revoked = await grants.revoke(created.id, tenantScope(tenantId))
     expect(revoked?.revokedAt).toBeInstanceOf(Date)
-    const again = await grants.revoke(created.id)
+    const again = await grants.revoke(created.id, tenantScope(tenantId))
     expect(again?.revokedAt?.getTime()).toBe(revoked?.revokedAt?.getTime())
     // The row is kept: the history of the policy is worth more than the
     // bytes.
-    expect((await grants.findById(created.id))?.id).toBe(created.id)
+    expect((await grants.findById(created.id, tenantScope(tenantId)))?.id).toBe(created.id)
   })
 
   test('an expired grant is not live', async () => {
@@ -160,7 +161,10 @@ describe('the list of the grants', () => {
 
   test('the list is paginated and the order is stable', async () => {
     const permissions = new PermissionRepository(database)
-    const permission = await permissions.create({ tenantId, key: 'workspace.listed' })
+    const permission = await permissions.create(
+      { tenantId, key: 'workspace.listed' },
+      tenantScope(tenantId)
+    )
     for (let index = 0; index < 4; index += 1) {
       await grants.create({
         tenantId,
@@ -209,7 +213,10 @@ describe('the grants of a group', () => {
       displayName: 'The team of the integration',
       members: [member.id],
     })
-    const permission = await permissions.create({ tenantId, key: 'workspace.team' })
+    const permission = await permissions.create(
+      { tenantId, key: 'workspace.team' },
+      tenantScope(tenantId)
+    )
     const grant = await grants.create({
       tenantId,
       userId: null,
@@ -239,7 +246,7 @@ describe('the grants of a group', () => {
     const group = await groups.findByKey(tenantId, 'team-integration')
     expect(group).toBeTruthy()
 
-    const updated = await groups.update(group!.id, { members: [] })
+    const updated = await groups.update(group!.id, { members: [] }, tenantScope(tenantId))
     expect(updated?.members).toEqual([])
     const roles = await grants.findLivePermissionKeys(member.id)
     expect(roles).not.toContain('workspace.team')

@@ -29,8 +29,10 @@ import {
   type Role,
   type RoleFilter,
   type RoleStore,
+  type Scope,
   type TenantStore,
 } from '../domains/administration'
+import { scopeOf, tenantScope } from '../domains/administration'
 import {
   CHECK_VIOLATION,
   DatabaseError,
@@ -291,8 +293,8 @@ export function createAdministrationService(
   }
 
   const principalStore: PrincipalStore = {
-    findById: async (id) => {
-      const row = await run(async () => await dependencies.users.findById(id))
+    findById: async (id, scope) => {
+      const row = await run(async () => await dependencies.users.findById(id, scope))
       return row ? toPrincipal(row) : null
     },
     findByExternalSubject: async (tenantId, externalSubject) => {
@@ -305,8 +307,8 @@ export function createAdministrationService(
       const row = await run(async () => await dependencies.users.create(registration, audit))
       return toPrincipal(row)
     },
-    update: async (id, changes, audit) => {
-      const row = await run(async () => await dependencies.users.update(id, changes, audit))
+    update: async (id, changes, scope, audit) => {
+      const row = await run(async () => await dependencies.users.update(id, changes, scope, audit))
       return row ? toPrincipal(row) : null
     },
     list: async (filter: PrincipalFilter) => {
@@ -321,8 +323,10 @@ export function createAdministrationService(
   }
 
   const permissionStore: PermissionStore = {
-    findCataloguePermission: async (key) => {
-      const row = await run(async () => await dependencies.permissions.findCataloguePermission(key))
+    findCataloguePermission: async (key, scope) => {
+      const row = await run(
+        async () => await dependencies.permissions.findCataloguePermission(key, scope)
+      )
       return row ? toPermission(row) : null
     },
     findByTenantAndKey: async (tenantId, key) => {
@@ -331,16 +335,18 @@ export function createAdministrationService(
       )
       return row ? toPermission(row) : null
     },
-    findByKey: async (key) => {
-      const row = await run(async () => await dependencies.permissions.findByKey(key))
+    findByKey: async (key, scope) => {
+      const row = await run(async () => await dependencies.permissions.findByKey(key, scope))
       return row ? toPermission(row) : null
     },
-    create: async (registration) => {
-      const row = await run(async () => await dependencies.permissions.create(registration))
+    create: async (registration, scope) => {
+      const row = await run(async () => await dependencies.permissions.create(registration, scope))
       return toPermission(row)
     },
-    createOrFind: async (registration) => {
-      const row = await run(async () => await dependencies.permissions.createOrFind(registration))
+    createOrFind: async (registration, scope) => {
+      const row = await run(
+        async () => await dependencies.permissions.createOrFind(registration, scope)
+      )
       return toPermission(row)
     },
   }
@@ -352,9 +358,11 @@ export function createAdministrationService(
    * published as the external identities of the principals: the
    * translation is the work of the adapter.
    */
-  const membersOf = async (ids: string[]): Promise<string[]> => {
+  const membersOf = async (ids: string[], scope: Scope): Promise<string[]> => {
     if (ids.length === 0) return []
-    const rows = await run(async () => await dependencies.users.findExternalSubjectsByIds(ids))
+    const rows = await run(
+      async () => await dependencies.users.findExternalSubjectsByIds(ids, scope)
+    )
     return rows
   }
 
@@ -363,12 +371,15 @@ export function createAdministrationService(
         findByKey: async (tenantId, key) => {
           const row = await run(async () => await dependencies.groups!.findByKey(tenantId, key))
           if (!row) return null
-          return toGroup(row, await membersOf(row.members))
+          return toGroup(row, await membersOf(row.members, tenantScope(tenantId)))
         },
         list: async (filter: GroupFilter) => {
           const page = await run(async () => await dependencies.groups!.list(filter))
+          const scope = scopeOf(filter.tenantId)
           const groups = await Promise.all(
-            page.rows.map(async (row: GroupRow) => toGroup(row, await membersOf(row.members)))
+            page.rows.map(async (row: GroupRow) =>
+              toGroup(row, await membersOf(row.members, scope))
+            )
           )
           return {
             groups,
@@ -390,9 +401,9 @@ export function createAdministrationService(
                 audit
               )
           )
-          return toGroup(row, await membersOf(row.members))
+          return toGroup(row, await membersOf(row.members, tenantScope(registration.tenantId)))
         },
-        update: async (id, changes, audit) => {
+        update: async (id, changes, scope, audit) => {
           const row = await run(
             async () =>
               await dependencies.groups!.update(
@@ -401,11 +412,12 @@ export function createAdministrationService(
                   displayName: changes.displayName,
                   ...(changes.memberIds ? { members: changes.memberIds } : {}),
                 },
+                scope,
                 audit
               )
           )
           if (!row) return null
-          return toGroup(row, await membersOf(row.members))
+          return toGroup(row, await membersOf(row.members, scope))
         },
       }
     : undefined
@@ -416,8 +428,8 @@ export function createAdministrationService(
           const row = await run(async () => await dependencies.roles!.findByKey(tenantId, key))
           return row ? toRole(row) : null
         },
-        findById: async (id) => {
-          const row = await run(async () => await dependencies.roles!.findById(id))
+        findById: async (id, scope) => {
+          const row = await run(async () => await dependencies.roles!.findById(id, scope))
           return row ? toRole(row) : null
         },
         list: async (filter: RoleFilter) => {
@@ -444,44 +456,54 @@ export function createAdministrationService(
           )
           return toRole(row)
         },
-        update: async (id, changes, audit) => {
-          const row = await run(async () => await dependencies.roles!.update(id, changes, audit))
+        update: async (id, changes, scope, audit) => {
+          const row = await run(
+            async () => await dependencies.roles!.update(id, changes, scope, audit)
+          )
           return row ? toRole(row) : null
         },
-        remove: async (id, audit) => {
-          return await run(async () => await dependencies.roles!.remove(id, audit))
+        remove: async (id, scope, audit) => {
+          return await run(async () => await dependencies.roles!.remove(id, scope, audit))
         },
-        grantPermission: async (roleId, permissionId, audit) => {
+        grantPermission: async (roleId, permissionId, scope, audit) => {
           return await run(
-            async () => await dependencies.roles!.grantPermission(roleId, permissionId, audit)
+            async () =>
+              await dependencies.roles!.grantPermission(roleId, permissionId, scope, audit)
           )
         },
-        revokePermission: async (roleId, permissionId, audit) => {
+        revokePermission: async (roleId, permissionId, scope, audit) => {
           return await run(
-            async () => await dependencies.roles!.revokePermission(roleId, permissionId, audit)
+            async () =>
+              await dependencies.roles!.revokePermission(roleId, permissionId, scope, audit)
           )
         },
-        nest: async (roleId, childRoleId, audit) => {
-          return await run(async () => await dependencies.roles!.nest(roleId, childRoleId, audit))
+        nest: async (roleId, childRoleId, scope, audit) => {
+          return await run(
+            async () => await dependencies.roles!.nest(roleId, childRoleId, scope, audit)
+          )
         },
-        unnest: async (roleId, childRoleId, audit) => {
-          return await run(async () => await dependencies.roles!.unnest(roleId, childRoleId, audit))
+        unnest: async (roleId, childRoleId, scope, audit) => {
+          return await run(
+            async () => await dependencies.roles!.unnest(roleId, childRoleId, scope, audit)
+          )
         },
-        descendants: async (roleId) => {
-          return await run(async () => await dependencies.roles!.descendants(roleId))
+        descendants: async (roleId, scope) => {
+          return await run(async () => await dependencies.roles!.descendants(roleId, scope))
         },
-        expand: async (roleId) => {
-          return await run(async () => await dependencies.roles!.expandedPermissionsOf(roleId))
+        expand: async (roleId, scope) => {
+          return await run(
+            async () => await dependencies.roles!.expandedPermissionsOf(roleId, scope)
+          )
         },
-        countGrants: async (roleId) => {
-          return await run(async () => await dependencies.roles!.countGrants(roleId))
+        countGrants: async (roleId, scope) => {
+          return await run(async () => await dependencies.roles!.countGrants(roleId, scope))
         },
       }
     : undefined
 
   const grantStore: GrantStore = {
-    findById: async (id) => {
-      const row = await run(async () => await dependencies.grants.findById(id))
+    findById: async (id, scope) => {
+      const row = await run(async () => await dependencies.grants.findById(id, scope))
       return row ? toGrant(row) : null
     },
     findLive: async (tenantId, subject, permissionId, roleId, workspaceId, routeId) => {
@@ -502,12 +524,12 @@ export function createAdministrationService(
       const row = await run(async () => await dependencies.grants.create(registration, audit))
       return toGrant(row)
     },
-    update: async (id, changes, audit) => {
-      const row = await run(async () => await dependencies.grants.update(id, changes, audit))
+    update: async (id, changes, scope, audit) => {
+      const row = await run(async () => await dependencies.grants.update(id, changes, scope, audit))
       return row ? toGrant(row) : null
     },
-    revoke: async (id, audit) => {
-      const row = await run(async () => await dependencies.grants.revoke(id, audit))
+    revoke: async (id, scope, audit) => {
+      const row = await run(async () => await dependencies.grants.revoke(id, scope, audit))
       return row ? toGrant(row) : null
     },
     list: async (filter: GrantFilter) => {

@@ -19,6 +19,7 @@ export type {
   AuditStore,
   ChangeAudit,
 } from './audit'
+export { platformScope, scopeOf, tenantScope, type Scope } from './scope'
 export type { Grant, GrantFilter, GrantPage, GrantRegistration, GrantStore } from './grants'
 export type { Group, GroupFilter, GroupPage, GroupRegistration, GroupStore } from './groups'
 export type { Permission, PermissionStore } from './permissions'

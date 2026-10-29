@@ -7,6 +7,7 @@
  * to it.
  */
 
+import { tenantScope } from '../../src/domains/administration'
 import {
   PermissionRepository,
   TenantRepository,
@@ -146,6 +147,6 @@ export async function seedPermission(
   key: string = TEST_PERMISSION_KEY
 ): Promise<string> {
   const permissions = new PermissionRepository(database)
-  const permission = await permissions.create({ tenantId, key })
+  const permission = await permissions.create({ tenantId, key }, tenantScope(tenantId))
   return permission.id
 }

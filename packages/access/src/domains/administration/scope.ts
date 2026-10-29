@@ -10,7 +10,24 @@
 import type { AdminScope } from './credentials'
 import { AdministrationError } from './errors'
 import type { AdministrationOptions } from './options'
-import type { Tenant } from './ports'
+import type { Scope, Tenant } from './ports'
+import { scopeOf } from './ports'
+
+/**
+ * The scope of the statements of a call.
+ *
+ * The scope is the scope of the credential: a credential of a tenant may
+ * only act for that tenant, and the statements it causes may only touch
+ * the rows of that tenant. The scope of the platform is the scope of the
+ * operator of the platform (spec §3.10).
+ */
+export async function statementScope(
+  options: AdministrationOptions,
+  scope: AdminScope
+): Promise<Scope> {
+  const tenant = await tenantOf(options, scope, null)
+  return scopeOf(tenant ? tenant.id : null)
+}
 
 /**
  * Refuses a call that acts for a tenant the credential may not act for.

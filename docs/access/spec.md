@@ -300,12 +300,14 @@ A **production** environment must name a PostgreSQL server, because the embedded
 
 The application isolates tenants: the keys of the eight tables carry the tenant, a grant's foreign key refuses another tenant's principal, and every statement reads a tenant by its id.
 
-The database is the **backstop**. The eight tables have PostgreSQL row level security, with the statement's tenant as the policy:
+The database is the **backstop**. The eight tables have PostgreSQL row level security, and the scope of a statement is written in two settings, local to the transaction:
 
-- A statement **not** scoped to a tenant (the administration, decisions made with the deployment bearer token) sees the whole platform.
-- A statement **scoped** to a tenant sees that tenant's rows and nothing else. The scope is the setting `access.tenant_id`, local to the transaction, so a pooled connection never carries another request's scope.
+- `access.scope` names the kind of the scope and `access.tenant_id` names the tenant of it.
+- A statement in the scope of a **tenant** (`access.scope` is `tenant`) sees that tenant's rows and nothing else.
+- A statement in the scope of the **platform** (`access.scope` is `platform`) sees the whole platform. The scope of the platform is the scope of the registry of the tenants and of the operations of the operator of the platform; it is asked for by name.
+- A statement with **no scope** sees **nothing**. The scope of a statement is never the default: a statement that forgot its scope reads no row of a tenant, and the database refuses to let it write one.
 
-The **empty** scope is the platform scope. PostgreSQL reverts a local setting when its transaction ends but leaves the setting's placeholder on the session, so `access.tenant_id` is empty, not unset, on every connection that ran a scoped statement. Pooled connections are reused, so empty is their normal state, and platform statements see the platform on them.
+The scope of a statement is the scope of the credential that caused it: a credential of a tenant may only act for that tenant, and the statements it causes are confined to that tenant by the database itself. A pooled connection never carries another request's scope, because the settings are local to the transaction; PostgreSQL reverts them when the transaction ends and leaves their placeholder on the session, and the placeholder is the absence of a scope.
 
 A statement that forgets the tenant in its text is therefore refused by PostgreSQL itself, not only by code review.
 

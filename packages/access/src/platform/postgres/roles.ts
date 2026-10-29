@@ -11,10 +11,10 @@
  * a role that names itself would expand forever.
  */
 
-import { withTenantScope } from './scope'
+import { withScope, withTenantScope } from './scope'
 import { auditedCte } from './audited'
 import type { SqlClient } from './database'
-import type { ChangeAudit } from '../../domains/administration'
+import type { ChangeAudit, Scope } from '../../domains/administration'
 
 /** The row of a role. */
 export interface RoleRow {
@@ -110,12 +110,22 @@ function toRow(record: RoleRecord): RoleRow {
 export class RoleRepository {
   constructor(private readonly db: SqlClient) {}
 
-  /** The role of an id. */
-  async findById(id: string): Promise<RoleRow | null> {
-    const rows = await this.db.query<RoleRecord>(
-      `select ${COLUMNS} from roles join tenants on tenants.id = roles.tenant_id
+  /**
+   * The role of an id.
+   *
+   * The scope is the scope of the call: a role of another tenant is not a
+   * role the statement may read (spec §3.10).
+   */
+  async findById(id: string, scope: Scope): Promise<RoleRow | null> {
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<RoleRecord>(
+          `select ${COLUMNS} from roles join tenants on tenants.id = roles.tenant_id
        where roles.id = $1`,
-      [id]
+          [id]
+        )
     )
     return rows[0] ? toRow(rows[0]) : null
   }
@@ -199,8 +209,12 @@ export class RoleRepository {
       input.description ?? null,
     ]
     const audited = auditedCte('inserted', params, audit)
-    const rows = await this.db.query<RoleRecord>(
-      `with inserted as (
+    const rows = await withTenantScope(
+      this.db,
+      input.tenantId,
+      async (client) =>
+        await client.query<RoleRecord>(
+          `with inserted as (
          insert into roles (tenant_id, key, display_name, description)
          values ($1, $2, $3, $4)
          returning id, tenant_id, key, display_name, description, created_at, updated_at
@@ -208,7 +222,8 @@ export class RoleRepository {
        select inserted.*, tenants.slug as tenant_slug, '{}'::text[] as permission_keys,
          '{}'::text[] as role_keys
        from inserted join tenants on tenants.id = inserted.tenant_id`,
-      params
+          params
+        )
     )
     return toRow(rows[0]!)
   }
@@ -222,6 +237,7 @@ export class RoleRepository {
   async update(
     id: string,
     input: { displayName?: string | null; description?: string | null },
+    scope: Scope,
     audit?: ChangeAudit | null
   ): Promise<RoleRow | null> {
     const assignments: string[] = []
@@ -244,15 +260,20 @@ export class RoleRepository {
     params.push(id)
     const idParam = params.length
     const audited = auditedCte('updated', params, audit)
-    const rows = await this.db.query<RoleRecord>(
-      `with updated as (
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<RoleRecord>(
+          `with updated as (
          update roles set ${assignments.join(', ')} where id = $${idParam}
          returning id, tenant_id, key, display_name, description, created_at, updated_at
        )${audited}
        select updated.*, tenants.slug as tenant_slug, '{}'::text[] as permission_keys,
          '{}'::text[] as role_keys
        from updated join tenants on tenants.id = updated.tenant_id`,
-      params
+          params
+        )
     )
     return rows[0] ? toRow(rows[0]) : null
   }
@@ -265,27 +286,41 @@ export class RoleRepository {
    * role that no grant names is a removal of a name and of the
    * permissions it held.
    */
-  async remove(id: string, audit?: ChangeAudit | null): Promise<boolean> {
+  async remove(id: string, scope: Scope, audit?: ChangeAudit | null): Promise<boolean> {
     const params: unknown[] = [id]
     const audited = auditedCte('removed', params, audit)
-    const rows = await this.db.query<{ id: string }>(
-      `with removed as (
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<{ id: string }>(
+          `with removed as (
          delete from roles where id = $1 returning id
        )${audited}
        select id from removed`,
-      params
+          params
+        )
     )
     return rows.length > 0
   }
 
   /**
    * The permissions a role names, the ones it names directly.
+   *
+   * The scope is the scope of the call: the memberships of a role of
+   * another tenant are not memberships the statement may read
+   * (spec §3.10).
    */
-  async permissionsOf(roleId: string): Promise<string[]> {
-    const rows = await this.db.query<{ key: string }>(
-      `select p.key from role_permissions rp join permissions p on p.id = rp.permission_id
+  async permissionsOf(roleId: string, scope: Scope): Promise<string[]> {
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<{ key: string }>(
+          `select p.key from role_permissions rp join permissions p on p.id = rp.permission_id
        where rp.role_id = $1 order by p.key`,
-      [roleId]
+          [roleId]
+        )
     )
     return rows.map((row) => row.key)
   }
@@ -296,9 +331,13 @@ export class RoleRepository {
    * The closure is a recursive statement, and it is a `union`: a cycle
    * of the roles answers instead of expanding forever.
    */
-  async descendants(roleId: string): Promise<string[]> {
-    const rows = await this.db.query<{ key: string }>(
-      `with recursive descendants(role_id) as (
+  async descendants(roleId: string, scope: Scope): Promise<string[]> {
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<{ key: string }>(
+          `with recursive descendants(role_id) as (
          select rr.child_role_id from role_roles rr where rr.role_id = $1
          union
          select rr.child_role_id
@@ -308,7 +347,8 @@ export class RoleRepository {
        select distinct r.key
          from descendants d join roles r on r.id = d.role_id
         order by r.key`,
-      [roleId]
+          [roleId]
+        )
     )
     return rows.map((row) => row.key)
   }
@@ -321,9 +361,13 @@ export class RoleRepository {
    * of the roles would otherwise expand forever. The schema refuses a
    * cycle, and the statement answers in every case.
    */
-  async expandedPermissionsOf(roleId: string): Promise<string[]> {
-    const rows = await this.db.query<{ key: string }>(
-      `with recursive descendants(role_id) as (
+  async expandedPermissionsOf(roleId: string, scope: Scope): Promise<string[]> {
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<{ key: string }>(
+          `with recursive descendants(role_id) as (
          select rr.child_role_id from role_roles rr where rr.role_id = $1
          union
          select rr.child_role_id
@@ -336,7 +380,8 @@ export class RoleRepository {
         where rp.role_id = $1
            or rp.role_id in (select role_id from descendants)
         order by p.key`,
-      [roleId]
+          [roleId]
+        )
     )
     return rows.map((row) => row.key)
   }
@@ -351,19 +396,25 @@ export class RoleRepository {
   async grantPermission(
     roleId: string,
     permissionId: string,
+    scope: Scope,
     audit?: ChangeAudit | null
   ): Promise<boolean> {
     const params: unknown[] = [roleId, permissionId]
     const audited = auditedCte('granted', params, audit, 'role_id')
-    const rows = await this.db.query<{ role_id: string }>(
-      `with granted as (
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<{ role_id: string }>(
+          `with granted as (
          insert into role_permissions (tenant_id, role_id, permission_id)
          select roles.tenant_id, roles.id, $2 from roles where roles.id = $1
          on conflict do nothing
          returning role_id
        )${audited}
        select role_id from granted`,
-      params
+          params
+        )
     )
     return rows.length > 0
   }
@@ -377,17 +428,23 @@ export class RoleRepository {
   async revokePermission(
     roleId: string,
     permissionId: string,
+    scope: Scope,
     audit?: ChangeAudit | null
   ): Promise<boolean> {
     const params: unknown[] = [roleId, permissionId]
     const audited = auditedCte('revoked', params, audit, 'role_id')
-    const rows = await this.db.query<{ role_id: string }>(
-      `with revoked as (
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<{ role_id: string }>(
+          `with revoked as (
          delete from role_permissions where role_id = $1 and permission_id = $2
          returning role_id
        )${audited}
        select role_id from revoked`,
-      params
+          params
+        )
     )
     return rows.length > 0
   }
@@ -399,11 +456,20 @@ export class RoleRepository {
    * that names it. A cycle is refused by the schema: the statement
    * fails and nothing is written.
    */
-  async nest(roleId: string, childRoleId: string, audit?: ChangeAudit | null): Promise<boolean> {
+  async nest(
+    roleId: string,
+    childRoleId: string,
+    scope: Scope,
+    audit?: ChangeAudit | null
+  ): Promise<boolean> {
     const params: unknown[] = [roleId, childRoleId]
     const audited = auditedCte('nested', params, audit, 'role_id')
-    const rows = await this.db.query<{ role_id: string }>(
-      `with nested as (
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<{ role_id: string }>(
+          `with nested as (
          insert into role_roles (tenant_id, role_id, child_role_id)
          select parent.tenant_id, parent.id, child.id
            from roles parent join roles child on child.tenant_id = parent.tenant_id
@@ -412,7 +478,8 @@ export class RoleRepository {
          returning role_id
        )${audited}
        select role_id from nested`,
-      params
+          params
+        )
     )
     return rows.length > 0
   }
@@ -420,15 +487,25 @@ export class RoleRepository {
   /**
    * Makes a role name another role no more.
    */
-  async unnest(roleId: string, childRoleId: string, audit?: ChangeAudit | null): Promise<boolean> {
+  async unnest(
+    roleId: string,
+    childRoleId: string,
+    scope: Scope,
+    audit?: ChangeAudit | null
+  ): Promise<boolean> {
     const params: unknown[] = [roleId, childRoleId]
     const audited = auditedCte('unnested', params, audit, 'role_id')
-    const rows = await this.db.query<{ role_id: string }>(
-      `with unnested as (
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<{ role_id: string }>(
+          `with unnested as (
          delete from role_roles where role_id = $1 and child_role_id = $2 returning role_id
        )${audited}
        select role_id from unnested`,
-      params
+          params
+        )
     )
     return rows.length > 0
   }
@@ -440,15 +517,20 @@ export class RoleRepository {
    * ones the grants of the groups of the principal name.
    */
   async rolesOfUser(userId: string): Promise<RoleRow[]> {
-    const rows = await this.db.query<RoleRecord>(
-      `select distinct ${COLUMNS}
+    const rows = await withTenantScope(
+      this.db,
+      null,
+      async (client) =>
+        await client.query<RoleRecord>(
+          `select distinct ${COLUMNS}
          from grants g
          join roles on roles.id = g.role_id
          join tenants on tenants.id = roles.tenant_id
         where g.user_id = $1 and g.revoked_at is null
           and (g.expires_at is null or g.expires_at > now())
         order by roles.key`,
-      [userId]
+          [userId]
+        )
     )
     return rows.map(toRow)
   }
@@ -457,15 +539,20 @@ export class RoleRepository {
    * The roles the members of a group hold.
    */
   async rolesOfGroup(groupId: string): Promise<RoleRow[]> {
-    const rows = await this.db.query<RoleRecord>(
-      `select distinct ${COLUMNS}
+    const rows = await withTenantScope(
+      this.db,
+      null,
+      async (client) =>
+        await client.query<RoleRecord>(
+          `select distinct ${COLUMNS}
          from grants g
          join roles on roles.id = g.role_id
          join tenants on tenants.id = roles.tenant_id
         where g.group_id = $1 and g.revoked_at is null
           and (g.expires_at is null or g.expires_at > now())
         order by roles.key`,
-      [groupId]
+          [groupId]
+        )
     )
     return rows.map(toRow)
   }
@@ -476,10 +563,15 @@ export class RoleRepository {
    * A role that a grant names is not removed: the operator revokes the
    * grants first.
    */
-  async countGrants(roleId: string): Promise<number> {
-    const rows = await this.db.query<{ count: number }>(
-      `select count(*)::int as count from grants where role_id = $1`,
-      [roleId]
+  async countGrants(roleId: string, scope: Scope): Promise<number> {
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<{ count: number }>(
+          `select count(*)::int as count from grants where role_id = $1`,
+          [roleId]
+        )
     )
     return rows[0]?.count ?? 0
   }

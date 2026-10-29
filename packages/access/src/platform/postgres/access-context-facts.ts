@@ -14,6 +14,7 @@ import type {
   AccessContextRequest,
   AccessContextStore,
 } from '../../domains/authorization'
+import { withTenantScope } from './scope'
 import type { SqlClient } from './database'
 
 /** The row of the context, as the database holds it. */
@@ -126,12 +127,17 @@ export class AccessContextRepository implements AccessContextStore {
    * told nothing about the cause.
    */
   async context(request: AccessContextRequest): Promise<AccessContextFacts> {
-    const rows = await this.db.query<AccessContextRecord>(ACCESS_CONTEXT_SQL, [
-      request.subject,
+    const rows = await withTenantScope(
+      this.db,
       request.tenantId,
-      request.workspaceId,
-      request.routeId,
-    ])
+      async (client) =>
+        await client.query<AccessContextRecord>(ACCESS_CONTEXT_SQL, [
+          request.subject,
+          request.tenantId,
+          request.workspaceId,
+          request.routeId,
+        ])
+    )
     const row = rows[0]
     if (!row) {
       return {

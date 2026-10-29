@@ -11,6 +11,7 @@
  * for the caller that needs it.
  */
 
+import { withPlatformScope, withTenantScope } from './scope'
 import type { SqlClient } from './database'
 import { sameSecret } from '../../observability'
 import { SecretError, type SecretCipher } from './secrets'
@@ -195,54 +196,76 @@ export class TenantRepository {
 
   /** The tenant of an id. */
   async findById(id: string): Promise<TenantRow | null> {
-    const rows = await this.db.query<TenantRecord>(`select ${COLUMNS} from tenants where id = $1`, [
+    const rows = await withTenantScope(
+      this.db,
       id,
-    ])
+      async (client) =>
+        await client.query<TenantRecord>(`select ${COLUMNS} from tenants where id = $1`, [id])
+    )
     return rows[0] ? toRow(rows[0]) : null
   }
 
-  /** The tenant of a slug: the slug is the key of the row. */
+  /**
+   * The tenant of a slug: the slug is the key of the row.
+   *
+   * The registry of the tenants is read in the scope of the platform:
+   * the slug is not an id, and the tenant it names is not known before
+   * the statement answers (spec §3.10).
+   */
   async findBySlug(slug: string): Promise<TenantRow | null> {
-    const rows = await this.db.query<TenantRecord>(
-      `select ${COLUMNS} from tenants where slug = $1`,
-      [slug]
+    const rows = await withPlatformScope(
+      this.db,
+      async (client) =>
+        await client.query<TenantRecord>(`select ${COLUMNS} from tenants where slug = $1`, [slug])
     )
     return rows[0] ? toRow(rows[0]) : null
   }
 
   /** The tenant of a client id of a gateway. */
   async findByClientId(clientId: string): Promise<TenantRow | null> {
-    const rows = await this.db.query<TenantRecord>(
-      `select ${COLUMNS} from tenants where client_id = $1`,
-      [clientId]
+    const rows = await withPlatformScope(
+      this.db,
+      async (client) =>
+        await client.query<TenantRecord>(`select ${COLUMNS} from tenants where client_id = $1`, [
+          clientId,
+        ])
     )
     return rows[0] ? toRow(rows[0]) : null
   }
 
   /** The tenant of an e-mail domain: the domain is a hint, never a key. */
   async findByEmailDomain(emailDomain: string): Promise<TenantRow | null> {
-    const rows = await this.db.query<TenantRecord>(
-      `select ${COLUMNS} from tenants where email_domain = $1`,
-      [emailDomain]
+    const rows = await withPlatformScope(
+      this.db,
+      async (client) =>
+        await client.query<TenantRecord>(`select ${COLUMNS} from tenants where email_domain = $1`, [
+          emailDomain,
+        ])
     )
     return rows[0] ? toRow(rows[0]) : null
   }
 
   /** The tenant that is the default of the platform. */
   async findDefault(): Promise<TenantRow | null> {
-    const rows = await this.db.query<TenantRecord>(
-      `select ${COLUMNS} from tenants where is_default limit 1`
+    const rows = await withPlatformScope(
+      this.db,
+      async (client) =>
+        await client.query<TenantRecord>(`select ${COLUMNS} from tenants where is_default limit 1`)
     )
     return rows[0] ? toRow(rows[0]) : null
   }
 
   /** The tenants of the platform, with their numbers. */
   async list(): Promise<TenantSummary[]> {
-    const rows = await this.db.query<TenantRecord & { user_count: number; grant_count: number }>(
-      `select ${COLUMNS},
+    const rows = await withPlatformScope(
+      this.db,
+      async (client) =>
+        await client.query<TenantRecord & { user_count: number; grant_count: number }>(
+          `select ${COLUMNS},
          (select count(*) from users where users.tenant_id = tenants.id)::int as user_count,
          (select count(*) from grants where grants.tenant_id = tenants.id)::int as grant_count
        from tenants order by slug`
+        )
     )
     return rows.map((row) => ({
       ...toRow(row),
@@ -278,8 +301,11 @@ export class TenantRepository {
       input.enabled ?? true,
     ]
     const audited = auditedCte('inserted', params, audit)
-    const rows = await this.db.query<TenantRecord>(
-      `with inserted as (
+    const rows = await withPlatformScope(
+      this.db,
+      async (client) =>
+        await client.query<TenantRecord>(
+          `with inserted as (
          insert into tenants (slug, display_name, idp_issuer, idp_client_id, idp_client_secret,
            idp_redirect_uri, idp_scopes, idp_algorithms, email_domain, client_id, client_secret,
            client_redirect_uris, auto_provision, shared_client, is_default, enabled)
@@ -287,7 +313,8 @@ export class TenantRepository {
          returning ${COLUMNS}
        )${audited}
        select ${COLUMNS} from inserted`,
-      params
+          params
+        )
     )
     return toRow(rows[0]!)
   }
@@ -306,75 +333,82 @@ export class TenantRepository {
     input: TenantUpdate,
     audit?: ChangeAudit | null
   ): Promise<TenantRow | null> {
-    const assignments: string[] = []
-    const params: unknown[] = []
-    const set = (column: string, value: unknown): void => {
-      params.push(value)
-      assignments.push(`${column} = $${params.length}`)
-    }
-    if (input.displayName !== undefined) set('display_name', input.displayName)
-    if (input.issuer !== undefined) set('idp_issuer', input.issuer)
-    if (input.idpClientId !== undefined) set('idp_client_id', input.idpClientId)
-    if (input.idpClientSecret !== undefined) {
-      set('idp_client_secret', this.encrypted(input.idpClientSecret))
-    }
-    if (input.idpRedirectUri !== undefined) set('idp_redirect_uri', input.idpRedirectUri)
-    if (input.idpScopes !== undefined) set('idp_scopes', input.idpScopes)
-    if (input.idpAlgorithms !== undefined) set('idp_algorithms', input.idpAlgorithms)
-    if (input.emailDomain !== undefined) set('email_domain', input.emailDomain)
-    if (input.clientId !== undefined) set('client_id', input.clientId)
-    if (input.clientRedirectUris !== undefined) {
-      set('client_redirect_uris', input.clientRedirectUris)
-    }
-    if (input.clientSecret !== undefined) {
-      // The secret that is replaced is kept for the window of the
-      // rotation: the two secrets are accepted until the window is over,
-      // and the rotation is then a rolling change (spec §4.3).
-      //
-      // A call that presents the secret that is already in use is not a
-      // rotation: the window of the rotation that is in flight is not
-      // closed by an unrelated change of the tenant.
-      const current = await this.readGatewaySecret(id)
-      if (current && !sameSecret(input.clientSecret, current)) {
-        set('previous_client_secret', this.encrypted(current))
-        set('previous_client_secret_until', new Date(Date.now() + SECRET_ROTATION_WINDOW_MS))
+    return await withTenantScope(this.db, id, async (client) => {
+      const assignments: string[] = []
+      const params: unknown[] = []
+      const set = (column: string, value: unknown): void => {
+        params.push(value)
+        assignments.push(`${column} = $${params.length}`)
       }
-      set('client_secret', this.encrypted(input.clientSecret))
-    }
-    if (input.autoProvision !== undefined) set('auto_provision', input.autoProvision)
-    if (input.sharedClient !== undefined) set('shared_client', input.sharedClient)
-    if (input.isDefault !== undefined) set('is_default', input.isDefault)
-    if (input.enabled !== undefined) set('enabled', input.enabled)
-    if (assignments.length === 0) {
-      // The call changed nothing, but it is still a call of the
-      // administration: the row is rewritten with the values it has, so
-      // that the row of the audit is written by the same statement as
-      // the row it names.
-      assignments.push('id = id')
-    } else {
-      set('updated_at', new Date())
-    }
-    params.push(id)
-    // The number of the id is read before the audit is appended: the
-    // parameters of the audit are always the last five.
-    const idParam = params.length
-    const audited = auditedCte('updated', params, audit)
-    const rows = await this.db.query<TenantRecord>(
-      `with updated as (
+      if (input.displayName !== undefined) set('display_name', input.displayName)
+      if (input.issuer !== undefined) set('idp_issuer', input.issuer)
+      if (input.idpClientId !== undefined) set('idp_client_id', input.idpClientId)
+      if (input.idpClientSecret !== undefined) {
+        set('idp_client_secret', this.encrypted(input.idpClientSecret))
+      }
+      if (input.idpRedirectUri !== undefined) set('idp_redirect_uri', input.idpRedirectUri)
+      if (input.idpScopes !== undefined) set('idp_scopes', input.idpScopes)
+      if (input.idpAlgorithms !== undefined) set('idp_algorithms', input.idpAlgorithms)
+      if (input.emailDomain !== undefined) set('email_domain', input.emailDomain)
+      if (input.clientId !== undefined) set('client_id', input.clientId)
+      if (input.clientRedirectUris !== undefined) {
+        set('client_redirect_uris', input.clientRedirectUris)
+      }
+      if (input.clientSecret !== undefined) {
+        // The secret that is replaced is kept for the window of the
+        // rotation: the two secrets are accepted until the window is over,
+        // and the rotation is then a rolling change (spec §4.3).
+        //
+        // A call that presents the secret that is already in use is not a
+        // rotation: the window of the rotation that is in flight is not
+        // closed by an unrelated change of the tenant.
+        const current = await this.gatewaySecretOf(client, id)
+        if (current && !sameSecret(input.clientSecret, current)) {
+          set('previous_client_secret', this.encrypted(current))
+          set('previous_client_secret_until', new Date(Date.now() + SECRET_ROTATION_WINDOW_MS))
+        }
+        set('client_secret', this.encrypted(input.clientSecret))
+      }
+      if (input.autoProvision !== undefined) set('auto_provision', input.autoProvision)
+      if (input.sharedClient !== undefined) set('shared_client', input.sharedClient)
+      if (input.isDefault !== undefined) set('is_default', input.isDefault)
+      if (input.enabled !== undefined) set('enabled', input.enabled)
+      if (assignments.length === 0) {
+        // The call changed nothing, but it is still a call of the
+        // administration: the row is rewritten with the values it has, so
+        // that the row of the audit is written by the same statement as
+        // the row it names.
+        assignments.push('id = id')
+      } else {
+        set('updated_at', new Date())
+      }
+      params.push(id)
+      // The number of the id is read before the audit is appended: the
+      // parameters of the audit are always the last five.
+      const idParam = params.length
+      const audited = auditedCte('updated', params, audit)
+      const rows = await client.query<TenantRecord>(
+        `with updated as (
          update tenants set ${assignments.join(', ')} where id = $${idParam}
          returning ${COLUMNS}
        )${audited}
        select ${COLUMNS} from updated`,
-      params
-    )
-    return rows[0] ? toRow(rows[0]) : null
+        params
+      )
+      return rows[0] ? toRow(rows[0]) : null
+    })
   }
 
   /** The client secret of Access at the provider, in clear. */
   async readProviderSecret(id: string): Promise<string | null> {
-    const rows = await this.db.query<{ idp_client_secret: Uint8Array }>(
-      `select idp_client_secret from tenants where id = $1`,
-      [id]
+    const rows = await withTenantScope(
+      this.db,
+      id,
+      async (client) =>
+        await client.query<{ idp_client_secret: Uint8Array }>(
+          `select idp_client_secret from tenants where id = $1`,
+          [id]
+        )
     )
     const stored = rows[0]?.idp_client_secret
     if (!stored) return null
@@ -383,7 +417,19 @@ export class TenantRepository {
 
   /** The secret of the gateway of the tenant, in clear. */
   async readGatewaySecret(id: string): Promise<string | null> {
-    const rows = await this.db.query<{ client_secret: Uint8Array }>(
+    return await withTenantScope(
+      this.db,
+      id,
+      async (client) => await this.gatewaySecretOf(client, id)
+    )
+  }
+
+  /**
+   * The secret of the gateway of the tenant, in clear, on a connection
+   * that already carries the scope of the tenant.
+   */
+  private async gatewaySecretOf(client: SqlClient, id: string): Promise<string | null> {
+    const rows = await client.query<{ client_secret: Uint8Array }>(
       `select client_secret from tenants where id = $1`,
       [id]
     )
@@ -401,14 +447,19 @@ export class TenantRepository {
    * does it (spec §8.8).
    */
   async readGatewaySecrets(id: string): Promise<GatewaySecrets> {
-    const rows = await this.db.query<{
-      client_secret: Uint8Array
-      previous_client_secret: Uint8Array | null
-      previous_client_secret_until: Date | null
-    }>(
-      `select client_secret, previous_client_secret, previous_client_secret_until
+    const rows = await withTenantScope(
+      this.db,
+      id,
+      async (client) =>
+        await client.query<{
+          client_secret: Uint8Array
+          previous_client_secret: Uint8Array | null
+          previous_client_secret_until: Date | null
+        }>(
+          `select client_secret, previous_client_secret, previous_client_secret_until
          from tenants where id = $1`,
-      [id]
+          [id]
+        )
     )
     const row = rows[0]
     if (!row) return { current: null, previous: null, previousUntil: null }

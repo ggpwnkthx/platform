@@ -7,6 +7,7 @@ import {
   UserRepository,
   type Database,
 } from '../../src/platform/postgres'
+import { tenantScope } from '../../src/domains/administration'
 import { seedTenant } from '../fixtures/tenant'
 import { openTestDatabase } from './database'
 
@@ -33,8 +34,12 @@ beforeAll(async () => {
   tenantId = seeded.tenantId
   userId = seeded.userId as string
   const permissions = new PermissionRepository(database)
-  permissionId = (await permissions.create({ tenantId, key: 'workspace.read' })).id
-  secondPermissionId = (await permissions.create({ tenantId, key: 'workspace.write' })).id
+  permissionId = (
+    await permissions.create({ tenantId, key: 'workspace.read' }, tenantScope(tenantId))
+  ).id
+  secondPermissionId = (
+    await permissions.create({ tenantId, key: 'workspace.write' }, tenantScope(tenantId))
+  ).id
 })
 
 afterAll(async () => {
@@ -45,48 +50,56 @@ describe('the roles of Access', () => {
   test('a role holds the permission it is given', async () => {
     const roles = new RoleRepository(database)
     const role = await roles.create({ tenantId, key: 'role-reader' })
-    await roles.grantPermission(role.id, permissionId)
-    expect(await roles.permissionsOf(role.id)).toEqual(['workspace.read'])
-    expect(await roles.expandedPermissionsOf(role.id)).toEqual(['workspace.read'])
+    await roles.grantPermission(role.id, permissionId, tenantScope(tenantId))
+    expect(await roles.permissionsOf(role.id, tenantScope(tenantId))).toEqual(['workspace.read'])
+    expect(await roles.expandedPermissionsOf(role.id, tenantScope(tenantId))).toEqual([
+      'workspace.read',
+    ])
   })
 
   test('a role holds the permissions of the role it names', async () => {
     const roles = new RoleRepository(database)
     const editor = await roles.create({ tenantId, key: 'role-editor' })
-    await roles.grantPermission(editor.id, secondPermissionId)
+    await roles.grantPermission(editor.id, secondPermissionId, tenantScope(tenantId))
     const chief = await roles.create({ tenantId, key: 'role-chief' })
-    await roles.nest(chief.id, editor.id)
-    expect(await roles.descendants(chief.id)).toEqual(['role-editor'])
-    expect(await roles.expandedPermissionsOf(chief.id)).toEqual(['workspace.write'])
+    await roles.nest(chief.id, editor.id, tenantScope(tenantId))
+    expect(await roles.descendants(chief.id, tenantScope(tenantId))).toEqual(['role-editor'])
+    expect(await roles.expandedPermissionsOf(chief.id, tenantScope(tenantId))).toEqual([
+      'workspace.write',
+    ])
   })
 
   test('the nesting is transitive', async () => {
     const roles = new RoleRepository(database)
     const reader = await roles.create({ tenantId, key: 'role-transitive-reader' })
-    await roles.grantPermission(reader.id, permissionId)
+    await roles.grantPermission(reader.id, permissionId, tenantScope(tenantId))
     const editor = await roles.create({ tenantId, key: 'role-transitive-editor' })
-    await roles.nest(editor.id, reader.id)
+    await roles.nest(editor.id, reader.id, tenantScope(tenantId))
     const chief = await roles.create({ tenantId, key: 'role-transitive-chief' })
-    await roles.nest(chief.id, editor.id)
-    expect(await roles.expandedPermissionsOf(chief.id)).toEqual(['workspace.read'])
+    await roles.nest(chief.id, editor.id, tenantScope(tenantId))
+    expect(await roles.expandedPermissionsOf(chief.id, tenantScope(tenantId))).toEqual([
+      'workspace.read',
+    ])
   })
 
   test('a cycle of the roles is refused by the database', async () => {
     const roles = new RoleRepository(database)
     const first = await roles.create({ tenantId, key: 'role-cycle-first' })
     const second = await roles.create({ tenantId, key: 'role-cycle-second' })
-    await roles.nest(first.id, second.id)
+    await roles.nest(first.id, second.id, tenantScope(tenantId))
     // The first role names the second one, and the second one may not
     // name the first one: the check is deferred to the end of the
     // transaction, and the statement that writes it fails.
-    await expect(roles.nest(second.id, first.id)).rejects.toThrow(/names a role that names it back/)
+    await expect(roles.nest(second.id, first.id, tenantScope(tenantId))).rejects.toThrow(
+      /names a role that names it back/
+    )
   })
 
   test('a grant of a role holds the role for the principal', async () => {
     const roles = new RoleRepository(database)
     const grants = new GrantRepository(database)
     const role = await roles.create({ tenantId, key: 'role-granted' })
-    await roles.grantPermission(role.id, permissionId)
+    await roles.grantPermission(role.id, permissionId, tenantScope(tenantId))
     const grant = await grants.create({
       tenantId,
       userId,
@@ -116,7 +129,7 @@ describe('the roles of Access', () => {
       externalSubject: 'the-subject-of-a-role',
     })
     const role = await roles.create({ tenantId, key: 'role-decided' })
-    await roles.grantPermission(role.id, permissionId)
+    await roles.grantPermission(role.id, permissionId, tenantScope(tenantId))
     await grants.create({
       tenantId,
       userId: principal.id,
@@ -142,7 +155,7 @@ describe('the roles of Access', () => {
       externalSubject: 'the-subject-of-the-keys',
     })
     const role = await roles.create({ tenantId, key: 'role-of-the-keys' })
-    await roles.grantPermission(role.id, secondPermissionId)
+    await roles.grantPermission(role.id, secondPermissionId, tenantScope(tenantId))
     await grants.create({
       tenantId,
       userId: principal.id,

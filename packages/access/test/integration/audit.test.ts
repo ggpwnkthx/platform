@@ -7,6 +7,7 @@ import {
   createSecretCipher,
   type Database,
 } from '../../src/platform/postgres'
+import { tenantScope } from '../../src/domains/administration'
 import { seedPermission, seedTenant } from '../fixtures/tenant'
 import { openTestDatabase } from './database'
 
@@ -149,6 +150,7 @@ describe('the audit of the administration', () => {
         grants.update(
           created.id,
           { expiresAt: new Date('2030-01-01T00:00:00.000Z') },
+          tenantScope(tenantId),
           {
             ...AUDIT,
             action: 'grant.updated',
@@ -182,7 +184,7 @@ describe('the audit of the administration', () => {
     )
     await withFailingAudit('grant.revoked', async () => {
       await expect(
-        grants.revoke(created.id, { ...AUDIT, action: 'grant.revoked' })
+        grants.revoke(created.id, tenantScope(tenantId), { ...AUDIT, action: 'grant.revoked' })
       ).rejects.toThrow()
     })
     const rows = await database.query<{ revoked_at: Date | null }>(
@@ -260,12 +262,12 @@ describe('the audit of the administration', () => {
     )
     // The change carries no field: the row of the principal keeps its
     // values, and the row of the audit is written all the same.
-    await users.update(userId, {}, { ...AUDIT, action: 'principal.updated' })
+    await users.update(userId, {}, tenantScope(tenantId), { ...AUDIT, action: 'principal.updated' })
     const after = await database.query<{ count: number }>(
       `select count(*)::int as count from admin_audit`
     )
     expect(after[0]!.count).toBe(before[0]!.count + 1)
-    const principal = await users.findById(userId)
+    const principal = await users.findById(userId, tenantScope(tenantId))
     expect(principal?.externalSubject).toBe('the-subject')
   })
 })

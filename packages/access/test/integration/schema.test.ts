@@ -81,6 +81,7 @@ describe('the schema of Access', () => {
       '0010_group_membership.sql',
       '0011_roles.sql',
       '0012_roles_scope.sql',
+      '0013_explicit_scope.sql',
     ])
 
     const second = await runMigrations({
@@ -102,6 +103,7 @@ describe('the schema of Access', () => {
       '0010_group_membership.sql',
       '0011_roles.sql',
       '0012_roles_scope.sql',
+      '0013_explicit_scope.sql',
     ])
   })
 
@@ -136,18 +138,17 @@ describe('the schema of Access', () => {
     expect(rows.map((row) => row.table_name)).toEqual([MIGRATIONS_TABLE, AUDIT_TABLE])
   })
 
-  test('the empty scope is the scope of the platform in every policy', async () => {
-    // The setting of the scope leaves its **placeholder** on a session
-    // that has run a scoped statement: `current_setting(…)` answers `''`
-    // and not `null` there. A policy that reads `current_setting(…)
-    // is null` treats every row of the platform as invisible on such a
-    // connection, and the write is refused (spec §3.10).
+  test('the scope of a statement is explicit in every policy', async () => {
+    // The scope of a statement is written in two settings: `access.scope`
+    // names the kind of the scope and `access.tenant_id` names the
+    // tenant of it. A statement that was not given a scope sees nothing
+    // (spec §3.10).
     //
     // The test reads the policies of the domain tables and holds that
-    // every one of them reads the empty scope as the platform. It is the
-    // guard of a table that is added to the model: a policy written with
-    // the other form breaks the administration of the platform on the
-    // second call, on the connection of the pool that served the first.
+    // every one of them names the scope of the platform and the tenant
+    // of the scope. It is the guard of a table that is added to the
+    // model: a policy that reads the absence of the scope as the
+    // platform lets a statement that forgot its scope read every tenant.
     const rows = await database.query<{ tablename: string; qual: string | null }>(
       `select tablename, qual from pg_policies
         where schemaname = current_schema()
@@ -157,8 +158,17 @@ describe('the schema of Access', () => {
     )
     expect(rows.length).toBe(8)
     const wrong = rows.filter((row) => {
-      const qual = (row.qual ?? '').toLowerCase().replace(/\s+/g, '')
-      return !qual.includes('nullif(current_setting(')
+      // PostgreSQL stores the casts of the settings in the policy: they
+      // are removed before the policy is read, so that the form of the
+      // test is the form of the migration.
+      const qual = (row.qual ?? '')
+        .toLowerCase()
+        .replace(/::text/g, '')
+        .replace(/\s+/g, '')
+      return (
+        !qual.includes("current_setting('access.scope',true)='platform'") ||
+        !qual.includes("nullif(current_setting('access.tenant_id',true),'')")
+      )
     })
     expect(wrong.map((row) => row.tablename)).toEqual([])
   })

@@ -6,8 +6,9 @@
  * every tenant; a permission of a tenant belongs to that tenant only.
  */
 
-import { withTenantScope } from './scope'
+import { withScope, withTenantScope } from './scope'
 import type { SqlClient } from './database'
+import type { Scope } from '../../domains/administration'
 
 /** The row of a permission. */
 export interface PermissionRow {
@@ -55,19 +56,33 @@ export class PermissionRepository {
   constructor(private readonly db: SqlClient) {}
 
   /** The permission of an id. */
-  async findById(id: string): Promise<PermissionRow | null> {
-    const rows = await this.db.query<PermissionRecord>(
-      `select ${COLUMNS} from permissions where id = $1`,
-      [id]
+  async findById(id: string, scope: Scope): Promise<PermissionRow | null> {
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<PermissionRecord>(`select ${COLUMNS} from permissions where id = $1`, [
+          id,
+        ])
     )
     return rows[0] ? toRow(rows[0]) : null
   }
 
-  /** The permission of the catalogue of the platform. */
-  async findCataloguePermission(key: string): Promise<PermissionRow | null> {
-    const rows = await this.db.query<PermissionRecord>(
-      `select ${COLUMNS} from permissions where tenant_id is null and key = $1`,
-      [key]
+  /**
+   * The permission of the catalogue of the platform.
+   *
+   * The catalogue is shared by every tenant: the statement reads it in
+   * the scope of the call (spec §3.10).
+   */
+  async findCataloguePermission(key: string, scope: Scope): Promise<PermissionRow | null> {
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<PermissionRecord>(
+          `select ${COLUMNS} from permissions where tenant_id is null and key = $1`,
+          [key]
+        )
     )
     return rows[0] ? toRow(rows[0]) : null
   }
@@ -87,10 +102,15 @@ export class PermissionRepository {
   }
 
   /** The permission of a key, whatever the tenant that owns it. */
-  async findByKey(key: string): Promise<PermissionRow | null> {
-    const rows = await this.db.query<PermissionRecord>(
-      `select ${COLUMNS} from permissions where key = $1 order by tenant_id nulls first limit 1`,
-      [key]
+  async findByKey(key: string, scope: Scope): Promise<PermissionRow | null> {
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<PermissionRecord>(
+          `select ${COLUMNS} from permissions where key = $1 order by tenant_id nulls first limit 1`,
+          [key]
+        )
     )
     return rows[0] ? toRow(rows[0]) : null
   }
@@ -104,18 +124,23 @@ export class PermissionRepository {
    * the second one. The conflict is resolved by the statement itself,
    * and the row that is already there is read back.
    */
-  async createOrFind(input: NewPermission): Promise<PermissionRow> {
-    const rows = await this.db.query<PermissionRecord>(
-      `insert into permissions (tenant_id, key, description)
+  async createOrFind(input: NewPermission, scope: Scope): Promise<PermissionRow> {
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<PermissionRecord>(
+          `insert into permissions (tenant_id, key, description)
        values ($1, $2, $3)
        on conflict (coalesce(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid), key) do nothing
        returning ${COLUMNS}`,
-      [input.tenantId ?? null, input.key, input.description ?? null]
+          [input.tenantId ?? null, input.key, input.description ?? null]
+        )
     )
     if (rows[0]) return toRow(rows[0])
     const existing = input.tenantId
       ? await this.findByTenantAndKey(input.tenantId, input.key)
-      : await this.findCataloguePermission(input.key)
+      : await this.findCataloguePermission(input.key, scope)
     if (!existing) {
       throw new Error(`the permission ${input.key} could not be created and could not be read`)
     }
@@ -124,27 +149,42 @@ export class PermissionRepository {
 
   /** The permissions of a tenant, and the ones of the catalogue. */
   async findByTenant(tenantId: string): Promise<PermissionRow[]> {
-    const rows = await this.db.query<PermissionRecord>(
-      `select ${COLUMNS} from permissions where tenant_id = $1 or tenant_id is null order by key`,
-      [tenantId]
+    const rows = await withTenantScope(
+      this.db,
+      tenantId,
+      async (client) =>
+        await client.query<PermissionRecord>(
+          `select ${COLUMNS} from permissions where tenant_id = $1 or tenant_id is null order by key`,
+          [tenantId]
+        )
     )
     return rows.map(toRow)
   }
 
   /** Creates a permission. */
-  async create(input: NewPermission): Promise<PermissionRow> {
-    const rows = await this.db.query<PermissionRecord>(
-      `insert into permissions (tenant_id, key, description) values ($1, $2, $3) returning ${COLUMNS}`,
-      [input.tenantId ?? null, input.key, input.description ?? null]
+  async create(input: NewPermission, scope: Scope): Promise<PermissionRow> {
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<PermissionRecord>(
+          `insert into permissions (tenant_id, key, description) values ($1, $2, $3) returning ${COLUMNS}`,
+          [input.tenantId ?? null, input.key, input.description ?? null]
+        )
     )
     return toRow(rows[0]!)
   }
 
   /** Enables or disables a permission: a disabled permission is never given. */
-  async setEnabled(id: string, enabled: boolean): Promise<PermissionRow | null> {
-    const rows = await this.db.query<PermissionRecord>(
-      `update permissions set enabled = $1 where id = $2 returning ${COLUMNS}`,
-      [enabled, id]
+  async setEnabled(id: string, enabled: boolean, scope: Scope): Promise<PermissionRow | null> {
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<PermissionRecord>(
+          `update permissions set enabled = $1 where id = $2 returning ${COLUMNS}`,
+          [enabled, id]
+        )
     )
     return rows[0] ? toRow(rows[0]) : null
   }

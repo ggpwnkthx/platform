@@ -11,10 +11,10 @@
  * statement of the same query.
  */
 
-import { withTenantScope } from './scope'
+import { withScope, withTenantScope } from './scope'
 import { auditedCte } from './audited'
 import type { SqlClient } from './database'
-import type { ChangeAudit } from '../../domains/administration'
+import type { ChangeAudit, Scope } from '../../domains/administration'
 
 /** The row of a grant. */
 export interface GrantRow {
@@ -177,11 +177,18 @@ function listConditions(filter: GrantListFilter): { where: string; params: unkno
 export class GrantRepository {
   constructor(private readonly db: SqlClient) {}
 
-  /** The grant of an id. */
-  async findById(id: string): Promise<GrantRow | null> {
-    const rows = await this.db.query<GrantRecord>(
-      `select ${COLUMNS} ${JOINS} where grants.id = $1`,
-      [id]
+  /**
+   * The grant of an id.
+   *
+   * The scope is the scope of the call: a grant of another tenant is not
+   * a grant the statement may read (spec §3.10).
+   */
+  async findById(id: string, scope: Scope): Promise<GrantRow | null> {
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<GrantRecord>(`select ${COLUMNS} ${JOINS} where grants.id = $1`, [id])
     )
     return rows[0] ? toRow(rows[0]) : null
   }
@@ -231,13 +238,18 @@ export class GrantRepository {
    * permission that the group holds is a permission of every member.
    */
   async findLiveByUser(userId: string): Promise<GrantRow[]> {
-    const rows = await this.db.query<GrantRecord>(
-      `select ${COLUMNS} ${JOINS}
+    const rows = await withTenantScope(
+      this.db,
+      null,
+      async (client) =>
+        await client.query<GrantRecord>(
+          `select ${COLUMNS} ${JOINS}
        where (grants.user_id = $1 or (grants.group_id is not null and groups.members @> array[$1::uuid]))
          and grants.revoked_at is null
          and (grants.expires_at is null or grants.expires_at > now())
        order by grants.created_at`,
-      [userId]
+          [userId]
+        )
     )
     return rows.map(toRow)
   }
@@ -254,8 +266,12 @@ export class GrantRepository {
    * forever.
    */
   async findLivePermissionKeys(userId: string): Promise<string[]> {
-    const rows = await this.db.query<{ key: string }>(
-      `with recursive held_roles as (
+    const rows = await withTenantScope(
+      this.db,
+      null,
+      async (client) =>
+        await client.query<{ key: string }>(
+          `with recursive held_roles as (
          select distinct grants.role_id
            from grants
            left join groups on groups.id = grants.group_id
@@ -291,7 +307,8 @@ export class GrantRepository {
          join permissions p on p.id = rp.permission_id
         where p.enabled
        order by 1`,
-      [userId]
+          [userId]
+        )
     )
     return rows.map((row) => row.key)
   }
@@ -312,9 +329,14 @@ export class GrantRepository {
 
   /** The grants of a principal, the revoked ones included. */
   async findByUser(userId: string): Promise<GrantRow[]> {
-    const rows = await this.db.query<GrantRecord>(
-      `select ${COLUMNS} ${JOINS} where grants.user_id = $1 order by grants.created_at`,
-      [userId]
+    const rows = await withTenantScope(
+      this.db,
+      null,
+      async (client) =>
+        await client.query<GrantRecord>(
+          `select ${COLUMNS} ${JOINS} where grants.user_id = $1 order by grants.created_at`,
+          [userId]
+        )
     )
     return rows.map(toRow)
   }
@@ -363,8 +385,12 @@ export class GrantRepository {
       input.grantedBy ?? null,
     ]
     const audited = auditedCte('inserted', params, audit)
-    const rows = await this.db.query<GrantRecord>(
-      `with inserted as (
+    const rows = await withTenantScope(
+      this.db,
+      input.tenantId,
+      async (client) =>
+        await client.query<GrantRecord>(
+          `with inserted as (
          insert into grants (tenant_id, user_id, group_id, permission_id, role_id, workspace_id,
            route_id, expires_at, granted_by)
          values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -377,7 +403,8 @@ export class GrantRepository {
        left join permissions on permissions.id = inserted.permission_id
        left join groups on groups.id = inserted.group_id
        left join roles on roles.id = inserted.role_id`,
-      params
+          params
+        )
     )
     return toRow(rows[0]!)
   }
@@ -391,6 +418,7 @@ export class GrantRepository {
   async update(
     id: string,
     input: { expiresAt?: Date | null; grantedBy?: string | null },
+    scope: Scope,
     audit?: ChangeAudit | null
   ): Promise<GrantRow | null> {
     const assignments: string[] = []
@@ -413,8 +441,12 @@ export class GrantRepository {
     // parameters of the audit are always the last five.
     const idParam = params.length
     const audited = auditedCte('updated', params, audit)
-    const rows = await this.db.query<GrantRecord>(
-      `with updated as (
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<GrantRecord>(
+          `with updated as (
          update grants set ${assignments.join(', ')} where id = $${idParam}
          returning id, tenant_id, user_id, group_id, permission_id, role_id, workspace_id,
            route_id, expires_at, revoked_at, granted_by, created_at
@@ -425,7 +457,8 @@ export class GrantRepository {
        left join permissions on permissions.id = updated.permission_id
        left join groups on groups.id = updated.group_id
        left join roles on roles.id = updated.role_id`,
-      params
+          params
+        )
     )
     return rows[0] ? toRow(rows[0]) : null
   }
@@ -440,11 +473,15 @@ export class GrantRepository {
    * The row of the audit of the revocation is written by the same
    * statement as the revocation (spec §10.1).
    */
-  async revoke(id: string, audit?: ChangeAudit | null): Promise<GrantRow | null> {
+  async revoke(id: string, scope: Scope, audit?: ChangeAudit | null): Promise<GrantRow | null> {
     const params: unknown[] = [id]
     const audited = auditedCte('updated', params, audit)
-    const rows = await this.db.query<GrantRecord>(
-      `with updated as (
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<GrantRecord>(
+          `with updated as (
          update grants set revoked_at = coalesce(revoked_at, now()) where id = $1
          returning id, tenant_id, user_id, group_id, permission_id, role_id, workspace_id,
            route_id, expires_at, revoked_at, granted_by, created_at
@@ -455,7 +492,8 @@ export class GrantRepository {
        left join permissions on permissions.id = updated.permission_id
        left join groups on groups.id = updated.group_id
        left join roles on roles.id = updated.role_id`,
-      params
+          params
+        )
     )
     return rows[0] ? toRow(rows[0]) : null
   }

@@ -27,7 +27,8 @@ import type {
   RoleRegistration,
 } from './ports'
 import { change, type AuditEntry } from './audit'
-import { refuseOutsideScope, tenantOf } from './scope'
+import { platformScope, tenantScope } from './ports'
+import { refuseOutsideScope, statementScope, tenantOf } from './scope'
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, wholeNumber } from './values'
 
 /**
@@ -137,7 +138,7 @@ export async function upsertRole(
       if (child.id === existing.id) {
         throw new AdministrationError('conflict', 'a role does not name itself')
       }
-      const descendants = await roles.descendants(child.id)
+      const descendants = await roles.descendants(child.id, tenantScope(tenant.id))
       if (descendants.includes(existing.key)) {
         throw new AdministrationError(
           'conflict',
@@ -167,6 +168,7 @@ export async function upsertRole(
         displayName: registration.displayName,
         description: registration.description,
       },
+      tenantScope(tenant.id),
       change('role.updated', tenant.slug, context)
     )
     if (!updated) {
@@ -180,7 +182,7 @@ export async function upsertRole(
 
   // The role is read again: the answer names the role as it is, with the
   // memberships it holds and not the ones it held.
-  const final = await roles.findById(role.id)
+  const final = await roles.findById(role.id, tenantScope(tenant.id))
 
   return {
     role: final ?? role,
@@ -210,19 +212,20 @@ export async function removeRole(
   if (!roles) {
     throw new AdministrationError('forbidden', 'the roles are not enabled in this deployment')
   }
-  const existing = await roles.findById(id)
+  const existing = await roles.findById(id, platformScope())
   if (!existing) {
     throw new AdministrationError('not_found', 'the role does not exist')
   }
   refuseOutsideScope(scope, existing.tenant)
-  const grants = await roles.countGrants(id)
+  const statement = await statementScope(options, scope)
+  const grants = await roles.countGrants(id, statement)
   if (grants > 0) {
     throw new AdministrationError(
       'conflict',
       'the role is named by a grant: revoke the grants before removing it'
     )
   }
-  await roles.remove(id, change('role.removed', existing.tenant, context))
+  await roles.remove(id, statement, change('role.removed', existing.tenant, context))
   return { action: 'role.removed', id, tenant: existing.tenant }
 }
 
@@ -250,6 +253,7 @@ async function replacePermissions(
     await roles.revokePermission(
       role.id,
       permission.id,
+      tenantScope(tenant.id),
       change('role.permission.revoked', tenant.slug, context)
     )
   }
@@ -258,6 +262,7 @@ async function replacePermissions(
     await roles.grantPermission(
       role.id,
       permission.id,
+      tenantScope(tenant.id),
       change('role.permission.granted', tenant.slug, context)
     )
   }
@@ -283,11 +288,21 @@ async function replaceNestedRoles(
     if (wanted.has(key)) continue
     const child = await roles.findByKey(tenant.id, key)
     if (!child) continue
-    await roles.unnest(role.id, child.id, change('role.role.unnested', tenant.slug, context))
+    await roles.unnest(
+      role.id,
+      child.id,
+      tenantScope(tenant.id),
+      change('role.role.unnested', tenant.slug, context)
+    )
   }
   for (const child of nested) {
     if (held.includes(child.key)) continue
-    await roles.nest(role.id, child.id, change('role.role.nested', tenant.slug, context))
+    await roles.nest(
+      role.id,
+      child.id,
+      tenantScope(tenant.id),
+      change('role.role.nested', tenant.slug, context)
+    )
   }
 }
 
@@ -304,7 +319,7 @@ async function permissionOf(
   tenantId: string,
   key: string
 ): Promise<Permission | null> {
-  const catalogue = await options.permissions.findCataloguePermission(key)
+  const catalogue = await options.permissions.findCataloguePermission(key, tenantScope(tenantId))
   if (catalogue) return catalogue
   return await options.permissions.findByTenantAndKey(tenantId, key)
 }
@@ -321,11 +336,12 @@ async function resolvePermission(
   tenantId: string,
   key: string
 ): Promise<Permission> {
-  const catalogue = await options.permissions.findCataloguePermission(key)
+  const scope = tenantScope(tenantId)
+  const catalogue = await options.permissions.findCataloguePermission(key, scope)
   if (catalogue) return catalogue
 
   const own = await options.permissions.findByTenantAndKey(tenantId, key)
   if (own) return own
 
-  return await options.permissions.createOrFind({ tenantId, key })
+  return await options.permissions.createOrFind({ tenantId, key }, scope)
 }

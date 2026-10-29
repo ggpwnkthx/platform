@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { UserRepository, type Database } from '../../src/platform/postgres'
+import { tenantScope } from '../../src/domains/administration'
 import { OTHER_TENANT, seedTenant } from '../fixtures/tenant'
 import { openTestDatabase } from './database'
 
@@ -48,16 +49,16 @@ describe('the principals of Access', () => {
 
   test('a principal is disabled and enabled again', async () => {
     const created = await users.create({ tenantId, externalSubject: 'disabled-subject' })
-    const disabled = await users.update(created.id, { status: 'disabled' })
+    const disabled = await users.update(created.id, { status: 'disabled' }, tenantScope(tenantId))
     expect(disabled?.status).toBe('disabled')
-    const enabled = await users.update(created.id, { status: 'active' })
+    const enabled = await users.update(created.id, { status: 'active' }, tenantScope(tenantId))
     expect(enabled?.status).toBe('active')
   })
 
   test('the last login is stamped', async () => {
     const created = await users.create({ tenantId, externalSubject: 'login-subject' })
-    await users.touchLogin(created.id)
-    const found = await users.findById(created.id)
+    await users.touchLogin(created.id, tenantScope(tenantId))
+    const found = await users.findById(created.id, tenantScope(tenantId))
     expect(found?.lastLoginAt).toBeInstanceOf(Date)
   })
 

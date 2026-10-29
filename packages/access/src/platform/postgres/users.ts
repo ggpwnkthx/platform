@@ -6,10 +6,10 @@
  * the key `(tenant, subject)` and never the e-mail.
  */
 
-import { withTenantScope } from './scope'
+import { withScope, withTenantScope } from './scope'
 import { auditedCte } from './audited'
 import type { SqlClient } from './database'
-import type { ChangeAudit } from '../../domains/administration'
+import type { ChangeAudit, Scope } from '../../domains/administration'
 
 /** The status of a principal. */
 type PrincipalStatus = 'active' | 'disabled'
@@ -129,11 +129,21 @@ function listConditions(filter: UserListFilter): { where: string; params: unknow
 export class UserRepository {
   constructor(private readonly db: SqlClient) {}
 
-  /** The principal of an id: the id is the subject of every token. */
-  async findById(id: string): Promise<UserRow | null> {
-    const rows = await this.db.query<UserRecord>(
-      `select ${COLUMNS} from users join tenants on tenants.id = users.tenant_id where users.id = $1`,
-      [id]
+  /**
+   * The principal of an id: the id is the subject of every token.
+   *
+   * The scope is the scope of the call: a principal of another tenant is
+   * not a principal the statement may read (spec §3.10).
+   */
+  async findById(id: string, scope: Scope): Promise<UserRow | null> {
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<UserRecord>(
+          `select ${COLUMNS} from users join tenants on tenants.id = users.tenant_id where users.id = $1`,
+          [id]
+        )
     )
     return rows[0] ? toRow(rows[0]) : null
   }
@@ -205,11 +215,16 @@ export class UserRepository {
    * it is published as the external identities: the translation is the
    * work of the adapter.
    */
-  async findExternalSubjectsByIds(ids: string[]): Promise<string[]> {
+  async findExternalSubjectsByIds(ids: string[], scope: Scope): Promise<string[]> {
     if (ids.length === 0) return []
-    const rows = await this.db.query<{ external_subject: string }>(
-      `select external_subject from users where id = any($1::uuid[])`,
-      [ids]
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<{ external_subject: string }>(
+          `select external_subject from users where id = any($1::uuid[])`,
+          [ids]
+        )
     )
     return rows.map((row) => row.external_subject)
   }
@@ -230,8 +245,12 @@ export class UserRepository {
       input.status ?? 'active',
     ]
     const audited = auditedCte('inserted', params, audit)
-    const rows = await this.db.query<UserRecord>(
-      `with inserted as (
+    const rows = await withTenantScope(
+      this.db,
+      input.tenantId,
+      async (client) =>
+        await client.query<UserRecord>(
+          `with inserted as (
          insert into users (tenant_id, external_subject, email, display_name, status)
          values ($1, $2, $3, $4, $5)
          returning id, tenant_id, external_subject, email, display_name, status, last_login_at,
@@ -239,7 +258,8 @@ export class UserRepository {
        )${audited}
        select inserted.*, tenants.slug as tenant_slug
        from inserted join tenants on tenants.id = inserted.tenant_id`,
-      params
+          params
+        )
     )
     return toRow(rows[0]!)
   }
@@ -250,7 +270,12 @@ export class UserRepository {
    * The row of the audit of the change is written by the same statement
    * as the principal (spec §10.1).
    */
-  async update(id: string, input: UserUpdate, audit?: ChangeAudit | null): Promise<UserRow | null> {
+  async update(
+    id: string,
+    input: UserUpdate,
+    scope: Scope,
+    audit?: ChangeAudit | null
+  ): Promise<UserRow | null> {
     const assignments: string[] = []
     const params: unknown[] = []
     const set = (column: string, value: unknown): void => {
@@ -274,24 +299,34 @@ export class UserRepository {
     // parameters of the audit are always the last five.
     const idParam = params.length
     const audited = auditedCte('updated', params, audit)
-    const rows = await this.db.query<UserRecord>(
-      `with updated as (
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<UserRecord>(
+          `with updated as (
          update users set ${assignments.join(', ')} where id = $${idParam}
          returning id, tenant_id, external_subject, email, display_name, status, last_login_at,
            created_at, updated_at
        )${audited}
        select updated.*, tenants.slug as tenant_slug
        from updated join tenants on tenants.id = updated.tenant_id`,
-      params
+          params
+        )
     )
     return rows[0] ? toRow(rows[0]) : null
   }
 
   /** Stamps the last successful login of a principal. */
-  async touchLogin(id: string): Promise<void> {
-    await this.db.query(
-      `update users set last_login_at = now(), updated_at = now() where id = $1`,
-      [id]
+  async touchLogin(id: string, scope: Scope): Promise<void> {
+    await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query(
+          `update users set last_login_at = now(), updated_at = now() where id = $1`,
+          [id]
+        )
     )
   }
 }

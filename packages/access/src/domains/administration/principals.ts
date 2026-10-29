@@ -17,6 +17,7 @@ import type {
   PrincipalRegistration,
 } from './ports'
 import { change, type AuditEntry } from './audit'
+import { tenantScope } from './ports'
 import { refuseOutsideScope, tenantOf } from './scope'
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, statusOf, wholeNumber } from './values'
 
@@ -140,6 +141,7 @@ export async function upsertPrincipal(
       displayName: registration.displayName,
       status: registration.status,
     },
+    tenantScope(tenant.id),
     change('principal.updated', tenant.slug, context)
   )
   if (!principal) {

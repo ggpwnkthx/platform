@@ -7,6 +7,7 @@
  */
 
 import type { ChangeAudit } from './audit'
+import type { Scope } from './scope'
 
 /** A grant of the policy. */
 export interface Grant {
@@ -78,8 +79,13 @@ export interface GrantPage {
 
 /** The storage of the grants. */
 export interface GrantStore {
-  /** The grant of an id. */
-  findById(id: string): Promise<Grant | null>
+  /**
+   * The grant of an id.
+   *
+   * The scope is the scope of the call: the grant of another tenant is
+   * not a grant the statement may read (spec §3.10).
+   */
+  findById(id: string, scope: Scope): Promise<Grant | null>
   /**
    * The live grant of a scope.
    *
@@ -118,10 +124,11 @@ export interface GrantStore {
   update(
     id: string,
     changes: { expiresAt?: Date | null; grantedBy?: string | null },
+    scope: Scope,
     audit: ChangeAudit
   ): Promise<Grant | null>
   /** Revokes a grant, and writes the row of its audit with it. */
-  revoke(id: string, audit: ChangeAudit): Promise<Grant | null>
+  revoke(id: string, scope: Scope, audit: ChangeAudit): Promise<Grant | null>
   /** The grants that match a filter, and their number. */
   list(filter: GrantFilter): Promise<GrantPage>
 }
