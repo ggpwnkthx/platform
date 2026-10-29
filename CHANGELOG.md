@@ -10,6 +10,21 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The tree of the dependencies is flat
+
+The development machine held a farm of symbolic links: every workspace had
+a `node_modules` of its own, and every package in it was a link that
+pointed into a store at the root of the tree. The images of the packages
+lay the tree out flat already, because the image copies the root of the tree
+and the links of the workspace without the store they point at, and the
+process refused to start with `ENOENT reading "node_modules/chokidar"`. The
+machine that develops the platform and the image of a package now hold the
+same tree.
+
+A workspace holds no `node_modules` of its own any more. The root of the
+repository holds every dependency of every workspace, and the resolution of
+a module walks the parents of the file until it finds one.
+
 ### The trust of the forwarding headers is the trust of an address
 
 The gateway honored the forwarding headers of a peer that was inside a
