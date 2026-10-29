@@ -175,6 +175,7 @@ Root commands cover every workspace:
 | `bun run deploy:check` | Check `deploy/` is consistent |
 | `bun run coverage:check` | Check every job of the continuous integration points at a workspace that is there, and that every test of the repository runs in one |
 | `bun run test` | Platform tests, then every workspace's tests |
+| `bun run cli` | The command line of the platform |
 | `bun run test:fast` | The tests that need no PostgreSQL server and no container |
 | `bun run compatibility` | Run the three services together ([Compatibility](internals.md#compatibility)) |
 | `bun run atlas` | Open the [atlas](atlas.html) |
