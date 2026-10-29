@@ -1,5 +1,5 @@
 /**
- * The endpoints of the provider of the access service (spec §5.1, §7.5).
+ * The endpoints of the provider of Access (spec §5.1, §7.5).
  *
  * The gateway discovers the service at `/.well-known/openid-configuration`,
  * it reads the keys at `/oauth/jwks` and it asks the claims of a principal

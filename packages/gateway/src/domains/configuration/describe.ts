@@ -8,7 +8,7 @@
  *
  * The description also names the settings that are **permissive**: a route
  * that accepts an unauthenticated caller, a route that authenticates the
- * caller without asking the access service, a route that hands the
+ * caller without asking Access, a route that hands the
  * credential of the caller to the upstream. They are not errors: a
  * deployment may want them. They are settings that look active but that
  * nobody may have read, and a warning that says so is worth more than a
@@ -84,11 +84,11 @@ export interface RouteDescription {
   /** The lifetime of a cached decision of access. */
   accessCacheTtlMs: number | null
   /**
-   * Whether the access service is asked about the route when it names no
+   * Whether Access is asked about the route when it names no
    * workspace.
    */
   accessCheck: boolean
-  /** The grace of an outage of the access service, in milliseconds. */
+  /** The grace of an outage of Access, in milliseconds. */
   accessStaleGraceMs: number
 }
 
@@ -152,8 +152,7 @@ function warningsOf(route: CompiledRoute<EffectiveRoute>): ConfigurationWarning[
     warnings.push({
       routeId: route.id,
       code: 'no_workspace_check',
-      message:
-        'the route authenticates the caller but never asks the access service about the workspace',
+      message: 'the route authenticates the caller but never asks Access about the workspace',
     })
   }
   if (policy.forwardAuthorization) {

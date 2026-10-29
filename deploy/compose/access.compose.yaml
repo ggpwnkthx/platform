@@ -1,9 +1,9 @@
-# The access service alone: the broker, the decisions and the
+# Access alone: the broker, the decisions and the
 # infrastructure they need.
 #
 #   docker compose -f deploy/compose/access.compose.yaml up --build
 #
-# The access service is deployed on its own: it holds the tenants, the
+# Access is deployed on its own: it holds the tenants, the
 # providers they authenticate against and the decisions of the gateway.
 # The gateway asks it about the workspaces of a caller, and the data
 # service asks it about the scope of a context, and neither of them has

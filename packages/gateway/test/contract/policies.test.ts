@@ -6,7 +6,7 @@ import { createHarness, WORKSPACE_ID, type Harness } from '../support/contract-h
  * The policies of a route.
  *
  * A route may refuse the navigations from another site, may not forward the
- * token of the caller to its upstream and may ask the access service for
+ * token of the caller to its upstream and may ask Access for
  * every request, so a revocation on that route is immediate.
  */
 
@@ -128,7 +128,7 @@ describe('the policies of a route', () => {
     expect(body.headers['x-gateway-user']).toBe('user-alice')
   })
 
-  test('the decision of the access service is cached by default', async () => {
+  test('the decision of Access is cached by default', async () => {
     const token = await harness.token()
     const before = harness.access.requests.length
     for (let index = 0; index < 3; index++) {

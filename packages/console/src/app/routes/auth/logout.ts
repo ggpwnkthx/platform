@@ -1,5 +1,5 @@
 /**
- * The end of a session. The access service has no session of its own to
+ * The end of a session. Access has no session of its own to
  * end: the token of the caller expires with its five minutes.
  */
 

@@ -1,5 +1,5 @@
 /**
- * The outbound calls of the access service.
+ * The outbound calls of Access.
  *
  * The platform owns the network: the calls of the providers of the tenants
  * go through here, with a timeout, without a redirect that a provider
@@ -10,7 +10,7 @@
 import type { CallTarget, HttpTransport, TransportResponse } from '../../domains/identity'
 
 /**
- * The largest body of an answer that the access service reads.
+ * The largest body of an answer that Access reads.
  *
  * The answers of a provider are the discovery document and the keys: they
  * are small. A provider that answers with a body of several megabytes

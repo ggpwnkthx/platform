@@ -32,7 +32,7 @@ let schema: string | null = null
 let opened: Database | null = null
 
 /**
- * Opens a database with the schema of the access service applied.
+ * Opens a database with the schema of Access applied.
  *
  * Every file opens its own database: the tests do not share their rows
  * and they do not depend on the order they run in.

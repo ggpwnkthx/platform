@@ -40,7 +40,7 @@ afterAll(async () => {
   await database.close()
 })
 
-describe('the tenants of the access service', () => {
+describe('the tenants of Access', () => {
   test('a tenant is created and read back', async () => {
     const created = await tenants.create(tenantOf('acme'))
     expect(created.slug).toBe('acme')

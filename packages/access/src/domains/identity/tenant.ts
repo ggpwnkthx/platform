@@ -19,9 +19,9 @@ export interface TenantOfLogin {
   autoProvision: boolean
   /** The issuer of the provider of the tenant. */
   issuer: string
-  /** The client id of the access service at the provider of the tenant. */
+  /** The client id of Access at the provider of the tenant. */
   idpClientId: string
-  /** The url of the access service at the provider of the tenant. */
+  /** The url of Access at the provider of the tenant. */
   idpRedirectUri: string
   /** The domain of the tenant; a hint, never an authorization. */
   emailDomain: string | null
@@ -34,7 +34,7 @@ export interface TenantOfLogin {
    * a url that is not in this list is never sent a code.
    */
   clientRedirectUris: string[]
-  /** The scopes the access service asks the provider for. */
+  /** The scopes Access asks the provider for. */
   scopes: string[]
   /** The algorithms a token of the tenant may be signed with. */
   algorithms: string[]

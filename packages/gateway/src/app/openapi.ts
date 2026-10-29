@@ -22,7 +22,7 @@ export function gatewayDocument(serviceVersion: string): Record<string, unknown>
       title: 'The gateway',
       version: serviceVersion,
       description:
-        'The application gateway of the platform. It authenticates the callers, asks the access service what they may do, and forwards their requests to the upstream of the route it matched.',
+        'The application gateway of the platform. It authenticates the callers, asks Access what they may do, and forwards their requests to the upstream of the route it matched.',
     },
     servers: [{ url: '/', description: 'The origin of the deployment.' }],
     security: [],

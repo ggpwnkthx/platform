@@ -2,7 +2,7 @@
  * A record: its values, its form, its history.
  *
  * A change of a record carries the validator of the record the caller
- * read: a record that changed in between is refused by the data service,
+ * read: a record that changed in between is refused by Data,
  * and the caller reads it again before it changes it.
  */
 
@@ -115,7 +115,7 @@ async function render(
               <input type="hidden" name="_etag" value={options.etag} />
               <ConfirmButton
                 label="Delete"
-                message="Delete this record? The data service keeps its tombstone when the collection keeps a history."
+                message="Delete this record? Data keeps its tombstone when the collection keeps a history."
               />
             </form>
           ) : null

@@ -1,6 +1,6 @@
 # Operations
 
-Run a data service deployment day to day. Platform-wide steps (first deployment, images, rollback)
+Run a Data deployment day to day. Platform-wide steps (first deployment, images, rollback)
 are in [Platform operations](../platform/operations.md); variables are in
 [Configuration](configuration.md).
 
@@ -11,7 +11,7 @@ One image, three roles, chosen with `DATA_PROCESS_ROLE`:
 | Role | Runs | Needs |
 | --- | --- | --- |
 | `api` | Endpoints and probes. | Gateway bindings, cursor key. |
-| `worker` | Delivery claims. | Delivery credentials, a service principal the access service knows. |
+| `worker` | Delivery claims. | Delivery credentials, a service principal Access knows. |
 | `all` | Both (local default). | Both sets. |
 
 ```bash
@@ -26,7 +26,7 @@ files. For a worker locally, see [Getting started](getting-started.md#run-with-a
 | Endpoint | Answers |
 | --- | --- |
 | `GET /healthz` | `200` while alive, with `version` and the manifest's `schemaVersion`. Calls no dependency. |
-| `GET /readyz` | `200` when configuration, schema, role privileges and access service discovery pass; else `503` with a reason. |
+| `GET /readyz` | `200` when configuration, schema, role privileges and Access discovery pass; else `503` with a reason. |
 | `GET /metrics` | Prometheus text. `404` when disabled, `401` without the right bearer token. |
 
 API readiness requires a role that is neither superuser nor `BYPASSRLS`, migrations matching the
@@ -39,7 +39,7 @@ delivery store and a registered subscriber. Probes skip workspace authorization.
 | Metric | Counts |
 | --- | --- |
 | `data_requests_total`, `data_request_duration_ms` | Requests by route, method, status. |
-| `data_access_requests_total`, `data_access_duration_ms` | Access service calls by method, contract path, outcome (`ok`, `refused`, `failed`). |
+| `data_access_requests_total`, `data_access_duration_ms` | Access calls by method, contract path, outcome (`ok`, `refused`, `failed`). |
 | `data_context_cache_hits_total`, `data_context_cache_misses_total` | Context cache (unlabelled). |
 | `data_db_pool_waits_total`, `data_db_acquire_duration_ms` | Connection waits. |
 | `data_authorization_denials_total`, `data_transaction_rollbacks_total` | Refusals, rollbacks. |
@@ -54,7 +54,7 @@ cumulative.
 ## Logs
 
 JSON on stdout. Redaction matches field names (secret, credential, cookie, signature, body, filter,
-email), so never rename such a field. Refusals log the error code, not the access service's reason.
+email), so never rename such a field. Refusals log the error code, not Access's reason.
 See [spec §15.2](spec.md#152-logs).
 
 ## Drain
@@ -82,7 +82,7 @@ bun run policy -- publish --workspace $WS --file policies.json
 bun run policy -- list --workspace $WS
 ```
 
-These commands never alter tables. A bundle says what a permission grants; the access service says
+These commands never alter tables. A bundle says what a permission grants; Access says
 who holds it. An unusable bundle fails closed, and published versions are immutable. See
 [spec §7.5](spec.md#75-workspace-catalog).
 
@@ -151,7 +151,7 @@ DATA_DELIVERY_DATABASE_URL=... bun run scripts/cli/delivery.ts requeue \
   --event <uuid> --subscriber <id> --actor <name>
 ```
 
-A requeue is attributed; the handler still asks the access service before acting.
+A requeue is attributed; the handler still asks Access before acting.
 
 ### Removing a workspace
 
@@ -209,7 +209,7 @@ checks tenant isolation (as the API role) and that pending deliveries survive.
 | --- | --- | --- |
 | Gateway public key | Binding `publicKeyFile` | The gateway makes the pair (`bun run identity:key`) and keeps the private half. Update the binding; restart. |
 | Legacy derived key | Binding `identityKeyFile` | Read only by `v4` routes; it can sign. Delete it when leaving legacy mode. |
-| Access context credential | `DATA_ACCESS_CONTEXT_TOKEN_FILE` | Access service first; until both match, `503 AUTHORIZATION_UNAVAILABLE`. |
+| Access context credential | `DATA_ACCESS_CONTEXT_TOKEN_FILE` | Access first; until both match, `503 AUTHORIZATION_UNAVAILABLE`. |
 | Cursor key | `DATA_CURSOR_KEY_FILE` | Live cursors fail with `400 INVALID_CURSOR`. |
 | Role passwords | Secret manager | Rerun `scripts/cli/provision.ts`; pools reconnect. |
 

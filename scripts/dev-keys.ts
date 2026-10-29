@@ -3,16 +3,16 @@
  * The keys of a development machine.
  *
  * The gateway signs the identity of every request it forwards, and the
- * data service verifies that signature with the public key of the pair.
+ * Data verifies that signature with the public key of the pair.
  * The two have to hold the same pair, and it has to be the same on every
  * replica of the gateway.
  *
  * The script writes the pair into `deploy/secrets/`:
  *
  *   deploy/secrets/identity-signing.pem          the private key, for the gateway
- *   deploy/secrets/identity-signing.public.pem   the public key, for the data service
+ *   deploy/secrets/identity-signing.public.pem   the public key, for Data
  *
- * and the bindings of the data service for a **run from the source**:
+ * and the bindings of Data for a **run from the source**:
  *
  *   deploy/config/bindings.local.json            the public key, at its local path
  *   deploy/config/routes.local.json              the route table, at the local ports
@@ -47,7 +47,7 @@ await mkdir(directory, { recursive: true })
 await writeFile(join(directory, 'identity-signing.pem'), pem)
 await writeFile(join(directory, 'identity-signing.public.pem'), publicPem)
 
-// The bindings of the data service for a run from the source: the public
+// The bindings of Data for a run from the source: the public
 // key is at its path on the disk, and not at the path it has in the
 // container. The path is absolute: the bindings are read from the
 // directory the service runs in, and that directory is not the root of
@@ -77,7 +77,7 @@ await writeFile(
 )
 
 // The route table of the gateway for a run from the source: the upstream
-// is the data service at its port on the loopback, and not at the name
+// is Data at its port on the loopback, and not at the name
 // it has in the network of the containers.
 await writeFile(
   join(root, 'deploy', 'config', 'routes.local.json'),

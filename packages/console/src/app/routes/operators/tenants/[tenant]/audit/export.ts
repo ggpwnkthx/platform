@@ -1,5 +1,5 @@
 /**
- * The export of the audit of a tenant: the file the access service
+ * The export of the audit of a tenant: the file Access
  * answers, handed to the browser as a download.
  */
 

@@ -1,5 +1,5 @@
 /**
- * The rows of the administration of the access service, as its contract
+ * The rows of the administration of Access, as its contract
  * answers them (docs/access/api.md).
  */
 

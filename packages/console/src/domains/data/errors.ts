@@ -1,7 +1,7 @@
 /**
- * The refusals of the data service, and of the gateway in front of it.
+ * The refusals of Data, and of the gateway in front of it.
  *
- * A refusal of the data service carries a stable code, a message and the
+ * A refusal of Data carries a stable code, a message and the
  * identifier of its request; a refusal of the gateway carries its own.
  * The console shows both as they are: it never says more than the
  * service said.
@@ -9,7 +9,7 @@
 
 import { bodyOf } from '../transport'
 
-/** A refusal of the data service, or of the gateway. */
+/** A refusal of Data, or of the gateway. */
 export class DataError extends Error {
   override readonly name = 'DataError'
   readonly status: number
@@ -40,7 +40,7 @@ export async function refusalOf(response: Response): Promise<DataError> {
   const requestId =
     (typeof envelope.requestId === 'string' ? envelope.requestId : null) ??
     response.headers.get('x-request-id')
-  // The envelope of the data service: `{ error: { code, message, details } }`.
+  // The envelope of Data: `{ error: { code, message, details } }`.
   if (typeof error === 'object' && error !== null) {
     const detail = error as Record<string, unknown>
     return new DataError({

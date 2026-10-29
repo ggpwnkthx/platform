@@ -1,5 +1,5 @@
 /**
- * The authorization code of the access service (spec §5.5).
+ * The authorization code of Access (spec §5.5).
  *
  * The code is an opaque random string of 32 bytes. It is stored under a
  * hash of itself, so the store never holds a code that a reader of the

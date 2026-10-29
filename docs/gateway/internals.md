@@ -18,8 +18,8 @@ The gateway is a modular monolith: one deployable, split into domains with expli
 | `src/platform/redis/`, `src/platform/postgres/` | Shared-state clients: construction, pool, TLS, schema, disposal. |
 | `src/runtime/` | Environment, composition root, file watcher, signals, drain, running-policy log. |
 | `src/observability/` | Logging and metrics; imports nothing else. |
-| `services/` | The access service reference implementation, which deployments may run. |
-| `services/fixtures/` | Deterministic provider, access-service and upstream stand-ins; refuse to run in production; not in the image. |
+| `services/` | Access reference implementation, which deployments may run. |
+| `services/fixtures/` | Deterministic provider, Access and upstream stand-ins; refuse to run in production; not in the image. |
 | `scripts/` | `cli/` (identity key, migrations, session revocation), `dev/` (runner, test Redis and Postgres), `gates/` (architecture, version, environment), `ops/` (load, benchmark), `support/`. |
 | `test/` | Checks other than domain unit tests; helpers in `test/support/`. |
 
@@ -115,7 +115,7 @@ Each rule lives in one domain, with its tests beside it.
 | `authentication/oidc.ts`, `login-state.ts` | Relying party (discovery, PKCE, exchange, bearer validation); signed login state. |
 | `authentication/session.ts`, `cookies.ts`, `service.ts` | Session rules; cookie names; authenticate, login, logout. |
 | `authentication/adapters/` | Memory, Redis (one script) and Postgres (one function) session stores. |
-| `workspace-access/client.ts` | Access-service client: request, cache, fail closed. |
+| `workspace-access/client.ts` | Access client: request, cache, fail closed. |
 | `workspace-access/breaker.ts`, `decision.ts`, `workspace.ts` | Service health; decision shape and metric reason; workspace ID validation. |
 | `workspace-access/adapters/` | Memory, Redis and Postgres decision caches. |
 | `forwarding/network.ts`, `context.ts` | CIDR and trusted proxies; peer, client address, protocol and effective host. |
@@ -132,7 +132,7 @@ Each rule lives in one domain, with its tests beside it.
 | `runtime/` | `shared-state.ts` (backend by URL scheme), `composition.ts`, `lifecycle.ts`, `policy-log.ts`, `version.ts`. |
 | `observability/` | `logging.ts` (credential redaction), `metrics.ts` (bounded labels). |
 
-`services/access-service.ts` answers the [spec §6.1](spec.md#61-access-service-protocol) protocol from a policy
+`services/access-service.ts` answers the [spec §6.1](spec.md#61-access-protocol) protocol from a policy
 file. It is not a fixture; `test/support/access-conformance.ts` runs against it, so protocol and reference
 cannot drift.
 
@@ -181,7 +181,7 @@ neither write a hash nor push to a list. `gateway-control` may read and write `~
 | Types, lint, format, dead code | `bun run typecheck`, `lint`, `format:check`, `dead` | — |
 
 CI (`.github/workflows/ci.yml`) also builds the image, checks it starts with a deployment configuration,
-refuses to start without a session secret, access service, identity provider or rate limit, and contains no
+refuses to start without a session secret, Access, identity provider or rate limit, and contains no
 fixtures.
 
 Last full run: **793 passed, 0 failed** across 79 files on Bun 1.4.3, with real Redis 7.0.15
@@ -314,7 +314,7 @@ Outside the gateway's scope, closed by the deployment:
 | Client TLS | The ingress. |
 | Upstream fixed per route | A router in front of pods, when the workspace picks the pod. |
 | Revocation waits for the cache TTL | `GATEWAY_ACCESS_CACHE_TTL_MS`, or `accessCacheTtlMs: 0` per route. |
-| Uncached decision latency | A fast access service; the cache absorbs the rest. |
+| Uncached decision latency | A fast Access; the cache absorbs the rest. |
 | One hostname per product surface | Subdomains, or one host with distinct path prefixes. |
 | WebSocket upstream over TLS | Not possible on this runtime ([above](#runtime)). |
 

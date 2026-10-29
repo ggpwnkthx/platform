@@ -1,5 +1,5 @@
 /**
- * The client of the administration of the access service.
+ * The client of the administration of Access.
  *
  * The client acts with one credential: the credential of the platform,
  * or the credential of a tenant. Which one is the business of the scope
@@ -44,7 +44,7 @@ export interface BatchOutcome {
 /** The query of a list: the filters and the page. */
 type Query = Record<string, string | number | boolean | null | undefined>
 
-/** The client of the administration of the access service. */
+/** The client of the administration of Access. */
 export class AdminClient {
   readonly #options: AdminClientOptions
   readonly #fetch: Fetch
@@ -67,7 +67,7 @@ export class AdminClient {
     }
     if (body !== undefined) headers['content-type'] = 'application/json'
     const response = await call(
-      'access service',
+      'Access',
       this.#fetch,
       `${this.#options.accessUrl}/v1/admin${path}${suffix ? `?${suffix}` : ''}`,
       { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) },

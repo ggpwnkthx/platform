@@ -9,7 +9,7 @@ import {
 /**
  * The reason of a denial.
  *
- * The access service sends the reason of a denial twice: as free text, for
+ * Access sends the reason of a denial twice: as free text, for
  * the log and for the operator, and as a **code**, for the metric. The
  * gateway counts the code and never the text: a service that rewords its
  * reason must not silently change the metric of the gateway.

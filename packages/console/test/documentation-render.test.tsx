@@ -72,7 +72,7 @@ describe('the navigation of the documentation', () => {
       '<details class="docs-nav-area" open=""><summary class="docs-nav-area-summary">Gateway</summary>'
     )
     expect(html).toContain(
-      '<details class="docs-nav-area"><summary class="docs-nav-area-summary">Data service</summary>'
+      '<details class="docs-nav-area"><summary class="docs-nav-area-summary">Data</summary>'
     )
     expect(html).toContain('<p class="docs-nav-label">Reference</p>')
     expect(html).toContain(

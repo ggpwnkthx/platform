@@ -1,6 +1,6 @@
 # The route table of the composition.
 #
-# The gateway of the platform forwards to the data service of the
+# The gateway of the platform forwards to Data of the
 # platform. The base of the gateway carries the routes of a gateway that
 # is deployed on its own, and the overlay replaces them with the ones of
 # the composition.

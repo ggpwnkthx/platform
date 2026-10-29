@@ -10,6 +10,28 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The services are named by their role: Gateway, Access, Data, Console
+
+Two of the four pieces of the platform carried a word the other two did
+not. "The access service" and "the data service" sat next to "the
+gateway" and "the console" in every list of the platform — the tables of
+the documentation, the areas of the console, the map of the status board
+— and the suffix read as part of the name rather than as part of the
+sentence. The names are the roles now: **Gateway**, **Access**, **Data**
+and **Console**. The word is gone from the names, the titles, the labels,
+the tables and the drawing of the atlas.
+
+The identifiers of the services do not move: the environment of Access is
+read with `ACCESS_*`, its metrics are published with `access_*`, and the
+name it answers with in the health endpoint is still `access`. The
+directories, the images, the compose keys and the files of the reference
+implementation keep their names as well.
+
+The migrations keep the comments they were applied with. The ledger of the
+schema holds the checksum of every applied migration, and a migration that
+is changed after it was applied is refused at the start of the next
+deployment; a comment is not worth a database that refuses to start.
+
 ### The titles of the documents are short, and no sentence is said twice
 
 The titles of the documents named their service and their subject at
@@ -77,8 +99,7 @@ readiness is the vocabulary of the platform — `ready`, `draining` and
 name of the role of the service and the version of the release. The
 data service says that it drains before it stops admitting requests.
 
-Every service publishes a description of its API as well. The access
-service answers `GET /openapi.json`, the gateway answers it on the
+Every service publishes a description of its API as well. The Access answers `GET /openapi.json`, the gateway answers it on the
 surface the callers reach and the control plane answers the description
 of its own surface, and the description of the data service holds the
 probes of the service beside the paths of the scope of a workspace.
@@ -100,8 +121,7 @@ The surface of the API is checked now. The check reads the routes the
 code of every service registers — the paths of the scope of a
 workspace, the constants of the gateway and the routes of its control
 plane — and the endpoints the documentation names, and it refuses the
-two when they part company. The description of the API of the data
-service is read as well, and it is refused when it does not hold every
+two when they part company. The description of the API of the Data is read as well, and it is refused when it does not hold every
 route of the service.
 
 The check found four gaps, and they are closed: the route that moves a
@@ -290,8 +310,7 @@ of its subject.
 
 ### The operators speak of users and of rights
 
-The **operators** package is the face of the administration of the access
-service, and it speaks the words of an operator: **users**, **groups**
+The **operators** package is the face of the administration of the Access, and it speaks the words of an operator: **users**, **groups**
 and **rights**. A user is a principal of the access service and a right
 is a grant of it, and the service keeps its own words: the operators
 translate them.
@@ -754,9 +773,7 @@ workspace of the development in the registry of the service, and it
 seeds the access service with a tenant, a principal, a group and the
 grants of the route. The login of a browser goes through the three
 services: the gateway sends it to the access service, the access service
-sends it to the identity provider, and the decision of the access
-service is what lets the gateway forward the request to the data
-service.
+sends it to the identity provider, and the decision of the Access is what lets the gateway forward the request to the Data.
 
 The runner of the gateway alone, with its fixtures and nothing but bun,
 is `bun run dev:gateway`.

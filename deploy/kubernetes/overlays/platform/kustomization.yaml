@@ -10,7 +10,7 @@
 #   kubectl apply -k deploy/kubernetes/base/data
 #
 # The overlay names the namespace of the platform, it routes the gateway to
-# the data service, and it points the gateway to the access service of the
+# Data, and it points the gateway to Access of the
 # platform.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -26,7 +26,7 @@ patches:
     target:
       kind: ConfigMap
       name: platform-gateway-routes
-  # The access service of the composition: the gateway asks the service of
+  # Access of the composition: the gateway asks the service of
   # the platform and not the one of the example.
   - path: gateway-access.yaml
     target:

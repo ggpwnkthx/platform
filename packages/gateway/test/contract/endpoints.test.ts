@@ -260,7 +260,7 @@ describe('the workspace of a request', () => {
     expect(body.error).toBe('workspace_forbidden')
   })
 
-  test('an access service that is not available is not a denial', async () => {
+  test('Access that is not available is not a denial', async () => {
     // A subject no other test asks about: a decision another test cached
     // would answer instead of the service.
     const token = await harness.idp!.mintAccessToken({ subject: 'user-outage-refused' })
@@ -281,7 +281,7 @@ describe('the workspace of a request', () => {
     }
   })
 
-  test('an access service that is not available is counted apart', async () => {
+  test('Access that is not available is counted apart', async () => {
     const token = await harness.idp!.mintAccessToken({ subject: 'user-outage-counted' })
     const before = await readMetrics()
     harness.access.setUnavailable(true)

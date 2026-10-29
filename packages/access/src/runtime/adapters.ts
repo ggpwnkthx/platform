@@ -241,7 +241,7 @@ export interface AdministrationDependencies {
   previousToken?: string
   /** The credentials of the tenants of the administration (spec §10.1). */
   credentials?: AdminCredential[]
-  /** The public url of the access service. */
+  /** The public url of Access. */
   publicUrl: string
   /**
    * Called when the registration of a tenant changes.

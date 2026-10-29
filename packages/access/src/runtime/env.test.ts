@@ -18,7 +18,7 @@ const PRODUCTION: Record<string, string> = {
   ACCESS_SIGNING_KID: 'access-1',
 }
 
-describe('the environment of the access service', () => {
+describe('the environment of Access', () => {
   test('the defaults are the ones of the specification', () => {
     const settings = readEnv({ ACCESS_DATABASE_URL: 'postgres://localhost:5432/access' })
     expect(settings.environment).toBe('development')
@@ -35,7 +35,7 @@ describe('the environment of the access service', () => {
     expect(settings.store.url).toBeUndefined()
   })
 
-  test('the public url of the access service defaults to the issuer', () => {
+  test('the public url of Access defaults to the issuer', () => {
     const settings = readEnv({
       ACCESS_DATABASE_URL: 'postgres://localhost:5432/access',
       ACCESS_ISSUER: 'https://access.example.com',

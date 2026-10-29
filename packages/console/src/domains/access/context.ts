@@ -1,7 +1,7 @@
 /**
  * The client of the contract of the access context.
  *
- * The console reads the keys that the access service holds for the
+ * The console reads the keys that Access holds for the
  * caller on the route of the console, with the credential of the
  * contract (docs/access/spec.md §9). The scope of an operator is read,
  * never assumed: the keys of the token of the caller are a snapshot of
@@ -57,7 +57,7 @@ export class ContextClient {
     if (!options.fresh && cached && cached.until > now) return cached.context
 
     const response = await call(
-      'access service',
+      'Access',
       this.#fetch,
       `${this.#options.accessUrl}/v1/access-context`,
       {

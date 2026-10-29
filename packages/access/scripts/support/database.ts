@@ -12,7 +12,7 @@ import { createLogger } from '../../src/observability'
 import type { Database } from '../../src/platform/postgres'
 
 /**
- * The database of a script, with the schema of the access service applied.
+ * The database of a script, with the schema of Access applied.
  *
  * The url is the one of the environment: a deployment that has a
  * PostgreSQL server measures that server, and a machine that has none
@@ -42,7 +42,7 @@ export interface SeededTenant {
   displayName: string
   /** The issuer of the provider of the tenant. */
   issuer: string
-  /** The client id of the access service at the provider of the tenant. */
+  /** The client id of Access at the provider of the tenant. */
   clientId: string
 }
 

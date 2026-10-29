@@ -197,7 +197,7 @@ describe('the environment of a production deployment', () => {
     expect(settings.oidc.allowPublicClient).toBe(true)
   })
 
-  test('the access service is required', () => {
+  test('Access is required', () => {
     const settings = readEnv({
       ...production,
       GATEWAY_ACCESS_TOKEN: undefined,

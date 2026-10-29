@@ -1,5 +1,5 @@
 /**
- * The listener of the access service.
+ * The listener of Access.
  *
  * The platform owns the socket: it starts the listener, it knows the
  * address of the peer of a request and it stops accepting when the runtime
@@ -35,7 +35,7 @@ export interface StartedListener {
   /**
    * The address of the peer of a request.
    *
-   * It is the address of the socket: the access service needs it to know the address of a
+   * It is the address of the socket: Access needs it to know the address of a
    * caller, which is the key of the rate limit of the administration.
    */
   peerAddress: (request: Request) => string
@@ -44,7 +44,7 @@ export interface StartedListener {
 }
 
 /**
- * Starts the listener of the access service.
+ * Starts the listener of Access.
  *
  * The peer address of a request is the address of the socket: the address
  * of the peer is not the one of a forwarding header, which a caller

@@ -8,7 +8,7 @@ import { displayOf, formValueOf, inputKindOf } from '../../domains/data'
 import JsonInput from '../islands/json-input'
 import { Tabs } from './page'
 
-/** The name of a workspace, as the registry of the data service holds it. */
+/** The name of a workspace, as the registry of Data holds it. */
 export function workspaceName(me: Me | null, id: string): string {
   return me?.workspace?.displayName ?? me?.workspace?.slug ?? id
 }

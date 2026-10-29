@@ -2,9 +2,9 @@
 /**
  * The shadow comparison (docs/access/operations.md, "Shadow comparison").
  *
- * The tool asks the access service of the tree and the access service that is in
+ * The tool asks Access of the tree and Access that is in
  * production the same decisions, and it reports the answers that differ. It reads the
- * decisions of the old service and it asks the access service: it never writes in the access service.
+ * decisions of the old service and it asks Access: it never writes in Access.
  *
  * The requests are read from a file, one json per line:
  *
@@ -30,7 +30,7 @@ interface Decision {
   reason: string
 }
 
-/** Asks an access service for a decision. */
+/** Asks Access for a decision. */
 async function ask(
   baseUrl: string,
   token: string,
@@ -59,7 +59,7 @@ async function main(): Promise<void> {
   const accessToken = process.env.ACCESS_DECISION_TOKEN ?? ''
   if (!oldUrl || !accessUrl) {
     throw new Error(
-      'the comparison needs the two access services: OLD_ACCESS_URL and ACCESS_URL must be set'
+      'the comparison needs the two Access instances: OLD_ACCESS_URL and ACCESS_URL must be set'
     )
   }
 

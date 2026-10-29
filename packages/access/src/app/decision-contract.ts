@@ -167,7 +167,7 @@ async function readCredentials(
 }
 
 /**
- * `POST /v1/decisions`: the answer of the access service of the gateway.
+ * `POST /v1/decisions`: the answer of Access of the gateway.
  */
 export async function decisionHandler(
   context: Context<AccessEnv>,

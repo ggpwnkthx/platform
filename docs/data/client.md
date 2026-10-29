@@ -40,7 +40,7 @@ const client = new DataClient({
 | `fetch` | Transport; defaults to global `fetch`. |
 | `signal` | Cancels calls. |
 
-The client never signs requests, stores access service credentials or logs in. Your credentials
+The client never signs requests, stores Access credentials or logs in. Your credentials
 travel in the transport, and the gateway turns them into a signed identity.
 
 ## Methods

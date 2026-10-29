@@ -58,7 +58,7 @@ export interface HttpTransport {
  * The guard of the addresses of the providers.
  *
  * A tenant registers the issuer of its provider: the address is checked
- * before the call, so a tenant cannot make the access service call a service of the
+ * before the call, so a tenant cannot make Access call a service of the
  * deployment. The guard returns the address of the call: the call is made
  * to the address that was checked, and not to the address the name
  * resolves to a second time.
@@ -255,7 +255,7 @@ export class ProviderClient {
   /**
    * The url of the authorization of the provider.
    *
-   * The access service sends a fresh state and a fresh nonce, and the challenge of the
+   * Access sends a fresh state and a fresh nonce, and the challenge of the
    * PKCE: the verifier stays in the state cookie of the login.
    */
   async authorizationUrl(options: {

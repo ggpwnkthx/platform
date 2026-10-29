@@ -3,7 +3,7 @@
  *
  * The suite runs against the reference implementation of `services/`, and
  * against the service of a deployment when `GATEWAY_TEST_ACCESS_URL` names
- * one: a deployment that writes its own access service runs the same
+ * one: a deployment that writes its own Access runs the same
  * checks against it, so the gateway can be pointed at it.
  */
 
@@ -26,7 +26,7 @@ const POLICY = {
   },
 }
 
-describe('the reference access service', () => {
+describe('the reference Access', () => {
   test('the service starts and answers', async () => {
     const service = await startAccessService({ policy: POLICY, port: 0 })
     try {

@@ -1,5 +1,5 @@
 /**
- * The endpoints of the access service.
+ * The endpoints of Access.
  *
  * They are the paths the service serves itself. They are matched before
  * anything else and they are never forwarded anywhere.
@@ -10,7 +10,7 @@ import type { AccessDependencies } from './dependencies'
 import type { AccessEnv } from './state'
 
 /**
- * The health of the access service.
+ * The health of Access.
  *
  * It is always available: it says that the process answers, not that the
  * service can serve the traffic.
@@ -27,7 +27,7 @@ export function healthHandler(
 }
 
 /**
- * The readiness of the access service.
+ * The readiness of Access.
  *
  * The service is ready when its dependencies answer and when it is not
  * draining: a task that cannot reach the database would reject every

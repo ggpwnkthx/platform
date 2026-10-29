@@ -1,4 +1,4 @@
-# Access service
+# Access
 
 The platform's OpenID Connect broker and access decision service. It authenticates callers against each tenant's identity provider, maps them to principals, issues its own tokens to the gateway, and answers the gateway's decision contract.
 

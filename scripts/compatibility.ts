@@ -15,10 +15,10 @@
  *
  * The harness runs two suites:
  *
- * 1. the contract of the access service: the gateway of the platform,
- *    at the pinned revision, against the access service of the tree;
- * 2. the acceptance of the platform: the data service of the tree,
- *    against the gateway and the access service of the pinned revision.
+ * 1. the contract of Access: the gateway of the platform,
+ *    at the pinned revision, against Access of the tree;
+ * 2. the acceptance of the platform: Data of the tree,
+ *    against the gateway and Access of the pinned revision.
  *
  * The command:
  *
@@ -30,8 +30,8 @@
  *                         path of a local repository (default: the
  *                         workspace of this repository)
  *   GATEWAY_COMMIT        the revision of the gateway
- *   ACCESS_REPOSITORY     the repository of the access service
- *   ACCESS_COMMIT         the revision of the access service
+ *   ACCESS_REPOSITORY     the repository of Access
+ *   ACCESS_COMMIT         the revision of Access
  *   COMPAT_MIRROR         a directory that holds the bare mirrors
  *   COMPAT_KEEP           when it is set, the checkouts are kept
  *
@@ -50,7 +50,7 @@ const root = resolve(import.meta.dir, '..')
 /** The suites of the platform, in the order they run. */
 const SUITES = [
   {
-    name: 'the contract of the access service',
+    name: 'the contract of Access',
     workspace: 'packages/access',
     command: ['bun', 'run', 'scripts/compat/compatibility.ts'],
   },

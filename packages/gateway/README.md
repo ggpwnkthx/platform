@@ -1,10 +1,10 @@
 # Gateway
 
 The platform's application gateway, workspace `packages/gateway/` of [the platform](../../README.md). It
-authenticates each caller, asks the access service what the caller may do, and forwards the request to the
+authenticates each caller, asks Access what the caller may do, and forwards the request to the
 matched route's upstream with a signed identity.
 
-The gateway has no domain model: workspaces, roles and quotas live in the access service. It enforces
+The gateway has no domain model: workspaces, roles and quotas live in Access. It enforces
 "authenticated, authorized for this workspace, forwarded safely" and nothing else. Documentation lives in
 [docs/gateway](../../docs/gateway/README.md); the contract is the
 [specification](../../docs/gateway/spec.md).
@@ -25,7 +25,7 @@ bun run dev          # the whole platform: the three services and the developmen
 bun run dev:gateway  # the gateway alone, with local fixtures
 ```
 
-`dev:gateway` starts a fixture identity provider, access service and two upstreams, writes a configuration
+`dev:gateway` starts a fixture identity provider, Access and two upstreams, writes a configuration
 file for them, and serves the gateway on `http://localhost:8080`:
 
 ```bash

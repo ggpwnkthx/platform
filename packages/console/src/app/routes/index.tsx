@@ -59,7 +59,7 @@ export default createRoute(async (c) => {
         <PageHead
           eyebrow="Platform console"
           title="Console"
-          lede="Browse and edit workspace data, administer tenants and their access, and check the platform's health. Every answer comes from the gateway, the access service or the data service."
+          lede="Browse and edit workspace data, administer tenants and their access, and check the platform's health. Every answer comes from the gateway, Access or Data."
           actions={
             <a class="button" href="/auth/login">
               Sign in
@@ -72,7 +72,7 @@ export default createRoute(async (c) => {
               href="/auth/login?redirect=%2Fworkspaces"
               eyebrow="Data"
               title="Workspaces"
-              text="Search, filter and edit records, read their history and roll them back, and shape the workspace model — within the policies the data service holds for you."
+              text="Search, filter and edit records, read their history and roll them back, and shape the workspace model — within the policies Data holds for you."
               go="Sign in to open"
             />
             <PlaceCard

@@ -1,6 +1,6 @@
 # Getting started
 
-Go from an empty checkout to a record created through the gateway, then run the data service on its
+Go from an empty checkout to a record created through the gateway, then run Data on its
 own. Tools, run modes and test commands for the whole repository are in
 [Platform development](../platform/development.md).
 
@@ -21,8 +21,7 @@ bun install
 bun run dev
 ```
 
-This starts PostgreSQL, the identity provider, all three services and the console, applies the data
-service's migrations, registers workspace `11111111-1111-4111-8111-111111111111`, and seeds a tenant
+This starts PostgreSQL, the identity provider, all three services and the console, applies the Data's migrations, registers workspace `11111111-1111-4111-8111-111111111111`, and seeds a tenant
 where `alice@gateway.test` (password `alice-password`) is an editor. Details:
 [Platform development](../platform/development.md#platform).
 
@@ -39,7 +38,7 @@ After the login you land on `/me`, which shows your principal, tenant, workspace
 
 ## 3. Create a record
 
-The gateway signs your identity and forwards the request; the data service asks the access service
+The gateway signs your identity and forwards the request; Data asks Access
 for your capabilities and applies the workspace's policies.
 
 ```bash
@@ -64,7 +63,7 @@ The `etag` header is the validator a later `PATCH` or `DELETE` must send. From c
 
 ## Run the service alone
 
-To work on the data service against your own PostgreSQL, from `packages/data`:
+To work on Data against your own PostgreSQL, from `packages/data`:
 
 ```bash
 cp .env.example .env                       # then change the secrets
@@ -79,7 +78,7 @@ It listens on `127.0.0.1:8082`:
 
 ```bash
 curl -s http://127.0.0.1:8082/healthz   # alive
-curl -s http://127.0.0.1:8082/readyz    # 200 once schema, roles and access service are in order
+curl -s http://127.0.0.1:8082/readyz    # 200 once schema, roles and Access are in order
 ```
 
 A plain `curl` of a `/ws/…` path answers `401 UNAUTHENTICATED`: data paths accept only requests the
@@ -92,15 +91,13 @@ and publish policies, see [Operations](operations.md#workspace-catalog).
 ## Run with a worker
 
 `deploy/compose/data.compose.yaml` builds the image, starts PostgreSQL, provisions roles, migrates and
-runs the API on port `8082`. The gateway and access service are not in it; point it at an access
-service with `DATA_ACCESS_URL` (default `http://host.docker.internal:8081`).
+runs the API on port `8082`. The gateway and Access are not in it; point it at an Access with `DATA_ACCESS_URL` (default `http://host.docker.internal:8081`).
 
 ```bash
 docker compose -f deploy/compose/data.compose.yaml up --build
 ```
 
-The compose file runs only the API. A worker claims event deliveries and needs a principal the access
-service knows:
+The compose file runs only the API. A worker claims event deliveries and needs a principal the Access knows:
 
 ```
 DATA_PROCESS_ROLE=all

@@ -2,7 +2,7 @@
 
 The normative behavior of the console: what it does, what it refuses, and where trust stops. Credentials and deployment are in [operations.md](operations.md).
 
-The console is the platform's web application: people read and change workspace data, operators administer access, and anyone reads service status. It is a **client** of the gateway, access service and data service, speaking their contracts. Every answer it shows comes from a service, under that service's spec.
+The console is the platform's web application: people read and change workspace data, operators administer access, and anyone reads service status. It is a **client** of the gateway, Access and Data, speaking their contracts. Every answer it shows comes from a service, under that service's spec.
 
 Status: 1.0.0. Runtime: Bun ≥ 1.4.3. Listener: HTTP on
 `CONSOLE_HOST:CONSOLE_PORT` (default `0.0.0.0:8083`).
@@ -17,12 +17,12 @@ Status: 1.0.0. Runtime: Bun ≥ 1.4.3. Listener: HTTP on
 | **operator** | A caller who administers a tenant or the platform. |
 | **tenant** | A platform customer. The tenant's slug identifies its operators. |
 | **session** | State the console keeps for a signed-in caller between requests. |
-| **scope** | What an operator may do: the keys the access service holds for the caller on the console's route. |
+| **scope** | What an operator may do: the keys Access holds for the caller on the console's route. |
 | **ability** | A rendering of the scope and a workspace's grants. It hides what is refused; it never allows anything. |
 
 Invariants, enforced in code and not configurable:
 
-- The console **never decides access**. It asks the access service and renders the answer.
+- The console **never decides access**. It asks Access and renders the answer.
 - The console **never reaches a database**. All data comes from a service over its contract.
 - The caller's token **never reaches the browser**. The browser holds only a signed session identifier.
 - The ability is a **mirror, never an authority**: an upper bound on what the caller may do, never a lower one (§5).
@@ -90,9 +90,9 @@ Sign-in uses the authorization code flow with PKCE (`S256`), a `state` and a `no
 
 | Step | What happens |
 | --- | --- |
-| `GET /auth/login?redirect=<path>` | The server records the pending login, binds it to the browser with the `console_login` cookie (`Path=/auth/callback`), and redirects to the access service's authorization endpoint. |
-| Provider | The access service signs the caller in at the tenant's provider and redirects back to `GET /auth/callback`. |
-| `GET /auth/callback` | The pending login is consumed (once), the code is exchanged with the console's credential, the ID token is verified against the access service's keys, and a **session** is created. |
+| `GET /auth/login?redirect=<path>` | The server records the pending login, binds it to the browser with the `console_login` cookie (`Path=/auth/callback`), and redirects to Access's authorization endpoint. |
+| Provider | Access signs the caller in at the tenant's provider and redirects back to `GET /auth/callback`. |
+| `GET /auth/callback` | The pending login is consumed (once), the code is exchanged with the console's credential, the ID token is verified against Access's keys, and a **session** is created. |
 
 A pending login is single-use and lives ten minutes. The post-login redirect target is a **console path**, never a URL: redirecting to another site would carry the caller's session there.
 
@@ -102,7 +102,7 @@ A pending login is single-use and lives ten minutes. The post-login redirect tar
 
 ## 4. Operator scope
 
-The console asks the access service for the caller's **access context** on the console's route (`CONSOLE_ROUTE_ID`, default `console`), for the workspace named after the caller's tenant, and reads its keys.
+The console asks Access for the caller's **access context** on the console's route (`CONSOLE_ROUTE_ID`, default `console`), for the workspace named after the caller's tenant, and reads its keys.
 
 | Key | Opens |
 | --- | --- |
@@ -112,15 +112,15 @@ The console asks the access service for the caller's **access context** on the c
 
 Scope is **read, never assumed**. A context is a snapshot: the console keeps it until its `validUntil`, never longer, and rereads it on every page. A revoked right closes administration from the next page on. An unreadable context opens nothing.
 
-The console acts with the operator's **tenant credential** when it holds one (`CONSOLE_TENANT_ADMIN_TOKENS`), otherwise with the **platform credential** (`CONSOLE_ADMIN_TOKEN`). The access service's audit names the operator of a tenant credential, so tenant changes are better signed by the tenant's own operator.
+The console acts with the operator's **tenant credential** when it holds one (`CONSOLE_TENANT_ADMIN_TOKENS`), otherwise with the **platform credential** (`CONSOLE_ADMIN_TOKEN`). Access's audit names the operator of a tenant credential, so tenant changes are better signed by the tenant's own operator.
 
 ---
 
 ## 5. Ability
 
-The ability renders the scope and a workspace's grants. The access service decides who holds a permission; the data service decides what a permission grants.
+The ability renders the scope and a workspace's grants. Access decides who holds a permission; Data decides what a permission grants.
 
-Every ability rule is an **upper bound**, never a lower one: the console hides what services refuse and shows what they allow. A button shown but refused by the data service is an annoyance; a button hidden but allowed is a fault.
+Every ability rule is an **upper bound**, never a lower one: the console hides what services refuse and shows what they allow. A button shown but refused by Data is an annoyance; a button hidden but allowed is a fault.
 
 The library has two wildcards, the action `manage` and the subject `all`. The console uses neither: every rule names its action and subject, and the wildcards match no rule.
 
@@ -133,7 +133,7 @@ The library has two wildcards, the action `manage` and the subject `all`. The co
 | Endpoint | Behavior |
 | --- | --- |
 | `GET /healthz` | `200` while the process is up. Always available. |
-| `GET /readyz` | `200` when the access service serves its discovery document, else `503`: a console that cannot sign anyone in is not ready. |
+| `GET /readyz` | `200` when Access serves its discovery document, else `503`: a console that cannot sign anyone in is not ready. |
 | `GET /auth/login` | Starts a login. |
 | `GET /auth/callback` | Completes a login. |
 | `GET /auth/logout` | Ends the session. |
@@ -152,7 +152,7 @@ The library has two wildcards, the action `manage` and the subject `all`. The co
 | `/workspaces/{id}/collections/{key}/aggregate` | Records grouped, counted and measured. | `/aggregate/{key}` |
 | `/workspaces/{id}/model` | The workspace data model: collections, fields, rules, relations, and changes to them. | `/model` and its writes (`data.model.read`, `data.model.write`) |
 | `/workspaces/{id}/audit` | Mutations committed in the workspace. | `/audit` (`data.audit.read`) |
-| `/operators` | Platform tenants, and tenant creation. A single-tenant operator is sent to its tenant. | Access service administration. |
+| `/operators` | Platform tenants, and tenant creation. A single-tenant operator is sent to its tenant. | Access administration. |
 | `/operators/tenants/{slug}` | The tenant: counts, latest changes, form. | Same. |
 | `/operators/tenants/{slug}/users` | Users, filtered by e-mail and status; registering one user, or a team in one batch. | Same. |
 | `/operators/tenants/{slug}/users/{id}` | A user's rights (direct and through groups), groups, and registration (including disabling). | Same. |
@@ -164,7 +164,7 @@ The library has two wildcards, the action `manage` and the subject `all`. The co
 | `/docs` | Platform documentation: shared docs, each service's contract, and the console's contract. | Nothing: docs are in the console build. |
 | `/me` | The caller: subject, tenant and scope keys. | The caller's access context. |
 
-A data service refusal is shown as-is: status, code, message, named fields, and request ID.
+A Data refusal is shown as-is: status, code, message, named fields, and request ID.
 
 ### 6.3 Platform map
 
@@ -194,9 +194,9 @@ The console calls the three services over their contracts, never a database and 
 
 | Service | Called for |
 | --- | --- |
-| Access service | Login code exchange, the caller's access context, tenant administration. |
-| Gateway | Workspace data, with the caller's token. The console reaches the data service **through** the gateway, like any client. |
-| Data service | Probes only, for the status board. Data is never read from it directly. |
+| Access | Login code exchange, the caller's access context, tenant administration. |
+| Gateway | Workspace data, with the caller's token. The console reaches Data **through** the gateway, like any client. |
+| Data | Probes only, for the status board. Data is never read from it directly. |
 
 Every call carries the request ID, so console and service traces share one search key.
 
@@ -216,7 +216,7 @@ A production console refuses to start unless `CONSOLE_PUBLIC_URL` is https or th
 
 The console does not:
 
-- decide access (it asks the access service and renders the answer);
+- decide access (it asks Access and renders the answer);
 - hold the gateway's identity-signing credential (with it, the console could impersonate the gateway);
 - reach any platform database;
 - sign identities of its own (every data request carries the caller's token);

@@ -1,5 +1,5 @@
 /**
- * The beginning of a sign-in: the browser is sent to the access service.
+ * The beginning of a sign-in: the browser is sent to Access.
  */
 
 import { setCookie } from 'hono/cookie'

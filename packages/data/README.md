@@ -1,10 +1,10 @@
-# Data service
+# Data
 
 A headless, permission-aware data API for applications behind the gateway: the `packages/data/`
 workspace of [the platform](../../README.md). Documentation: [docs/data](../../docs/data/README.md).
 
 The service holds workspaces, collections, data policies, records, audit and version history, and committed
-events. [The access service](../access/) owns identity, tenants, groups and grants, and its access
+events. [Access](../access/) owns identity, tenants, groups and grants, and its access
 context contract (`/v1/access-context`) is a required dependency: without it the service fails
 closed. TypeScript on Bun 1.4.3 with Hono; PostgreSQL 15 or later with row-level security.
 

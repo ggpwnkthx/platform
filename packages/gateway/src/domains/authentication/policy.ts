@@ -42,7 +42,7 @@ export const WorkspacePolicySchema = z.strictObject({
  * The authentication policy of a route.
  *
  * A workspace check needs an authentication mode: the gateway asks the
- * access service about a caller it authenticated, so a policy without a
+ * Access about a caller it authenticated, so a policy without a
  * credential could never be satisfied.
  */
 export const AuthPolicySchema = z

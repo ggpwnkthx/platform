@@ -25,7 +25,7 @@ export default createRoute(async (c) => {
         title="Status"
         lede={
           board.detail
-            ? 'Probes of the gateway, the access service, the data service and the console, refreshed every ten seconds.'
+            ? 'Probes of the gateway, Access, Data and the console, refreshed every ten seconds.'
             : 'Whether each service is up. Versions, latencies and probe answers are shown to operators who hold console.status.'
         }
       />

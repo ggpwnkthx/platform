@@ -151,13 +151,13 @@ export function problemsOf(
   const problems: string[] = []
   for (const endpoint of [...served].sort()) {
     if (!named.has(endpoint)) {
-      problems.push(`the ${name} serves ${endpoint}, and its documentation does not name it`)
+      problems.push(`${name} serves ${endpoint}, and its documentation does not name it`)
     }
   }
   for (const endpoint of [...named].sort()) {
     if (!served.has(endpoint)) {
       problems.push(
-        `the documentation of the ${name} names ${endpoint}, and the service does not serve it`
+        `the documentation of ${name} names ${endpoint}, and the service does not serve it`
       )
     }
   }

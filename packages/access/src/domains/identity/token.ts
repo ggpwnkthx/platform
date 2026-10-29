@@ -3,7 +3,7 @@
  *
  * Before a single row is read, the token of the provider is validated: the
  * issuer, the audience, the nonce, the algorithm, the clock and the
- * subject. A token that does not pass every check is refused: the access service never
+ * subject. A token that does not pass every check is refused: Access never
  * authenticates a caller against a provider that is not the one of the
  * tenant.
  */
@@ -49,7 +49,7 @@ export interface ValidationOptions {
   token: ProviderToken
   /** The issuer of the provider of the tenant: the comparison is exact. */
   expectedIssuer: string
-  /** The client id of the access service at the provider of the tenant. */
+  /** The client id of Access at the provider of the tenant. */
   expectedAudience: string
   /** The nonce of the login in flight. */
   expectedNonce?: string
@@ -100,7 +100,7 @@ export function validateProviderToken(options: ValidationOptions): ValidatedIden
     )
   }
 
-  // The audience carries the client id of the access service at the provider, or the
+  // The audience carries the client id of Access at the provider, or the
   // authorized party is that client id.
   const audiences = Array.isArray(token.audience)
     ? token.audience

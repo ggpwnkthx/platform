@@ -1,13 +1,13 @@
 /**
- * The access service of the tests (spec §5).
+ * Access of the tests (spec §5).
  *
- * The fake the access service speaks the access context contract of the specification:
+ * The fake Access speaks the access context contract of the specification:
  * it answers the discovery, it evaluates a request against the grants it
  * holds and it refuses what it may not answer. It is a fixture of the
  * domain tests and of the tests of the failure injection.
  *
  * The evidence of the real integration is produced by the compatibility
- * harness, which runs the real access service with the real extension.
+ * harness, which runs the real Access with the real extension.
  */
 
 /** The grants of a principal. */
@@ -25,15 +25,15 @@ export interface FakeGrant {
 /** The fake access. */
 export interface FakeAccess {
   url: string
-  /** The requests the access service received, for the assertions. */
+  /** The requests Access received, for the assertions. */
   readonly requests: { path: string; body: unknown }[]
   /** The grants of the fixture. */
   readonly grants: Map<string, FakeGrant[]>
-  /** True when the access service refuses every request. */
+  /** True when Access refuses every request. */
   unavailable: boolean
-  /** True when the access service answers a context that is already expired. */
+  /** True when Access answers a context that is already expired. */
   expired: boolean
-  /** The lifetime the access service announces. */
+  /** The lifetime Access announces. */
   maxLifetimeMs: number
   /** Stops access. */
   stop: () => Promise<void>
@@ -41,7 +41,7 @@ export interface FakeAccess {
 
 /** The options of the fake access. */
 export interface FakeAccessOptions {
-  /** The credential the access service accepts. */
+  /** The credential Access accepts. */
   readonly credential?: string
   /** The port of access. */
   readonly port?: number

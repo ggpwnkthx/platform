@@ -12,7 +12,7 @@ import { METRICS_TOKEN } from '../support/contract-harness'
  *
  * The latency of the upstream is a different number from the latency of
  * the gateway: the time the gateway spent on the authentication, on the
- * limits and on the access service is not part of it.
+ * limits and on Access is not part of it.
  */
 let harness: Harness
 

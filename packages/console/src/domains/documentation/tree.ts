@@ -3,7 +3,7 @@
  *
  * The console shows the documents of the documentation, and it holds
  * them as a tree: the documents of the platform, the contract of the
- * gateway, of the access service and of the data service, and the
+ * gateway, of Access and of Data, and the
  * console itself.
  *
  * The tree is built when the console is built, and it is held by the
@@ -239,8 +239,8 @@ const TITLES: Record<string, string> = {
   '': 'Overview',
   platform: 'Platform',
   gateway: 'Gateway',
-  access: 'Access service',
-  data: 'Data service',
+  access: 'Access',
+  data: 'Data',
   console: 'Console',
 }
 

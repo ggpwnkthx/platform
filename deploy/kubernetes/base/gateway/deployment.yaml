@@ -63,7 +63,7 @@ spec:
               value: gateway
             - name: GATEWAY_ACCESS_URL
               value: https://access.example.com
-            # The clients of the provider and of the access service, the
+            # The clients of the provider and of Access, the
             # secret of the sessions, the url of the shared state and the
             # token of the metrics come from the secret of the platform.
             - name: GATEWAY_OIDC_CLIENT_SECRET

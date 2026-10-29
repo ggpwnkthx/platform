@@ -29,7 +29,7 @@ describe.skipIf(!issuer)('the interoperability with a real identity provider', (
       // The port is fixed: the provider of the deployment is configured
       // with the exact uri of the callback.
       gatewayPort: 18080,
-      // The access service of the tests allows one workspace to one
+      // Access of the tests allows one workspace to one
       // subject, and the subject of the account of dex carries the id of
       // the user and the id of the connector: it is not known before the
       // first login. The wildcard of the fixture allows every caller: what

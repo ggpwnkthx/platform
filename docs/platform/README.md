@@ -5,22 +5,22 @@ Three HTTP services and a web console, kept as workspaces of one repository: one
 ## How it fits
 
 ```
-clients ──▶ gateway ──▶ data service ──▶ PostgreSQL
+clients ──▶ Gateway ──▶ Data ──▶ PostgreSQL
                │              │
-               │              └──▶ access service (access context)
-               └─────────────────▶ access service (login and decisions)
+               │              └──▶ Access (access context)
+               └─────────────────▶ Access (login and decisions)
 ```
 
-- **Gateway**: the only service callers reach. It authenticates the caller (OIDC with PKCE for browsers, bearer tokens for API clients), asks the access service, and forwards the request with the caller's identity signed as a JWS. It fails closed: no answer means refusal. It has no domain model.
-- **Access service**: an OIDC broker and access decision service. It signs callers in at each tenant's identity provider, maps them to principals, issues its own tokens to the gateway, and answers its decisions. It holds tenants, principals, groups, grants and the administration audit.
-- **Data service**: a headless, permission-aware data API. It owns workspaces, collections, data policies, records, audit and version history, and committed events. It verifies the gateway's signature and asks the access service for the caller's access context.
+- **Gateway**: the only service callers reach. It authenticates the caller (OIDC with PKCE for browsers, bearer tokens for API clients), asks Access, and forwards the request with the caller's identity signed as a JWS. It fails closed: no answer means refusal. It has no domain model.
+- **Access**: an OIDC broker and access decision service. It signs callers in at each tenant's identity provider, maps them to principals, issues its own tokens to the gateway, and answers its decisions. It holds tenants, principals, groups, grants and the administration audit.
+- **Data**: a headless, permission-aware data API. It owns workspaces, collections, data policies, records, audit and version history, and committed events. It verifies the gateway's signature and asks Access for the caller's access context.
 - **Console**: the web interface, a client of the three that decides nothing itself.
 
 The services are separate processes and deployments that talk only over HTTP; no workspace imports another's source.
 
 ## Services at a glance
 
-| | Gateway | Access service | Data service |
+| | Gateway | Access | Data |
 | --- | --- | --- | --- |
 | Env prefix | `GATEWAY_*` | `ACCESS_*` | `DATA_*` |
 | Port | `8080` | `8081` | `8082` |
@@ -39,4 +39,4 @@ The services are separate processes and deployments that talk only over HTTP; no
 | Review trust boundaries and secrets | [Security](security.md) |
 | Work on the repository itself | [Internals](internals.md), [Decisions](decisions.md) |
 
-Service areas: [gateway](../gateway/README.md), [access service](../access/README.md), [data service](../data/README.md), [console](../console/README.md).
+Service areas: [Gateway](../gateway/README.md), [Access](../access/README.md), [Data](../data/README.md), [Console](../console/README.md).

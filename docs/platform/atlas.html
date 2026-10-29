@@ -594,9 +594,9 @@
           >
             <title id="map-title">The map of the platform</title>
             <desc id="map-desc">
-              The browser and the console on the left, the gateway in the middle, the access
-              service above it with the identity provider above that, the data service on the
-              right, and the stores of the three services along the bottom. Every station and
+              The browser and the Console on the left, the Gateway in the middle, the Access above it
+              with the identity provider above that, Data on the right, and the stores of the three
+              services along the bottom. Every station and
               every hop of the map is listed in the tables under it.
             </desc>
 
@@ -680,7 +680,7 @@
                 a caller
               </text>
               <text class="station-name" x="95" y="310" text-anchor="middle">
-                The console
+                Console
               </text>
             </g>
             <g class="station" data-station="gateway">
@@ -696,7 +696,7 @@
                 a service
               </text>
               <text class="station-name" x="337" y="244" text-anchor="middle">
-                The gateway
+                Gateway
               </text>
             </g>
             <g class="station" data-station="access">
@@ -712,7 +712,7 @@
                 a service
               </text>
               <text class="station-name" x="637" y="139" text-anchor="middle">
-                The access service
+                Access
               </text>
             </g>
             <g class="station" data-station="provider">
@@ -744,7 +744,7 @@
                 a service
               </text>
               <text class="station-name" x="942" y="244" text-anchor="middle">
-                The data service
+                Data
               </text>
             </g>
             <g class="station station-store" data-station="gateway-db">
@@ -760,7 +760,7 @@
                 PostgreSQL
               </text>
               <text class="station-name" x="285" y="410" text-anchor="middle">
-                The database of the gateway
+                The database of Gateway
               </text>
             </g>
             <g class="station station-store" data-station="shared">
@@ -792,7 +792,7 @@
                 PostgreSQL
               </text>
               <text class="station-name" x="785" y="410" text-anchor="middle">
-                The database of the access service
+                The database of Access
               </text>
             </g>
             <g class="station station-store" data-station="data-db">
@@ -808,7 +808,7 @@
                 PostgreSQL
               </text>
               <text class="station-name" x="1035" y="410" text-anchor="middle">
-                The database of the data service
+                The database of Data
               </text>
             </g>
             <defs>
@@ -835,7 +835,7 @@
         </div>
 
         <div class="dossier" id="dossier">
-          <h3 id="dossier-title">The gateway</h3>
+          <h3 id="dossier-title">Gateway</h3>
           <p id="dossier-what"></p>
           <dl class="fields" id="dossier-fields"></dl>
         </div>
@@ -915,157 +915,97 @@
       "kind": "a caller",
       "what": "A person, or an application, that holds a session cookie, or a bearer token, and asks the platform for the data of a workspace.",
       "owns": "nothing of the platform",
-      "contracts": "the contract of the data service, behind the gateway",
-      "code": "",
-      "docs": [
-        [
-          "the contract of the gateway",
-          "../gateway/spec.md"
-        ]
-      ]
+      "contracts": "the contract of Data, behind the gateway",
+      "code": ""
     },
     {
       "id": "console",
-      "name": "The console",
+      "name": "Console",
       "kind": "a caller",
-      "what": "The web application of the platform: it shows the data of a workspace and the administration of the access service. It is a client of the three services, it signs no identity of its own, and it decides nothing.",
+      "what": "The web application of the platform: it shows the data of a workspace and the administration of Access. It is a client of the three services, it signs no identity of its own, and it decides nothing.",
       "owns": "the sessions of its own sign-in",
-      "contracts": "the gateway, for the data; the access service, for the administration",
-      "code": "packages/console/src",
-      "docs": [
-        [
-          "the console",
-          "../console/README.md"
-        ]
-      ]
+      "contracts": "the gateway, for the data; Access, for the administration",
+      "code": "packages/console/src"
     },
     {
       "id": "gateway",
-      "name": "The gateway",
+      "name": "Gateway",
       "kind": "a service of the platform",
-      "what": "It authenticates the caller against an identity provider, asks the access service whether the caller may use the workspace, and forwards the request to the upstream of the route it matched. It never decides an access of its own: it asks, and it refuses the request when the service does not answer.",
+      "what": "It authenticates the caller against an identity provider, asks Access whether the caller may use the workspace, and forwards the request to the upstream of the route it matched. It never decides an access of its own: it asks, and it refuses the request when the service does not answer.",
       "owns": "the route table, the sessions, the counters of the limits, the cache of the decisions",
-      "contracts": "GET /auth/login, POST /auth/callback, GET /auth/logout; POST /v1/decisions; the contract of the data service",
-      "code": "packages/gateway/src",
-      "docs": [
-        [
-          "the contract of the gateway",
-          "../gateway/spec.md"
-        ]
-      ]
+      "contracts": "GET /auth/login, POST /auth/callback, GET /auth/logout; POST /v1/decisions; the contract of Data",
+      "code": "packages/gateway/src"
     },
     {
       "id": "access",
-      "name": "The access service",
+      "name": "Access",
       "kind": "a service of the platform",
-      "what": "It is the OpenID Connect broker and the decision service of the platform: it authenticates a caller against the provider of a tenant, maps the identity to a principal, and answers the decisions of the gateway and the contexts of the data service.",
+      "what": "It is the OpenID Connect broker and the decision service of the platform: it authenticates a caller against the provider of a tenant, maps the identity to a principal, and answers the decisions of the gateway and the contexts of Data.",
       "owns": "the tenants, the principals, the permissions, the groups, the grants, the audit of the administration",
       "contracts": "GET /oauth/authorize, GET /oauth/tenant/callback, POST /oauth/token; POST /v1/decisions; POST /v1/access-context; /v1/admin/*",
-      "code": "packages/access/src",
-      "docs": [
-        [
-          "the contract of the access service",
-          "../access/spec.md"
-        ]
-      ]
+      "code": "packages/access/src"
     },
     {
       "id": "provider",
       "name": "The identity provider",
       "kind": "the provider of a tenant",
-      "what": "The OpenID Connect provider of a tenant: it holds the identity of the people of the tenant, and the access service brokers it. The gateway may also be registered with a provider of its own.",
+      "what": "The OpenID Connect provider of a tenant: it holds the identity of the people of the tenant, and Access brokers it. The gateway may also be registered with a provider of its own.",
       "owns": "the identity of the people of the tenant",
       "contracts": "the discovery, the authorization, the token, the userinfo, the keys",
-      "code": "",
-      "docs": [
-        [
-          "the security of the access service",
-          "../access/internals.md"
-        ]
-      ]
+      "code": ""
     },
     {
       "id": "data",
-      "name": "The data service",
+      "name": "Data",
       "kind": "a service of the platform",
-      "what": "The headless backend of the data: it owns the workspaces, the collections, the policies, the records, the versions, the audit and the events. It verifies the identity the gateway signed, asks the access service for the permissions of the caller, and answers with the rows that caller may see.",
+      "what": "The headless backend of the data: it owns the workspaces, the collections, the policies, the records, the versions, the audit and the events. It verifies the identity the gateway signed, asks Access for the permissions of the caller, and answers with the rows that caller may see.",
       "owns": "the workspaces, the registry of the collections, the policy bundles, the records, their versions, the audit, the events",
       "contracts": "/ws/:workspaceId/v1/*",
-      "code": "packages/data/src",
-      "docs": [
-        [
-          "the contract of the data service",
-          "../data/spec.md"
-        ]
-      ]
+      "code": "packages/data/src"
     },
     {
       "id": "gateway-db",
-      "name": "The database of the gateway",
+      "name": "The database of Gateway",
       "kind": "a store",
       "what": "The store of the gateway: the sessions of the callers, the route table and its revisions, the cache of the decisions, the counters of the limits, the audit and the failures of the control plane.",
       "owns": "the state of the gateway",
       "contracts": "the schema of the gateway",
-      "code": "packages/gateway/src/platform/postgres",
-      "docs": [
-        [
-          "the operations of the gateway",
-          "../gateway/operations.md"
-        ]
-      ]
+      "code": "packages/gateway/src/platform/postgres"
     },
     {
       "id": "shared",
       "name": "The shared state",
       "kind": "a store",
-      "what": "The Redis of the deployment: the sessions, the route table and the counters of the gateway, and the codes of the logins of the access service. A deployment with several replicas shares it, and a deployment with one may leave it out.",
+      "what": "The Redis of the deployment: the sessions, the route table and the counters of the gateway, and the codes of the logins of Access. A deployment with several replicas shares it, and a deployment with one may leave it out.",
       "owns": "the state the replicas share",
       "contracts": "the commands of the shared state",
-      "code": "packages/gateway/src/platform/redis",
-      "docs": [
-        [
-          "the operations of the platform",
-          "../platform/operations.md"
-        ]
-      ]
+      "code": "packages/gateway/src/platform/redis"
     },
     {
       "id": "access-db",
-      "name": "The database of the access service",
+      "name": "The database of Access",
       "kind": "a store",
-      "what": "The store of the access service: the tenants, the principals, the permissions, the groups, the grants and the audit of the administration.",
-      "owns": "the state of the access service",
-      "contracts": "the migrations of the access service",
-      "code": "packages/access/src/platform/postgres",
-      "docs": [
-        [
-          "the operations of the access service",
-          "../access/operations.md"
-        ]
-      ]
+      "what": "The store of Access: the tenants, the principals, the permissions, the groups, the grants and the audit of the administration.",
+      "owns": "the state of Access",
+      "contracts": "the migrations of Access",
+      "code": "packages/access/src/platform/postgres"
     },
     {
       "id": "data-db",
-      "name": "The database of the data service",
+      "name": "The database of Data",
       "kind": "a store",
-      "what": "The store of the data service: the workspaces, the registry of the collections, the policy bundles, the records, their versions, the audit, the events and the receipts of the writes.",
+      "what": "The store of Data: the workspaces, the registry of the collections, the policy bundles, the records, their versions, the audit, the events and the receipts of the writes.",
       "owns": "the data of the workspaces",
-      "contracts": "the migrations of the data service",
-      "code": "packages/data/migrations",
-      "docs": [
-        [
-          "the migrations of the data service",
-          "../data/operations.md"
-        ]
-      ]
+      "contracts": "the migrations of Data",
+      "code": "packages/data/migrations"
     }
   ],
   "hops": [
     {
       "id": "call",
       "from": "The browser",
-      "to": "The gateway",
-      "contract": "the contract of the data service, behind the gateway",
+      "to": "Gateway",
+      "contract": "the contract of Data, behind the gateway",
       "carries": "the session cookie, or the bearer token",
       "decides": "who the caller is",
       "refuses": "401, or a redirect to the sign-in",
@@ -1077,7 +1017,7 @@
     {
       "id": "login-page",
       "from": "The browser",
-      "to": "The gateway",
+      "to": "Gateway",
       "contract": "GET /auth/login",
       "carries": "the target of the redirect",
       "decides": "that a login is in flight",
@@ -1089,7 +1029,7 @@
     },
     {
       "id": "counters",
-      "from": "The gateway",
+      "from": "Gateway",
       "to": "The shared state",
       "contract": "the commands of the shared state",
       "carries": "the route table, the counters of the limits",
@@ -1103,8 +1043,8 @@
     },
     {
       "id": "sessions",
-      "from": "The gateway",
-      "to": "The database of the gateway",
+      "from": "Gateway",
+      "to": "The database of Gateway",
       "contract": "the table of the sessions",
       "carries": "the session of the caller",
       "decides": "whether the session is alive",
@@ -1117,8 +1057,8 @@
     },
     {
       "id": "decision",
-      "from": "The gateway",
-      "to": "The access service",
+      "from": "Gateway",
+      "to": "Access",
       "contract": "POST /v1/decisions",
       "carries": "the subject, the workspace, the route and the roles",
       "decides": "whether the caller may use the workspace",
@@ -1130,8 +1070,8 @@
     },
     {
       "id": "login",
-      "from": "The gateway",
-      "to": "The access service",
+      "from": "Gateway",
+      "to": "Access",
       "contract": "GET /oauth/authorize",
       "carries": "the client, the redirect and the challenge",
       "decides": "which tenant the login is for",
@@ -1143,8 +1083,8 @@
     },
     {
       "id": "forward",
-      "from": "The gateway",
-      "to": "The data service",
+      "from": "Gateway",
+      "to": "Data",
       "contract": "/ws/:workspaceId/v1/*",
       "carries": "the identity headers and their detached signature",
       "decides": "nothing: the gateway forwards the request",
@@ -1156,7 +1096,7 @@
     },
     {
       "id": "provider",
-      "from": "The access service",
+      "from": "Access",
       "to": "The identity provider",
       "contract": "the OpenID Connect",
       "carries": "the authorization code",
@@ -1169,7 +1109,7 @@
     },
     {
       "id": "codes",
-      "from": "The access service",
+      "from": "Access",
       "to": "The shared state",
       "contract": "the commands of the shared state",
       "carries": "the codes of the logins",
@@ -1182,8 +1122,8 @@
     },
     {
       "id": "token",
-      "from": "The access service",
-      "to": "The gateway",
+      "from": "Access",
+      "to": "Gateway",
       "contract": "POST /oauth/token",
       "carries": "the code and the verifier",
       "decides": "the identity of the caller",
@@ -1195,8 +1135,8 @@
     },
     {
       "id": "context",
-      "from": "The data service",
-      "to": "The access service",
+      "from": "Data",
+      "to": "Access",
       "contract": "POST /v1/access-context",
       "carries": "the subject, the tenant, the workspace and the route",
       "decides": "which permissions the caller holds",
@@ -1208,8 +1148,8 @@
     },
     {
       "id": "rows",
-      "from": "The data service",
-      "to": "The database of the data service",
+      "from": "Data",
+      "to": "The database of Data",
       "contract": "the query",
       "carries": "the query and its bound values",
       "decides": "which rows the caller sees",
@@ -1221,8 +1161,8 @@
     },
     {
       "id": "console-access",
-      "from": "The console",
-      "to": "The access service",
+      "from": "Console",
+      "to": "Access",
       "contract": "/v1/admin/*",
       "carries": "the token of the operator",
       "decides": "what the operator may change",
@@ -1234,8 +1174,8 @@
     },
     {
       "id": "console-context",
-      "from": "The console",
-      "to": "The access service",
+      "from": "Console",
+      "to": "Access",
       "contract": "POST /v1/access-context",
       "carries": "the subject, the tenant, the workspace and the route",
       "decides": "the scope of the operator",
@@ -1247,8 +1187,8 @@
     },
     {
       "id": "grants",
-      "from": "The access service",
-      "to": "The database of the access service",
+      "from": "Access",
+      "to": "The database of Access",
       "contract": "the table of the grants",
       "carries": "the tenants, the principals, the grants",
       "decides": "what a principal may do",
@@ -1272,7 +1212,7 @@
         "context",
         "rows"
       ],
-      "note": "A record is read and written on the same path: the same services, the same contracts, the same order. A write asks the access service for a fresh context — the decision of a moment ago is exactly the decision that has to be checked — and it carries an idempotency key and the etag of the record it changes."
+      "note": "A record is read and written on the same path: the same services, the same contracts, the same order. A write asks Access for a fresh context — the decision of a moment ago is exactly the decision that has to be checked — and it carries an idempotency key and the etag of the record it changes."
     },
     {
       "id": "login",
@@ -1333,7 +1273,7 @@
         /**
          * The name of a station, as it reads inside a sentence.
          *
-         * A station is named as a reader names a thing — "The gateway".
+         * A station is named as a reader names a thing — "Gateway".
          * Inside a sentence, the name of the thing that is not the
          * subject of it is written in the lower case.
          */

@@ -140,7 +140,7 @@ export interface ExchangeResult {
    * It is the time from the moment the request was sent to the moment the
    * final headers of the answer arrived. It is the latency of the
    * upstream and not the latency of the gateway: the time the gateway
-   * spent on the authentication, on the limits and on the access service
+   * spent on the authentication, on the limits and on Access
    * is not part of it.
    */
   upstreamDurationMs?: number

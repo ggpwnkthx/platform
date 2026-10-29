@@ -1,5 +1,5 @@
 /**
- * The environment of the access service.
+ * The environment of Access.
  *
  * The environment is read once, at the start of the process, and it is
  * validated as a whole: a value that cannot be understood stops the service,
@@ -7,7 +7,7 @@
  * only exception is the level of the log, which falls back to `info`: a
  * typo in the level of a log must not keep a deployment down.
  *
- * The names of the variables never leave this module: the rest of the access service
+ * The names of the variables never leave this module: the rest of Access
  * receives the settings it needs, not the environment.
  */
 
@@ -29,9 +29,9 @@ interface NetworkSettings {
 
 /** The urls the browser and the gateway use. */
 interface PublicSettings {
-  /** The public issuer url of the access service: the `iss` of every token it issues. */
+  /** The public issuer url of Access: the `iss` of every token it issues. */
   issuer: string
-  /** The public url of the access service, when it differs from the issuer. */
+  /** The public url of Access, when it differs from the issuer. */
   publicUrl: string
 }
 
@@ -116,9 +116,9 @@ interface SecretSettings {
   encryptionKey?: string
 }
 
-/** The settings of the key the access service signs its tokens with. */
+/** The settings of the key Access signs its tokens with. */
 interface SigningSettings {
-  /** The private key of the access service, in PEM. */
+  /** The private key of Access, in PEM. */
   key?: string
   /** The identifier of the key in the JWKS. */
   kid?: string
@@ -130,7 +130,7 @@ interface SigningSettings {
 
 /** The settings of the deadlines. */
 interface TimeoutSettings {
-  /** How long the access service waits for the provider of a tenant. */
+  /** How long Access waits for the provider of a tenant. */
   idpTimeoutMs: number
   /** How long a decision may take before it is a denial. */
   decisionTimeoutMs: number
@@ -144,7 +144,7 @@ interface ObservabilitySettings {
   logLevel: LogLevel
 }
 
-/** Everything the access service needs to start. */
+/** Everything Access needs to start. */
 export interface RuntimeSettings {
   /** The environment of the process. */
   environment: Environment
@@ -408,7 +408,7 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
   if (!rawDatabase) {
     if (production) {
       problems.push(
-        'ACCESS_DATABASE_URL must be set in a production environment: it names the PostgreSQL of the eight tables of the access service'
+        'ACCESS_DATABASE_URL must be set in a production environment: it names the PostgreSQL of the eight tables of Access'
       )
     } else {
       databasePath = DEFAULT_EMBEDDED_DATABASE_PATH
@@ -436,7 +436,7 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
     parsed.ACCESS_ISSUER ?? (production ? undefined : developmentIssuer(parsed.ACCESS_PORT))
   if (!issuer) {
     problems.push(
-      'ACCESS_ISSUER must be set in a production environment: it is the issuer of the tokens of the access service and the one the gateway is configured with'
+      'ACCESS_ISSUER must be set in a production environment: it is the issuer of the tokens of Access and the one the gateway is configured with'
     )
   } else if (!isHttpUrl(issuer)) {
     problems.push('ACCESS_ISSUER must be an absolute http url')
@@ -467,7 +467,7 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
     }
     if (!parsed.ACCESS_SIGNING_KEY) {
       problems.push(
-        'ACCESS_SIGNING_KEY must be set in a production environment: it is the private key the access service signs its tokens with, and a key that is generated at the start of a process invalidates every token that is alive'
+        'ACCESS_SIGNING_KEY must be set in a production environment: it is the private key Access signs its tokens with, and a key that is generated at the start of a process invalidates every token that is alive'
       )
     }
     if (!parsed.ACCESS_SIGNING_KID) {

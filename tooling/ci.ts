@@ -115,8 +115,8 @@ export function matrixValues(job: unknown): string[][] {
  *
  * Every `run` of every step of every job is a command, and the
  * expressions of a matrix are substituted: the job of the gateway runs
- * the command of the gateway, and the job of the access service runs
- * the command of the access service.
+ * the command of the gateway, and the job of Access runs
+ * the command of Access.
  */
 export function commandsOf(directory: string): Command[] {
   const commands: Command[] = []

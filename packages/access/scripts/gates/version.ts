@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * The version of the release of the access service.
+ * The version of the release of Access.
  *
  * The version of the release is written in several places: the package
  * of the workspace, the image, the answer of the probe of the health,

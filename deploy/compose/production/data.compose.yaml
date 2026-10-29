@@ -1,4 +1,4 @@
-# The production stack of the data service alone: the api, the schema of
+# The production stack of Data alone: the api, the schema of
 # its deployment and the credentials of the deployment.
 #
 #   docker compose -f deploy/compose/production/data.compose.yaml up -d
@@ -55,9 +55,9 @@ services:
       DATA_SCHEMA_BUNDLE_FILE: /app/packages/data/manifests/schema.json
       DATA_POLICY_BUNDLE_FILE: /app/packages/data/manifests/policies.json
       DATA_GATEWAY_BINDINGS_FILE: /etc/platform/bindings.json
-      # The access service of the access context contract. The credential travels with
+      # Access of the access context contract. The credential travels with
       # the request, so the url is https in a production deployment.
-      DATA_ACCESS_URL: ${DATA_ACCESS_URL:?the access service of the access context contract is required}
+      DATA_ACCESS_URL: ${DATA_ACCESS_URL:?Access of the access context contract is required}
       DATA_ACCESS_CONTEXT_TOKEN_FILE: /run/secrets/access-context.token
       DATA_CURSOR_KEY_FILE: /run/secrets/cursor.key
       # The token of the metrics endpoint is not set: without the file of

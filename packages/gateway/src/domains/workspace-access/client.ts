@@ -1,11 +1,11 @@
 /**
  * The client of access.
  *
- * The gateway never decides access on its own: it asks the access service
+ * The gateway never decides access on its own: it asks Access
  * and denies the request when no valid decision is available (fail closed).
  *
  * The decisions are cached for a few seconds, so a busy gateway does not ask
- * the access service for every single request. **Only an explicit decision
+ * Access for every single request. **Only an explicit decision
  * is cached**: a transport failure is not a decision, and caching it would
  * keep denying a caller that the service would have allowed.
  */
@@ -37,7 +37,7 @@ export interface AccessTransport {
   }): Promise<{ status: number; body: string }>
 }
 
-/** A decision of the access service, as it is cached. */
+/** A decision of Access, as it is cached. */
 export interface CachedDecision {
   allow: boolean
   /** The kind of the decision: only an explicit one is ever cached. */
@@ -158,7 +158,7 @@ export interface AccessClientOptions {
 /**
  * The key of a cached decision.
  *
- * The roles of the caller are part of the decision: the access service
+ * The roles of the caller are part of the decision: Access
  * decides on them, so a decision that was made for a caller with a role
  * must never be served to a caller without it. The key is hashed, so the
  * keys of the server stay small and cannot collide by accident.
@@ -236,7 +236,7 @@ export class AccessClient {
   }
 
   /**
-   * Asks the access service whether the subject may use the workspace.
+   * Asks Access whether the subject may use the workspace.
    *
    * Any failure results in a denial.
    *
@@ -299,7 +299,7 @@ export class AccessClient {
       const decision: AccessDecision = {
         allow: false,
         kind: 'unavailable',
-        reason: 'the access service is not available',
+        reason: 'Access is not available',
         cached: false,
         stale: false,
         decidedAt: Date.now(),
@@ -316,7 +316,7 @@ export class AccessClient {
         return {
           allow: false,
           kind: 'unavailable' as const,
-          reason: 'the access service is not available',
+          reason: 'Access is not available',
           cached: false,
           stale: false,
           decidedAt: Date.now(),
@@ -386,7 +386,7 @@ export class AccessClient {
       return {
         allow: false,
         kind: 'unavailable',
-        reason: `the access service is not available`,
+        reason: `Access is not available`,
         cached: false,
         stale: false,
         decidedAt: Date.now(),
@@ -461,7 +461,7 @@ export class AccessClient {
     let response: { status: number; body: string }
     try {
       // The workspace is only in the request when the route names one: a
-      // route that asks the access service about itself sends the subject,
+      // route that asks Access about itself sends the subject,
       // the route and the roles, and the service decides without a
       // workspace.
       const payload: Record<string, unknown> = {
@@ -496,7 +496,7 @@ export class AccessClient {
       // breaker: a bug in the gateway must not refuse every caller of the
       // deployment by opening the breaker of the service.
       if (response.status !== 400) this.#breaker.reportFailure()
-      throw new Error(`the access service answered with the status ${response.status}`)
+      throw new Error(`Access answered with the status ${response.status}`)
     }
     let body: { allow?: unknown; reason?: unknown; reasonCode?: unknown }
     try {
@@ -507,11 +507,11 @@ export class AccessClient {
       }
     } catch {
       this.#breaker.reportFailure()
-      throw new Error('the access service answered with a body that is not json')
+      throw new Error('Access answered with a body that is not json')
     }
     if (typeof body.allow !== 'boolean') {
       this.#breaker.reportFailure()
-      throw new Error('the access service answered with a malformed decision')
+      throw new Error('Access answered with a malformed decision')
     }
     // The service answered: it is healthy again. The breaker counts a
     // denial as a success: the service did its job.

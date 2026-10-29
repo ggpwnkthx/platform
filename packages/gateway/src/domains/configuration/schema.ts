@@ -172,16 +172,16 @@ export const RouteSchema = z.strictObject({
    */
   forwardAuthorization: z.boolean().optional(),
   /**
-   * How long a decision of the access service is cached for the route, in
+   * How long a decision of Access is cached for the route, in
    * milliseconds.
    *
    * It is the latency of a revocation on that route: a value of zero asks
-   * the access service for every request, so a revocation is immediate.
+   * Access for every request, so a revocation is immediate.
    * It replaces the value of the defaults.
    */
   accessCacheTtlMs: z.number().int().min(0).max(600_000).optional(),
   /**
-   * How long a decision of the access service may be served after the
+   * How long a decision of Access may be served after the
    * service became unreachable, in milliseconds.
    *
    * Zero disables it: an unreachable service is an outage and the gateway
@@ -194,7 +194,7 @@ export const RouteSchema = z.strictObject({
    */
   accessStaleGraceMs: z.number().int().min(0).max(3_600_000).optional(),
   /**
-   * Whether the access service is asked about this route when the route
+   * Whether Access is asked about this route when the route
    * names no workspace.
    *
    * A route that names a workspace is always checked. A route that names
@@ -202,7 +202,7 @@ export const RouteSchema = z.strictObject({
    * carries the subject, the route and the roles, and no workspace.
    *
    * A check needs an authentication mode other than `none`: the gateway
-   * asks the access service about a caller it authenticated.
+   * asks Access about a caller it authenticated.
    */
   accessCheck: z.boolean().optional(),
 })
@@ -294,7 +294,7 @@ export const GatewayConfigSchema = z
           code: 'custom',
           path: ['routes', index, 'accessCheck'],
           message:
-            'a check of the access service needs an authentication mode other than "none": the gateway asks the service about a caller it authenticated',
+            'a check of Access needs an authentication mode other than "none": the gateway asks the service about a caller it authenticated',
         })
       }
       if (workspace && !placeholders.includes(workspace.param)) {
@@ -373,7 +373,7 @@ export function effectivePolicy(
     upstreamAttemptMs: number
     /** The size of a replayable body when neither the route nor the defaults set one. */
     replayMaxBytes: number
-    /** The grace of an outage of the access service when neither the route nor the defaults set one. */
+    /** The grace of an outage of Access when neither the route nor the defaults set one. */
     accessStaleGraceMs: number
   }
 ): {

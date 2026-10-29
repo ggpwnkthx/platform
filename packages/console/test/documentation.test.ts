@@ -99,7 +99,7 @@ describe('the markdown of the documentation', () => {
   })
 
   test('a heading in a block of code is not a heading', () => {
-    const blocks = parseMarkdown('```bash\n# the access service\n```\n\n## The heading\n')
+    const blocks = parseMarkdown('```bash\n# Access\n```\n\n## The heading\n')
     expect(blocks[0]?.kind).toBe('code')
     expect(blocks[1]).toMatchObject({ kind: 'heading', id: 'the-heading' })
   })
@@ -289,8 +289,8 @@ describe('the tree of the documentation', () => {
   })
 
   test('a group is named by its area, not its directory', () => {
-    expect(titleOf('access')).toBe('Access service')
-    expect(titleOf('data')).toBe('Data service')
+    expect(titleOf('access')).toBe('Access')
+    expect(titleOf('data')).toBe('Data')
     expect(titleOf('')).toBe('Overview')
   })
 

@@ -16,8 +16,8 @@ packages/console/
 │   ├── main.ts           process: serves the build, or the sources through Vite
 │   ├── runtime/          configuration, logging, client composition
 │   ├── domains/          core: no HonoX, no pages
-│   │   ├── access/         access service administration and access context
-│   │   ├── authentication/ sign-in at the access service (code flow, PKCE, ID token)
+│   │   ├── access/         Access administration and access context
+│   │   ├── authentication/ sign-in at Access (code flow, PKCE, ID token)
 │   │   ├── data/           workspace data through the gateway; form values
 │   │   ├── documentation/  platform docs: the tree and its URLs
 │   │   ├── operators/      operator scope, user rights

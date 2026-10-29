@@ -1,11 +1,10 @@
 /**
  * The vocabulary of the services of the platform.
  *
- * The three services are named by their role — the gateway, the access
- * service and the data service — and the identifiers of a service carry
- * the name of that role: the prefixes of its environment, the names of
- * its metrics and the name it reports in the health endpoint and in the
- * logs.
+ * The three services are named by their role — Gateway, Access and
+ * Data — and the identifiers of a service carry the name of that role:
+ * the prefixes of its environment, the names of its metrics and the name
+ * it reports in the health endpoint and in the logs.
  *
  * The names the services carried before were the names of the
  * repositories they were published from, and those repositories are

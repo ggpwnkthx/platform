@@ -38,7 +38,7 @@
  * against the references that are pinned.
  *
  * Before the merge the manifest named two repositories and two commits:
- * the gateway was another repository, and the access service was another
+ * the gateway was another repository, and Access was another
  * one. They are workspaces of this repository now, and the baseline is
  * the revision of the repository itself — the revision the platform was
  * released at, pinned in the manifest.

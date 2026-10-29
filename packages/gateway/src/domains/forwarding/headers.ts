@@ -261,7 +261,7 @@ export function buildUpstreamHeaders(options: UpstreamHeadersOptions): Headers {
     if (identity.email) headers.set(IDENTITY_HEADER_NAMES.email, identity.email)
     // The roles are written as a list, separated by commas. A role that
     // contains a comma would make the list ambiguous, so it is not written
-    // at all: the roles of the caller are handed to the access service
+    // at all: the roles of the caller are handed to Access
     // unfiltered, and the header is only a hint for the upstream.
     headers.set(IDENTITY_HEADER_NAMES.roles, identity.roles.join(','))
     if (identity.workspaceId) headers.set(IDENTITY_HEADER_NAMES.workspace, identity.workspaceId)

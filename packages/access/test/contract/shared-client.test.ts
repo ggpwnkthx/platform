@@ -49,8 +49,8 @@ let admin: (
 /**
  * A login of another tenant, begun by the shared client.
  *
- * The browser goes to the authorization of the access service, then to the provider and
- * then back to the callback of the access service.
+ * The browser goes to the authorization of Access, then to the provider and
+ * then back to the callback of Access.
  */
 async function loginOfTheOtherTenant(): Promise<string> {
   const query = new URLSearchParams({

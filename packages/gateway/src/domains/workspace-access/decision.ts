@@ -43,7 +43,7 @@ export type AccessReasonCode =
   | 'policy_denied'
   | 'access_denied'
 
-/** The reason codes the protocol of the access service accepts. */
+/** The reason codes the protocol of Access accepts. */
 export const ACCESS_REASON_CODES: readonly AccessReasonCode[] = [
   'missing_role',
   'workspace_not_found',
@@ -93,7 +93,7 @@ export interface AccessDecision {
   /** True when the decision was served from the cache. */
   cached: boolean
   /**
-   * True when the decision was served while the access service was not
+   * True when the decision was served while Access was not
    * reachable.
    *
    * A stale decision is the last decision the service took, served for a
@@ -114,7 +114,7 @@ export interface AccessRequest {
   /**
    * The identifier of the workspace.
    *
-   * It is absent when the route asks the access service about itself and
+   * It is absent when the route asks Access about itself and
    * names no workspace: the service then decides on the subject, the route
    * and the roles.
    */
@@ -129,7 +129,7 @@ export interface AccessRequest {
  * The reason of a denial, as the metric counts it.
  *
  * `missing_role` is not a decision of the gateway: the gateway does not check
- * roles itself. It is reported when the access service denies a caller
+ * roles itself. It is reported when Access denies a caller
  * because of a missing role. The reason of the service is not given to the
  * caller: it describes the policy of the platform and it is not the business
  * of the client.
@@ -140,7 +140,7 @@ export type AuthFailureReason = 'unauthenticated' | 'missing_role' | 'access_den
  * Maps the reason of a denial to the reason of the metric.
  *
  * The **code** of the reason is what is counted when the service sends
- * one: the codes are part of the protocol of the access service (§6.1 of
+ * one: the codes are part of the protocol of Access (§6.1 of
  * the specification), and they are exact.
  *
  * A service that sends no code is counted with the **legacy rule**: the

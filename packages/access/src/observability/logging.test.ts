@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { createLogger, redactFields, redactUrl } from './logging'
 
-describe('the logs of the access service', () => {
+describe('the logs of Access', () => {
   test('a credential never reaches a log line', () => {
     const lines: string[] = []
     const logger = createLogger({ level: 'info', write: (line) => lines.push(line) })

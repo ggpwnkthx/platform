@@ -272,7 +272,7 @@ describe('the revalidation of a websocket', () => {
     })
     bridge.start()
     bridge.startRevalidation(async () => {
-      throw new Error('the access service is not reachable')
+      throw new Error('Access is not reachable')
     })
     await new Promise((resolve) => setTimeout(resolve, 40))
     expect(client.closed).toHaveLength(1)

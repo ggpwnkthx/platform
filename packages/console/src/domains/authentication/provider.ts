@@ -1,14 +1,14 @@
 /**
- * The sign-in of the console at the access service.
+ * The sign-in of the console at Access.
  *
  * The console is a client of the tenant, like the gateway is: it sends
- * the browser to the authorization endpoint of the access service with
+ * the browser to the authorization endpoint of Access with
  * PKCE (`S256`), a `state` and a `nonce`, it exchanges the code with its
  * own credential, and it verifies the id token against the keys of the
  * service. The access token that comes with it is the credential the
  * gateway accepts for the calls of the data.
  *
- * The browser reaches the access service at the endpoints of the
+ * The browser reaches Access at the endpoints of the
  * discovery document; the console reaches it at its own url. The two
  * may differ: the service of a composition has an internal name.
  */
@@ -17,7 +17,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { createRemoteJWKSet, customFetch, type JWTPayload, jwtVerify } from 'jose'
 import { bodyOf, call, type Fetch } from '../transport'
 
-/** The discovery document of the access service, as far as the console reads it. */
+/** The discovery document of Access, as far as the console reads it. */
 export interface Discovery {
   readonly issuer: string
   readonly authorizationEndpoint: string
@@ -40,7 +40,7 @@ export interface Identity {
   readonly roles: readonly string[]
 }
 
-/** A login that the access service refused, or that did not hold. */
+/** A login that Access refused, or that did not hold. */
 export class LoginError extends Error {
   override readonly name = 'LoginError'
   /** The code of the refusal. */
@@ -82,7 +82,7 @@ export function safeRedirect(target: string | null | undefined): string {
 
 /** The options of the provider. */
 export interface ProviderOptions {
-  /** The url the console reaches the access service at. */
+  /** The url the console reaches Access at. */
   readonly accessUrl: string
   readonly clientId: string
   readonly clientSecret: string
@@ -90,7 +90,7 @@ export interface ProviderOptions {
   readonly fetch?: Fetch
 }
 
-/** The access service, as the provider of the sign-in of the console. */
+/** Access, as the provider of the sign-in of the console. */
 export class AccessProvider {
   readonly #options: ProviderOptions
   readonly #fetch: Fetch
@@ -114,7 +114,7 @@ export class AccessProvider {
       return this.#discovery.value
     }
     const response = await call(
-      'access service',
+      'Access',
       this.#fetch,
       `${this.#options.accessUrl}/.well-known/openid-configuration`,
       { headers: { accept: 'application/json' } },
@@ -126,10 +126,7 @@ export class AccessProvider {
       typeof body?.issuer !== 'string' ||
       typeof body.authorization_endpoint !== 'string'
     ) {
-      throw new LoginError(
-        'discovery_failed',
-        'the access service did not answer its discovery document'
-      )
+      throw new LoginError('discovery_failed', 'Access did not answer its discovery document')
     }
     const value = { issuer: body.issuer, authorizationEndpoint: body.authorization_endpoint }
     this.#discovery = { value, at: now }
@@ -166,7 +163,7 @@ export class AccessProvider {
       `${encodeURIComponent(this.#options.clientId)}:${encodeURIComponent(this.#options.clientSecret)}`
     ).toString('base64')
     const response = await call(
-      'access service',
+      'Access',
       this.#fetch,
       `${this.#options.accessUrl}/oauth/token`,
       {
@@ -191,11 +188,11 @@ export class AccessProvider {
       const description =
         typeof body?.error_description === 'string'
           ? body.error_description
-          : `the access service refused the code with the status ${response.status}`
+          : `Access refused the code with the status ${response.status}`
       throw new LoginError(code, description)
     }
     if (typeof body?.access_token !== 'string' || typeof body.id_token !== 'string') {
-      throw new LoginError('token_refused', 'the access service answered no token')
+      throw new LoginError('token_refused', 'Access answered no token')
     }
     const expiresIn = typeof body.expires_in === 'number' ? body.expires_in : 300
     return {
@@ -205,7 +202,7 @@ export class AccessProvider {
     }
   }
 
-  /** Verifies the id token of a login against the keys of the access service. */
+  /** Verifies the id token of a login against the keys of Access. */
   async verify(idToken: string, nonce: string): Promise<Identity> {
     const discovery = await this.discovery()
     let payload: JWTPayload

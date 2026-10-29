@@ -1,5 +1,5 @@
 /**
- * The application of the access service.
+ * The application of Access.
  *
  * The application is thin on purpose: it holds the order of the pipeline,
  * it maps the failures of the domains to the answers of the protocol and it
@@ -71,7 +71,7 @@ export interface AccessHandler {
   handle(request: Request, env: AccessEnv['Bindings']): Response | Promise<Response>
 }
 
-/** Wraps the application of the access service for the listener of the platform. */
+/** Wraps the application of Access for the listener of the platform. */
 export function createAccessHandler(app: Hono<AccessEnv>): AccessHandler {
   const executionCtx: ExecutionContext = {
     waitUntil: () => undefined,
@@ -83,7 +83,7 @@ export function createAccessHandler(app: Hono<AccessEnv>): AccessHandler {
   }
 }
 
-/** Builds the application of the access service. */
+/** Builds the application of Access. */
 export function createAccessApp(dependencies: AccessDependencies): Hono<AccessEnv> {
   const app = new Hono<AccessEnv>()
 
@@ -96,7 +96,7 @@ export function createAccessApp(dependencies: AccessDependencies): Hono<AccessEn
     await next()
     try {
       context.res.headers.set('x-request-id', state.requestId)
-      // The headers of a browser: the answer of the access service is never framed, it
+      // The headers of a browser: the answer of Access is never framed, it
       // is never sniffed, and it never carries the url of another site.
       context.res.headers.set('x-content-type-options', 'nosniff')
       context.res.headers.set('x-frame-options', 'DENY')
@@ -195,7 +195,7 @@ export function createAccessApp(dependencies: AccessDependencies): Hono<AccessEn
   // and it does not change.
   app.get('/v1/admin/audit', async (context) => auditHandler(context, dependencies))
 
-  // Every other path is refused: the access service has a fixed surface and the paths
+  // Every other path is refused: Access has a fixed surface and the paths
   // that are not part of it are not part of it.
   app.all('*', () => jsonError(404, 'not_found', 'unknown path'))
 

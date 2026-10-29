@@ -24,12 +24,12 @@ bun install
 bun run dev
 ```
 
-The runner starts PostgreSQL, a development identity provider, the access service, the data service, the gateway and the console. It applies migrations, registers a workspace, and seeds a tenant, a user and grants. When everything is up it prints:
+The runner starts PostgreSQL, a development identity provider, Access, Data, the gateway and the console. It applies migrations, registers a workspace, and seeds a tenant, a user and grants. When everything is up it prints:
 
 ```
   gateway         http://localhost:8080
-  access service  http://127.0.0.1:8081
-  data service    http://127.0.0.1:8082
+  Access  http://127.0.0.1:8081
+  Data    http://127.0.0.1:8082
   console         http://localhost:8083
   identity        http://127.0.0.1:5556
   ...
@@ -58,9 +58,9 @@ Open the printed sign-in address in a browser:
 http://localhost:8080/auth/login?redirect=/ws/11111111-1111-4111-8111-111111111111/v1/me
 ```
 
-Sign in with the same credentials. The browser returns to `/ws/11111111-1111-4111-8111-111111111111/v1/me`, and the data service answers with your principal, tenant and workspace as JSON.
+Sign in with the same credentials. The browser returns to `/ws/11111111-1111-4111-8111-111111111111/v1/me`, and Data answers with your principal, tenant and workspace as JSON.
 
-That one request crossed every service: the gateway sent you to the access service, which sent you to the identity provider; the access service then allowed the workspace, and the gateway forwarded the request to the data service with a signed identity.
+That one request crossed every service: the gateway sent you to Access, which sent you to the identity provider; Access then allowed the workspace, and the gateway forwarded the request to Data with a signed identity.
 
 ## Stop and reset
 

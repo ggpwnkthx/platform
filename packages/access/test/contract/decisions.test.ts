@@ -319,7 +319,7 @@ describe('the decisions of the gateway', () => {
     expect(after).toBe(before)
   })
 
-  test('a field that the access service does not know is ignored', async () => {
+  test('a field that Access does not know is ignored', async () => {
     const answer = await decide({
       subject,
       workspaceId: WORKSPACE,

@@ -1,10 +1,10 @@
-# Access service
+# Access
 
-The access service is an OpenID Connect broker and access decision service: it authenticates callers against each tenant's identity provider, maps them to principals, and answers the gateway's existing decision contract.
+Access is an OpenID Connect broker and access decision service: it authenticates callers against each tenant's identity provider, maps them to principals, and answers the gateway's existing decision contract.
 
 ## How it fits
 
-The gateway (`packages/gateway/`, read-only here) logs callers in through this service and asks it for a decision on every request; the gateway itself is unchanged, and the compatibility suite proves it against the repository's revision of the gateway. The data service reads a principal's capabilities through the access context contract. Shared concerns are in [Platform](../platform/README.md).
+The gateway (`packages/gateway/`, read-only here) logs callers in through this service and asks it for a decision on every request; the gateway itself is unchanged, and the compatibility suite proves it against the repository's revision of the gateway. Data reads a principal's capabilities through the access context contract. Shared concerns are in [Platform](../platform/README.md).
 
 Concepts:
 

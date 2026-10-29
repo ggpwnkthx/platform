@@ -48,7 +48,7 @@ export interface DatabaseSettings {
   readonly acquireTimeoutMs: number
 }
 
-/** The settings of the access service access context contract. */
+/** The settings of Access access context contract. */
 export interface AccessSettings {
   /** The base url of access. */
   readonly url: string
@@ -296,12 +296,10 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
     problems.push('DATA_GATEWAY_BINDINGS_FILE must be set for an api process')
   }
 
-  // The access service of the access context contract.
+  // Access of the access context contract.
   const accessUrl = values.DATA_ACCESS_URL
   if (!accessUrl) {
-    problems.push(
-      'DATA_ACCESS_URL must be set: it names the access service of the access context contract'
-    )
+    problems.push('DATA_ACCESS_URL must be set: it names Access of the access context contract')
   } else if (!isHttpUrl(accessUrl)) {
     problems.push('DATA_ACCESS_URL must be an absolute http url')
   } else if (production && !accessUrl.startsWith('https://')) {

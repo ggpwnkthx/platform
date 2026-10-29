@@ -7,14 +7,14 @@ import {
 } from '../support/contract-harness'
 
 /**
- * The access service of the gateway.
+ * Access of the gateway.
  *
- * The gateway asks the access service about the workspace of a route, and
+ * The gateway asks Access about the workspace of a route, and
  * it may ask it about a route that names no workspace. It fails closed, and
  * it tells a denial and an outage apart.
  *
  * The grace of an outage is what keeps the traffic of a deployment flowing
- * while the access service is down: the last decision of the service is
+ * while Access is down: the last decision of the service is
  * served for a bounded time, and only when it allows the caller.
  */
 
@@ -51,7 +51,7 @@ function routes(context: { upstreamA: string; upstreamB: string }): unknown[] {
       match: { host: 'admin.gateway.test', path: '/' },
       upstream: context.upstreamA,
       auth: { mode: 'jwt' },
-      // The route names no workspace: the access service is asked about
+      // The route names no workspace: Access is asked about
       // the route itself.
       accessCheck: true,
     },
@@ -79,7 +79,7 @@ function staleCount(text: string): number {
 }
 
 /**
- * Asks the graceful route while the access service is down.
+ * Asks the graceful route while Access is down.
  *
  * The first request lets the service decide, so the cache holds a decision
  * that allows the caller. The decision is then older than its lifetime of a
@@ -103,7 +103,7 @@ async function requestDuringOutage(harness: Harness): Promise<Response> {
   }
 }
 
-describe('the access service of the gateway', () => {
+describe('Access of the gateway', () => {
   let harness: Harness
 
   beforeAll(async () => {

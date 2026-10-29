@@ -4,7 +4,7 @@
  *
  * The requeue of a delivery is an explicit command of the operator: it
  * does not bypass the authorization of the business, the handler of the
- * subscriber asks the access service again before it does anything.
+ * subscriber asks Access again before it does anything.
  *
  *   bun run scripts/cli/delivery.ts list
  *   bun run scripts/cli/delivery.ts requeue --event <uuid> --subscriber <id> --actor <name>

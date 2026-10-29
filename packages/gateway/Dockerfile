@@ -57,7 +57,7 @@ CMD ["services/fixtures/oidc-provider.ts"]
 
 # ------------------------------------------------------------------- access
 #
-# The reference implementation of the access service. It is not part of
+# The reference implementation of Access. It is not part of
 # the gateway: it is the service the gateway asks about the workspaces, and
 # a deployment that has its own does not need this one. The implementation
 # uses nothing but the runtime, so the image carries no dependency.
@@ -103,7 +103,7 @@ WORKDIR /app/packages/gateway
 ARG VERSION
 ARG REVISION
 LABEL org.opencontainers.image.title="gateway" \
-      org.opencontainers.image.description="An application gateway: it authenticates a caller, asks an access service and forwards the request to a single upstream." \
+      org.opencontainers.image.description="An application gateway: it authenticates a caller, asks Access and forwards the request to a single upstream." \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}" \
       org.opencontainers.image.source="https://github.com/ggpwnkthx/platform" \

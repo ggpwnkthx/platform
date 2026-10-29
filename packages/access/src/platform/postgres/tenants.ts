@@ -1,5 +1,5 @@
 /**
- * The tenants of the access service (spec §3.1).
+ * The tenants of Access (spec §3.1).
  *
  * The repository is the storage of the rows: it holds no policy. The rules
  * of a tenant live in the domains that use it, and the answers of the
@@ -28,7 +28,7 @@ export interface TenantRow {
   emailDomain: string | null
   idpIssuer: string
   idpClientId: string
-  /** The client secret of the access service at the provider, encrypted at rest. */
+  /** The client secret of Access at the provider, encrypted at rest. */
   idpClientSecret: Uint8Array
   idpRedirectUri: string
   idpScopes: string[]
@@ -71,7 +71,7 @@ export interface NewTenant {
   /** The issuer of the provider of the tenant. */
   issuer: string
   idpClientId: string
-  /** The client secret of the access service at the provider, in clear. */
+  /** The client secret of Access at the provider, in clear. */
   idpClientSecret: string
   idpRedirectUri: string
   idpScopes: string[]
@@ -370,7 +370,7 @@ export class TenantRepository {
     return rows[0] ? toRow(rows[0]) : null
   }
 
-  /** The client secret of the access service at the provider, in clear. */
+  /** The client secret of Access at the provider, in clear. */
   async readProviderSecret(id: string): Promise<string | null> {
     const rows = await this.db.query<{ idp_client_secret: Uint8Array }>(
       `select idp_client_secret from tenants where id = $1`,

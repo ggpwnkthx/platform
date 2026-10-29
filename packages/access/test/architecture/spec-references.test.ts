@@ -9,7 +9,7 @@ const root = resolve(import.meta.dir, '..', '..')
 /**
  * The references to the specification (spec §N).
  *
- * The specification is the normative document of the access service, and the code, the
+ * The specification is the normative document of Access, and the code, the
  * tests and the other documents point at it by its number. A reference
  * that points at nothing is a dead end for the reader and a lie about
  * the contract: the number of a section that moved is the number of a
@@ -34,7 +34,7 @@ interface Reference {
  *
  * The code of the workspace, and the documentation of its contract:
  * the documentation of the three contracts is one tree at the root of
- * the repository, and the directory of the access service is the one
+ * the repository, and the directory of Access is the one
  * that holds its own documents.
  */
 const DIRECTORIES = ['src', 'test', 'scripts']
@@ -43,7 +43,7 @@ const DIRECTORIES = ['src', 'test', 'scripts']
  * The directory of the documentation of the contract.
  *
  * The documentation of the three contracts is one tree at the root of
- * the repository, and the directory of the access service is the one
+ * the repository, and the directory of Access is the one
  * that holds its own documents.
  */
 const DOCUMENTATION = resolve(root, '../../docs/access')

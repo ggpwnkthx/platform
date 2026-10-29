@@ -13,12 +13,12 @@
  *
  * - the **session** still exists: a session that expired ends the
  *   connections it opened;
- * - the **access service** still allows the workspace: a revoked access
+ * - the **Access** still allows the workspace: a revoked access
  *   ends the connections it allowed;
  * - the **route** still exists and still accepts websockets: a route that
  *   was removed ends the connections it served.
  *
- * The decision of the access service is read through the cache, so a
+ * The decision of Access is read through the cache, so a
  * short outage of the service does not close the connections of the
  * deployment. The window of the cache is the latency of a revocation; the
  * interval of the revalidation is added to it.
@@ -83,12 +83,12 @@ export function buildRevalidation(
       }
     }
 
-    // The access service. A revoked access ends the connections it
+    // Access. A revoked access ends the connections it
     // allowed. The decision is asked for again: the cached one is exactly
     // the decision that has to be checked.
     //
     // The route is asked too when it names no workspace and asks the
-    // access service about itself: the connection was authorized by that
+    // Access about itself: the connection was authorized by that
     // check, and the check is what has to be made again.
     if (target.subject && (target.workspaceId || route.payload.accessCheck)) {
       const decision = await dependencies.access.decide(

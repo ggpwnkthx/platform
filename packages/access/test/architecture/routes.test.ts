@@ -7,7 +7,7 @@ const root = resolve(import.meta.dir, '..', '..')
 /**
  * The routes of the code and the routes of the documentation.
  *
- * The HTTP surface of the access service is a contract of its own: a route that is not
+ * The HTTP surface of Access is a contract of its own: a route that is not
  * documented is a route that nobody knows how to call, and a route that
  * is documented and does not exist is a promise that the service does
  * not keep.
@@ -23,7 +23,7 @@ const root = resolve(import.meta.dir, '..', '..')
  * The documents that hold the HTTP surface.
  *
  * The documentation of the contracts is one tree at the root of the
- * repository, and the directory of the access service is the one that
+ * repository, and the directory of Access is the one that
  * holds its own documents.
  */
 const DOCUMENTS = ['api.md', 'operations.md']
@@ -80,7 +80,7 @@ async function routesOfTheDocuments(): Promise<Route[]> {
   return routes
 }
 
-describe('the routes of the access service', () => {
+describe('the routes of Access', () => {
   test('every route of the code is documented', async () => {
     const code = await routesOfTheCode()
     const documents = await routesOfTheDocuments()

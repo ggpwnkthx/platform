@@ -1,14 +1,14 @@
 /**
  * The health of access.
  *
- * The access service is a dependency of the deployment and it is on the
+ * Access is a dependency of the deployment and it is on the
  * path of every request of a route that names a workspace. A service that
  * is down therefore does not only refuse the requests: it makes them
  * **slow**, because every request waits for the budget of the call before
  * it is answered.
  *
  * That is the failure the breaker closes. Without it, an outage of the
- * access service means one call per request, each of them waiting for the
+ * Access means one call per request, each of them waiting for the
  * whole timeout of the client, and the traffic of the deployment piles up
  * behind it. The dependency being down makes the gateway slower, and the
  * slower gateway falls further behind: the outage amplifies itself.

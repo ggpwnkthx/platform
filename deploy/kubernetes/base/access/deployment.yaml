@@ -1,7 +1,7 @@
-# The access service on its own.
+# Access on its own.
 #
 # It holds the tenants, the providers they authenticate against and the
-# decisions of the gateway. The gateway and the data service ask it, and
+# decisions of the gateway. The gateway and Data ask it, and
 # neither of them has to be in the same deployment.
 apiVersion: apps/v1
 kind: Deployment

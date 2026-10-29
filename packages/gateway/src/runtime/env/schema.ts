@@ -147,7 +147,7 @@ export const EnvSchema = z.object({
   GATEWAY_ACCESS_TOKEN: z.string().optional(),
   GATEWAY_ACCESS_TIMEOUT_MS: intEnv(3_000, { min: 1 }),
   /**
-   * The number of failures of the access service before it is not called
+   * The number of failures of Access before it is not called
    * any more, in milliseconds of the cooldown that follows.
    *
    * The breaker only refuses: it never lets a caller in, so it cannot be
@@ -163,7 +163,7 @@ export const EnvSchema = z.object({
   GATEWAY_ACCESS_BREAKER_COOLDOWN_MS: intEnv(5_000, { min: 0, max: 3_600_000 }),
   GATEWAY_ACCESS_CACHE_TTL_MS: intEnv(5_000, { min: 0 }),
   /**
-   * How long a decision of the access service may be served after the
+   * How long a decision of Access may be served after the
    * service became unreachable, in milliseconds.
    *
    * Zero disables it: an unreachable service is an outage and the gateway
@@ -174,7 +174,7 @@ export const EnvSchema = z.object({
    */
   GATEWAY_ACCESS_STALE_GRACE_MS: intEnv(0, { min: 0, max: 3_600_000 }),
   /**
-   * Allows the gateway to call the access service without a token.
+   * Allows the gateway to call Access without a token.
    *
    * The setting is the production validation of the deployment: the access
    * service refuses a call without a token, so a deployment that does not
@@ -289,7 +289,7 @@ export const EnvSchema = z.object({
    * The cap above bounds the exchanges with the upstreams. This one
    * bounds the whole pipeline, including the phase that waits for a
    * dependency: the limits, the session and the decision of the access
-   * service. A request that waits for a hanging access service would
+   * service. A request that waits for a hanging Access would
    * never reach the cap above.
    */
   GATEWAY_MAX_PENDING_REQUESTS: intEnv(1_000, { min: 0 }),

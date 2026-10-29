@@ -1,6 +1,6 @@
 # HTTP API
 
-Every access service endpoint with its request, response, errors and a `curl` example. The rules behind them are in [spec.md](spec.md), cited as `§N`.
+Every Access endpoint with its request, response, errors and a `curl` example. The rules behind them are in [spec.md](spec.md), cited as `§N`.
 
 ## Conventions
 
@@ -47,7 +47,7 @@ Response: `302` to the tenant's provider, or `400 invalid_request` (no tenant, b
 
 ### `GET /oauth/tenant/callback`
 
-Where the tenant's provider returns the browser with `code` and `state`. Response: `302` to the request's `redirect_uri` with the access service's code and the gateway's `state`. Refusals (§5.6): `400 login_state_invalid`, `400 invalid_request`, `403 identity_rejected`, `403 identity_unknown`, `403 principal_disabled`, `403 provider_error`, `403 tenant_disabled`, `502 upstream_unavailable`. An unexpected failure is `500 internal_error` and never carries a dependency's error.
+Where the tenant's provider returns the browser with `code` and `state`. Response: `302` to the request's `redirect_uri` with Access's code and the gateway's `state`. Refusals (§5.6): `400 login_state_invalid`, `400 invalid_request`, `403 identity_rejected`, `403 identity_unknown`, `403 principal_disabled`, `403 provider_error`, `403 tenant_disabled`, `502 upstream_unavailable`. An unexpected failure is `500 internal_error` and never carries a dependency's error.
 
 ### `POST /oauth/token`
 
@@ -245,7 +245,7 @@ curl -sS -X POST https://access.example.com/v1/admin/tenants \
 | `idpScopes` | Optional. Default `["openid","email","profile"]`. |
 | `idpAlgorithms` | Optional. Default `["RS256"]`. |
 | `emailDomain` | Optional. Unique when set. |
-| `clientId` | Required. The client id of the tenant's gateway at the access service. Unique across tenants. |
+| `clientId` | Required. The client id of the tenant's gateway at Access. Unique across tenants. |
 | `clientSecret` | Required. Encrypted at rest, never returned. On replacement, the old secret stays valid for 24 hours alongside the new one. |
 | `clientRedirectUris` | Optional. Default `[]`. The gateway's callback URLs; a tenant with none refuses every login. |
 | `autoProvision` | Optional. Default `false`. |

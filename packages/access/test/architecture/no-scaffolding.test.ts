@@ -34,7 +34,7 @@ async function sourcesOf(directory: string): Promise<string[]> {
   return found
 }
 
-describe('the deferred features of the access service', () => {
+describe('the deferred features of Access', () => {
   test('the code holds none of them', async () => {
     const findings: string[] = []
     for (const file of await sourcesOf(join(root, 'src'))) {

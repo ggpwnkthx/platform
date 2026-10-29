@@ -87,7 +87,7 @@ export function createSecretCipher(secret: string): SecretCipher {
       const version = ciphertext[0]!
       if (version !== CIPHERTEXT_VERSION) {
         throw new SecretError(
-          `the stored secret has the version ${version} and this version of the access service reads the version ${CIPHERTEXT_VERSION}`
+          `the stored secret has the version ${version} and this version of Access reads the version ${CIPHERTEXT_VERSION}`
         )
       }
       const nonce = ciphertext.subarray(1, 1 + NONCE_BYTES)

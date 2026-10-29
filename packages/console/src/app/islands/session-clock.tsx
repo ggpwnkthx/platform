@@ -1,7 +1,7 @@
 /**
  * The clock of the access of the caller to the data.
  *
- * The access token of the access service lives five minutes and there is
+ * The access token of Access lives five minutes and there is
  * no refresh token. The clock says how long the access to the data is
  * left, and it offers the renewal when it is over: the renewal is a
  * login, which the provider of the tenant answers without a question

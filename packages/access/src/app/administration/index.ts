@@ -1,5 +1,5 @@
 /**
- * The administrative endpoints of the access service (spec §10).
+ * The administrative endpoints of Access (spec §10).
  *
  * The handlers are thin: they authenticate the call, they validate the
  * body, they ask the administration domain and they write the answer. The

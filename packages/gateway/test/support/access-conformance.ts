@@ -1,7 +1,7 @@
 /**
- * The protocol of the access service, as a suite of checks.
+ * The protocol of Access, as a suite of checks.
  *
- * The gateway asks an access service that it does not own: the service is
+ * The gateway asks Access that it does not own: the service is
  * a dependency of the deployment, and the deployment may write its own.
  * The suite here is the contract of that dependency: an implementation
  * that passes it speaks the protocol of §6 of the specification, and the
@@ -71,7 +71,7 @@ async function decide(
  * The label names the implementation in the output of the tests.
  */
 export function describeAccessService(label: string, profile: AccessConformanceProfile): void {
-  describe(`the access service in ${label}`, () => {
+  describe(`Access in ${label}`, () => {
     test('a subject that may use a workspace is allowed', async () => {
       const { status, json } = await decide(profile, {
         subject: profile.allowed.subject,
@@ -132,7 +132,7 @@ export function describeAccessService(label: string, profile: AccessConformanceP
     })
 
     test('a request without a workspace is answered', async () => {
-      // The workspace is optional: a route that asks the access service
+      // The workspace is optional: a route that asks Access
       // about itself names none, and the service decides on the subject,
       // the route and the roles.
       const { status, json } = await decide(profile, {

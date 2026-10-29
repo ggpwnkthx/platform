@@ -35,7 +35,7 @@ they ask not to be named.
 Anything that lets a caller reach an upstream, or an upstream reach something it should not:
 
 - caller authentication and credential modes;
-- workspace authorization and the access-service protocol;
+- workspace authorization and the Access protocol;
 - header policy, identity headers and the identity signature;
 - gateway cookies and sessions;
 - the cross-site guard;
@@ -47,8 +47,8 @@ Anything that lets a caller reach an upstream, or an upstream reach something it
 ## Out of scope
 
 - The applications behind the gateway: the deployment that owns them is responsible.
-- The identity provider, the access service and the shared state: they are dependencies, and a problem in
-  one belongs to it. The access-service protocol is [spec §6.1](../../docs/gateway/spec.md); its
+- The identity provider, Access and the shared state: they are dependencies, and a problem in
+  one belongs to it. The Access protocol is [spec §6.1](../../docs/gateway/spec.md); its
   conformance suite is `test/support/access-conformance.ts`.
 - The ingress in front of the gateway: it terminates TLS and the deployment configures it.
 - Volumetric denial of service: the gateway bounds its own resources and deployment limits bound traffic,
@@ -65,5 +65,5 @@ Anything that lets a caller reach an upstream, or an upstream reach something it
   [decisions.md](../../docs/gateway/decisions.md).
 - Caller identities are signed with a private key only the gateway holds, so an upstream that verifies an
   identity cannot mint one.
-- The gateway asks the access service and fails closed: no decision, no request.
+- The gateway asks Access and fails closed: no decision, no request.
 - The gateway logs the policy it is running and names permissive settings.

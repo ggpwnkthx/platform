@@ -340,7 +340,7 @@ describe('the effective policy of a route', () => {
       })
     )
     const snapshot = configuration.snapshot!
-    // Zero asks the access service for every request: the revocation of
+    // Zero asks Access for every request: the revocation of
     // that route is immediate.
     expect(snapshot.routes.find((route) => route.id === 'a')!.payload.accessCacheTtlMs).toBe(0)
     expect(snapshot.routes.find((route) => route.id === 'b')!.payload.accessCacheTtlMs).toBe(1000)
@@ -512,7 +512,7 @@ describe('the description of the configuration that is running', () => {
     expect(description.warnings.map((warning) => warning.code)).toContain('unauthenticated_route')
   })
 
-  test('a route that authenticates without asking the access service is named', () => {
+  test('a route that authenticates without asking Access is named', () => {
     const configuration = store()
     configuration.apply(
       baseConfig({
@@ -532,7 +532,7 @@ describe('the description of the configuration that is running', () => {
     expect(codes).not.toContain('unauthenticated_route')
   })
 
-  test('a route that asks the access service about itself is not named', () => {
+  test('a route that asks Access about itself is not named', () => {
     const configuration = store()
     configuration.apply(
       baseConfig({
@@ -549,13 +549,13 @@ describe('the description of the configuration that is running', () => {
     )
     const description = describeConfiguration(configuration.snapshot!)
     const codes = description.warnings.map((warning) => warning.code)
-    // The route asks the access service: it is not a route that
+    // The route asks Access: it is not a route that
     // authenticates the caller and never checks anything.
     expect(codes).not.toContain('no_workspace_check')
     expect(description.routes[0]?.accessCheck).toBe(true)
   })
 
-  test('a check of the access service needs an authenticated caller', () => {
+  test('a check of Access needs an authenticated caller', () => {
     const configuration = store()
     const result = configuration.apply(
       baseConfig({

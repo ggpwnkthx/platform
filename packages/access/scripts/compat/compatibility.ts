@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * The compatibility runner of the access service.
+ * The compatibility runner of Access.
  *
  * The compatibility suite runs the **real** gateway of the platform,
  * unchanged, against access. The gateway is a reference: it

@@ -4,7 +4,7 @@
 #   docker compose -f deploy/compose/gateway.compose.yaml up --build
 #
 # The gateway is the only service the callers reach, and it is deployed
-# on its own: the identity provider and the access service of a
+# on its own: the identity provider and Access of a
 # deployment are its own. This stack brings the ones of a development
 # machine, so that the gateway can be run without the other two services
 # of the platform.
@@ -42,7 +42,7 @@ services:
       # dex is served over plain http in this development stack.
       GATEWAY_OIDC_ALLOW_INSECURE: 'true'
       GATEWAY_ACCESS_URL: http://access-fixture:8090
-      # The gateway authenticates against the access service. A deployment
+      # The gateway authenticates against Access. A deployment
       # without a token is refused in production.
       GATEWAY_ACCESS_TOKEN: ${GATEWAY_ACCESS_TOKEN:-development-access-token}
       GATEWAY_SESSION_SECRET: ${GATEWAY_SESSION_SECRET:-development-session-secret}
@@ -127,7 +127,7 @@ services:
     expose:
       - '8090'
 
-  # The reference implementation of the access service, for a stack that
+  # The reference implementation of Access, for a stack that
   # does not want the fixture. It applies the policy of the file and it
   # answers the protocol of the specification. Start it with
   # `docker compose --profile reference up` and point the gateway at it

@@ -1,5 +1,5 @@
 /**
- * The shared store of the access service.
+ * The shared store of Access.
  *
  * The store holds the authorization codes of the logins. It is shared by
  * the replicas of a deployment: a code that lives in the memory of one

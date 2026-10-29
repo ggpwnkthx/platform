@@ -19,7 +19,7 @@ import {
  * The baseline of the compatibility of the platform.
  *
  * Before the merge the baseline named two repositories and two commits:
- * the gateway and the access service were repositories of their own. They
+ * the gateway and Access were repositories of their own. They
  * are workspaces of this repository now, and the baseline is the revision
  * of the repository that the platform was released at — the revision the
  * manifest pins, and the revision the candidates are tested against.
@@ -83,7 +83,7 @@ describe('the manifest of the baseline', () => {
     expect(manifest.workspaces.data.path).toBe('packages/data')
   })
 
-  test('the gateway and the access service are pinned to a revision', async () => {
+  test('the gateway and Access are pinned to a revision', async () => {
     const manifest = await readCompatibilityManifest(
       join(resolve(import.meta.dir, '..'), 'compatibility.json')
     )
@@ -91,7 +91,7 @@ describe('the manifest of the baseline', () => {
     // itself proves that the tree agrees with the tree.
     expect(manifest.workspaces.gateway.source?.commit).toMatch(/^[0-9a-f]{40}$/)
     expect(manifest.workspaces.access.source?.commit).toMatch(/^[0-9a-f]{40}$/)
-    // The data service is the candidate: it is the service under test.
+    // Data is the candidate: it is the service under test.
     expect(manifest.workspaces.data.source).toBeUndefined()
   })
 
@@ -207,7 +207,7 @@ describe('the manifest of the baseline', () => {
     expect(baseline.isBaseline).toBe(true)
     expect(baseline.overrides).toEqual([])
     // The reference of the gateway is the pinned revision, and the
-    // candidate of the data service is the tree of the working directory.
+    // candidate of Data is the tree of the working directory.
     expect(baseline.workspaces.gateway?.commit).toBe(manifest.workspaces.gateway.source?.commit)
     expect(baseline.workspaces.data?.commit).toBeUndefined()
   })

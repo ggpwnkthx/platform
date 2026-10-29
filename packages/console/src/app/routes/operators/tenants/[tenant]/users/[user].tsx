@@ -55,7 +55,7 @@ export const POST = createRoute(async (c) => {
       text:
         status !== user.status
           ? status === 'disabled'
-            ? `${userLabel(user)} is disabled: the access service refuses every decision for them.`
+            ? `${userLabel(user)} is disabled: Access refuses every decision for them.`
             : `${userLabel(user)} is active again.`
           : `${userLabel(user)} was saved.`,
     })

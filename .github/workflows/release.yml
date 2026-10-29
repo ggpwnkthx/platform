@@ -310,11 +310,11 @@ jobs:
             exit 1
           fi
 
-      - name: the image of the access service starts with the configuration of a deployment
+      - name: the image of Access starts with the configuration of a deployment
         if: matrix.service == 'access'
         run: |
           set -euo pipefail
-          # The key that signs the tokens of the access service: it comes
+          # The key that signs the tokens of Access: it comes
           # from the secret manager of the deployment and never from the
           # image.
           openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
@@ -365,7 +365,7 @@ jobs:
             exit 1
           fi
 
-      - name: the image of the access service refuses to start without its secrets
+      - name: the image of Access refuses to start without its secrets
         if: matrix.service == 'access'
         run: |
           set -euo pipefail
@@ -377,7 +377,7 @@ jobs:
             exit 1
           fi
 
-      - name: the image of the data service starts with the configuration of a deployment
+      - name: the image of Data starts with the configuration of a deployment
         if: matrix.service == 'data'
         run: |
           set -euo pipefail
@@ -405,7 +405,7 @@ jobs:
             sleep 1
           done
           # The readiness of the service needs the schema of the
-          # deployment, the role of the connection and the access service.
+          # deployment, the role of the connection and Access.
           for _ in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8082/readyz > /dev/null; then
               echo 'the service of the image is ready'
@@ -417,7 +417,7 @@ jobs:
           docker logs data
           exit 1
 
-      - name: the image of the data service refuses to start without the key of the cursors
+      - name: the image of Data refuses to start without the key of the cursors
         if: matrix.service == 'data'
         run: |
           set -euo pipefail
@@ -532,14 +532,14 @@ jobs:
       - name: the notes of the release
         run: |
           cat > notes.md <<EOF
-          The images of the platform: the gateway, the access service and
-          the data service, at the same version.
+          The images of the platform: the gateway, Access and
+          Data, at the same version.
 
           | Image | What it is |
           | --- | --- |
-          | \`${{ env.REGISTRY }}/gateway:${{ needs.version.outputs.version }}\` | The gateway: it authenticates a caller, asks the access service and forwards the request to an upstream. |
-          | \`${{ env.REGISTRY }}/access:${{ needs.version.outputs.version }}\` | The access service: an OpenID Connect broker and an access decision service. |
-          | \`${{ env.REGISTRY }}/data:${{ needs.version.outputs.version }}\` | The data service: a headless, permission aware data API. |
+          | \`${{ env.REGISTRY }}/gateway:${{ needs.version.outputs.version }}\` | The gateway: it authenticates a caller, asks Access and forwards the request to an upstream. |
+          | \`${{ env.REGISTRY }}/access:${{ needs.version.outputs.version }}\` | Access: an OpenID Connect broker and an access decision service. |
+          | \`${{ env.REGISTRY }}/data:${{ needs.version.outputs.version }}\` | Data: a headless, permission aware data API. |
 
           The images carry the runtime of the release (Bun ${{ env.BUN_VERSION }})
           and the version of the platform (${{ needs.version.outputs.version }}).

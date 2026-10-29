@@ -18,7 +18,7 @@ afterAll(async () => {
   await database.close()
 })
 
-describe('the permissions of the access service', () => {
+describe('the permissions of Access', () => {
   test('a permission of a tenant is created and read back', async () => {
     const created = await permissions.create({ tenantId, key: 'workspace.read' })
     expect(created.enabled).toBe(true)

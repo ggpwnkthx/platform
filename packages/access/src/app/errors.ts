@@ -1,11 +1,11 @@
 /**
- * The answers of the access service itself.
+ * The answers of Access itself.
  *
- * The access service refuses a request with a json body that names the error and says what
+ * Access refuses a request with a json body that names the error and says what
  * happened. The body of an error of a dependency never reaches a caller.
  */
 
-/** The body of a refusal of the access service. */
+/** The body of a refusal of Access. */
 interface AccessErrorBody {
   error: string
   message: string
@@ -13,7 +13,7 @@ interface AccessErrorBody {
 }
 
 /**
- * Builds the answer of a refusal of the access service.
+ * Builds the answer of a refusal of Access.
  *
  * The body is `{"error": <code>, "message": <text>}`: the code is the
  * machine readable name of the failure, the text says what happened.

@@ -117,7 +117,7 @@ describe('the request of a decision', () => {
   })
 })
 
-describe('the decisions of the access service', () => {
+describe('the decisions of Access', () => {
   test('an explicit decision allows the caller', async () => {
     const { client: access } = client({ body: '{"allow":true,"reason":"allowed"}' })
     const decision = await access.decide({
@@ -472,7 +472,7 @@ describe('the reason of a denial', () => {
   })
 })
 
-describe('the grace of an outage of the access service', () => {
+describe('the grace of an outage of Access', () => {
   const request = {
     subject: 'user-1',
     workspaceId: 'workspace-1',
@@ -605,7 +605,7 @@ describe('the grace of an outage of the access service', () => {
   })
 })
 
-describe('the breaker of the access service', () => {
+describe('the breaker of Access', () => {
   const request = {
     subject: 'user-1',
     workspaceId: 'workspace-1',

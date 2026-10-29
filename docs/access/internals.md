@@ -1,6 +1,6 @@
 # Internals
 
-For maintainers: how the access service's code is organised, how the compatibility suite works, what was measured, the security review, and what a release must satisfy. Behavior is in [spec.md](spec.md); running it is in [Operations](operations.md).
+For maintainers: how Access's code is organised, how the compatibility suite works, what was measured, the security review, and what a release must satisfy. Behavior is in [spec.md](spec.md); running it is in [Operations](operations.md).
 
 ## Code layout
 
@@ -73,7 +73,7 @@ A **modular monolith**: one process, one image, one database, four independent d
 
 ## Compatibility suite
 
-`bun run --cwd packages/access test:compat` runs the platform gateway, unchanged, against the access service (§15.1, §15.2). The reference is `packages/gateway/` at the commit pinned in the root `compatibility.json` ([platform compatibility](../platform/internals.md#compatibility) describes the manifest). The runner validates it strictly: `version` `2`, the platform repository, only the three known workspaces, and a 40-hex commit (no branch) for a reference.
+`bun run --cwd packages/access test:compat` runs the platform gateway, unchanged, against Access (§15.1, §15.2). The reference is `packages/gateway/` at the commit pinned in the root `compatibility.json` ([platform compatibility](../platform/internals.md#compatibility) describes the manifest). The runner validates it strictly: `version` `2`, the platform repository, only the three known workspaces, and a 40-hex commit (no branch) for a reference.
 
 The runner reads the manifest from the repository root, clones the gateway at the pinned commit (from the local repository when it holds the commit, so no network), installs its dependencies, checks its tracked files, runs `bun test test/compatibility` with the path in `ACCESS_GATEWAY_PATH`, and checks the reference is still unchanged. Its last line names the tested commit: `the compatibility suite passed against the gateway at <commit> …`.
 
@@ -85,7 +85,7 @@ Sources, first one set wins:
 | --- | --- |
 | `ACCESS_GATEWAY_PATH` | A prepared gateway directory, used as is: never reset, cleaned or checked out over. |
 | `GATEWAY_REPOSITORY` + `GATEWAY_COMMIT` | A git URL or local path holding that 40-hex commit. The run tests a **candidate**, not the baseline. |
-| `COMPAT_MIRROR` | A directory holding a bare `gateway.git`, for offline runs (the data service harness uses the same layout). |
+| `COMPAT_MIRROR` | A directory holding a bare `gateway.git`, for offline runs (Data harness uses the same layout). |
 | — | This repository's workspace. |
 
 Options: `COMPAT_WORKSPACE` (checkout directory, default temporary), `COMPAT_KEEP` (keep the checkout), `COMPAT_TESTS` (space-separated test files). To test a running service such as a release image, set `ACCESS_EXTERNAL_URL`, `ACCESS_EXTERNAL_ADMIN_TOKEN` and `ACCESS_EXTERNAL_ACCESS_TOKEN` (its decision token); the suite then starts nothing of its own.

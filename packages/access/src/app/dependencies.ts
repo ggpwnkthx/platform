@@ -80,7 +80,7 @@ interface GatewaySecrets {
 /**
  * The probe of the readiness.
  *
- * The readiness of the access service is the health of its dependencies: the database has
+ * The readiness of Access is the health of its dependencies: the database has
  * to answer and the migrations have to be applied. The port is implemented
  * by the platform of the database, and the runtime hands it over.
  */
@@ -91,7 +91,7 @@ interface ReadinessProbe {
 
 /** Everything the application needs to answer a request. */
 export interface AccessDependencies {
-  /** The version of the access service, as the health endpoint reports it. */
+  /** The version of Access, as the health endpoint reports it. */
   version: string
   /** The logger of the service. */
   logger: Logger
@@ -125,7 +125,7 @@ export interface AccessDependencies {
   tenants: TenantPort
   /** The `Secure` attribute of the cookies of the login. */
   cookieSecure: boolean
-  /** The public url of the access service, for the default callback of a tenant. */
+  /** The public url of Access, for the default callback of a tenant. */
   publicUrl: string
   /** The address of the peer of a request: the address of the socket. */
   peerAddress: (request: Request) => string

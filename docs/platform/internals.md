@@ -19,8 +19,8 @@ platform/
 ├── .github/workflows/    CI and releases
 ├── packages/
 │   ├── gateway/          gateway
-│   ├── access/           access service
-│   ├── data/             data service
+│   ├── access/           Access
+│   ├── data/             Data
 │   └── console/          console, the platform's interface (HonoX)
 ```
 
@@ -59,7 +59,7 @@ The gateway, access and data workspaces share one layout, enforced by each works
 | `test/` | Tests by kind: unit, contract, integration, architecture |
 | `scripts/` | Operator tools and checks: `cli/`, `ops/`, `compat/`, `gates/`, `dev/`, `support/` |
 
-Rules: gateway [§14.3](../gateway/spec.md#143-dependency-rules), access service [§16](../access/spec.md#16-code-layout), data service [§13](../data/spec.md#13-architecture). Each workspace declares its own rules (domain matrix, process entry files, packages a domain core may not import) in `scripts/gates/architecture.ts`; the shared engine is `tooling/architecture.ts`.
+Rules: gateway [§14.3](../gateway/spec.md#143-dependency-rules), Access [§16](../access/spec.md#16-code-layout), Data [§13](../data/spec.md#13-architecture). Each workspace declares its own rules (domain matrix, process entry files, packages a domain core may not import) in `scripts/gates/architecture.ts`; the shared engine is `tooling/architecture.ts`.
 
 ## Console workspace
 
@@ -106,7 +106,7 @@ docker build -f packages/data/Dockerfile    -t data:ci    .
 
 ## Compatibility
 
-The compatibility suites prove the three services still talk over HTTP as their specs say, against a pinned **baseline**: a revision of this repository. The gateway and access service at that revision are the **references**; the harness clones them. The access and data services in the working tree are the **candidates**.
+The compatibility suites prove the three services still talk over HTTP as their specs say, against a pinned **baseline**: a revision of this repository. The gateway and Access at that revision are the **references**; the harness clones them. The Access and Data in the working tree are the **candidates**.
 
 The manifest is [`compatibility.json`](../../compatibility.json), the single owner of the pin: the harness, the docs and the drift check all read it. A workspace with a `source` is a reference; one without is a candidate:
 
@@ -138,8 +138,8 @@ The pin moves every release: a release's baseline is the revision it shipped at.
 
 | Suite | Proves | Command |
 | --- | --- | --- |
-| Access service contract | The pinned gateway works with the tree's access service | `bun run --cwd packages/access test:compatibility` |
-| Platform acceptance | The tree's data service works with the pinned gateway and access service | `bun run --cwd packages/data test:compatibility` |
+| Access contract | The pinned gateway works with the tree's Access | `bun run --cwd packages/access test:compatibility` |
+| Platform acceptance | The tree's Data works with the pinned gateway and Access | `bun run --cwd packages/data test:compatibility` |
 
 `bun run compatibility` runs both.
 
@@ -150,8 +150,8 @@ The harness clones each reference at the pinned revision (from the local reposit
 | Variable | Sets |
 | --- | --- |
 | `GATEWAY_REPOSITORY`, `GATEWAY_COMMIT` | Gateway revision |
-| `ACCESS_REPOSITORY`, `ACCESS_COMMIT` | Access service revision |
-| `DATA_REPOSITORY`, `DATA_COMMIT` | Data service revision |
+| `ACCESS_REPOSITORY`, `ACCESS_COMMIT` | Access revision |
+| `DATA_REPOSITORY`, `DATA_COMMIT` | Data revision |
 | `ACCESS_GATEWAY_PATH` | A gateway that is already prepared |
 | `COMPAT_MIRROR` | Directory of bare repository mirrors |
 | `COMPAT_WORKSPACE` | Directory where checkouts are created |
@@ -165,15 +165,15 @@ Releases point the access and data suites at a running service to prove the publ
 
 | Variable | Sets |
 | --- | --- |
-| `ACCESS_EXTERNAL_URL` | URL callers use to reach the access service |
+| `ACCESS_EXTERNAL_URL` | URL callers use to reach Access |
 | `ACCESS_EXTERNAL_ADMIN_TOKEN` | Its administration token |
 | `ACCESS_EXTERNAL_ACCESS_TOKEN` | Its decision token |
-| `ACCESS_TEST_DATABASE_URL` | PostgreSQL for access service tests (default: embedded) |
-| `ACCESS_TEST_REDIS_URL` | Redis for access service tests |
+| `ACCESS_TEST_DATABASE_URL` | PostgreSQL for Access tests (default: embedded) |
+| `ACCESS_TEST_REDIS_URL` | Redis for Access tests |
 | `GATEWAY_TEST_REDIS_URL` | Redis for gateway tests |
 | `GATEWAY_TEST_POSTGRES_URL` | PostgreSQL for gateway tests |
 
-The data service harness starts its own PostgreSQL server in a temporary directory: it needs several databases and roles isolated from the development server.
+Data harness starts its own PostgreSQL server in a temporary directory: it needs several databases and roles isolated from the development server.
 
 ## Release
 

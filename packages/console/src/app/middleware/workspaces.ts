@@ -1,12 +1,12 @@
 /**
  * The workspaces of the caller.
  *
- * The data service has no list of the workspaces of a caller: a caller
+ * Data has no list of the workspaces of a caller: a caller
  * names the workspace it calls. The console learns the workspaces of a
- * caller from its rights — the grants the access service holds for it,
+ * caller from its rights — the grants Access holds for it,
  * by itself and through its groups — read with the credential of its
  * tenant, and from the workspaces the caller opened. Whether the caller
- * may read one is the answer of the data service, never the guess of the
+ * may read one is the answer of Data, never the guess of the
  * console.
  */
 

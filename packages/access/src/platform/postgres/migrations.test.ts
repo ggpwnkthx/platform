@@ -40,7 +40,7 @@ describe('the directory of the migrations of the schema', () => {
     expect(migrationsDirectoryOf(['/nowhere/at/all', '/nowhere/either'])).toBe('/nowhere/at/all')
   })
 
-  test('the directory of the running the access service holds the migrations of the schema', async () => {
+  test('the directory of the running Access holds the migrations of the schema', async () => {
     // The source tree and the image carry the directory next to the
     // module: the service finds its schema without any configuration.
     const directory = resolveMigrationsDirectory()

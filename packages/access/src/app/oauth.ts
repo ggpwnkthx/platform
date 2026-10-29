@@ -1,5 +1,5 @@
 /**
- * The token endpoint of the access service (spec §5.1).
+ * The token endpoint of Access (spec §5.1).
  *
  * The gateway exchanges the code of the login for the tokens. The client
  * authenticates itself with `client_secret_basic`; a client without a

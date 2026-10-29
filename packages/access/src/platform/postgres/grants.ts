@@ -1,5 +1,5 @@
 /**
- * The grants of the access service (spec §3.4).
+ * The grants of Access (spec §3.4).
  *
  * A grant says: this principal holds this permission, on this workspace,
  * on this route, until this date. A revoked grant is kept: the history of

@@ -51,7 +51,7 @@ afterAll(async () => {
   await service.stop()
 })
 
-describe('the administration of the access service', () => {
+describe('the administration of Access', () => {
   test('a tenant is created and the answer carries no secret', async () => {
     const response = await call('/v1/admin/tenants', 'POST', {
       slug: 'acme',

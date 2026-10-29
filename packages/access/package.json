@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "The access service of the platform: an OpenID Connect broker that answers the decisions of the gateway.",
+  "description": "Access of the platform: an OpenID Connect broker that answers the decisions of the gateway.",
   "scripts": {
     "start": "bun run src/main.ts",
     "test": "bun test src test/contract test/architecture",

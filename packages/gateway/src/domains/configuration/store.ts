@@ -84,7 +84,7 @@ export interface ConfigurationStoreOptions {
    */
   defaultReplayMaxBytes?: number
   /**
-   * The grace of an outage of the access service when neither the route
+   * The grace of an outage of Access when neither the route
    * nor the defaults set one.
    *
    * It comes from the environment.

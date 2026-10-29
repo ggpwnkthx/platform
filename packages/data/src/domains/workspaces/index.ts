@@ -2,7 +2,7 @@
  * The workspace registry (spec §6.1).
  *
  * A workspace is a resource of the backend: it belongs to exactly one
- * tenant of the access service and it is either active or disabled. The registry stores
+ * tenant of Access and it is either active or disabled. The registry stores
  * the reference to the tenant of access, never a copy of its directory: the
  * backend does not own the identity of a tenant and it does not own the
  * grants of a principal.
@@ -20,7 +20,7 @@ export type WorkspaceStatus = 'active' | 'disabled'
 export interface WorkspaceIdentity {
   /** The identifier of the workspace. */
   readonly id: string
-  /** The tenant of the access service the workspace belongs to. */
+  /** The tenant of Access the workspace belongs to. */
   readonly tenantId: string
   /** The state of the workspace. */
   readonly status: WorkspaceStatus

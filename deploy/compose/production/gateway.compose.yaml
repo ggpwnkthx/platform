@@ -26,8 +26,8 @@ services:
       GATEWAY_OIDC_CLIENT_ID: ${GATEWAY_OIDC_CLIENT_ID:-gateway}
       GATEWAY_OIDC_CLIENT_SECRET: ${GATEWAY_OIDC_CLIENT_SECRET:?the secret of the client is required}
       GATEWAY_OIDC_REDIRECT_URI: ${GATEWAY_OIDC_REDIRECT_URI:?the url of the callback is required}
-      GATEWAY_ACCESS_URL: ${GATEWAY_ACCESS_URL:?the access service is required}
-      GATEWAY_ACCESS_TOKEN: ${GATEWAY_ACCESS_TOKEN:?the token of the access service is required}
+      GATEWAY_ACCESS_URL: ${GATEWAY_ACCESS_URL:?Access is required}
+      GATEWAY_ACCESS_TOKEN: ${GATEWAY_ACCESS_TOKEN:?the token of Access is required}
       # The secret of the sessions: it signs the state of the login.
       GATEWAY_SESSION_SECRET: ${GATEWAY_SESSION_SECRET:?the secret of the sessions is required}
       # The private key that signs the identity of the requests. The

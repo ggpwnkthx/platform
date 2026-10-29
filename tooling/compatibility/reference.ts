@@ -2,8 +2,8 @@
  * The acquisition of the references of the compatibility suite.
  *
  * The references of the suite are the workspaces of this repository:
- * the gateway of `packages/gateway/`, the access service of
- * `packages/access/` and the data service of `packages/data/`. They are
+ * the gateway of `packages/gateway/`, Access of
+ * `packages/access/` and Data of `packages/data/`. They are
  * not cloned: they are the code of this repository, and the suite proves
  * that the tracked files of the workspaces are the ones of the revision
  * that is tested.

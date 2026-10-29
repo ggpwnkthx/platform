@@ -1,5 +1,5 @@
 /**
- * The end of a sign-in: the access service sends the browser back with
+ * The end of a sign-in: Access sends the browser back with
  * the code of the login, and the console exchanges it.
  */
 
@@ -37,7 +37,7 @@ export default createRoute(async (c) => {
     )
   }
 
-  // The access service, or the provider of the tenant, refused the login.
+  // Access, or the provider of the tenant, refused the login.
   const refused = c.req.query('error')
   if (refused) {
     return fail(

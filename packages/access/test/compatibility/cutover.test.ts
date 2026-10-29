@@ -35,14 +35,14 @@ const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111'
  * The tenant of the rehearsal.
  *
  * The name of the tenant is unique per run: the rehearsal is a
- * *creation*, and an access service that keeps its rows between two runs would
+ * *creation*, and Access that keeps its rows between two runs would
  * answer "200, updated" instead of "201, created". The client of the
  * gateway is named after it: a client id belongs to one tenant.
  */
 const TENANT_SLUG = `acme-cutover-${crypto.randomUUID().slice(0, 8)}`
 const CLIENT_ID = `gateway-${TENANT_SLUG}`
 
-/** The access service under test: the one of the process, or the one of the environment. */
+/** Access under test: the one of the process, or the one of the environment. */
 let accessUnderTest: AccessUnderTest
 let accessUrl: string
 let provider: ProviderFixture
@@ -59,7 +59,7 @@ const upstream = Bun.serve({
   },
 })
 
-/** Calls the administration of the access service. */
+/** Calls the administration of Access. */
 let admin: (
   path: string,
   method: string,
@@ -71,7 +71,7 @@ beforeAll(async () => {
   upstreamUrl = `http://127.0.0.1:${upstream.port}`
   provider = await startProviderFixture()
 
-  // The access service under test: the one of the process of the test, or the one
+  // Access under test: the one of the process of the test, or the one
   // that the environment names — the image of a release, for instance.
   accessUnderTest = await startAccessUnderTest()
   accessUrl = accessUnderTest.url
@@ -222,7 +222,7 @@ describe('the rehearsal of the cutover of a tenant', () => {
   })
 
   test('the tenant is switched again without registering anything', async () => {
-    // The data of the access service stays: the principal and the tenant are still
+    // The data of Access stays: the principal and the tenant are still
     // there, and the access is given again by a grant.
     const principals = await admin(`/v1/admin/users?tenant=${TENANT_SLUG}`, 'GET')
     const principal = (principals.body.principals as { id: string }[])[0]!

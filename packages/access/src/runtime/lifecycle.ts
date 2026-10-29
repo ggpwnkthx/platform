@@ -1,5 +1,5 @@
 /**
- * The lifecycle of the access service.
+ * The lifecycle of Access.
  *
  * The runtime owns the admission and the shutdown: it handles the signals
  * of the process and it drains the work that is in flight before the

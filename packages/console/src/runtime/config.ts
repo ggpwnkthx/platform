@@ -21,14 +21,14 @@ export interface ConsoleConfig {
   readonly port: number
   /** The url the browser reaches the console at. */
   readonly publicUrl: URL
-  /** The access service, as the console reaches it. */
+  /** Access, as the console reaches it. */
   readonly accessUrl: string
-  /** The client of the console at the access service. */
+  /** The client of the console at Access. */
   readonly clientId: string
   readonly clientSecret: string
   /** The gateway: the console reads the data of a workspace through it. */
   readonly gatewayUrl: string
-  /** The data service, for its probes. Optional. */
+  /** Data, for its probes. Optional. */
   readonly dataUrl: string | null
   /** The credential of the administration of the platform. */
   readonly adminToken: string | null
@@ -36,7 +36,7 @@ export interface ConsoleConfig {
   readonly tenantAdminTokens: Readonly<Record<string, string>>
   /** The credential of the contract of the access context. */
   readonly accessContextToken: string | null
-  /** The route of the console at the access service. */
+  /** The route of the console at Access. */
   readonly routeId: string
   /** The secret that signs the cookies of the console. */
   readonly sessionSecret: string
@@ -118,7 +118,7 @@ function integerOf(
   return parsed
 }
 
-/** Reads a credential: at least sixteen characters, the rule of the access service. */
+/** Reads a credential: at least sixteen characters, the rule of Access. */
 function credentialOf(env: Environment, name: string, problems: string[]): string | null {
   const value = readValue(env, name)
   if (value === undefined) return null

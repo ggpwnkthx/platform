@@ -1,5 +1,5 @@
 /**
- * The provider of the access service (spec §7).
+ * The provider of Access (spec §7).
  *
  * The domain owns the protocol that the gateway speaks: the JWKS, the
  * discovery document, the tokens and the claims of the userinfo. The

@@ -141,7 +141,7 @@ export function createMetrics(): Metrics {
     {
       name: 'data_access_duration_ms',
       kind: 'histogram',
-      help: 'The duration of the access service requests.',
+      help: 'The duration of Access requests.',
     },
     {
       name: 'data_context_cache_hits_total',

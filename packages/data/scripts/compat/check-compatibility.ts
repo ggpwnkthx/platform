@@ -32,7 +32,7 @@ export const MANIFEST_END = '<!-- compatibility-manifest:end -->'
  * The specification of the service.
  *
  * The documentation of the three contracts is one tree at the root of
- * the repository, and the directory of the data service is the one that
+ * the repository, and the directory of Data is the one that
  * holds its own documents.
  */
 const SPECS_FILE = '../../docs/data/spec.md'
@@ -64,8 +64,8 @@ export function baselineBlock(manifest: CompatibilityManifest): string {
     '| Workspace | Path | The revision it is tested against |',
     '| --- | --- | --- |',
     `| The gateway | \`${gateway.path}\` | ${revision(gateway.source)} |`,
-    `| The access service | \`${access.path}\` | ${revision(access.source)} |`,
-    `| The data service | \`${data.path}\` | ${revision(data.source)} |`,
+    `| Access | \`${access.path}\` | ${revision(access.source)} |`,
+    `| Data | \`${data.path}\` | ${revision(data.source)} |`,
     '',
     BASELINE_END,
   ].join('\n')

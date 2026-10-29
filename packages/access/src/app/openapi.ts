@@ -1,5 +1,5 @@
 /**
- * The description of the API of the access service.
+ * The description of the API of Access.
  *
  * The document describes the fixed protocol: the paths, the envelopes,
  * the headers and the errors. The details of the tenants and of their
@@ -15,15 +15,15 @@
 
 import { apiPaths } from './openapi-paths'
 
-/** The description of the API of the access service. */
+/** The description of the API of Access. */
 export function openapiDocument(serviceVersion: string): Record<string, unknown> {
   return {
     openapi: '3.1.0',
     info: {
-      title: 'The access service',
+      title: 'Access',
       version: serviceVersion,
       description:
-        'The access service holds the tenants, their principals and their rights, and it answers the decisions of the gateway. It is the provider of the gateway.',
+        'Access holds the tenants, their principals and their rights, and it answers the decisions of the gateway. It is the provider of the gateway.',
     },
     servers: [{ url: '/', description: 'The origin of the deployment.' }],
     security: [],

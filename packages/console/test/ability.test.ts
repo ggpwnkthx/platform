@@ -2,7 +2,7 @@
  * The ability of the caller.
  *
  * The ability is the drawing of what the services answered: the scope
- * of the operator for the console, and the metadata of the data service
+ * of the operator for the console, and the metadata of Data
  * for a collection. The test holds the two rules that matter: the
  * console holds no wildcard, and the ability never allows less than
  * the services allow.

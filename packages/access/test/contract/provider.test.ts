@@ -25,7 +25,7 @@ afterAll(async () => {
   await service.stop()
 })
 
-describe('the provider of the access service', () => {
+describe('the provider of Access', () => {
   test('the JWKS publishes the key of the service', async () => {
     const response = await fetch(`${service.base}/oauth/jwks`)
     expect(response.status).toBe(200)

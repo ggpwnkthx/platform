@@ -1,7 +1,7 @@
 /**
  * The client of the access context contract (spec §5).
  *
- * The adapter speaks the contract of the access service over the transport of the
+ * The adapter speaks the contract of Access over the transport of the
  * runtime. It uses the service credential of the deployment and it never
  * sends anything else: the credential authorizes the context and nothing
  * else.

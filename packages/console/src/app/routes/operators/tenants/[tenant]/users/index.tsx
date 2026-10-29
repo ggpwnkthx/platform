@@ -118,11 +118,7 @@ export default createRoute(async (c) => {
   }
   return c.render(
     <>
-      <TenantHead
-        slug={slug}
-        title="Users"
-        lede="People in this tenant, as the access service knows them."
-      />
+      <TenantHead slug={slug} title="Users" lede="People in this tenant, as Access knows them." />
       <TenantTabs slug={slug} current="users" />
       <form method="get" class="toolbar">
         <label class="field">

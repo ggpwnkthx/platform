@@ -1,5 +1,5 @@
 /**
- * The composition root of the access service.
+ * The composition root of Access.
  *
  * This is the only place where the concrete pieces are assembled: the
  * environment is read here, the clients and the stores are created here,
@@ -51,7 +51,7 @@ import type { RuntimeSettings } from './env'
 import { drain as drainRuntime } from './lifecycle'
 import { VERSION } from './version'
 
-/** The runtime of the access service. */
+/** The runtime of Access. */
 export interface AccessRuntime {
   /** The settings the runtime was built with. */
   settings: RuntimeSettings
@@ -89,7 +89,7 @@ interface AccessRepositories {
 const PROVIDER_CLIENT_TTL_MS = 600_000
 
 /**
- * Builds the runtime of the access service.
+ * Builds the runtime of Access.
  *
  * The dependencies of the domains are assembled here and nowhere else: a
  * domain never builds a client and never reads the environment.
@@ -115,7 +115,7 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
     statementTimeoutMs: settings.timeouts.decisionTimeoutMs,
   })
 
-  // The schema is applied before the listener accepts: the access service does not start
+  // The schema is applied before the listener accepts: Access does not start
   // against a schema it does not understand.
   const migrations = await runMigrations({
     database,
@@ -361,7 +361,7 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
   const dependencies: AccessDependencies = {
     version: VERSION,
     logger,
-    // The readiness of the access service is the health of its dependencies: the database
+    // The readiness of Access is the health of its dependencies: the database
     // has to answer and the migrations have to be applied.
     probe: {
       ready: async () => {

@@ -1,8 +1,8 @@
-# The data service on its own.
+# Data on its own.
 #
 # It owns the workspaces, the collections, the policies, the records, the
-# audit and the events. It asks the access service about the scope of a
-# context, and the access service of the deployment is somewhere else.
+# audit and the events. It asks Access about the scope of a
+# context, and Access of the deployment is somewhere else.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -81,7 +81,7 @@ spec:
             # requests.
             - name: DATA_GATEWAY_BINDINGS_FILE
               value: /etc/platform/bindings.json
-            # The access service of the access context contract. The credential travels
+            # Access of the access context contract. The credential travels
             # with the request, so the url is https in a production
             # deployment.
             - name: DATA_ACCESS_URL
@@ -96,7 +96,7 @@ spec:
             - name: DATA_LOG_LEVEL
               value: info
           # The service answers /healthz while it starts and /readyz when
-          # the schema is applied and the access service answers.
+          # the schema is applied and Access answers.
           startupProbe:
             httpGet:
               path: /readyz

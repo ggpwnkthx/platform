@@ -52,17 +52,17 @@ export interface EffectiveRoute {
    */
   forwardAuthorization: boolean
   /**
-   * The lifetime of a cached decision of the access service for the route,
+   * The lifetime of a cached decision of Access for the route,
    * in milliseconds. Undefined means the lifetime of the environment.
    */
   accessCacheTtlMs?: number
   /**
-   * How long a decision of the access service may be served after the
+   * How long a decision of Access may be served after the
    * service became unreachable, in milliseconds. Zero disables it.
    */
   accessStaleGraceMs: number
   /**
-   * Whether the access service is asked about the route when it names no
+   * Whether Access is asked about the route when it names no
    * workspace.
    */
   accessCheck: boolean
@@ -76,7 +76,7 @@ export interface EnvironmentDefaults {
   defaultUpstreamAttemptMs?: number
   /** The size of a replayable body when neither the route nor the defaults set one. */
   defaultReplayMaxBytes?: number
-  /** The grace of an outage of the access service when neither the route nor the defaults set one. */
+  /** The grace of an outage of Access when neither the route nor the defaults set one. */
   defaultAccessStaleGraceMs?: number
 }
 

@@ -76,12 +76,12 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
   }
   if (production && !parsed.GATEWAY_ACCESS_URL) {
     throw new Error(
-      'GATEWAY_ACCESS_URL must be set in a production environment: it names the access service that decides which caller may use a workspace'
+      'GATEWAY_ACCESS_URL must be set in a production environment: it names Access that decides which caller may use a workspace'
     )
   }
   if (production && !parsed.GATEWAY_ACCESS_TOKEN && !parsed.GATEWAY_ACCESS_ALLOW_ANONYMOUS) {
     throw new Error(
-      'GATEWAY_ACCESS_TOKEN must be set in a production environment, or GATEWAY_ACCESS_ALLOW_ANONYMOUS=true when the access service authenticates the gateway by other means'
+      'GATEWAY_ACCESS_TOKEN must be set in a production environment, or GATEWAY_ACCESS_ALLOW_ANONYMOUS=true when Access authenticates the gateway by other means'
     )
   }
   // The signature of the identity is asymmetric in a production

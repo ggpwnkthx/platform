@@ -197,6 +197,6 @@ any change to payload, version or algorithm fails the gateway build. Run the sam
 implementation with your own fixtures. This guide was tested at revision
 `39ece6a6682e41eee114b2cd7560728d438d564a`.
 
-The access-service protocol has its own conformance suite,
+The Access protocol has its own conformance suite,
 [test/support/access-conformance.ts](../../packages/gateway/test/support/access-conformance.ts),
 parameterized by the subjects and workspaces an implementation knows.

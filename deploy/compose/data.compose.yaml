@@ -1,17 +1,17 @@
-# The data service alone: the api, the schema of its deployment and the
+# Data alone: the api, the schema of its deployment and the
 # infrastructure they need.
 #
 #   docker compose -f deploy/compose/data.compose.yaml up --build
 #
-# The data service is deployed on its own: it owns the workspaces, the
+# Data is deployed on its own: it owns the workspaces, the
 # collections, the policies, the records, the audit and the events. It
-# asks the access service about the scope of a context, and the access
+# asks Access about the scope of a context, and the access
 # service of the deployment is somewhere else.
 #
 # The service listens on http://localhost:8082.
 #
-# The access service of the deployment is named by the environment. On a machine
-# where the access service runs, it is the address of the host:
+# Access of the deployment is named by the environment. On a machine
+# where Access runs, it is the address of the host:
 #
 #   DATA_ACCESS_URL=http://host.docker.internal:8081 \
 #   docker compose -f deploy/compose/data.compose.yaml up --build
@@ -75,7 +75,7 @@ services:
         condition: service_healthy
       data-migrate:
         condition: service_completed_successfully
-    # The address of the access service of the deployment, when it runs
+    # The address of Access of the deployment, when it runs
     # on another host of the machine.
     extra_hosts:
       - 'host.docker.internal:host-gateway'

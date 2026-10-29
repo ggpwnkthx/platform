@@ -2,7 +2,7 @@
  * The pieces of the pages of the administration.
  *
  * The administration speaks the words of an operator: a **user** is a
- * principal of the access service, and a **right** is a grant of it.
+ * principal of Access, and a **right** is a grant of it.
  */
 
 import type { Context } from 'hono'
@@ -141,7 +141,7 @@ export function RevokeButton(props: { grant: Grant; back: string }) {
       <ConfirmButton
         small
         label="Revoke"
-        message={`Revoke the right ${props.grant.permission}? The access service refuses it from the next decision on.`}
+        message={`Revoke the right ${props.grant.permission}? Access refuses it from the next decision on.`}
       />
     </form>
   )

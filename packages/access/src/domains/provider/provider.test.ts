@@ -22,7 +22,7 @@ function aKey(): string {
   }).privateKey
 }
 
-describe('the keys of the access service', () => {
+describe('the keys of Access', () => {
   test('the key of the deployment is loaded and published', async () => {
     const keys = await loadSigningKeys({ key: aKey(), kid: 'access-1' })
     expect(keys?.kid).toBe('access-1')
@@ -56,7 +56,7 @@ describe('the keys of the access service', () => {
   })
 })
 
-describe('the tokens of the access service', () => {
+describe('the tokens of Access', () => {
   test('the id token carries the claims of the specification', async () => {
     const keys = await loadSigningKeys({ key: aKey(), kid: 'access-1' })
     const pair = await issueTokens({
@@ -130,7 +130,7 @@ describe('the tokens of the access service', () => {
   })
 })
 
-describe('the roles claim of the access service', () => {
+describe('the roles claim of Access', () => {
   test('the roles are sorted and without duplicates', () => {
     expect(rolesClaim(['workspace.write', 'workspace.read', 'workspace.read']).roles).toEqual([
       'workspace.read',
@@ -147,7 +147,7 @@ describe('the roles claim of the access service', () => {
   })
 })
 
-describe('the discovery document of the access service', () => {
+describe('the discovery document of Access', () => {
   test('it carries the fields the gateway reads', () => {
     const document = discoveryDocument({
       issuer: 'https://access.example.com',
@@ -167,13 +167,13 @@ describe('the discovery document of the access service', () => {
     expect(document.token_endpoint_auth_methods_supported).toEqual(['client_secret_basic'])
   })
 
-  test('a scope that the access service does not know is ignored', () => {
+  test('a scope that Access does not know is ignored', () => {
     expect(acceptedScopes(['openid', 'groups', 'something-else'])).toEqual(['openid', 'groups'])
     expect(SUPPORTED_SCOPES).toContain('groups')
   })
 })
 
-describe('the userinfo of the access service', () => {
+describe('the userinfo of Access', () => {
   /** The service of the tests. */
   async function service(key: string, roles: string[] = []): Promise<ProviderService> {
     const provider = new ProviderService({

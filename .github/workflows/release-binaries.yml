@@ -9,8 +9,8 @@ name: release-binaries
 #
 #   git tag v1.0.0 && git push origin v1.0.0
 #
-# A binary of the platform is not only an executable: the access service
-# reads the migrations of the schema from the disk, and the data service
+# A binary of the platform is not only an executable: Access
+# reads the migrations of the schema from the disk, and Data
 # reads the manifests of the collections, the policies and the migrations
 # of the deployment from it. Every archive of a release carries them next
 # to the executable.
@@ -80,7 +80,7 @@ jobs:
       - name: the versions of the platform agree
         run: bun run versions
 
-      # The client of the data service: it is published as a tarball of
+      # The client of Data: it is published as a tarball of
       # the release and on the registry of the packages. The check of the
       # packaging installs the tarball in a consumer outside of this
       # repository and calls the api with it: a tarball that nobody can
@@ -345,7 +345,7 @@ jobs:
           fi
           echo "the compiled binary starts, serves the health probe and stops"
 
-      - name: the binary of the access service starts, serves and stops
+      - name: the binary of Access starts, serves and stops
         if: matrix.service == 'access'
         run: |
           set -euo pipefail
@@ -384,7 +384,7 @@ jobs:
           fi
           echo "the compiled binary starts, serves the health probe and stops"
 
-      - name: the binary of the data service starts, serves and stops
+      - name: the binary of Data starts, serves and stops
         if: matrix.service == 'data'
         run: |
           set -euo pipefail
@@ -455,11 +455,11 @@ jobs:
       - name: the notes of the release
         run: |
           cat > notes.md <<EOF
-          The platform, as standalone executables: the gateway, the access
-          service and the data service. The runtime is inside every
+          The platform, as standalone executables: the gateway, Access
+          and Data. The runtime is inside every
           binary: nothing else has to be installed.
 
-          | Platform | Archive of the gateway | Archive of the access service | Archive of the data service |
+          | Platform | Archive of the gateway | Archive of Access | Archive of Data |
           | --- | --- | --- | --- |
           | Linux x64 (glibc) | \`gateway-${{ needs.version.outputs.version }}-linux-x64.tar.gz\` | \`access-${{ needs.version.outputs.version }}-linux-x64.tar.gz\` | \`data-${{ needs.version.outputs.version }}-linux-x64.tar.gz\` |
           | Linux x64 (musl, Alpine) | \`gateway-${{ needs.version.outputs.version }}-linux-x64-musl.tar.gz\` | \`access-${{ needs.version.outputs.version }}-linux-x64-musl.tar.gz\` | \`data-${{ needs.version.outputs.version }}-linux-x64-musl.tar.gz\` |
@@ -471,8 +471,8 @@ jobs:
 
           The archive of the gateway holds the gateway and the control
           plane, the administrative surface of a deployment. The archive
-          of the access service holds the migrations of the schema, and
-          the archive of the data service holds the manifests of the
+          of Access holds the migrations of the schema, and
+          the archive of Data holds the manifests of the
           collections, the policies and the migrations of the deployment.
           The three are deployed in the same directory.
 

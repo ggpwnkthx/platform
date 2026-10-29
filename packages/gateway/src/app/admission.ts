@@ -4,8 +4,8 @@
  * The cap of the exchanges bounds the phase of the proxying: the requests
  * that are talking to an upstream at the same time. The phase **before**
  * it was not bounded: the limits, the authentication and the decision of
- * the access service happen before the exchange, and a request that waits
- * for the access service holds the resources of the process for the whole
+ * Access happen before the exchange, and a request that waits
+ * for Access holds the resources of the process for the whole
  * budget of the call — three seconds by default.
  *
  * That gap matters exactly when it hurts. A service that hangs does not

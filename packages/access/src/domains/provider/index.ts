@@ -1,7 +1,7 @@
 /**
- * The provider of the access service.
+ * The provider of Access.
  *
- * The domain owns the tokens the access service issues: the signing, the JWKS, the
+ * The domain owns the tokens Access issues: the signing, the JWKS, the
  * discovery document and the claims of the userinfo.
  */
 

@@ -1,7 +1,7 @@
 /**
- * The keys of the access service (spec §4.2).
+ * The keys of Access (spec §4.2).
  *
- * The tokens the access service issues are signed with RS256 and published at
+ * The tokens Access issues are signed with RS256 and published at
  * `/oauth/jwks`. The key is a secret of the deployment: it comes from the
  * environment and it is never generated at the start of a process, because
  * a key that changes at every restart invalidates every token that is
@@ -15,7 +15,7 @@
 import { createPrivateKey, createPublicKey } from 'node:crypto'
 import { exportJWK, SignJWT, type JWK, type JWTPayload } from 'jose'
 
-/** The algorithm of the tokens of the access service. */
+/** The algorithm of the tokens of Access. */
 const SIGNING_ALGORITHM = 'RS256'
 
 /** A key of the JWKS. */

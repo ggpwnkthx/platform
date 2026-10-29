@@ -1,5 +1,5 @@
 /**
- * The state of a request of the access service.
+ * The state of a request of Access.
  *
  * The state travels with the request: the identifier of the request and the
  * moment it arrived. The identifier is in every log line of the request and
@@ -16,7 +16,7 @@ export interface AccessState {
 /**
  * The environment of the application.
  *
- * The bindings are the capabilities of the runtime. The access service has none for now:
+ * The bindings are the capabilities of the runtime. Access has none for now:
  * the probes and the endpoints of the protocol are answered by the
  * application itself.
  */

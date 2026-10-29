@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * The entry point of the access service.
+ * The entry point of Access.
  *
  * The runtime reads the environment, starts the listener and waits for a
  * termination signal. Everything else lives in the runtime and in the

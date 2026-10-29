@@ -1,7 +1,7 @@
 /**
  * The scope of an operator.
  *
- * The console reads the keys the access service holds for the caller on
+ * The console reads the keys Access holds for the caller on
  * the route of the console, for the workspace that is the tenant of the
  * caller. Three keys mean something to the console:
  *
@@ -13,7 +13,7 @@
  *
  * The console acts with the credential of the tenant of the operator when
  * it holds one, and with the credential of the platform otherwise: the
- * audit of the access service names the operator of a tenant credential,
+ * audit of Access names the operator of a tenant credential,
  * and a change of a tenant is better signed by its own operator.
  */
 

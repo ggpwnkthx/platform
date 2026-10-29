@@ -2,12 +2,12 @@
 /**
  * The compatibility harness (spec §16 and §17).
  *
- * The harness runs the **real** gateway, the **real** access service and
+ * The harness runs the **real** gateway, the **real** Access and
  * the **real** backend of this repository, against a real PostgreSQL
  * server, and it performs the acceptance scenario through the gateway.
  *
  * The references are the workspaces of this repository: the gateway of
- * `packages/gateway/` and the access service of `packages/access/`. The revision that is
+ * `packages/gateway/` and Access of `packages/access/`. The revision that is
  * tested is the revision of the repository, and the harness proves that
  * the tracked files of the workspaces are the ones of that revision.
  *
@@ -20,11 +20,11 @@
  *   GATEWAY_REPOSITORY    the repository of the gateway: a git url or the
  *                         path of a local repository (default: the
  *                         workspace of this repository)
- *   ACCESS_REPOSITORY     the repository of the access service (default:
+ *   ACCESS_REPOSITORY     the repository of Access (default:
  *                         the workspace of this repository)
  *   GATEWAY_COMMIT        the revision of the gateway (default: the head
  *                         of the repository)
- *   ACCESS_COMMIT         the revision of the access service (default:
+ *   ACCESS_COMMIT         the revision of Access (default:
  *                         the head of the repository)
  *   COMPAT_MIRROR         a directory that holds the bare mirrors
  *   COMPAT_KEEP           when it is set, the temporary directory is kept
@@ -61,7 +61,7 @@ import {
 /**
  * The directory of the mirrors.
  *
- * The harness needs the gateway and the access service at a revision. It
+ * The harness needs the gateway and Access at a revision. It
  * fetches them from the network when it can, and it takes them from the
  * mirrors when it cannot: a directory that holds a bare repository named
  * `gateway.git` and a bare repository named `access.git`. The mirrors are
@@ -316,14 +316,14 @@ async function main(): Promise<void> {
     }
     if (accessBaseline.repository) {
       const checkout = join(workspace, 'access')
-      step(`the access service is cloned from ${accessSource} at ${accessBaseline.commit}`)
+      step(`Access is cloned from ${accessSource} at ${accessBaseline.commit}`)
       const published = publishedReference(accessSource, accessBaseline.commit!, checkout)
       accessReference = join(published.directory, accessBaseline.path)
       accessRevision = accessBaseline.commit!
     } else {
       const reference = workspaceReference(accessDirectory)
       accessRevision = reference.revision
-      step(`the access service is the workspace ${reference.directory} at ${accessRevision}`)
+      step(`Access is the workspace ${reference.directory} at ${accessRevision}`)
     }
     const gatewayWorkingDirectory = gatewayReference
     const accessWorkingDirectory = accessReference
@@ -382,14 +382,14 @@ async function main(): Promise<void> {
     // 4. The extended access.
     const accessPort = await freePort()
     const accessUrl = `http://127.0.0.1:${accessPort}`
-    // The database of the access service is created before it starts.
+    // The database of Access is created before it starts.
     const creator = new Client({
       connectionString: `postgres://data@localhost/postgres?host=${encodeURIComponent(socketDirectory)}&port=${postgres.port}`,
     })
     await creator.connect()
     await creator.query('create database access_compat owner data')
     await creator.end()
-    const access = start('the access service', ['bun', 'run', 'src/main.ts'], {
+    const access = start('Access', ['bun', 'run', 'src/main.ts'], {
       cwd: accessWorkingDirectory,
       env: {
         ACCESS_HOST: '127.0.0.1',
@@ -409,26 +409,24 @@ async function main(): Promise<void> {
     })
     processes.push(access.process)
     await waitFor(`${accessUrl}/healthz`)
-    step('the extended access service is ready')
+    step('the extended Access is ready')
 
-    // The discovery of the access context contract. The pinned the access service has to
-    // answer it: it is the readiness check of the backend, and an access service that
+    // The discovery of the access context contract. The pinned Access has to
+    // answer it: it is the readiness check of the backend, and Access that
     // does not answer it never lets the backend serve a request.
     const contextDiscovery = await fetch(`${accessUrl}/v1/access-context`, {
       headers: { authorization: `Bearer ${CONTEXT_TOKEN}` },
     })
     if (!contextDiscovery.ok) {
       throw new Error(
-        `the access service does not answer the discovery of the access context: ${await contextDiscovery.text()}`
+        `Access does not answer the discovery of the access context: ${await contextDiscovery.text()}`
       )
     }
     const contract = (await contextDiscovery.json()) as { versions?: number[] }
     if (!Array.isArray(contract.versions) || !contract.versions.includes(1)) {
-      throw new Error(
-        'the access service does not speak the version of the access context contract'
-      )
+      throw new Error('Access does not speak the version of the access context contract')
     }
-    step('the access service answers the discovery of the access context contract')
+    step('Access answers the discovery of the access context contract')
 
     // 5. The fixtures of the access: a tenant, a principal, a group, the grants.
     const adminCall = async (
@@ -446,7 +444,7 @@ async function main(): Promise<void> {
       })
       const text = await response.text()
       if (!response.ok) {
-        throw new Error(`the administration of the access service failed at ${path}: ${text}`)
+        throw new Error(`the administration of Access failed at ${path}: ${text}`)
       }
       return JSON.parse(text) as Record<string, unknown>
     }
@@ -472,7 +470,7 @@ async function main(): Promise<void> {
     const tenantId = String((tenant as { id?: string }).id ?? tenant.tenantId ?? '')
     const otherTenantId = String((otherTenant as { id?: string }).id ?? otherTenant.tenantId ?? '')
     if (!tenantId || !otherTenantId) {
-      throw new Error('the administration of the access service did not answer the identifiers')
+      throw new Error('the administration of Access did not answer the identifiers')
     }
 
     const principal = await adminCall('/v1/admin/users', {
@@ -567,7 +565,7 @@ async function main(): Promise<void> {
       },
       'PUT'
     )
-    step('the fixtures of the access service are written')
+    step('the fixtures of Access are written')
 
     // 6. The registry of the backend.
     const owner = new Client({ connectionString: ownerUrl })
@@ -666,7 +664,7 @@ async function main(): Promise<void> {
       users: [
         {
           // The subject of the caller is the identifier of the principal
-          // of the access: it is what the tokens of the access service carry, and it
+          // of the access: it is what the tokens of Access carry, and it
           // is what the gateway forwards.
           sub: principalId,
           email: 'alice@example.test',
@@ -690,7 +688,7 @@ async function main(): Promise<void> {
             upstream: backendUrl,
             auth: { mode: 'any', workspace: { param: 'workspaceId', requireUuid: true } },
             forwardAuthorization: false,
-            // The decision of the access service is not cached: a
+            // The decision of Access is not cached: a
             // revocation is immediate.
             accessCacheTtlMs: 0,
           },
@@ -905,7 +903,7 @@ async function main(): Promise<void> {
     }
     const discoveryBody = (await discovery.json()) as Record<string, unknown>
     if (!((discoveryBody.versions as number[]) ?? []).includes(1)) {
-      throw new Error('the access service does not speak the version of the contract')
+      throw new Error('Access does not speak the version of the contract')
     }
     const context = await fetch(`${accessUrl}/v1/access-context`, {
       method: 'POST',
@@ -922,18 +920,18 @@ async function main(): Promise<void> {
       }),
     })
     if (!context.ok) {
-      throw new Error(`the context of the access service failed: ${context.status}`)
+      throw new Error(`the context of Access failed: ${context.status}`)
     }
     const contextBody = (await context.json()) as Record<string, unknown>
     const permissionKeys = (contextBody.permissionKeys as string[]) ?? []
     for (const key of ['content.reader', 'content.editor', 'data.audit.read']) {
       if (!permissionKeys.includes(key)) {
         throw new Error(
-          `the context of the access service does not hold "${key}": ${permissionKeys.join(', ')}`
+          `the context of Access does not hold "${key}": ${permissionKeys.join(', ')}`
         )
       }
     }
-    step('the real access service answers the complete set of the scoped keys')
+    step('the real Access answers the complete set of the scoped keys')
 
     // The existing decision of the gateway is untouched.
     const decision = await fetch(`${accessUrl}/v1/decisions`, {
@@ -1134,7 +1132,7 @@ async function main(): Promise<void> {
         !grant.revokedAt
     )
     if (!readerGrant) {
-      throw new Error('the grant of the reader was not found in the access service')
+      throw new Error('the grant of the reader was not found in Access')
     }
     const revoked = await fetch(`${accessUrl}/v1/admin/grants/${readerGrant.id}`, {
       method: 'DELETE',

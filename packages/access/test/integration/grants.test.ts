@@ -29,7 +29,7 @@ afterAll(async () => {
   await database.close()
 })
 
-describe('the grants of the access service', () => {
+describe('the grants of Access', () => {
   test('a grant is created and read back', async () => {
     const created = await grants.create({
       tenantId,

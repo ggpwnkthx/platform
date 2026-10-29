@@ -1,5 +1,5 @@
 /**
- * The administration of the access service (spec §10).
+ * The administration of Access (spec §10).
  *
  * Five endpoints, and they are the whole surface of the administration:
  * a tenant, a principal and a grant are created and revoked with them and
@@ -57,7 +57,7 @@ import { listTenants, upsertTenant } from './tenants'
 export type { AdministrationOptions } from './options'
 export type { AuditEntry } from './audit'
 
-/** The administration of the access service. */
+/** The administration of Access. */
 export class AdministrationService {
   constructor(private readonly options: AdministrationOptions) {}
 

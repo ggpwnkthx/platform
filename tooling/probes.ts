@@ -1,7 +1,7 @@
 /**
  * The probes of the services of the platform.
  *
- * The gateway, the access service and the data service answer the same
+ * The gateway, Access and Data answer the same
  * probes, and they answer them the same way: the same paths, the same
  * fields and the same vocabulary of the readiness. A deployment reads
  * the probes of the three services with the same code, and a probe that

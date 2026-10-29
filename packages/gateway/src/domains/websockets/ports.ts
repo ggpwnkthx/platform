@@ -91,7 +91,7 @@ export interface RevalidationOutcome {
  * The port that revalidates an open connection.
  *
  * The domain asks the port whether the connection may stay open; it does
- * not know what a session is and it does not know what the access service
+ * not know what a session is and it does not know what Access
  * answers.
  */
 export type RevalidationPort = () => Promise<RevalidationOutcome>

@@ -7,7 +7,7 @@ import type { AccessContext, AccessContextClient } from '../../src/domains/autho
  * The metrics of the service (spec §15.1).
  *
  * The exposition is the text format of Prometheus: the histograms carry
- * the cumulative count of their buckets, and the counters of the access service and
+ * the cumulative count of their buckets, and the counters of Access and
  * of the cache of the context say what the process did.
  */
 
@@ -45,7 +45,7 @@ function clientOf(counter: { calls: number }): AccessContextClient {
     evaluate: async (): Promise<AccessContext> => {
       counter.calls += 1
       const evaluatedAt = new Date()
-      // The answer of the access service is the wire form: the times are strings.
+      // The answer of Access is the wire form: the times are strings.
       return {
         version: 1,
         allow: true,

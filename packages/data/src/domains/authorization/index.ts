@@ -7,7 +7,7 @@
  *
  * The domain imports the gateway context, the workspace registry and the
  * schema of the deployment, and it imports no adapter: the client of the
- * The access service is a port.
+ * Access is a port.
  */
 
 import type { Metrics } from '../../observability/metrics'
@@ -133,7 +133,7 @@ export interface ContextResolverOptions {
    * The maximum number of the entries of the cache.
    *
    * The cache is bounded: it is the mitigation of the availability of
-   * The access service, and a mitigation that grows without a bound is a leak. The
+   * Access, and a mitigation that grows without a bound is a leak. The
    * default is a bound that holds the contexts of a few thousand
    * principals.
    */
@@ -162,7 +162,7 @@ export const DEFAULT_CONTEXT_CACHE_MAX_ENTRIES = 4096
  *
  * The default is no cache: every request asks access. A cache is
  * allowed for the reads only, it is bounded by the local lifetime and by
- * the lifetime the access service announced, and a failure never extends an entry
+ * the lifetime Access announced, and a failure never extends an entry
  * and never falls back on a stale one.
  */
 export class ContextResolver {
@@ -300,8 +300,8 @@ export class ContextResolver {
   /**
    * The moment the authorization stops being valid.
    *
-   * The deadline of the access service is turned into the monotonic clock of the
-   * process, and it is never longer than the life the access service announced. The
+   * The deadline of Access is turned into the monotonic clock of the
+   * process, and it is never longer than the life Access announced. The
    * lifetime of the cache is a different bound: it applies to the entry
    * of the cache and not to the authorization.
    */

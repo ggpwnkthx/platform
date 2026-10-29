@@ -1,6 +1,6 @@
 # Operations
 
-Deploy, configure, monitor, repair and cut tenants over to the access service. Behavior is in [spec.md](spec.md), endpoints in [api.md](api.md), and procedures shared by all services in [platform operations](../platform/operations.md).
+Deploy, configure, monitor, repair and cut tenants over to Access. Behavior is in [spec.md](spec.md), endpoints in [api.md](api.md), and procedures shared by all services in [platform operations](../platform/operations.md).
 
 ## Requirements
 
@@ -94,7 +94,7 @@ kubectl -n platform rollout status deployment/platform-access
    GATEWAY_OIDC_CLIENT_SECRET=the-secret-of-the-gateway
    GATEWAY_OIDC_REDIRECT_URI=https://gateway-acme.example.com/auth/callback
    GATEWAY_ACCESS_URL=https://access.example.com
-   GATEWAY_ACCESS_TOKEN=the-access-token-of-the-access-service
+   GATEWAY_ACCESS_TOKEN=the-access-token-of-the-Access
    GATEWAY_SESSION_SECRET=the-secret-of-the-sessions
    GATEWAY_IDENTITY_SIGNING_KEY=the-private-key-of-the-deployment
    ```

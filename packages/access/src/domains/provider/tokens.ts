@@ -1,7 +1,7 @@
 /**
- * The tokens of the access service (spec §7).
+ * The tokens of Access (spec §7).
  *
- * The access service is the provider of the gateway: the tokens it issues are ordinary
+ * Access is the provider of the gateway: the tokens it issues are ordinary
  * OpenID Connect tokens. The gateway reads `sub`, `email` and `roles` and
  * nothing else, so the claims below are the whole contract with the
  * gateway.
@@ -9,7 +9,7 @@
 
 import type { SigningKeys } from './keys'
 
-/** The life of a token of the access service, in seconds. */
+/** The life of a token of Access, in seconds. */
 export const TOKEN_LIFE_SECONDS = 300
 
 /** The number of roles of a token. */
@@ -97,7 +97,7 @@ export async function issueTokens(options: IssueOptions): Promise<TokenPair> {
     ...(subject.displayName ? { name: subject.displayName } : {}),
     roles,
     tid: subject.tenant,
-    // The access service does not verify the e-mail of a provider.
+    // Access does not verify the e-mail of a provider.
     email_verified: false,
   })
 

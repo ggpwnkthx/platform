@@ -1,5 +1,5 @@
 /**
- * A tenant: what the access service holds about it, its latest changes,
+ * A tenant: what Access holds about it, its latest changes,
  * and its form.
  */
 

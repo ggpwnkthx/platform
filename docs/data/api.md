@@ -1,6 +1,6 @@
 # API contract
 
-The stable v1 HTTP surface of the data service: what clients may rely on and what a change costs. The
+The stable v1 HTTP surface of Data: what clients may rely on and what a change costs. The
 [specification](spec.md#9-http-api) is normative; this page changes only with a major client version.
 
 ## Endpoints
@@ -80,7 +80,7 @@ document publishes every code.
 | Anything else | `500 INTERNAL_ERROR`, always a service defect |
 
 The message is a safe summary, and `details` name only fields the caller may write or query. Answers
-never carry stack traces, SQL text, constraint names, raw access-service reasons or other tenants'
+never carry stack traces, SQL text, constraint names, raw Access reasons or other tenants'
 identifiers.
 
 ## Query parameters
@@ -250,7 +250,7 @@ never grants a read.
 
 | Path | Returns | Requires |
 | --- | --- | --- |
-| `/schema` | Collections where the caller holds an applicable action policy; a collection may be write-only, its records unreadable. Each carries key, label, schema version, supported actions, readable and writable fields with bounds, filterable and sortable fields, visible relations, policy bundle version and API limits. Never SQL identifiers, row predicates, secrets, subscriber configuration, access-service grants or studio instructions. | At least one applicable action policy |
+| `/schema` | Collections where the caller holds an applicable action policy; a collection may be write-only, its records unreadable. Each carries key, label, schema version, supported actions, readable and writable fields with bounds, filterable and sortable fields, visible relations, policy bundle version and API limits. Never SQL identifiers, row predicates, secrets, subscriber configuration, Access grants or studio instructions. | At least one applicable action policy |
 | `/model` | Model version, content digest, served schema version, served collections with fields and relations, and deployment collections not served yet. | `data.model.read` or `data.model.write` |
 | `/audit` | Metadata of committed mutations, paged with `limit` and a cursor: identifiers and changed field names, never values. Not a revision history. | `data.audit.read`, granted on its own, not implied by editing records |
 
@@ -280,11 +280,11 @@ Change rules:
 | Service | `1.0.0` | `/healthz` (`version`), the image label, the package version. |
 | API | `v1` | Every data route path. |
 | Client | `1.0.0` | `packages/client/package.json` and the release tarball. |
-| Access context contract | `1` | Access service discovery. |
+| Access context contract | `1` | Access discovery. |
 | Gateway signature | `v5` | The identity header. Legacy `v4` is a migration path, declared with `DATA_LEGACY_IDENTITY`; refused by default. |
 | Manifest format | `1` | The manifest's `version`. |
 | Policy bundle format | `1` | The bundle's `version`. |
 
-Access-service and gateway contracts are platform contracts; the integration baseline is the
+Access and gateway contracts are platform contracts; the integration baseline is the
 repository revision in [`compatibility.json`](../../compatibility.json), and
 `bun run check:compatibility` proves docs and workflows agree with it.

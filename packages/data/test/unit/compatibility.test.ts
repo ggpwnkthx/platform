@@ -11,11 +11,11 @@ import {
 } from '../../scripts/compat/check-compatibility'
 
 /**
- * The drift of the baseline of the data service.
+ * The drift of the baseline of Data.
  *
  * The manifest of the baseline lives at the root of the platform: it
  * owns the workspaces of the three services. The specification of the
- * data service and its guide show the baseline, and the blocks they show
+ * Data and its guide show the baseline, and the blocks they show
  * are generated from the manifest: a baseline that is written twice
  * drifts.
  *

@@ -1,7 +1,7 @@
 /**
  * The port of the database.
  *
- * The access service stores its eight tables in PostgreSQL. The port is the same for the
+ * Access stores its eight tables in PostgreSQL. The port is the same for the
  * two drivers: a PostgreSQL server of a deployment and the embedded
  * PostgreSQL of a development machine. The domains and the repositories
  * never know which one they talk to.
@@ -84,7 +84,7 @@ export interface MigrationLock {
   release(): Promise<void>
 }
 
-/** The database of the access service. */
+/** The database of Access. */
 export interface Database extends SqlClient {
   /** Closes the database and everything it owns. */
   close(): Promise<void>

@@ -3,7 +3,7 @@
  *
  * The harness builds the real application, with the real adapters and a
  * real PostgreSQL server, and it signs the requests the way the pinned
- * gateway does. The access service is the fixture of the tests: the evidence of the
+ * gateway does. Access is the fixture of the tests: the evidence of the
  * real integration is produced by the compatibility harness.
  */
 

@@ -59,32 +59,32 @@ interface Service {
 /** The services of the platform, and the surface of their API. */
 const SERVICES: readonly Service[] = [
   {
-    name: 'access service',
+    name: 'Access',
     code: [],
     document: 'docs/access/api.md',
     surfaces: [
       {
-        name: 'the access service',
+        name: 'Access',
         code: ['packages/access/src/app/app.ts'],
         described: accessDocument('1.0.0'),
       },
     ],
   },
   {
-    name: 'data service',
+    name: 'Data',
     code: [],
     document: 'docs/data/api.md',
     scope: { name: 'scope', prefix: '/ws/:workspaceId/v1' },
     surfaces: [
       {
-        name: 'the data service',
+        name: 'Data',
         code: ['packages/data/src/app/app.ts', 'packages/data/src/app/routes.ts'],
         described: dataDocument('1', '1.0.0'),
       },
     ],
   },
   {
-    name: 'gateway',
+    name: 'the gateway',
     code: [],
     document: 'docs/gateway/spec.md',
     constants: {

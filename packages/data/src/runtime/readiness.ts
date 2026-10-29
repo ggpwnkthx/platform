@@ -4,7 +4,7 @@
  * The service is ready when its configuration is valid, when the
  * migrations of the deployment are applied and match the files of the
  * repository, when the privileges of the role of the connection are the
- * ones the deployment expects and when the access service speaks the version of the
+ * ones the deployment expects and when Access speaks the version of the
  * access context contract.
  *
  * The probes are not routed through the authorization of a workspace: a

@@ -1,6 +1,6 @@
 # Decisions
 
-The data service's contract and implementation decisions, each with its reason. The
+Data's contract and implementation decisions, each with its reason. The
 [specification](spec.md) is normative for behavior; the decision process and table shape are in the
 [platform decisions](../platform/decisions.md).
 
@@ -11,9 +11,9 @@ The data service's contract and implementation decisions, each with its reason. 
 | # | Question | Decision | Stated in | Status | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | 1 | Is the service a studio? | No: it is headless; Studio is a separate project. | §1.3 | resolved | `src/app/app.ts`, `test/contract/http.test.ts` |
-| 2 | Who owns identity and capabilities? | The access service stays the authority for identity and capability assignment. | §5 | resolved | `src/domains/authorization/access-context.ts`, `test/contract/http.test.ts` |
+| 2 | Who owns identity and capabilities? | Access stays the authority for identity and capability assignment. | §5 | resolved | `src/domains/authorization/access-context.ts`, `test/contract/http.test.ts` |
 | 3 | Where is the authentication boundary? | The gateway, through its existing signed-identity contract. | §4 | resolved | `src/domains/gateway-context/verify.ts`, `test/contract/http.test.ts` |
-| 4 | What is the access context contract? | A new access-service contract; stale role snapshots are not enough. | §5.2 | resolved | `src/domains/authorization/access-context.ts`, `test/integration/replicas.test.ts` |
+| 4 | What is the access context contract? | A new Access contract; stale role snapshots are not enough. | §5.2 | resolved | `src/domains/authorization/access-context.ts`, `test/integration/replicas.test.ts` |
 | 5 | Where do workspaces and policies live? | Workspaces and data policy semantics belong to the backend. | §6 | resolved | `src/domains/workspaces/index.ts`, `test/contract/catalog.test.ts` |
 | 6 | What is the first supported schema model? | PostgreSQL, reviewed migrations and registered manifests. | §7.1 | resolved | `migrations/`, `src/platform/postgres/migrations.ts` |
 | 7 | What is the first transport? | REST, with metadata, OpenAPI and a small typed client. | §9 | resolved | `src/app/openapi.ts`, `packages/client/` |
@@ -84,7 +84,7 @@ binding format and gateway key at once takes a deployment down.
 
 ### 10. The integration baseline is one checked file
 
-`compatibility.json` holds the gateway and access-service repositories and tested revisions, and the
+`compatibility.json` holds the gateway and Access repositories and tested revisions, and the
 drift check refuses docs or workflows that disagree or pin their own revision. Earlier baselines'
 revisions stay in the release notes as historical evidence.
 
@@ -111,11 +111,11 @@ command; the originating caller is only an attribution.
 The 4 MiB budget is checked while rows are encoded, and expansion is bounded before rows are
 materialized, using one statement per relation and parent batch, never one per parent.
 
-### 15. The access-service extension lives in the access service
+### 15. The Access extension lives in Access
 
 The access context extension lives in `packages/access/`, `compatibility.json` pins the revision
-carrying it, and the data service keeps no copy that could rot. The harness proves the contract
-against the real access service at that revision.
+carrying it, and Data keeps no copy that could rot. The harness proves the contract
+against the real Access at that revision.
 
 ### 16. Tests run against a real PostgreSQL server
 
@@ -131,7 +131,7 @@ answers from both engines.
 
 ### 18. Dependency and cache metrics are recorded by their owners
 
-The access-service client times its calls, the resolver counts cache hits and misses, the pool counts
+The Access client times its calls, the resolver counts cache hits and misses, the pool counts
 connection waits, and the store counts rollbacks. Only the component that sees an event can count it
 without guessing.
 
@@ -144,10 +144,10 @@ migration; a workspace that registered nothing serves every collection ([spec §
 
 ### 20. Bundle publication is an operator command, not an HTTP route
 
-A publishing endpoint would be an authority outside the access service: a tenant able to publish could
+A publishing endpoint would be an authority outside Access: a tenant able to publish could
 grant itself every field. The command uses schema-owner credentials on the operator's machine and
 keeps a history that audit entries reference. Cost: tenants cannot change policies through the API; a
-studio needing that requires an endpoint defined in the access service.
+studio needing that requires an endpoint defined in Access.
 
 ### 21. Predicate negation keeps three-valued logic
 
@@ -197,7 +197,7 @@ limit may be refused slightly early.
 ### 28. The context cache is bounded
 
 Expired entries are dropped and the least recently used entry is evicted when full. The earlier
-unbounded map leaked exactly while the cache was mitigating an access-service outage.
+unbounded map leaked exactly while the cache was mitigating an Access outage.
 
 ### 29. Per-tenant bounds apply once the tenant is known
 

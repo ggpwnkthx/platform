@@ -1,5 +1,5 @@
 /**
- * The observation of the access service.
+ * The observation of Access.
  *
  * The observation layer knows nothing about the domains, the application or
  * the runtime: it measures and it writes. The application asks it to record

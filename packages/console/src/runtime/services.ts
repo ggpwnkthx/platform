@@ -110,8 +110,8 @@ export function compose(config: ConsoleConfig, stores?: Stores): Services {
       const others = await Promise.all(
         [
           { id: 'gateway' as const, name: 'The gateway', url: config.gatewayUrl },
-          { id: 'access' as const, name: 'The access service', url: config.accessUrl },
-          { id: 'data' as const, name: 'The data service', url: config.dataUrl },
+          { id: 'access' as const, name: 'Access', url: config.accessUrl },
+          { id: 'data' as const, name: 'Data', url: config.dataUrl },
         ].map((target) => probeService(target, { timeoutMs: config.probeTimeoutMs }))
       )
       return [...others, itself]

@@ -43,7 +43,7 @@ export interface TenantRegistration {
   displayName: string
   issuer: string
   idpClientId: string
-  /** The client secret of the access service at the provider, in clear. */
+  /** The client secret of Access at the provider, in clear. */
   idpClientSecret: string
   idpRedirectUri: string
   idpScopes: string[]

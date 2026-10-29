@@ -319,7 +319,7 @@ export class IdentityNotWritableError extends Error {
  * it cannot trust.
  *
  * The subject is never rewritten. A sanitization that removes a character
- * of a subject turns two callers into one: the access service, which
+ * of a subject turns two callers into one: Access, which
  * decides with the subject it was given, and the upstream, which reads the
  * subject of the header, would then speak of two different callers. The
  * address of the caller and the workspace of the request are hints, and

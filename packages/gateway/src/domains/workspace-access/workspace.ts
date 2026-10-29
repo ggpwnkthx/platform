@@ -2,7 +2,7 @@
  * The workspace of a request.
  *
  * The workspace is the unit of access control of the platform: the gateway
- * asks the access service whether a caller may use it. The gateway never
+ * asks Access whether a caller may use it. The gateway never
  * decides access on its own.
  */
 
@@ -11,7 +11,7 @@
  *
  * The format is the one of the RFC 4122: eight groups of hexadecimal
  * digits separated by dashes. The version and the variant are not checked:
- * the access service is the one that decides what a workspace is.
+ * Access is the one that decides what a workspace is.
  */
 export function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)

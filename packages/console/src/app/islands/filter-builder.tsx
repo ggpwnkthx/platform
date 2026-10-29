@@ -2,7 +2,7 @@
  * The filter of a list, built from rows or written as json.
  *
  * A row is a field, an operator and a value; the rows are joined with
- * `_and` into the json filter of the data service. A filter that the
+ * `_and` into the json filter of Data. A filter that the
  * rows cannot express — an `_or`, a `_not`, a nesting — is written as
  * json, and the builder says so instead of losing it.
  *

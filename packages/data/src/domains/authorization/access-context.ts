@@ -1,7 +1,7 @@
 /**
- * The access context of the access service (spec §5).
+ * The access context of Access (spec §5).
  *
- * The backend owns the meaning of a permission, and the access service owns the decision
+ * The backend owns the meaning of a permission, and Access owns the decision
  * of which permissions a principal holds right now. The contract between
  * the two is the access context: a request for the context of a principal
  * in a workspace, and an answer that carries the complete set of the
@@ -93,7 +93,7 @@ function unavailable(reason: string): never {
  * Validates the discovery of the contract.
  *
  * An unknown version stops the readiness of the service: a backend that
- * does not know the contract of its the access service would guess the permissions.
+ * does not know the contract of its Access would guess the permissions.
  */
 export function validateDiscovery(raw: unknown): AccessContextDiscovery {
   if (!isObject(raw)) unavailable('the discovery is not an object')

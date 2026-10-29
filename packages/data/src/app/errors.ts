@@ -4,7 +4,7 @@
  * Every failure answers with the same envelope: the code, a safe message,
  * the details of the fields and the correlation id of the request. The
  * envelope never carries a stack trace, a statement, a name of a
- * constraint, a reason of the access service or a credential.
+ * constraint, a reason of Access or a credential.
  */
 
 import type { ErrorCode, ErrorDetail } from '../protocol/errors'

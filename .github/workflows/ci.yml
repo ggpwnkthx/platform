@@ -225,7 +225,7 @@ jobs:
         env:
           GATEWAY_TEST_POSTGRES_URL: postgres://platform:platform@127.0.0.1:5432/gateway
 
-      - name: the tests of the access service
+      - name: the tests of Access
         if: matrix.workspace == 'access'
         run: bun test --cwd packages/access test/integration
         env:
@@ -268,7 +268,7 @@ jobs:
       - name: install
         run: bun install --frozen-lockfile
 
-      - name: the gateway, the access service and the data service
+      - name: the gateway, Access and Data
         # The references of the suite are the workspaces of this
         # repository: the suite proves that the three still speak to each
         # other the way their specifications say.
@@ -437,7 +437,7 @@ jobs:
           docker build -f ${{ matrix.path }}/Dockerfile --target fixtures -t gateway-fixtures:ci .
           docker run --rm --entrypoint sh gateway-fixtures:ci -c 'ls node_modules/oidc-provider'
 
-      - name: the image of the access service starts and answers its probes
+      - name: the image of Access starts and answers its probes
         if: matrix.workspace == 'access'
         run: |
           # The key that signs the tokens: it comes from the secret
@@ -477,7 +477,7 @@ jobs:
             exit 1
           fi
 
-      - name: the image of the access service refuses to start without its secrets
+      - name: the image of Access refuses to start without its secrets
         if: matrix.workspace == 'access'
         run: |
           # The environment of a production deployment is the one of the
@@ -491,7 +491,7 @@ jobs:
             exit 1
           fi
 
-      - name: the image of the data service starts and answers its probes
+      - name: the image of Data starts and answers its probes
         if: matrix.workspace == 'data'
         run: |
           # The key that signs the cursors is a secret of the
@@ -525,7 +525,7 @@ jobs:
           docker logs data
           exit 1
 
-      - name: the image of the data service refuses to start without the key of the cursors
+      - name: the image of Data refuses to start without the key of the cursors
         if: matrix.workspace == 'data'
         run: |
           if docker run --rm \
@@ -719,7 +719,7 @@ jobs:
         run: bun run --cwd packages/gateway load -- --websockets 500
 
   data-gates:
-    name: the gates of the data service
+    name: the gates of Data
     runs-on: ubuntu-latest
     services:
       postgres:

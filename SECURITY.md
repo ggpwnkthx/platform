@@ -1,6 +1,6 @@
 # Security
 
-How to report a vulnerability in the platform, and what happens next. One policy covers the gateway, the access service and the data service.
+How to report a vulnerability in the platform, and what happens next. One policy covers the gateway, Access and Data.
 
 ## Supported versions
 

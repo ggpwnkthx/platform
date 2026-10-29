@@ -412,7 +412,7 @@ export async function createRuntime(
     logger,
   })
 
-  // The decisions of the access service are cached where the replicas share
+  // The decisions of Access are cached where the replicas share
   // their state, so every replica answers with the same decision.
   const decisionCache: DecisionCache =
     sharedConnection?.kind === 'redis'
@@ -445,16 +445,16 @@ export async function createRuntime(
     },
     transport: new FetchAccessTransport(),
     cache: decisionCache,
-    onError: (error) => logger.warn('the access service request failed', { error }),
+    onError: (error) => logger.warn('Access request failed', { error }),
     // The service is not called at all while the breaker is open. The
     // operator has to see it: the metric of the unavailability counts the
     // refusals, and this one counts the calls that were not made.
     onBreakerOpen: () =>
-      logger.warn('the access service is not called any more', {
+      logger.warn('Access is not called any more', {
         reason: 'it failed recently',
         cooldownMs: settings.access.breakerCooldownMs,
       }),
-    onBreakerRecovery: () => logger.info('the access service answered again'),
+    onBreakerRecovery: () => logger.info('Access answered again'),
     // The latency of the service is published: it is a dependency of its
     // own on the path of every request of a workspace.
     onDecision: (routeId, durationMs) => observer.recordAccess(routeId, durationMs),
@@ -587,7 +587,7 @@ export async function createRuntime(
   // The admission of the requests. It bounds the requests that are inside
   // the gateway at the same time, and it covers the phase that comes
   // before the exchange: the limits, the session and the decision of the
-  // access service. A request that waits for a hanging access service
+  // Access. A request that waits for a hanging Access
   // would never reach the cap of the exchanges.
   const admission = new AdmissionController({
     max: settings.resources.maxPendingRequests,

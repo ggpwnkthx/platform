@@ -3,34 +3,34 @@ import { createRuntime, type AccessRuntime } from '../../src/runtime/composition
 import { readEnv } from '../../src/runtime/env'
 
 /**
- * The access service under test.
+ * Access under test.
  *
- * The suite runs against an access service that it starts itself, in the process of
+ * The suite runs against Access that it starts itself, in the process of
  * the test: it is the fast way, and it is the way a developer runs it.
  *
- * The suite can also run against an access service that is **already running** — the
+ * The suite can also run against Access that is **already running** — the
  * image of a release, for instance — when the environment names it:
  *
- *   ACCESS_EXTERNAL_URL           the url the callers reach that the access service at
+ *   ACCESS_EXTERNAL_URL           the url the callers reach that Access at
  *   ACCESS_EXTERNAL_ADMIN_TOKEN   the token of its administration
  *   ACCESS_EXTERNAL_ACCESS_TOKEN  the token of its decisions
  *
  * The suite never creates what the environment names: a suite that is
  * supposed to prove the image of a release has to talk to that image,
- * and a suite that talks to another the access service proves nothing about it.
+ * and a suite that talks to another deployment of Access proves nothing about it.
  */
 
-/** The access service under test. */
+/** Access under test. */
 export interface AccessUnderTest {
-  /** The url the callers reach the access service at. */
+  /** The url the callers reach Access at. */
   url: string
-  /** The token of the administration of the access service. */
+  /** The token of the administration of Access. */
   adminToken: string
-  /** The token of the decisions of the access service. */
+  /** The token of the decisions of Access. */
   accessToken: string
-  /** True when the access service runs in the process of the test. */
+  /** True when Access runs in the process of the test. */
   local: boolean
-  /** Stops the access service, when the suite is the one that started it. */
+  /** Stops Access, when the suite is the one that started it. */
   stop: () => Promise<void>
 }
 
@@ -43,9 +43,9 @@ export async function freePort(): Promise<number> {
 }
 
 /**
- * The access service that the suite runs against.
+ * Access that the suite runs against.
  *
- * The environment decides: a running access service when it is named, an access service of the
+ * The environment decides: a running Access when it is named, Access of the
  * process of the test otherwise.
  */
 export async function startAccessUnderTest(): Promise<AccessUnderTest> {
@@ -55,12 +55,12 @@ export async function startAccessUnderTest(): Promise<AccessUnderTest> {
     const accessToken = process.env.ACCESS_EXTERNAL_ACCESS_TOKEN?.trim()
     if (!adminToken) {
       throw new Error(
-        'ACCESS_EXTERNAL_URL is set and ACCESS_EXTERNAL_ADMIN_TOKEN is not: the suite administers the access service it is given'
+        'ACCESS_EXTERNAL_URL is set and ACCESS_EXTERNAL_ADMIN_TOKEN is not: the suite administers the Access it is given'
       )
     }
     if (!accessToken) {
       throw new Error(
-        'ACCESS_EXTERNAL_URL is set and ACCESS_EXTERNAL_ACCESS_TOKEN is not: the gateway of the reference asks the access service it is given for its decisions'
+        'ACCESS_EXTERNAL_URL is set and ACCESS_EXTERNAL_ACCESS_TOKEN is not: the gateway of the reference asks the Access it is given for its decisions'
       )
     }
     return {
@@ -69,7 +69,7 @@ export async function startAccessUnderTest(): Promise<AccessUnderTest> {
       accessToken,
       local: false,
       stop: async () => {
-        // The access service is not ours: it is not ours to stop.
+        // Access is not ours: it is not ours to stop.
       },
     }
   }

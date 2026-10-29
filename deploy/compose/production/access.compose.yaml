@@ -1,4 +1,4 @@
-# The production stack of the access service alone: the broker, the
+# The production stack of Access alone: the broker, the
 # decisions and the shared state of the authorization codes.
 #
 #   docker compose -f deploy/compose/production/access.compose.yaml up -d

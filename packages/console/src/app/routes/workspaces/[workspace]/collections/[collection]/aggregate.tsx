@@ -1,6 +1,6 @@
 /**
  * The aggregate of a collection: its records grouped, counted and
- * measured by the data service, over the rows the caller may read.
+ * measured by Data, over the rows the caller may read.
  */
 
 import { createRoute } from 'honox/factory'
@@ -148,8 +148,7 @@ export default createRoute(async (c) => {
           <>
             {result.meta.truncated ? (
               <Notice tone="warn" title="The answer holds the first groups only">
-                The data service answered {result.meta.groups} groups and there are more: narrow the
-                filter.
+                Data answered {result.meta.groups} groups and there are more: narrow the filter.
               </Notice>
             ) : null}
             <div class="table-wrap">

@@ -1,9 +1,9 @@
 /**
  * The guard of the addresses of the providers (ACCESS-081).
  *
- * A tenant registers the issuer of its provider, and the access service calls that
+ * A tenant registers the issuer of its provider, and Access calls that
  * address: the discovery document and the keys are the only outbound
- * calls. A tenant that registers an internal address would make the access service call
+ * calls. A tenant that registers an internal address would make Access call
  * a service of the deployment with the credentials of the tenant.
  *
  * The address is checked before the call: the host is resolved and every

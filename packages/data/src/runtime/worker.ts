@@ -256,7 +256,7 @@ export class SubscriberWorker {
   /**
    * The context of a command of the worker.
    *
-   * The context is fresh: the access service resolves the grants of the service
+   * The context is fresh: Access resolves the grants of the service
    * principal before every command. The identity of the caller that
    * started the chain is an attribution and never an authority.
    */

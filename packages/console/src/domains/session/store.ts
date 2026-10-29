@@ -13,7 +13,7 @@
 
 import { randomBytes } from 'node:crypto'
 
-/** The principal of a session, as the id token of the access service names it. */
+/** The principal of a session, as the id token of Access names it. */
 export interface SessionPrincipal {
   /** The id of the principal: the `sub` of the token. */
   readonly id: string

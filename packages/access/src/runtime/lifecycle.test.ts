@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { createSilentLogger } from '../observability'
 import { drain } from './lifecycle'
 
-describe('the drain of the access service', () => {
+describe('the drain of Access', () => {
   test('the admission stops first and the resources are closed', async () => {
     const calls: string[] = []
     await drain(

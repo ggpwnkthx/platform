@@ -46,7 +46,7 @@ WORKDIR /app/packages/console
 ARG VERSION
 ARG REVISION
 LABEL org.opencontainers.image.title="console" \
-      org.opencontainers.image.description="The console of the platform: the web application that is the interface of the gateway, the access service and the data service." \
+      org.opencontainers.image.description="The console of the platform: the web application that is the interface of the gateway, Access and Data." \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}" \
       org.opencontainers.image.source="https://github.com/ggpwnkthx/platform" \

@@ -1,6 +1,6 @@
 # Configuration
 
-Environment variables and deployment files of the data service: process variables, the gateway
+Environment variables and deployment files of Data: process variables, the gateway
 bindings file, the collection manifest and the policy bundle.
 
 The service reads the environment once at startup and validates it as a whole: it reports every
@@ -44,15 +44,15 @@ problem together, and any value it cannot understand stops it. Rules: [spec §14
 
 Manifests and policies are immutable for the life of a process; their version is their content digest.
 
-## Access service
+## Access
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `DATA_ACCESS_URL` | required | Access service base URL. `https` in production: the context credential travels with it. |
+| `DATA_ACCESS_URL` | required | Access base URL. `https` in production: the context credential travels with it. |
 | `DATA_ACCESS_CONTEXT_TOKEN_FILE` | required | Service credential for the access context contract. |
 | `DATA_CONTEXT_CACHE_TTL_MS` | `0` | Read-only context cache lifetime, 0 to 5000. Default: no cache. Mutations and worker commands always fetch a fresh context. |
 | `DATA_CONTEXT_CACHE_MAX_ENTRIES` | `4096` | Context cache size. When full, the least recently used entry is evicted; expired entries are dropped on write. |
-| `DATA_ACCESS_TIMEOUT_MS` | `1000` | Bound on one access-service call. |
+| `DATA_ACCESS_TIMEOUT_MS` | `1000` | Bound on one call to Access. |
 
 ## Budgets
 
@@ -112,7 +112,7 @@ Shape: `{"version": 2, "bindings": [...]}`, at most 100 bindings.
 | `id` | Local route name, for diagnostics. |
 | `host` | Exact public authority the gateway signs: lowercase ASCII, with the port if any. |
 | `upstreamPathPattern` | Path the backend receives, with exactly one `{workspaceId}` segment and a terminal `/*`. |
-| `routeId` | Access-service route scope matching the gateway route. |
+| `routeId` | Access route scope matching the gateway route. |
 | `expectedTenantId` | Optional. Restricts the route to one tenant. |
 | `identity.version` | `v5` (current) or `v4` (legacy). |
 | `identity.algorithm` | `ES256` with a public key, `HS256` with the derived key. |
@@ -195,7 +195,7 @@ unknown properties.
 | Field | Meaning |
 | --- | --- |
 | `id` | Stable policy name, recorded in the audit. |
-| `permission` | Access-service permission key the policy applies to. |
+| `permission` | Access permission key the policy applies to. |
 | `collection` | Manifest collection. |
 | `action` | `read`, `create`, `update` or `delete`. |
 | `where` | Predicate selecting the rows the policy covers. |

@@ -1,5 +1,5 @@
 /**
- * The refusals of the access service.
+ * The refusals of Access.
  *
  * A refusal of the service is shown as it is: its code, its message and
  * the identifier of the request in the logs of the service. The console
@@ -8,7 +8,7 @@
 
 import { bodyOf } from '../transport'
 
-/** A refusal of the access service. */
+/** A refusal of Access. */
 export class AccessError extends Error {
   override readonly name = 'AccessError'
   readonly status: number
@@ -40,7 +40,7 @@ export async function refusalOf(response: Response): Promise<AccessError> {
         ? envelope.message
         : typeof body === 'string' && body.length > 0 && body.length < 300
           ? body
-          : `the access service answered ${response.status}`,
+          : `Access answered ${response.status}`,
     requestId: response.headers.get('x-request-id'),
   })
 }

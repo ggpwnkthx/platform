@@ -37,8 +37,8 @@ let admin: (
 /**
  * Starts a login and follows it until the callback.
  *
- * The browser goes to the authorization of the access service, then to the provider and
- * then back to the callback of the access service.
+ * The browser goes to the authorization of Access, then to the provider and
+ * then back to the callback of Access.
  */
 async function startLogin(
   options: { clientId?: string; tenant?: string; scope?: string } = {}
@@ -100,7 +100,7 @@ afterAll(async () => {
   await service.stop()
 })
 
-describe('the login of the access service', () => {
+describe('the login of Access', () => {
   test('a browser logs in at the provider and comes back with a code', async () => {
     const { response } = await startLogin()
     expect(response.status).toBe(302)

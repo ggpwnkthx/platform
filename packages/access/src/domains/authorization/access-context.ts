@@ -1,14 +1,14 @@
 /**
  * The access context of a principal (spec §9).
  *
- * The gateway asks the access service whether a principal may use a workspace, and the
+ * The gateway asks Access whether a principal may use a workspace, and the
  * answer is a boolean. A service that owns data needs more than a
  * boolean: it needs the complete set of the capabilities of the
  * principal, so that it can decide what the principal may read and what
  * it may write.
  *
  * The access context is the contract that answers that question. It is
- * evaluated on every request, it is never cached by the access service, and it carries
+ * evaluated on every request, it is never cached by Access, and it carries
  * the moment it stops being valid: a consumer that keeps it longer than
  * that keeps a permission that was already revoked.
  */
@@ -71,7 +71,7 @@ export interface AccessContextAnswer {
  * applies to it. The keys of the answer are the keys of the grants that
  * apply to the request: the grants of the principal and the grants of
  * its groups, whose workspace and route scope match the request or is
- * unrestricted. A consumer decides what the keys mean, the access service decides
+ * unrestricted. A consumer decides what the keys mean, Access decides
  * which ones are held.
  */
 export function evaluateAccessContext(facts: AccessContextFacts, now: Date): AccessContextAnswer {

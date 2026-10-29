@@ -1,5 +1,5 @@
 /**
- * The permissions of the access service (spec §3.3).
+ * The permissions of Access (spec §3.3).
  *
  * A permission is a role of the platform: it travels in the `roles` claim
  * and it is what a grant gives. A permission of the catalogue belongs to

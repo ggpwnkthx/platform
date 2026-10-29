@@ -17,7 +17,7 @@ import { readEnv } from '../packages/access/src/runtime/env'
  * that has **no id** is not readable: the expression is empty, and the
  * step that reads it fails long after the mistake was made.
  *
- * The second check is about the environment of the access service: the
+ * The second check is about the environment of Access: the
  * workflows of the platform start the service of a **production**
  * deployment, and a production deployment refuses to start with a secret
  * that is too short or that is the value of the example. A workflow

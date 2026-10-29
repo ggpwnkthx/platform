@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { BoundedLabel, LABEL_LIMIT, MetricsStore, OVERFLOW_LABEL } from './metrics'
 
-describe('the metrics of the access service', () => {
+describe('the metrics of Access', () => {
   test('the decisions are counted with their tenant', async () => {
     const store = new MetricsStore()
     store.recordDecision('allow', 'acme', 3)

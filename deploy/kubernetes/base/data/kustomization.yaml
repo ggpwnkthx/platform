@@ -1,4 +1,4 @@
-# The data service on its own.
+# Data on its own.
 #
 #   kubectl apply -k deploy/kubernetes/base/data
 #

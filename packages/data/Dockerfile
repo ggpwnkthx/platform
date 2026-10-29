@@ -33,7 +33,7 @@ RUN bun install --frozen-lockfile --production && \
 # ------------------------------------------------------------------- runtime
 #
 # The production image contains the service and nothing else. There is no
-# secret in it: the credentials of the database, of the access service and of the
+# secret in it: the credentials of the database, of Access and of the
 # signature are files that the deployment mounts, and they are read at the
 # start of the process.
 FROM oven/bun:${BUN_VERSION}-alpine@${BUN_DIGEST} AS runtime

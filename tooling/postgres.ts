@@ -75,7 +75,7 @@ const CONTAINER_LABEL = 'com.platform.postgres'
  * The label of the role of a container.
  *
  * The leftovers of a run are the containers of the same role: the
- * machine of the development and the tests of the data service are two
+ * machine of the development and the tests of Data are two
  * roles, and one of them never removes the container of the other.
  */
 const CONTAINER_ROLE_LABEL = 'com.platform.postgres.role'

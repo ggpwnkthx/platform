@@ -115,7 +115,7 @@ describe('the labels of the metrics', () => {
     expect(body).toContain('gateway_active_requests 0')
   })
 
-  test('the latency of the access service is published', async () => {
+  test('the latency of Access is published', async () => {
     const metrics = new MetricsStore()
     metrics.recordAccess('workspace-api', 7)
     const body = await metrics.render()

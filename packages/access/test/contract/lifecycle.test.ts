@@ -6,7 +6,7 @@ const root = resolve(import.meta.dir, '..', '..')
 /** The port the process of the tests listens on. */
 const port = 18_099
 
-/** Starts the process of the access service and waits for its health. */
+/** Starts the process of Access and waits for its health. */
 async function startAccess(env: Record<string, string>): Promise<{
   proc: ReturnType<typeof Bun.spawn>
   base: string
@@ -29,10 +29,10 @@ async function startAccess(env: Record<string, string>): Promise<{
     await Bun.sleep(50)
   }
   proc.kill('SIGKILL')
-  throw new Error('the process of the access service did not start')
+  throw new Error('the process of Access did not start')
 }
 
-describe('the lifecycle of the process of the access service', () => {
+describe('the lifecycle of the process of Access', () => {
   test('a signal drains the process and the process exits', async () => {
     const { proc, base } = await startAccess({
       ACCESS_DATABASE_URL: 'pglite://memory://',

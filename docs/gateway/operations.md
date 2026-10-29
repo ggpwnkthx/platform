@@ -10,7 +10,7 @@ can replace any replica at any time. An ingress terminates TLS in front of it.
 
 1. Follow the [platform first deployment](../platform/operations.md#first-deployment).
 2. Set the [variables production requires](configuration.md#required-in-production): session secret,
-   identity signing key, OIDC client, access service, at least one rate limit, and shared state. Use the
+   identity signing key, OIDC client, Access, at least one rate limit, and shared state. Use the
    same `GATEWAY_SESSION_SECRET` and `GATEWAY_IDENTITY_SIGNING_KEY` on every replica.
 3. Choose a [shared-state backend](#shared-state) and create its [roles](#roles).
 4. Put an [ingress](#ingress) in front.
@@ -83,14 +83,14 @@ Per-route keys override environment defaults ([spec §3](spec.md#3-configuration
 | `crossSite` | `navigation` | Set `strict` when the upstream changes state on a `GET`. |
 | `forwardAuthorization` | `true` | Set `false` when the upstream does not need the caller's token. |
 | `accessCacheTtlMs` | environment | Set `0` for immediate revocation. |
-| `accessStaleGraceMs` | environment | Serve the last allow decision during an access-service outage. |
+| `accessStaleGraceMs` | environment | Serve the last allow decision during an Access outage. |
 | `replayMaxBytes` | environment | Cap bodies resent to the next upstream. |
 | `timeouts.upstreamAttemptMs` | environment | Budget one attempt across several upstreams; `0` disables it. |
 
-## Access service
+## Access
 
 The gateway fails closed: no decision, no request. Point `GATEWAY_ACCESS_URL` at a service that speaks
-[spec §6.1](spec.md#61-access-service-protocol). Either run the reference implementation
+[spec §6.1](spec.md#61-access-protocol). Either run the reference implementation
 (`services/access-service.ts`, built from the `access-service` stage of the `Dockerfile`, deployed separately)
 with `ACCESS_POLICY_FILE` and `ACCESS_SERVICE_TOKEN`, or check your own with the conformance suite:
 
@@ -119,7 +119,7 @@ public key (`bun run identity:key --public`), so they can verify identities but 
 | `GATEWAY_SESSION_SECRET` | [Below](#rotating-the-session-secret). |
 | `GATEWAY_IDENTITY_SIGNING_KEY` | [Below](#rotating-the-identity-key). |
 | `GATEWAY_OIDC_CLIENT_SECRET` | The provider accepts two secrets during rotation; switch, then retire the old one. |
-| `GATEWAY_ACCESS_TOKEN` | The access service accepts two tokens during rotation. |
+| `GATEWAY_ACCESS_TOKEN` | Access accepts two tokens during rotation. |
 | Shared-state passwords | Change client and server in the same window. |
 | `GATEWAY_METRICS_TOKEN` | Change scraper and deployment together. |
 
@@ -190,7 +190,7 @@ labels are listed in [spec §12.1](spec.md#121-health-readiness-and-metrics); lo
 | Signal | Means |
 | --- | --- |
 | `/readyz` answers `503` | Replica out of rotation. |
-| `gateway_access_unavailable_total` | Access service unreachable; callers get `503`. |
+| `gateway_access_unavailable_total` | Access unreachable; callers get `503`. |
 | `gateway_access_stale_total` | Outage covered by a grace; revocations are late. |
 | `gateway_shared_state_errors_total` | Shared state degraded. |
 | `gateway_rate_limit_fallback_total` | Limits counted per replica, not per deployment. |
@@ -210,7 +210,7 @@ workspace.
 | `/readyz` `503`, `sessionStore: unavailable` | Shared state down. | Restore it. |
 | Every request `404 no_route` | Ingress rewrites `Host`. | Send `x-forwarded-host`, or match the host the ingress sends. |
 | Browser requests `403 cross_site_request` | Same, seen through the origin. | Send `x-forwarded-host` and `x-forwarded-proto`. |
-| `503 access_unavailable` | Access service down or answering garbage. | Restore it; other routes are unaffected. |
+| `503 access_unavailable` | Access down or answering garbage. | Restore it; other routes are unaffected. |
 | `gateway_access_stale_total` grows | Grace routes serve old decisions. | Restore the service; set `accessStaleGraceMs: 0` where that is unacceptable. |
 | `gateway_shared_state_errors_total` grows | Sessions fail closed (`401`/`503`), decisions are re-asked, limits follow `GATEWAY_RATE_LIMIT_FALLBACK`. | Restore the shared state. |
 | `502` on one route | Its upstream is down. | Repair it. With several upstreams, resendable requests move on. |

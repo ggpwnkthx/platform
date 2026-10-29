@@ -1,7 +1,7 @@
 /**
  * The members of a group.
  *
- * A group of the access service names its members by the identity the
+ * A group of Access names its members by the identity the
  * provider gives them, and an operator names them by their e-mail: the
  * picker shows the users of the tenant by their names and writes their
  * identities into the form.

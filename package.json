@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "The platform: an application gateway, an access service, a data service and the console that is the interface of the three, as workspaces of one repository.",
+  "description": "The platform: an application gateway, Access, a Data and the console that is the interface of the three, as workspaces of one repository.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ggpwnkthx/platform.git"

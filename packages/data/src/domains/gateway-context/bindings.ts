@@ -87,7 +87,7 @@ export interface RouteBinding {
   readonly host: string
   /** The backend received path pattern, with the workspace placeholder. */
   readonly upstreamPathPattern: string
-  /** The access service route scope of the route. */
+  /** Access route scope of the route. */
   readonly routeId: string
   /** How the signatures of the route are verified. */
   readonly identity: IdentityVerificationConfig

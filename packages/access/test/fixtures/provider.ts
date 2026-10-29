@@ -57,9 +57,9 @@ export interface ProviderFixture {
   url: string
   /** The issuer of the provider. */
   issuer: string
-  /** The client id of the access service at the provider. */
+  /** The client id of Access at the provider. */
   clientId: string
-  /** The client secret of the access service at the provider. */
+  /** The client secret of Access at the provider. */
   clientSecret: string
   /** The subject of the caller. */
   subject: string

@@ -2,8 +2,8 @@
  * The rights of a user.
  *
  * The console speaks the words of an operator: a **user** is a principal
- * of the access service, and a **right** is a grant. A user holds a right
- * by itself, or through a group it is a member of: the access service
+ * of Access, and a **right** is a grant. A user holds a right
+ * by itself, or through a group it is a member of: Access
  * evaluates both, and the console shows both, with where each one comes
  * from.
  */
@@ -49,7 +49,7 @@ export function rightsOf(
   )
 }
 
-/** The shape of a uuid: the identifier of a workspace of the data service. */
+/** The shape of a uuid: the identifier of a workspace of Data. */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** Reports whether a value is a uuid. */
@@ -60,7 +60,7 @@ export function isUuid(value: string): boolean {
 /**
  * The workspaces a user holds a right on.
  *
- * A right on a workspace of the data service names its uuid; a right on
+ * A right on a workspace of Data names its uuid; a right on
  * the route of the console names the tenant, and it is not a workspace.
  * A right on every workspace of the tenant names none, and the console
  * cannot list what it does not name: the caller opens such a workspace

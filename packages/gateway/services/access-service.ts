@@ -59,7 +59,7 @@ import { readFileSync } from 'node:fs'
 /**
  * The machine readable reasons of a denial.
  *
- * The codes are the ones the protocol of the access service accepts (§6.1
+ * The codes are the ones the protocol of Access accepts (§6.1
  * of the specification). The gateway counts them, and the free text of the
  * reason is for the log and for the operator.
  */
@@ -200,7 +200,7 @@ export function decide(
   if (!subject) {
     return {
       allow: false,
-      reason: 'the subject is not known to the access service',
+      reason: 'the subject is not known to Access',
       reasonCode: 'access_denied',
     }
   }
@@ -248,7 +248,7 @@ export interface StartedAccessService {
 }
 
 /**
- * Starts the reference access service.
+ * Starts the reference Access.
  *
  * The service is a plain HTTP service: it answers the decision requests of
  * the gateway and nothing else.
@@ -335,7 +335,7 @@ if (import.meta.main) {
     console.error(
       JSON.stringify({
         level: 'error',
-        msg: 'the access service needs a policy file',
+        msg: 'Access needs a policy file',
         hint: 'set ACCESS_POLICY_FILE to the path of the policy file',
       })
     )
@@ -345,7 +345,7 @@ if (import.meta.main) {
     console.error(
       JSON.stringify({
         level: 'error',
-        msg: 'the access service needs a token in a production environment',
+        msg: 'Access needs a token in a production environment',
         hint: 'set ACCESS_SERVICE_TOKEN to the token the gateway presents',
       })
     )
@@ -359,7 +359,7 @@ if (import.meta.main) {
     console.error(
       JSON.stringify({
         level: 'error',
-        msg: 'the policy of the access service could not be read',
+        msg: 'the policy of Access could not be read',
         error: error instanceof Error ? error.message : String(error),
       })
     )
@@ -382,7 +382,7 @@ if (import.meta.main) {
   console.log(
     JSON.stringify({
       level: 'info',
-      msg: 'the reference access service started',
+      msg: 'the reference Access started',
       port: service.port,
       subjects: Object.keys(policy.subjects).length,
     })

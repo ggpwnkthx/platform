@@ -16,7 +16,7 @@ import { startUpstream, type StartedUpstream } from '../../services/fixtures/ups
  * The harness of the contract tests.
  *
  * It starts the real gateway with the fixtures around it: the identity
- * provider, the access service and two upstreams. The tests speak to the
+ * provider, Access and two upstreams. The tests speak to the
  * gateway over a socket, exactly like a caller does.
  */
 

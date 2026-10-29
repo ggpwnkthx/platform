@@ -27,11 +27,11 @@ Run `bun install` once at the root; it covers every workspace. Where each depend
 | --- | --- |
 | Identity provider (gateway fixture) | `5556` |
 | Gateway | `8080` |
-| Access service | `8081` |
-| Data service | `8082` |
+| Access | `8081` |
+| Data | `8082` |
 | Console | `8083` |
 
-There is **one** PostgreSQL server, with a database per service (`data`, `access`). The runner creates the access service's role and database, and the access service applies its own migrations. The runner applies the data service's migrations, registers the dev workspace, and seeds the access service with a tenant, principal, group, permission roles, and grants for the dev route and the console. The seed is idempotent: a rerun updates the existing dev tenant.
+There is **one** PostgreSQL server, with a database per service (`data`, `access`). The runner creates Access's role and database, and Access applies its own migrations. The runner applies Data's migrations, registers the dev workspace, and seeds Access with a tenant, principal, group, permission roles, and grants for the dev route and the console. The seed is idempotent: a rerun updates the existing dev tenant.
 
 The identity-signing key is generated per run; the runner prints its public half for upstreams that verify identities.
 
@@ -48,9 +48,9 @@ Development state lives in two root directories only:
 | Directory | Contents |
 | --- | --- |
 | `.pg/` | Dev PostgreSQL data (`.pg/data`) and the test server's data (`.pg/tests/`). With a containerized server, data is in a runtime volume instead. |
-| `.tmp/` | Files regenerated on every run: gateway route table, data service bindings, run keys, UI screenshots (`.tmp/dev/`, `.tmp/ui/`). |
+| `.tmp/` | Files regenerated on every run: gateway route table, Data bindings, run keys, UI screenshots (`.tmp/dev/`, `.tmp/ui/`). |
 
-Packages hold no state. The access service run alone uses the process's embedded PostgreSQL (`packages/access/.access/`); test scratch files go to the system temp directory.
+Packages hold no state. Access run alone uses the process's embedded PostgreSQL (`packages/access/.access/`); test scratch files go to the system temp directory.
 
 ### Gateway with fixtures
 
@@ -86,7 +86,7 @@ To run the production stack locally, use [`.env.min`](../../.env.min) as in [Ope
 
 ### Services from source
 
-Each service reads its own environment; each `.env.example` lists development values. The access and data services need PostgreSQL. Start one with:
+Each service reads its own environment; each `.env.example` lists development values. The Access and Data need PostgreSQL. Start one with:
 
 ```bash
 bun run tooling/postgres.ts --fresh
@@ -95,7 +95,7 @@ bun run tooling/postgres.ts --fresh
 
 Without PostgreSQL binaries it uses a container and leaves it running; stop it by hand.
 
-Provision roles and migrate the data service:
+Provision roles and migrate Data:
 
 ```bash
 export DATA_ADMIN_DATABASE_URL="postgres://data@localhost/postgres?host=<the socket of the server>&port=<the port>"
@@ -113,7 +113,7 @@ bun run --cwd packages/data migrate
 Then start each service in its own terminal:
 
 ```bash
-# access service
+# Access
 ACCESS_ENVIRONMENT=development ACCESS_HOST=127.0.0.1 ACCESS_PORT=8081 \
 ACCESS_ISSUER=http://localhost:8081 ACCESS_PUBLIC_URL=http://localhost:8081 \
 ACCESS_ADMIN_TOKEN=dev-admin-token-0000000 ACCESS_DECISION_TOKEN=dev-access-token-0000000 \
@@ -123,7 +123,7 @@ ACCESS_SIGNING_KEY="$(cat access-signing-key.pem)" ACCESS_SIGNING_KID=dev \
 ACCESS_CONTEXT_TOKENS='{"development-access-context-token-0001":null}' \
 bun run --cwd packages/access start
 
-# data service
+# Data
 DATA_ENVIRONMENT=development DATA_HOST=127.0.0.1 DATA_PORT=8082 DATA_PROCESS_ROLE=api \
 DATA_DATABASE_URL="postgres://data_runtime:dev-runtime-password-0001@localhost/data?host=<the socket>&port=<the port>" \
 DATA_REGISTRY_DATABASE_URL="postgres://data_registry:dev-registry-password-0001@localhost/data?host=<the socket>&port=<the port>" \
@@ -155,9 +155,9 @@ bun run --cwd packages/console start
 ```
 
 > [!NOTE]
-> The data service's bindings name the file holding the **public identity-signing key**. `scripts/dev-keys.ts` writes the key pair and the bindings for a source run (`deploy/config/bindings.local.json`).
+> Data's bindings name the file holding the **public identity-signing key**. `scripts/dev-keys.ts` writes the key pair and the bindings for a source run (`deploy/config/bindings.local.json`).
 >
-> The data service connects to the development database through the server's **socket**, not its port: the dev server authenticates local socket connections without a password.
+> Data connects to the development database through the server's **socket**, not its port: the dev server authenticates local socket connections without a password.
 
 ## Commands
 
@@ -193,8 +193,8 @@ bun run --cwd packages/console build   # writes dist/
 
 ```bash
 bun test --cwd packages/gateway src test/contract   # gateway units and contracts
-bun test --cwd packages/access src test/contract    # access service units and contracts
-bun test --cwd packages/data test/unit test/contract # data service units and contracts
+bun test --cwd packages/access src test/contract    # Access units and contracts
+bun test --cwd packages/data test/unit test/contract # Data units and contracts
 bun test --cwd packages/console test                # console core, and its build against the contracts
 ```
 
@@ -217,7 +217,7 @@ Suites with extra needs:
 | `bun run --cwd packages/gateway test:load` | Nothing; measures the gateway against the fixtures |
 | `bun run --cwd packages/data test:mutation` | Nothing; breaks code on purpose and checks the suites notice |
 
-`bun run compatibility` starts the gateway, access and data services from `packages/` against a real PostgreSQL server and runs the acceptance scenario through the gateway. Details: [Compatibility](internals.md#compatibility).
+`bun run compatibility` starts the gateway, Access and Data from `packages/` against a real PostgreSQL server and runs the acceptance scenario through the gateway. Details: [Compatibility](internals.md#compatibility).
 
 ## Releasing
 

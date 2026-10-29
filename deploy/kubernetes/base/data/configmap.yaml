@@ -1,4 +1,4 @@
-# The bindings of the data service: the routes the gateway forwards to it
+# The bindings of Data: the routes the gateway forwards to it
 # and the public key that verifies the identity of the requests.
 #
 # The key of the gateway is the public half of the pair of the identity

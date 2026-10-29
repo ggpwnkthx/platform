@@ -4,7 +4,7 @@
 #   docker compose -f deploy/compose/production/platform.compose.yaml up -d
 #
 # The three services are deployed apart as well: the stacks of the
-# gateway, of the access service and of the data service are in this
+# gateway, of Access and of Data are in this
 # directory, and they hold the same services, the same ports and the same
 # variables of the environment as this composition.
 #
@@ -13,7 +13,7 @@
 # credential: the values that are not set make the services refuse to
 # start, exactly like in a production deployment.
 #
-# The files of the credentials of the data service are named by the
+# The files of the credentials of Data are named by the
 # environment:
 #
 #   ACCESS_CONTEXT_TOKEN_FILE=/etc/platform/secrets/access-context.token \
@@ -38,7 +38,7 @@ services:
     volumes:
       - pg-data:/var/lib/postgresql/data
 
-  # The role of the access service. The service refuses to start with a
+  # The role of Access. The service refuses to start with a
   # role that bypasses the isolation of the tenants, and the role of the
   # administrator of the server is such a role.
   roles:
@@ -53,7 +53,7 @@ services:
       - -c
       - |
         psql "postgres://platform:${POSTGRES_PASSWORD:?the password of the server is required}@postgres:5432/platform" -v ON_ERROR_STOP=1 <<'SQL'
-        create role access_app login password '${ACCESS_APP_PASSWORD:?the password of the role of the access service is required}';
+        create role access_app login password '${ACCESS_APP_PASSWORD:?the password of the role of Access is required}';
         grant usage, create on schema public to access_app;
         SQL
 
@@ -75,7 +75,7 @@ services:
       timeout: 3s
       retries: 5
 
-  # The access service: the OpenID Connect broker and the access
+  # Access: the OpenID Connect broker and the access
   # decision service.
   access:
     image: ghcr.io/ggpwnkthx/access:1.0.0
@@ -94,7 +94,7 @@ services:
       ACCESS_HOST: 0.0.0.0
       ACCESS_PORT: '8081'
       ACCESS_ISSUER: ${ACCESS_ISSUER:?the issuer of the service is required}
-      ACCESS_DATABASE_URL: postgres://access_app:${ACCESS_APP_PASSWORD:?the password of the role of the access service is required}@postgres:5432/platform
+      ACCESS_DATABASE_URL: postgres://access_app:${ACCESS_APP_PASSWORD:?the password of the role of Access is required}@postgres:5432/platform
       ACCESS_REDIS_URL: redis://redis:6379/0
       ACCESS_ADMIN_TOKEN: ${ACCESS_ADMIN_TOKEN:?the token of the administration is required}
       ACCESS_DECISION_TOKEN: ${ACCESS_DECISION_TOKEN:?the token of the decisions is required}
@@ -119,7 +119,7 @@ services:
       start_period: 10s
     stop_grace_period: 30s
 
-  # The roles of the data service and the schema of its deployment. The
+  # The roles of Data and the schema of its deployment. The
   # service waits for them: it refuses to start against a database that
   # is not migrated.
   data-migrate:
@@ -138,7 +138,7 @@ services:
       DATA_DELIVERY_PASSWORD: ${DATA_DELIVERY_PASSWORD:?the password of the role of the deliveries is required}
       DATA_MAINTENANCE_PASSWORD: ${DATA_MAINTENANCE_PASSWORD:?the password of the role of the retention is required}
 
-  # The data service: the headless, permission aware data api.
+  # Data: the headless, permission aware data api.
   data:
     image: ghcr.io/ggpwnkthx/data:1.0.0
     restart: unless-stopped
@@ -157,7 +157,7 @@ services:
       DATA_SCHEMA_BUNDLE_FILE: /app/packages/data/manifests/schema.json
       DATA_POLICY_BUNDLE_FILE: /app/packages/data/manifests/policies.json
       DATA_GATEWAY_BINDINGS_FILE: /etc/platform/bindings.json
-      DATA_ACCESS_URL: ${DATA_ACCESS_URL:?the access service of the access context contract is required}
+      DATA_ACCESS_URL: ${DATA_ACCESS_URL:?Access of the access context contract is required}
       DATA_ACCESS_CONTEXT_TOKEN_FILE: /run/secrets/access-context.token
       DATA_CURSOR_KEY_FILE: /run/secrets/cursor.key
       DATA_LOG_LEVEL: ${DATA_LOG_LEVEL:-info}
@@ -204,7 +204,7 @@ services:
       GATEWAY_OIDC_CLIENT_SECRET: ${GATEWAY_OIDC_CLIENT_SECRET:?the secret of the client is required}
       GATEWAY_OIDC_REDIRECT_URI: ${GATEWAY_OIDC_REDIRECT_URI:?the url of the callback is required}
       GATEWAY_ACCESS_URL: ${GATEWAY_ACCESS_URL:-http://access:8081}
-      GATEWAY_ACCESS_TOKEN: ${GATEWAY_ACCESS_TOKEN:?the token of the access service is required}
+      GATEWAY_ACCESS_TOKEN: ${GATEWAY_ACCESS_TOKEN:?the token of Access is required}
       GATEWAY_SESSION_SECRET: ${GATEWAY_SESSION_SECRET:?the secret of the sessions is required}
       GATEWAY_IDENTITY_SIGNING_KEY: ${GATEWAY_IDENTITY_SIGNING_KEY:?the key of the identity signature is required}
       GATEWAY_SESSION_URL: redis://redis:6379/0

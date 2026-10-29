@@ -1,5 +1,5 @@
 /**
- * The version of the access service.
+ * The version of Access.
  *
  * The version is reported by the health endpoint, so an operator knows what
  * is running without reading the logs. It is the version of the release; it

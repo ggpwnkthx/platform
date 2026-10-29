@@ -1,5 +1,5 @@
 /**
- * The shapes of the contract of `v1` of the data service, as the console
+ * The shapes of the contract of `v1` of Data, as the console
  * reads them (docs/data/api.md).
  */
 

@@ -3,7 +3,7 @@
  *
  * The form carries the key of its idempotency: a form that is sent twice
  * — a double click, a reload of the answer — creates one record, and the
- * data service answers the receipt of the first one.
+ * Data answers the receipt of the first one.
  */
 
 import type { Context } from 'hono'
@@ -59,7 +59,7 @@ function render(
       <PageHead
         title={`New ${collection.label.replace(/s$/, '').toLowerCase()}`}
         eyebrow={collection.label}
-        lede="Fields you leave empty get the data service's default, or are refused if required."
+        lede="Fields you leave empty get Data's default, or are refused if required."
       />
       {options.refusal ? <Refusal refusal={options.refusal} /> : null}
       {options.problems && options.problems.length > 0 ? (

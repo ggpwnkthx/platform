@@ -1,5 +1,5 @@
 /**
- * The database of the access service.
+ * The database of Access.
  *
  * The platform owns the client of PostgreSQL, the migrations of the four
  * tables and the storage of the rows. It knows no policy: it runs the

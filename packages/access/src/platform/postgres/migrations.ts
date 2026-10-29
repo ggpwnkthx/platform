@@ -1,11 +1,11 @@
 /**
- * The migrations of the schema of the access service.
+ * The migrations of the schema of Access.
  *
  * The schema is created by plain SQL files, applied in the order of their
  * names. One runner applies them, under an advisory lock, so two replicas
  * that start at the same time do not apply the same migration twice.
  *
- * A migration that fails stops the process: the access service does not start against a
+ * A migration that fails stops the process: Access does not start against a
  * schema it does not understand.
  */
 
@@ -130,7 +130,7 @@ export async function readMigrations(directory: string): Promise<Migration[]> {
  * Applies the migrations that are not applied yet.
  *
  * The runner refuses to start against a database that holds a migration
- * this version of the access service does not know: the code is older than the schema and
+ * this version of Access does not know: the code is older than the schema and
  * it does not know what it would find in the tables.
  */
 export async function runMigrations(options: MigrationRunnerOptions): Promise<MigrationResult> {
@@ -152,7 +152,7 @@ export async function runMigrations(options: MigrationRunnerOptions): Promise<Mi
     for (const row of rows) {
       if (!migrations.some((migration) => migration.name === row.name)) {
         throw new Error(
-          `the database has the migration "${row.name}" that this version of the access service does not know: the deployment runs a version of the image that is older than the schema`
+          `the database has the migration "${row.name}" that this version of Access does not know: the deployment runs a version of the image that is older than the schema`
         )
       }
     }

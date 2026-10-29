@@ -1,6 +1,6 @@
 # Decisions
 
-Repository-level decisions, taken when the three service repositories were merged. Contract decisions live with each service: [gateway](../gateway/decisions.md), [access service](../access/decisions.md), [data service](../data/decisions.md).
+Repository-level decisions, taken when the three service repositories were merged. Contract decisions live with each service: [Gateway](../gateway/decisions.md), [Access](../access/decisions.md), [Data](../data/decisions.md).
 
 | # | Decision | Evidence | Status |
 | --- | --- | --- | --- |
@@ -9,12 +9,12 @@ Repository-level decisions, taken when the three service repositories were merge
 | 3 | All three images build with the repository root as context. | Dependencies come from the root `bun install` and `bun.lock`; a build from a workspace directory would install a tree the root lockfile rejects. | resolved |
 | 4 | There is one version: the platform's. | Repository, tag, three images, three binaries **and** the three specs' status share it; the retired version lines are not continued. `scripts/version.ts` checks they agree. | resolved |
 | 5 | Images and environment prefixes are renamed. | They are deployment coordinates, so the rename is a migration recorded in the changelog. A variable with a retired name is read by no service. | resolved |
-| 6 | The data service's published client keeps its name. | Consumers install `@data-backend/client` (`packages/data/packages/client/package.json`); renaming it would break them. | resolved |
+| 6 | Data's published client keeps its name. | Consumers install `@data-backend/client` (`packages/data/packages/client/package.json`); renaming it would break them. | resolved |
 | 7 | The compatibility baseline is a revision of this repository. | The references are workspaces here now, and running this repository at a revision proves more than cloning a copy. An environment override still names a published revision and tests a candidate. Manifest: `compatibility.json`. | resolved |
 | 8 | One tagger, one CI workflow, one image workflow, one binary workflow. | There were three of each, drifting. Every service runs the same jobs, so a gate missing for one is visible. See `scripts/tag.ts`, `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `.github/workflows/release-binaries.yml`. | resolved |
 | 9 | All documentation is one tree at the repository root. | Contracts are read alongside the shared docs: `docs/platform/` holds shared docs, each service's directory holds its contract. The code boundary did not move. | resolved |
 | 10 | Platform tools are declared at the root; a service's dependencies are declared in its workspace. | Compiler, linter, formatter and dead-code checker serve all three at one version (root `package.json`); a workspace carries only what it uses. | resolved |
-| 11 | Specs name services by role, and so does the platform. | A retired repository's name names nothing. Workspaces, images, environment and docs say gateway, access service and data service. | resolved |
+| 11 | Specs name services by role, and so does the platform. | A retired repository's name names nothing. Workspaces, images, environment and docs say gateway, Access and Data. | resolved |
 | 12 | The platform never names the retired repositories, and a check enforces it. | Clones of the old repositories fail and their releases are unreachable. `scripts/check-repositories.ts` fails the build when a file names any other repository; it accepts only the platform's and lists no retired names. No record of the old state is kept. | resolved |
 | 13 | Each service's vocabulary carries its role name. | Metrics, identity headers, cookies, tables, shared-state namespaces and env prefixes moved to role names. A dashboard watching a retired metric sees nothing. | resolved |
 | 14 | A vocabulary check rejects identifiers that don't carry their service's role name. | `scripts/check-vocabulary.ts` accepts only role names in env prefixes, metric names and reported names; it lists no retired names (decision 12). | resolved |

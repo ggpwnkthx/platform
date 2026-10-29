@@ -301,7 +301,7 @@ export interface ResourceSettings {
    * The cap above bounds the exchanges with the upstreams. This one
    * bounds the whole pipeline, and it covers the phase that comes before
    * the exchange: the limits, the session and the decision of the access
-   * service. A request that waits for a hanging access service holds the
+   * service. A request that waits for a hanging Access holds the
    * resources of the process for the whole budget of the call, and the
    * cap of the exchanges never sees it.
    *

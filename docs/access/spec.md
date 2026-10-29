@@ -1,14 +1,13 @@
 # Specification
 
-Normative behavior of the access service: a Bun service that brokers logins against each tenant's
+Normative behavior of Access: a Bun service that brokers logins against each tenant's
 OpenID Connect (OIDC) provider, maps external identities to principals, answers gateway decision
 requests from a table of grants, and is administered with twelve `curl` endpoints plus one that
 reads the audit.
 
-The access service is a separate deployable, not a gateway feature. It sits between browsers,
-tenant identity providers and gateways. The gateway keeps its single provider, its single access
-service and its whole configuration, and gains **zero** new features; a gateway deployment simply
-points at the access service.
+Access is a separate deployable, not a gateway feature. It sits between browsers,
+tenant identity providers and gateways. The gateway keeps its single provider, its single deployment of Access and its whole configuration, and gains **zero** new features; a gateway deployment simply
+points at Access.
 
 Request and response bodies are in [API](api.md), the design in [Internals](internals.md),
 the code in `src/`. A behavior change updates this document first, in the same commit as the code.
@@ -54,8 +53,8 @@ Status: 1.0.0. Runtime: Bun ≥ 1.4.3. Listener: HTTP on
       │                         │    {"allow":true}           │                  │
 ```
 
-The gateway sees **one** provider and **one** access service, and they are the same service. It
-cannot tell that the access service brokers several identity providers, and it must not need to.
+The gateway sees **one** provider and **one** Access, and they are the same service. It
+cannot tell that Access brokers several identity providers, and it must not need to.
 
 ### 1.4 One gateway client per tenant
 
@@ -67,7 +66,7 @@ resolved from the authorization request's client id (§5.2), and `tenants.client
 - **One gateway deployment for several tenants** under one client id is not allowed by the
   schema: two tenants cannot hold the same `client_id`.
 
-The access service is multi-tenant; the gateway is not. That is the price of "the gateway gains
+Access is multi-tenant; the gateway is not. That is the price of "the gateway gains
 zero new features", paid on the access side, where tenancy belongs.
 
 **Escape hatch (§5.2).** A tenant with `shared_client = true` lets its gateway log in principals of
@@ -81,12 +80,12 @@ caller controls can move a login to another tenant) and is off by default.
 | --- | --- |
 | **tenant** | A customer of the platform. Owns one identity provider, one principal population and one set of grants. |
 | **provider (of a tenant)** | The tenant's OIDC provider. Exactly one per tenant. |
-| **principal** | The `users` row that carries a caller's platform identity. It is the `subject` of every token the access service issues and of every decision request. |
+| **principal** | The `users` row that carries a caller's platform identity. It is the `subject` of every token Access issues and of every decision request. |
 | **permission** | A named capability, e.g. `workspace.read`. It is a platform *role*: it travels in the `roles` claim and is what a grant gives. |
 | **grant** | A permission a principal holds on a workspace and route, until revoked or expired. |
 | **decision** | The answer of `POST /v1/decisions`: may this principal use this workspace on this route? |
-| **gateway** | A gateway deployment: a client of the access service and a consumer of its decisions. |
-| **operator** | The person who runs the access service and calls the twelve administrative endpoints. |
+| **gateway** | A gateway deployment: a client of Access and a consumer of its decisions. |
+| **operator** | The person who runs Access and calls the twelve administrative endpoints. |
 
 ### 2.1 Invariants
 
@@ -108,8 +107,8 @@ None is configurable. Each is enforced in code and has a test.
 7. **A secret is never returned, logged or sent through a browser.** Provider client secrets,
    gateway client secrets and tokens are write-only.
 8. **A gateway never learns a reason.** A decision's reason is for the operator; neither the
-   gateway nor the access service forwards it to a caller.
-9. **The gateway contract does not change.** The access service answers the decision request the
+   gateway nor Access forwards it to a caller.
+9. **The gateway contract does not change.** Access answers the decision request the
    gateway already sends, with the body it already sends (§8).
 
 ## 3. Tables
@@ -137,12 +136,12 @@ One row per customer, with the registration of the tenant's provider and of its 
 | `auto_provision` | `boolean` | Default `false`. Whether an unknown external identity gets a principal row on its first login (§6.4). |
 | `email_domain` | `text` | The tenant's domain, or `null`. Unique when set. A **hint**, never an authorization (§5.2, §6.3). |
 | `idp_issuer` | `text` | The provider's issuer. A token whose `iss` does not match it exactly is refused. |
-| `idp_client_id` | `text` | The access service's client id at the provider. |
-| `idp_client_secret` | `bytea` | The access service's client secret at the provider, encrypted at rest (§4.3). |
-| `idp_redirect_uri` | `text` | The access service's callback url registered at the provider. Must be the url of §5.1. |
+| `idp_client_id` | `text` | Access's client id at the provider. |
+| `idp_client_secret` | `bytea` | Access's client secret at the provider, encrypted at rest (§4.3). |
+| `idp_redirect_uri` | `text` | Access's callback url registered at the provider. Must be the url of §5.1. |
 | `idp_scopes` | `text[]` | Scopes requested from the provider. Default `['openid','email','profile']`. |
 | `idp_algorithms` | `text[]` | Algorithms a provider token may be signed with. Default `['RS256']`. |
-| `client_id` | `text` | The client id of the tenant's **gateway** at the access service. Unique across tenants. |
+| `client_id` | `text` | The client id of the tenant's **gateway** at Access. Unique across tenants. |
 | `client_redirect_uris` | `text[]` | The urls the tenant's gateway is registered with. The browser returns to one of them with the login code; an unlisted url never receives a code (§5.2). Default `[]`: a tenant with no url refuses every login. |
 | `client_secret` | `bytea` | The tenant gateway's secret, encrypted at rest (§4.3). |
 | `previous_client_secret` | `bytea` | The secret the current one replaced, encrypted at rest. `null` without a rotation. |
@@ -156,7 +155,7 @@ One row per principal: the platform identity.
 
 | Column | Type | Rule |
 | --- | --- | --- |
-| `id` | `uuid` | Primary key. The `sub` of every token the access service issues and the `subject` of every decision request. |
+| `id` | `uuid` | Primary key. The `sub` of every token Access issues and the `subject` of every decision request. |
 | `tenant_id` | `uuid` | The principal's tenant. Foreign key to `tenants`. |
 | `external_subject` | `text` | The provider's `sub`. |
 | `email` | `text` | Last e-mail seen at the provider; `null` when the provider publishes none. A display value, never a key. |
@@ -227,7 +226,7 @@ different grants and two different rows.
 
 A set of principals of one tenant. A grant that names a group holds for every member.
 
-An access-service group is **not** the provider's `groups` scope (§7.4): that scope asks the
+An Access group is **not** the provider's `groups` scope (§7.4): that scope asks the
 provider for the caller's groups, while a group here is a set of the tenant's principals that
 policy is written on.
 
@@ -351,8 +350,7 @@ The database is PostgreSQL, selected by `ACCESS_DATABASE_URL`:
 | `pglite://<path>` | The process's embedded PostgreSQL, in `<path>`. |
 | Unset, in a development environment | The process's embedded PostgreSQL, in `./.access/pglite`. |
 
-The embedded PostgreSQL is `pglite`: PostgreSQL compiled to WebAssembly, running in the access
-service's process. It is the same PostgreSQL as a deployment's, so development applies the
+The embedded PostgreSQL is `pglite`: PostgreSQL compiled to WebAssembly, running in the Access's process. It is the same PostgreSQL as a deployment's, so development applies the
 production migrations with nothing to translate.
 
 Local development (`bun run dev`) uses the machine's PostgreSQL **server**, with one database per
@@ -630,7 +628,7 @@ belong to the platform (§10.1).
 against the gateway's registered urls (`client_redirect_uris`, §3.1) before the tenant is resolved:
 
 - A `redirect_uri` that is not registered → `400 invalid_request`, and the browser is **not** sent
-  there. The refusal is an access service page, not a redirect: an unregistered url never receives
+  there. The refusal is Access page, not a redirect: an unregistered url never receives
   a code.
 - A tenant with no registered url refuses every login, until the deployment registers its
   gateway's url.
@@ -650,28 +648,28 @@ the `nonce`, the PKCE verifier for the provider, and the login start time. It is
 The cookie is **single use**: it is deleted as soon as the callback is processed, whatever the
 outcome.
 
-**Provider state.** The access service sends the provider a fresh random `state` and a fresh
+**Provider state.** Access sends the provider a fresh random `state` and a fresh
 `nonce`, both bound to the state cookie and checked when the browser returns.
 
-**PKCE.** The access service sends `S256` to the provider and keeps the verifier in the state
+**PKCE.** Access sends `S256` to the provider and keeps the verifier in the state
 cookie. A provider without PKCE support is refused when the tenant is registered.
 
 ### 5.4 Flow
 
 1. The gateway sends the browser to
    `GET /oauth/authorize?client_id=…&redirect_uri=…&response_type=code&scope=openid profile email groups&state=…&nonce=…&code_challenge=…&code_challenge_method=S256`.
-2. The access service resolves the tenant (§5.2), sets the state cookie and redirects the browser to
+2. Access resolves the tenant (§5.2), sets the state cookie and redirects the browser to
    the provider's authorization endpoint with the `state`, `nonce`, `code_challenge` and the
    tenant's `redirect_uri`.
 3. The provider authenticates the caller and sends the browser to
    `GET /oauth/tenant/callback?code=…&state=…`.
-4. The access service reads the state cookie, checks the `state`, deletes the cookie, exchanges the
+4. Access reads the state cookie, checks the `state`, deletes the cookie, exchanges the
    code at the provider with the PKCE verifier, and validates the id token (§6.1).
 5. It maps the external identity to a principal (§6.2, §6.4).
 6. It issues an authorization code for the gateway and redirects the browser to the request's
    `redirect_uri` with the code and the gateway's `state`.
 7. The gateway exchanges the code at `POST /oauth/token` with its verifier, client id and secret.
-8. The access service answers with an `id_token` and an `access_token` (§7).
+8. Access answers with an `id_token` and an `access_token` (§7).
 
 ### 5.5 Authorization code
 
@@ -729,7 +727,7 @@ The provider's discovery document is fetched from
 `{idp_issuer}/.well-known/openid-configuration`. A provider whose document names an issuer other
 than the tenant's `idp_issuer` is refused.
 
-**Provider addresses.** The access service calls only the registered issuer's address, for the
+**Provider addresses.** Access calls only the registered issuer's address, for the
 discovery document and the keys. Before the call, the host is resolved and every address it
 resolves to must be public. Production refuses private addresses; development accepts them (the
 test fixtures are on loopback).
@@ -754,7 +752,7 @@ guess. Linking two external identities to one principal is a deferred feature (�
 
 ### 6.3 E-mail is a display value
 
-The token's e-mail is stored on the principal row and published in the access service's tokens. It
+The token's e-mail is stored on the principal row and published in Access's tokens. It
 is **never** used to find a principal and **never** used to authorize anything. An e-mail domain
 selects a tenant only for a shared client (§5.2), and only as a hint.
 
@@ -782,7 +780,7 @@ A provider rotates by publishing a new key in its JWKS and signing with it; the 
 published until the last token it signed has expired.
 
 Provider keys are cached ten minutes (§6.1), so a token naming an uncached key is **not** a bad
-token but a sign of rotation. The access service re-reads the keys once and verifies the token
+token but a sign of rotation. Access re-reads the keys once and verifies the token
 against them. A token signed with a key the provider does not publish is still refused.
 
 Keys are re-read at most once every thirty seconds per tenant, so a provider is not hammered with
@@ -793,13 +791,13 @@ issuer) drops that tenant's client, and the next login builds a new one.
 
 ## 7. Tokens
 
-The access service is the gateway's OIDC provider; it issues ordinary OIDC tokens.
+Access is the gateway's OIDC provider; it issues ordinary OIDC tokens.
 
 ### 7.1 ID token claims
 
 | Claim | Value |
 | --- | --- |
-| `iss` | The access service's issuer. |
+| `iss` | Access's issuer. |
 | `sub` | The principal's id. |
 | `aud` | The client id of the tenant's gateway, i.e. the client that began the login (§5.2, §5.5). |
 | `exp`, `iat` | Five minutes of life. |
@@ -808,7 +806,7 @@ The access service is the gateway's OIDC provider; it issues ordinary OIDC token
 | `name` | The principal's display name, when known. |
 | `roles` | Permission keys of the principal's active grants (§7.3). |
 | `tid` | The tenant's slug. |
-| `email_verified` | Always `false`: the access service does not verify a provider's e-mail. |
+| `email_verified` | Always `false`: Access does not verify a provider's e-mail. |
 
 The gateway reads only `sub`, `email` and `roles`; those claims are the whole contract with the
 gateway.
@@ -816,7 +814,7 @@ gateway.
 `sub` is a principal id, a **uuid** (§8.1). The release `1.0.0` gateway writes the identity's
 subject **as is** and refuses with `500` a subject that cannot be written into a header: one with a
 control character, an empty one, or one longer than 512 characters. A uuid has no control character
-and is thirty-six characters long, so the access service's subject is always written and never
+and is thirty-six characters long, so Access's subject is always written and never
 rewritten.
 
 ### 7.2 Access token
@@ -827,7 +825,7 @@ bearer tokens against the same provider it discovers for the browser.
 
 | Claim | Value |
 | --- | --- |
-| `iss` | The access service's issuer. |
+| `iss` | Access's issuer. |
 | `sub` | The principal's id. |
 | `aud` | The client id of the tenant's gateway. |
 | `exp`, `iat` | Five minutes of life. |
@@ -863,7 +861,7 @@ and the number left out is logged.
 
 ### 7.4 Scopes
 
-The access service accepts the scopes `openid`, `profile`, `email` and `groups`. An unknown scope
+Access accepts the scopes `openid`, `profile`, `email` and `groups`. An unknown scope
 is ignored, not refused: the gateway asks for `groups` by default, and refusing unknown scopes would
 break gateways that never changed.
 
@@ -893,7 +891,7 @@ token that is expired, signed with another key or issued for another audience �
 ## 8. Decisions
 
 This is the contract the gateway already speaks, defined in §6 of the gateway spec. It is repeated
-here because the access service must implement it exactly.
+here because Access must implement it exactly.
 
 ### 8.1 Request
 
@@ -905,7 +903,7 @@ Content-Type: application/json
 {"subject":"…","workspaceId":"…","routeId":"…","roles":["…"]}
 ```
 
-These four fields are what the gateway sends. The access service requires no field the gateway does
+These four fields are what the gateway sends. Access requires no field the gateway does
 not send and refuses no field it does not know.
 
 - Missing or wrong credential → `401 unauthorized`. The two credential schemes are in §8.8.
@@ -997,12 +995,12 @@ The §8.3 query stops at the first grant that satisfies it.
 
 ### 8.6 Revocation latency
 
-The access service does not cache decisions: the table is the truth and the query is cheap.
+Access does not cache decisions: the table is the truth and the query is cheap.
 Revocation latency is therefore the gateway's decision cache lifetime,
 `GATEWAY_ACCESS_CACHE_TTL_MS` (5 s by default).
 
-A route with `accessCacheTtlMs: 0` asks the access service on every request, so revocation is
-immediate there. The access service cannot do better: the gateway does not ask again, and changing
+A route with `accessCacheTtlMs: 0` asks Access on every request, so revocation is
+immediate there. Access cannot do better: the gateway does not ask again, and changing
 that would be a gateway change.
 
 ### 8.7 Reasons
@@ -1149,7 +1147,7 @@ state or a missing grant.
 
 ### 9.4 Rule
 
-The access service evaluates one consistent policy snapshot:
+Access evaluates one consistent policy snapshot:
 
 1. The credential may ask about the requested tenant.
 2. The principal exists, is active and belongs to that tenant.
@@ -1157,13 +1155,13 @@ The access service evaluates one consistent policy snapshot:
 4. At least one enabled, unrevoked, unexpired grant applies to the principal or to one of its
    groups.
 
-The access service keeps no workspace catalog: which workspaces belong to a tenant is the
-consumer's responsibility. The access service still checks that the principal belongs to the
+Access keeps no workspace catalog: which workspaces belong to a tenant is the
+consumer's responsibility. Access still checks that the principal belongs to the
 requested tenant.
 
 ### 9.5 Freshness
 
-The context is evaluated on every request and never cached by the access service. A consumer may
+The context is evaluated on every request and never cached by Access. A consumer may
 cache it for reads, within its own bounds: never past `validUntil`, and a mutation or background
 command always asks for a fresh context.
 
@@ -1415,7 +1413,7 @@ A row carries no secret: the operator is the calling credential's fingerprint.
 | --- | --- |
 | The caller has a grant that satisfies the rule | `{"allow":true,"reason":"allowed"}` |
 | The caller has no grant | `{"allow":false,"reason":"the principal does not have the role of the workspace"}` |
-| The caller is not a principal of the access service | `{"allow":false,"reason":"the principal does not exist"}` |
+| The caller is not a principal of Access | `{"allow":false,"reason":"the principal does not exist"}` |
 | The database is down | `503` → the gateway denies, because it fails closed |
 
 The gateway hides the reason from the caller and counts it: `allowed` is not counted, a denial with
@@ -1470,13 +1468,13 @@ The point of the design, as a list of what is **not** touched:
 | In the gateway | Status |
 | --- | --- |
 | The route table format (`config/routes.json`) | Unchanged. |
-| The gateway environment (`GATEWAY_*`) | Names carry the gateway's role; the contract is unchanged. The access service asks for no new variable. Variables added by gateway releases before the merge are the deployment's business; two are required by a production gateway (`GATEWAY_SESSION_SECRET` and `GATEWAY_IDENTITY_SIGNING_KEY`). The gateway added `GATEWAY_TRUSTED_PROXY_HOPS` (default one), the number of proxies in front of it, and changed `GATEWAY_TRUSTED_PROXIES`: when set, its ranges replace the route table's ranges instead of adding to them. The platform release added no variable and changed no contract. |
-| The single provider (`GATEWAY_OIDC_ISSUER`, `GATEWAY_OIDC_CLIENT_ID`, `GATEWAY_OIDC_REDIRECT_URI`, `GATEWAY_OIDC_CLIENT_SECRET`) | Unchanged. They name the access service. |
-| The single access service (`GATEWAY_ACCESS_URL`, `GATEWAY_ACCESS_TOKEN`) | Unchanged. They name the access service. |
-| The decision contract (`POST /v1/decisions`, `{subject, workspaceId, routeId, roles}` → `{allow, reason}`) | Unchanged. The access service implements it as is and sends a denial's `reasonCode` (§8.7). |
+| The gateway environment (`GATEWAY_*`) | Names carry the gateway's role; the contract is unchanged. Access asks for no new variable. Variables added by gateway releases before the merge are the deployment's business; two are required by a production gateway (`GATEWAY_SESSION_SECRET` and `GATEWAY_IDENTITY_SIGNING_KEY`). The gateway added `GATEWAY_TRUSTED_PROXY_HOPS` (default one), the number of proxies in front of it, and changed `GATEWAY_TRUSTED_PROXIES`: when set, its ranges replace the route table's ranges instead of adding to them. The platform release added no variable and changed no contract. |
+| The single provider (`GATEWAY_OIDC_ISSUER`, `GATEWAY_OIDC_CLIENT_ID`, `GATEWAY_OIDC_REDIRECT_URI`, `GATEWAY_OIDC_CLIENT_SECRET`) | Unchanged. They name Access. |
+| The single Access (`GATEWAY_ACCESS_URL`, `GATEWAY_ACCESS_TOKEN`) | Unchanged. They name the service. |
+| The decision contract (`POST /v1/decisions`, `{subject, workspaceId, routeId, roles}` → `{allow, reason}`) | Unchanged. Access implements it as is and sends a denial's `reasonCode` (§8.7). |
 | The gateway's decision cache | Unchanged. Its TTL is the revocation latency. |
-| Identity headers, sessions, limits, WebSockets | Names carry the gateway's role; the contract is unchanged. The release `1.0.0` gateway writes the identity's **subject** as is and refuses one that cannot be written into a header; the access service's token subject is a uuid (§7.1), so it is always written. |
-| The identity signature | The gateway's own: release `1.0.0` removed the symmetric format, and upstreams verify the signature with the deployment's public key. The gateway signs it, not the access service. |
+| Identity headers, sessions, limits, WebSockets | Names carry the gateway's role; the contract is unchanged. The release `1.0.0` gateway writes the identity's **subject** as is and refuses one that cannot be written into a header; Access's token subject is a uuid (§7.1), so it is always written. |
+| The identity signature | The gateway's own: release `1.0.0` removed the symmetric format, and upstreams verify the signature with the deployment's public key. The gateway signs it, not Access. |
 | Routes, upstreams, workspaces | Unchanged. They belong to the deployment, not the broker. |
 | The gateway code | **No commit.** |
 
@@ -1491,20 +1489,20 @@ GATEWAY_OIDC_SCOPES=openid,profile,email,groups
 GATEWAY_OIDC_ROLES_CLAIM=roles
 
 GATEWAY_ACCESS_URL=https://access.example.com
-GATEWAY_ACCESS_TOKEN=the-access-token-of-the-access-service
+GATEWAY_ACCESS_TOKEN=the-access-token-of-the-Access
 ```
 
-The gateway discovers the access service, reads its JWKS, exchanges codes at its token endpoint and
+The gateway discovers Access, reads its JWKS, exchanges codes at its token endpoint and
 asks it for decisions, without knowing it fronts several identity providers.
 
 The release `1.0.0` gateway and later also require, in production, `GATEWAY_SESSION_SECRET` (the
 browser session secret) and `GATEWAY_IDENTITY_SIGNING_KEY` (the private key that signs a request's
-identity). They are the deployment's business, not the access service's: upstreams verify the
+identity). They are the deployment's business, not Access's: upstreams verify the
 identity with the deployment's public key.
 
 ### 13.2 Settings that must agree
 
-| Access service | Gateway |
+| Access | Gateway |
 | --- | --- |
 | `ACCESS_ISSUER` | `GATEWAY_OIDC_ISSUER`: the **same** url, character for character. |
 | `tenants.client_id` | `GATEWAY_OIDC_CLIENT_ID` |
@@ -1549,21 +1547,21 @@ The rule that every rule needs a test is in [platform internals](../platform/int
 | Kind | Where | What it proves |
 | --- | --- | --- |
 | Unit | `src/domains/*/*.test.ts` | Provider token validation, mapping, the decision rule, tenant resolution. |
-| Contract | `test/contract/` | The whole flow against the access service fixtures: browser login, code exchange, decision, the twelve administrative endpoints, the audit, secret rotation. |
+| Contract | `test/contract/` | The whole flow against Access fixtures: browser login, code exchange, decision, the twelve administrative endpoints, the audit, secret rotation. |
 | Integration | `test/integration/` | Decisions against real PostgreSQL and Redis, tenant isolation, migrations, the statement deadline, the decision rule against randomly built policies. |
-| Compatibility | `test/compatibility/` | **The unchanged gateway against the access service.** The gateway reference's fixtures are replaced by the access service, and the gateway's contract suite runs against it. |
-| Architecture | `test/architecture/` | The access service's import boundaries, and the absence of deferred features. |
+| Compatibility | `test/compatibility/` | **The unchanged gateway against Access.** The gateway reference's fixtures are replaced by Access, and the gateway's contract suite runs against it. |
+| Architecture | `test/architecture/` | Access's import boundaries, and the absence of deferred features. |
 | Tooling | `test/tooling/` | The compatibility suite runner: the reference pin, the checkout sources, and the refusals. |
 
 ### 15.1 Compatibility test
 
-The gateway starts with its own configuration, with its fixtures replaced by the access service:
+The gateway starts with its own configuration, with its fixtures replaced by Access:
 
 ```
-GATEWAY_OIDC_ISSUER   = the issuer of the access service
+GATEWAY_OIDC_ISSUER   = the issuer of Access
 GATEWAY_OIDC_CLIENT_ID= the client id of the tenant
-GATEWAY_ACCESS_URL    = the base url of the access service
-GATEWAY_ACCESS_TOKEN  = the access token of the access service
+GATEWAY_ACCESS_URL    = the base url of Access
+GATEWAY_ACCESS_TOKEN  = the access token of Access
 ```
 
 The suite asserts that:
@@ -1618,7 +1616,7 @@ Layers and boundaries: [Internals](internals.md#code-layout). Summary:
 | `src/domains/identity/` | Provider token validation, principal mapping, tenant resolution. |
 | `src/domains/authorization/` | The decision rule, grant reads, reasons. |
 | `src/domains/administration/` | The twelve endpoints, body validation, auditing every change. |
-| `src/domains/provider/` | The access service's tokens, the JWKS, the discovery document, code exchange. |
+| `src/domains/provider/` | Access's tokens, the JWKS, the discovery document, code exchange. |
 | `src/platform/` | Adapters: PostgreSQL, Redis, the Bun listener, the HTTP client. |
 | `src/observability/` | Logs, metrics, secret comparison. |
 | `src/runtime/` | Environment, composition root, lifecycle and drain. |

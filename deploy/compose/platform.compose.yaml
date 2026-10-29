@@ -9,8 +9,8 @@
 #   bun run scripts/dev-keys.ts
 #   export GATEWAY_IDENTITY_SIGNING_KEY="$(cat deploy/secrets/identity-signing.pem)"
 #
-# The gateway listens on http://localhost:8080, the access service on
-# http://localhost:8081 and the data service on http://localhost:8082.
+# The gateway listens on http://localhost:8080, Access on
+# http://localhost:8081 and Data on http://localhost:8082.
 #
 # Every service of the platform is also a stack of its own, in this
 # directory: `access.compose.yaml`, `data.compose.yaml` and
@@ -70,7 +70,7 @@ services:
       timeout: 3s
       retries: 10
 
-  # The access service: the OpenID Connect broker and the access
+  # Access: the OpenID Connect broker and the access
   # decision service.
   access:
     build:
@@ -95,8 +95,8 @@ services:
       ACCESS_REDIS_URL: redis://redis:6379/0
       ACCESS_ADMIN_TOKEN: the-admin-token-of-the-development
       ACCESS_DECISION_TOKEN: the-access-token-of-the-development
-      # The credential of the data service at the access context contract.
-      # The value is the one of the fixture of the data service
+      # The credential of Data at the access context contract.
+      # The value is the one of the fixture of Data
       # (`deploy/fixtures/secrets/access-context.token`): the two have to
       # name the same credential.
       ACCESS_CONTEXT_TOKENS: '{"development-access-context-token-0001":null}'
@@ -104,7 +104,7 @@ services:
       ACCESS_SECRET_ENCRYPTION_KEY: 1111111111111111111111111111111111111111111111111111111111111111
       ACCESS_LOG_LEVEL: info
 
-  # The roles of the data service and the schema of its deployment. The
+  # The roles of Data and the schema of its deployment. The
   # service waits for them: it refuses to start against a database that
   # is not migrated.
   data-migrate:
@@ -124,7 +124,7 @@ services:
       DATA_DELIVERY_PASSWORD: dev-delivery-password-0001
       DATA_MAINTENANCE_PASSWORD: dev-maintenance-password-001
 
-  # The data service: the headless, permission aware data api.
+  # Data: the headless, permission aware data api.
   data:
     build:
       context: ../..
@@ -198,7 +198,7 @@ services:
   # The console: the web application of the platform. It is a client of
   # the three services: it authenticates the caller against the access
   # service, it reads the data through the gateway and it acts for the
-  # access service with the credential of the operator.
+  # Access with the credential of the operator.
   #
   # The console is not published as an image: a deployment that wants it
   # builds it from `packages/console/Dockerfile`.
@@ -223,11 +223,11 @@ services:
       CONSOLE_ACCESS_URL: http://access:8081
       CONSOLE_CLIENT_ID: platform
       CONSOLE_CLIENT_SECRET: the-client-secret-of-the-development
-      # The host of the route of the data service is the one of the
+      # The host of the route of Data is the one of the
       # route table of the development (`api.gateway.test`).
       CONSOLE_GATEWAY_URL: http://api.gateway.test:8080
-      # The data service: the console reads the data through the
-      # gateway, and it reads the probes of the data service here.
+      # Data: the console reads the data through the
+      # gateway, and it reads the probes of Data here.
       CONSOLE_DATA_URL: http://data:8082
       CONSOLE_ADMIN_TOKEN: the-admin-token-of-the-development
       CONSOLE_ACCESS_CONTEXT_TOKEN: development-access-context-token-0001

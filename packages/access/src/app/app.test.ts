@@ -33,7 +33,7 @@ function dependencies(): AccessDependencies {
   }
 }
 
-describe('the application of the access service', () => {
+describe('the application of Access', () => {
   test('the application answers a request', async () => {
     const app = createAccessApp(dependencies())
     const response = await app.fetch(new Request('http://access.example.com/healthz'))

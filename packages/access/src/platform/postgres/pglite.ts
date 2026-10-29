@@ -2,7 +2,7 @@
  * The embedded PostgreSQL of the development machine.
  *
  * The driver is `pglite`: a PostgreSQL compiled to WebAssembly that runs
- * in the process of the access service. It is the same PostgreSQL as the one of a
+ * in the process of Access. It is the same PostgreSQL as the one of a
  * deployment, so a development machine runs the migrations of the
  * production and nothing has to be translated between the two.
  *

@@ -87,7 +87,7 @@ export interface RefusalView {
 export function refusalOf(error: unknown): RefusalView {
   if (error instanceof DataError) {
     return {
-      title: titleOfStatus(error.status, 'the data service'),
+      title: titleOfStatus(error.status, 'Data'),
       message: error.message,
       code: error.code,
       requestId: error.requestId,
@@ -97,7 +97,7 @@ export function refusalOf(error: unknown): RefusalView {
   }
   if (error instanceof AccessError) {
     return {
-      title: titleOfStatus(error.status, 'the access service'),
+      title: titleOfStatus(error.status, 'Access'),
       message: error.message,
       code: error.code,
       requestId: error.requestId,

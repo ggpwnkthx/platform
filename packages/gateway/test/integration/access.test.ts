@@ -5,13 +5,13 @@ import { FetchAccessTransport } from '../../src/platform/bun/access-transport'
 import { startAccessService } from '../../services/fixtures/access-fixture'
 
 /**
- * The client of the access service, against the real fixture.
+ * The client of Access, against the real fixture.
  *
  * The contract of the domain is about the failures: a service that is not
  * there, a service that answers with something else than a decision and a
  * decision that is not for this caller.
  */
-describe('the access service', () => {
+describe('Access', () => {
   test('a decision of the service allows the caller', async () => {
     const service = await startAccessService()
     const client = new AccessClient({

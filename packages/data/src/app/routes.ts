@@ -30,7 +30,7 @@ import type { AppDependencies, AppEnv } from './types'
  *
  * The routes share the establishment of the context: the gateway signs
  * the identity of the caller, the backend verifies the signature, it
- * resolves the workspace in its registry and it asks the access service for the
+ * resolves the workspace in its registry and it asks Access for the
  * capabilities of the principal.
  */
 export function registerRoutes(app: Hono<AppEnv>, dependencies: AppDependencies): void {
@@ -552,7 +552,7 @@ const MUTATIONS = new Set(['POST', 'PATCH', 'PUT', 'DELETE'])
  * of a workspace.
  *
  * The model of a workspace is its configuration: the administrator of
- * the workspace reads it and writes it, and the access service says who
+ * the workspace reads it and writes it, and Access says who
  * the administrator is. The model names the fields of the collections
  * of the workspace, and the metadata of the schema is the answer that
  * every other caller reads.

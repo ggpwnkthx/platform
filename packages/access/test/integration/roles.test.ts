@@ -11,7 +11,7 @@ import { seedTenant } from '../fixtures/tenant'
 import { openTestDatabase } from './database'
 
 /**
- * The roles of the access service, against the database (spec §3.6).
+ * The roles of Access, against the database (spec §3.6).
  *
  * A role holds permissions, and it may name another role: the
  * permissions of the named role are the permissions of the role that
@@ -41,7 +41,7 @@ afterAll(async () => {
   await database.close()
 })
 
-describe('the roles of the access service', () => {
+describe('the roles of Access', () => {
   test('a role holds the permission it is given', async () => {
     const roles = new RoleRepository(database)
     const role = await roles.create({ tenantId, key: 'role-reader' })

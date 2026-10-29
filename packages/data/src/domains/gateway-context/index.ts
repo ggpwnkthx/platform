@@ -95,7 +95,7 @@ function reject(): never {
  * normalized. The gateway of the release `1.0.0` of the platform writes
  * the subject of the identity without rewriting it — a subject that
  * carries a control character is refused by the gateway itself, and the
- * subject of the access service is a uuid — and the signed bytes are
+ * subject of Access is a uuid — and the signed bytes are
  * rebuilt from the bytes of the header. A reader that trimmed a value
  * would rebuild a payload that the gateway never signed, and a request
  * whose identity is sound would be refused.

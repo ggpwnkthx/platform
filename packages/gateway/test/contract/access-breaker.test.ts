@@ -4,7 +4,7 @@ import { createHarness, WORKSPACE_ID, type Harness } from '../support/contract-h
 /**
  * The breaker of access.
  *
- * The access service is on the path of every request of a route that
+ * Access is on the path of every request of a route that
  * names a workspace. A service that is down does not only refuse the
  * requests: it makes them **slow**, because every request waits for the
  * budget of the call before it is answered. The outage amplifies itself:
@@ -50,7 +50,7 @@ async function ask(harness: Harness): Promise<Response> {
   })
 }
 
-describe('the breaker of the access service', () => {
+describe('the breaker of Access', () => {
   test('the service is not called any more while the breaker is open', async () => {
     harness.access.setUnavailable(true)
     try {

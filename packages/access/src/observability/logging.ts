@@ -1,5 +1,5 @@
 /**
- * The logs of the access service.
+ * The logs of Access.
  *
  * The format is JSON and the redaction happens before anything is written:
  * a credential never reaches the log stream. The library owns the format,
@@ -150,7 +150,7 @@ export interface LoggerOptions {
 }
 
 /**
- * Creates the logger of the access service.
+ * Creates the logger of Access.
  *
  * The fields are redacted before they reach the library, so a credential
  * never ends up in the output.

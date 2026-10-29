@@ -1,5 +1,5 @@
 /**
- * The metrics of the access service (spec §12.2).
+ * The metrics of Access (spec §12.2).
  *
  * The observation layer measures and writes: it knows nothing about the
  * domains, the application or the runtime. The labels are bounded: a
@@ -57,7 +57,7 @@ export interface Observer {
   readonly contentType: string
 }
 
-/** The store of the metrics of the access service. */
+/** The store of the metrics of Access. */
 export class MetricsStore implements Observer {
   private readonly registry = new Registry()
   private readonly tenants = new BoundedLabel()

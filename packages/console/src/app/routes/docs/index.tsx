@@ -89,8 +89,8 @@ export default createRoute(async (c) => {
         <header class="doc-head">
           <h1>Documentation</h1>
           <p class="doc-lede">
-            Guides and contracts for the gateway, the access service, the data service and this
-            console. New here? Follow the reading path.
+            Guides and contracts for the gateway, Access, Data and this console. New here? Follow
+            the reading path.
           </p>
         </header>
         {steps.length > 0 ? (

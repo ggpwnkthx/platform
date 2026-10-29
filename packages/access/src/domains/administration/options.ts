@@ -49,7 +49,7 @@ export interface AdministrationOptions {
    * simultaneous one (spec §4.3).
    */
   previousToken?: string
-  /** The public url of the access service, for the default callback of a tenant. */
+  /** The public url of Access, for the default callback of a tenant. */
   publicUrl: string
   /**
    * The limiter of the failed authentications.

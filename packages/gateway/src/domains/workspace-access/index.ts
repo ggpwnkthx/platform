@@ -2,7 +2,7 @@
  * The workspace access domain.
  *
  * The domain owns the validation of the identifier of a workspace, the
- * requests to the access service, the keys of the cached decisions and the
+ * requests to Access, the keys of the cached decisions and the
  * failures of the service.
  *
  * The domain never evaluates the roles of a caller: it asks the access

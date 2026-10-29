@@ -1,6 +1,6 @@
 /**
  * The query of a list, between the url of a page of the console and the
- * parameters of the data service.
+ * parameters of Data.
  *
  * The url of a page of a collection is the whole state of the page: the
  * search, the filter, the sort and the page. A reader who sends the url
@@ -18,7 +18,7 @@ export interface PageQuery {
   readonly limit: number
   readonly cursor: string
   readonly count: boolean
-  /** The query of the data service, when the url is understood. */
+  /** The query of Data, when the url is understood. */
   readonly list: ListQuery
   /** What the console did not understand. */
   readonly problem: string | null

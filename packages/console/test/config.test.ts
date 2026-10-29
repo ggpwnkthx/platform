@@ -67,7 +67,7 @@ describe('the configuration of the console', () => {
     expect(() => readConfig({ ...BASE, CONSOLE_TENANT_ADMIN_TOKENS: '[1]' })).toThrow(ConfigError)
   })
 
-  test('a credential shorter than the rule of the access service is refused', () => {
+  test('a credential shorter than the rule of Access is refused', () => {
     expect(() => readConfig({ ...BASE, CONSOLE_ADMIN_TOKEN: 'too-short' })).toThrow(ConfigError)
   })
 })

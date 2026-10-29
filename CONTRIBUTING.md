@@ -15,7 +15,7 @@ Each service's spec defines its behavior. A behavior change updates the spec in 
 | Contract | `test/contract/` | HTTP surface behavior |
 | Integration | `test/integration/` | Behavior against real PostgreSQL and Redis |
 | Architecture | `test/architecture/` | Boundaries, documented counts, routes and docs |
-| Compatibility | `test/compatibility/` | The **real, unchanged platform gateway against the access service** |
+| Compatibility | `test/compatibility/` | The **real, unchanged platform gateway against Access** |
 | Platform | root `test/` | Workflows, tools, versions, tagger, compatibility baseline |
 
 ## Before you open a pull request

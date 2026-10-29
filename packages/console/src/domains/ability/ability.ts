@@ -5,13 +5,13 @@
  * what they answer. The ability is that drawing: the rules of the
  * console itself, and the rules of the collections of a workspace.
  *
- * The ability is a mirror and never an authority. The access service
- * decides who holds a permission, and the data service decides what a
+ * The ability is a mirror and never an authority. Access
+ * decides who holds a permission, and Data decides what a
  * permission grants. Every rule of the ability is an upper bound of
  * what the caller may do, and never a lower one: the console hides what
  * the services refuse, and it shows what they allow. A button that the
- * console shows and the data service refuses is an annoyance; a button
- * that the console hides and the data service allows is a fault.
+ * console shows and Data refuses is an annoyance; a button
+ * that the console hides and Data allows is a fault.
  *
  * The library knows two wildcards: the action `manage` and the subject
  * `all`. The console has neither. The action and the subject of a rule
@@ -82,7 +82,7 @@ export function abilityOf(rules: readonly AbilityRule[]): ConsoleAbility {
 /**
  * The rules of the console itself, from the scope of the operator.
  *
- * The scope is the source: the access service says which keys the
+ * The scope is the source: Access says which keys the
  * caller holds on the route of the console, and the scope draws them.
  * The rules are that drawing.
  */
@@ -109,15 +109,15 @@ export function consoleAbility(scope: OperatorScope): ConsoleAbility {
 }
 
 /**
- * The rules of a collection, from the metadata the data service published.
+ * The rules of a collection, from the metadata Data published.
  *
- * The metadata is the answer of the data service about the caller: the
+ * The metadata is the answer of Data about the caller: the
  * actions it may perform and the fields it may read and write. The
  * rules are that answer, and nothing else.
  *
  * The fields of the metadata are the union of the fields of the
  * policies that apply, and the rules are the same union: a rule is
- * about what the caller may do at most, and the data service decides
+ * about what the caller may do at most, and Data decides
  * what it may do for one row.
  */
 export function collectionRules(collection: CollectionMetadata): AbilityRule[] {

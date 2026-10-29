@@ -1,4 +1,4 @@
-# The access service on its own.
+# Access on its own.
 #
 #   kubectl apply -k deploy/kubernetes/base/access
 #

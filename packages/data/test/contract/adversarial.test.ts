@@ -189,8 +189,8 @@ describe('the concurrency of the writes', () => {
   })
 })
 
-describe('the context of the access service is never used when it is not valid', () => {
-  test('an expired answer of the access service is refused', async () => {
+describe('the context of Access is never used when it is not valid', () => {
+  test('an expired answer of Access is refused', async () => {
     harness.access.expired = true
     const response = await harness.request(`/ws/${WORKSPACE_ID}/v1/items/articles`)
     expect(response.status).toBe(503)
@@ -199,7 +199,7 @@ describe('the context of the access service is never used when it is not valid',
     harness.access.expired = false
   })
 
-  test('an unavailable access service is refused', async () => {
+  test('an unavailable Access is refused', async () => {
     harness.access.unavailable = true
     const response = await harness.request(`/ws/${WORKSPACE_ID}/v1/items/articles`)
     expect(response.status).toBe(503)
@@ -209,7 +209,7 @@ describe('the context of the access service is never used when it is not valid',
   })
 
   test('a context of another workspace is refused', async () => {
-    // The access service answers the fields of the request: a context that names
+    // Access answers the fields of the request: a context that names
     // another workspace is not the context of the request.
     const original = harness.access.grants.get(PRINCIPAL_ID)
     harness.access.grants.set(PRINCIPAL_ID, [])

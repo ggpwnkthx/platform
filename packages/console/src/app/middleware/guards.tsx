@@ -31,7 +31,7 @@ export const requireSession: MiddlewareHandler = createMiddleware(async (c, next
 
 /**
  * A page that reads the data of a workspace: the caller needs a token
- * the gateway accepts. The access token of the access service lives five
+ * the gateway accepts. The access token of Access lives five
  * minutes and there is no refresh token: a token that expired is renewed
  * with a login, which the provider of the tenant answers without a
  * question when the caller is still signed in there.
@@ -61,9 +61,9 @@ export const requireOperator: MiddlewareHandler = createMiddleware(async (c, nex
       <section class="refusal">
         <h1>The administration is not open to you</h1>
         <p>
-          The access service holds neither <code>console.admin</code> nor{' '}
-          <code>console.platform</code> for you on the route of the console, or the console holds no
-          credential of the administration for your tenant.
+          Access holds neither <code>console.admin</code> nor <code>console.platform</code> for you
+          on the route of the console, or the console holds no credential of the administration for
+          your tenant.
         </p>
         <p>
           <a href="/me">See what the console knows about you</a>

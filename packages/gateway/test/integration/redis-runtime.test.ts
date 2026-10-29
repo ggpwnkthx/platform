@@ -58,7 +58,7 @@ describeRedis('a deployment with several replicas', () => {
     expect(await second.auth.sessions.get(created.id)).toBeNull()
   })
 
-  test('the decision of the access service is shared by the replicas', async () => {
+  test('the decision of Access is shared by the replicas', async () => {
     const calls: number[] = []
     const transport = {
       async post() {

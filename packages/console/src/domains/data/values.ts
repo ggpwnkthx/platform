@@ -1,12 +1,12 @@
 /**
  * The values of the records, between the forms of the console and the
- * contract of the data service.
+ * contract of Data.
  *
- * A form carries text; the data service takes typed values. The console
+ * A form carries text; Data takes typed values. The console
  * converts what a form carries into the type that the metadata of the
  * field names, and it refuses only what cannot be converted: the rules of
  * a value — its length, its bounds, its enumeration — are the rules of
- * the data service, and its refusal is the one the caller reads.
+ * Data, and its refusal is the one the caller reads.
  */
 
 import type { FieldMetadata, RecordValue } from './types'
@@ -154,7 +154,7 @@ function same(left: unknown, right: unknown): boolean {
  *
  * A creation carries the fields the caller filled in. An update carries
  * the fields that changed, and nothing else: an update that changes
- * nothing is not sent, because the data service refuses an empty patch
+ * nothing is not sent, because Data refuses an empty patch
  * and an update always increments the version of the record.
  */
 export function readValues(options: {

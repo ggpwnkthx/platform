@@ -122,7 +122,7 @@ describe('the documentation of the platform', () => {
 describe('the names of the headings', () => {
   test('a name is the text of the heading, in lower case, without its punctuation', () => {
     expect(slugOf('6.2 The places')).toBe('62-the-places')
-    expect(slugOf('The access service — HTTP API')).toBe('the-access-service--http-api')
+    expect(slugOf('Access — HTTP API')).toBe('access--http-api')
   })
 
   test('the markup of a heading is not part of its name', () => {
@@ -141,7 +141,7 @@ describe('the names of the headings', () => {
   test('a heading in a block of code is not a heading of the document', () => {
     // The comment of a shell is not a heading, and a link that names it
     // points at nothing.
-    const names = headingsOf('# Real\n\n```bash\n# the access service\n```\n\n## Also real\n')
+    const names = headingsOf('# Real\n\n```bash\n# Access\n```\n\n## Also real\n')
     expect([...names]).toEqual(['real', 'also-real'])
   })
 })

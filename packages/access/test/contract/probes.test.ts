@@ -13,7 +13,7 @@ afterAll(async () => {
   await service.stop()
 })
 
-describe('the probes of the access service', () => {
+describe('the probes of Access', () => {
   test('the health says that the process answers', async () => {
     const response = await fetch(`${service.base}/healthz`)
     expect(response.status).toBe(200)

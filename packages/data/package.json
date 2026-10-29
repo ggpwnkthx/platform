@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "The data service of the platform: a headless, permission aware data API behind the gateway, authorized by the access service.",
+  "description": "Data of the platform: a headless, permission aware data API behind the gateway, authorized by Access.",
   "scripts": {
     "start": "bun run src/main.ts",
     "dev": "bun --watch src/main.ts",

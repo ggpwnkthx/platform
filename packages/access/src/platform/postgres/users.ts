@@ -1,5 +1,5 @@
 /**
- * The principals of the access service (spec §3.2).
+ * The principals of Access (spec §3.2).
  *
  * The repository is the storage of the rows: it holds no policy. The
  * mapping of an identity is the work of the identity domain, and it uses

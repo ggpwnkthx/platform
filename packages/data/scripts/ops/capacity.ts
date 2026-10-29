@@ -3,7 +3,7 @@
  * The capacity measurement of a deployment (spec §15.5).
  *
  * The command starts a complete deployment of the development machine: a
- * PostgreSQL server, an access service of the fixtures, the backend and a load. It
+ * PostgreSQL server, Access of the fixtures, the backend and a load. It
  * measures the latency of the reads, the latency of the writes and the
  * behaviour under the failure of a dependency.
  *
@@ -330,10 +330,10 @@ async function main(): Promise<void> {
     return response.status
   })
 
-  // The failure of a dependency: the access service is not available any more.
+  // The failure of a dependency: Access is not available any more.
   access.unavailable = true
   const degraded = await run(
-    'the access service is down',
+    'Access is down',
     async () => await call(`/ws/${WORKSPACE_ID}/v1/items/articles?limit=10`)
   )
   access.unavailable = false

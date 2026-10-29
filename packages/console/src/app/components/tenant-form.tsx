@@ -1,7 +1,7 @@
 /**
  * The form of a tenant: its creation, and its change.
  *
- * The access service never answers a secret: a change of a tenant
+ * Access never answers a secret: a change of a tenant
  * carries the secrets of its provider and of its client again, and a
  * secret that replaces another one is accepted beside it for a day.
  */
@@ -32,7 +32,7 @@ export function tenantInputOf(form: SentForm, platform: boolean, current?: Tenan
     autoProvision: flag('autoProvision'),
     enabled: flag('enabled'),
     // The flags of the platform are sent by the operator of the platform
-    // only: the access service refuses a tenant credential that changes
+    // only: Access refuses a tenant credential that changes
     // them, and the console sends what the row holds.
     sharedClient: platform ? flag('sharedClient') : (current?.sharedClient ?? false),
     default: platform ? flag('default') : (current?.default ?? false),
@@ -101,7 +101,7 @@ export function TenantForm(props: {
       </div>
       <fieldset class="form-grid" style="border: 0; padding: 0; margin: 0">
         <legend class="small muted" style="grid-column: 1 / -1">
-          The provider of the tenant: the access service signs its people in there
+          The provider of the tenant: Access signs its people in there
         </legend>
         <label class="field">
           <span>Issuer</span>

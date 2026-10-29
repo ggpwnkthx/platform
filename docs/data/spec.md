@@ -1,7 +1,7 @@
 # Specification
 
-The normative contract of the data service release: what the service owns, how it trusts the
-gateway and the access service, and the rules for schema, authorization, mutations, events and
+The normative contract of Data release: what the service owns, how it trusts the
+gateway and Access, and the rules for schema, authorization, mutations, events and
 operations.
 
 Status: 1.0.0.
@@ -13,12 +13,12 @@ MUST, MUST NOT, SHOULD, SHOULD NOT and MAY carry their RFC 2119 meaning. A behav
 deferred is outside the release and MUST NOT be advertised as available.
 
 The examples are illustrative configuration and protocol fixtures. They do not describe features
-that already exist in the gateway or the access service.
+that already exist in the gateway or Access.
 
 ## 1. Purpose and authority
 
 The backend provides reusable, permission-aware data APIs for applications behind the gateway.
-The access service is its authority for principals, tenants, groups and grants. The backend owns
+Access is its authority for principals, tenants, groups and grants. The backend owns
 workspaces, registered collections, record operations, data policies, audit history and committed
 domain events.
 
@@ -33,27 +33,27 @@ and the revision of the repository that is tested against them.
 | Workspace | Path | The revision it is tested against |
 | --- | --- | --- |
 | The gateway | `packages/gateway` | `d3cdb48b79c3962e66bf51d8f386132baff824b7` |
-| The access service | `packages/access` | `d3cdb48b79c3962e66bf51d8f386132baff824b7` |
-| The data service | `packages/data` | the tree of the run |
+| Access | `packages/access` | `d3cdb48b79c3962e66bf51d8f386132baff824b7` |
+| Data | `packages/data` | the tree of the run |
 
 <!-- compatibility-baseline:end -->
 
 The baseline is a repository revision and is immutable: changing it means changing the manifest
 and rerunning the compatibility harness. References to earlier baselines are historical evidence of
-data service releases; they stay in the release notes and are not the active baseline.
+Data releases; they stay in the release notes and are not the active baseline.
 
 ### 1.2 Ownership
 
 | Owner | Responsibility |
 | --- | --- |
 | Identity provider | Authenticating the external identity. |
-| Access service | Login, principals, tenants, groups, permission keys and scoped grants. |
+| Access | Login, principals, tenants, groups, permission keys and scoped grants. |
 | Gateway | Sessions, caller credentials, workspace admission, gateway limits, and forwarding with the signed identity. |
 | Backend | Verifying the upstream identity, tenant and workspace scope, current grants, record and field policies, and the data APIs. |
 | Studio (separate project) | The browser application: navigation, forms, tables, dashboards and preview. |
 | Other clients | Websites, application servers and scripts that consume the headless API. |
 
-The access service's tables stay private to it. The backend MUST NOT query or mutate them, expose
+Access's tables stay private to it. The backend MUST NOT query or mutate them, expose
 them as collections, or keep a second directory of identities and grants.
 
 ### 1.3 Headless boundary
@@ -80,7 +80,7 @@ validation and evaluation MUST NOT depend on them.
 | Capability | Required behavior |
 | --- | --- |
 | Gateway | Verify `v5` gateway identities with the gateway's public key and map verified requests to trusted route bindings. The legacy `v4` format is a migration path: a deployment that still uses it declares it with `DATA_LEGACY_IDENTITY`; the service refuses it by default. |
-| Access service | A current, authoritative access context through the §5 contract. |
+| Access | A current, authoritative access context through the §5 contract. |
 | Workspaces | Workspace ownership and enabled or disabled state. |
 | Collections | Declarative collection manifests backed by reviewed SQL migrations. |
 | Catalog | The collections a workspace serves and the policy bundle that applies to it, without changing the physical schema. |
@@ -104,7 +104,7 @@ validation and evaluation MUST NOT depend on them.
 | GraphQL | Another transport over the same query and command services. |
 | Bulk writes and exports | Bounded operations with the same row and field rules and no privileged query path. Aggregates and searches are the exceptions: they are bounded and use the same rules. |
 | Runtime schema editing | A versioned schema-management contract and a reviewed migration workflow. The catalog is a logical registry: it never creates or alters a table. |
-| Policy editing over HTTP | Publishing a bundle is an operator command. An endpoint that writes policies would be an authority that bypasses the access service. |
+| Policy editing over HTTP | Publishing a bundle is an operator command. An endpoint that writes policies would be an authority that bypasses Access. |
 | Marketplace extensions | An explicit execution and trust model. Only code the deployer registered is allowed. |
 | MCP and AI features | Clients and adapters that invoke the authorized domain operations. |
 | Other database engines | Storage adapters, once their transaction, isolation and query semantics are specified. |
@@ -117,9 +117,9 @@ Directus parity.
 
 1. No business data operation starts without a trusted principal and a resolved workspace and
    tenant context.
-2. A workspace belongs to exactly one access service tenant. Ownership is immutable.
+2. A workspace belongs to exactly one tenant of Access. Ownership is immutable.
 3. Authentication, workspace admission and data authorization are three separate checks.
-4. An enabled workspace and an access service grant do not imply access to every collection or
+4. An enabled workspace and Access grant do not imply access to every collection or
    action.
 5. Forwarded roles and e-mail addresses are never authoritative data permissions.
 6. A missing context, an unavailable dependency, an unknown policy and an incomplete capabilities
@@ -140,7 +140,7 @@ Directus parity.
 ~~~mermaid
 flowchart TD
     Clients["Studio or other API clients"] --> Gateway["The gateway"]
-    Gateway -->|"Login and workspace admission"| Access["The access service"]
+    Gateway -->|"Login and workspace admission"| Access["Access"]
     Gateway -->|"Signed request"| Backend["Data Backend"]
     Backend -->|"Current scoped access context"| Access
     Backend --> Database["PostgreSQL"]
@@ -148,8 +148,7 @@ flowchart TD
     Worker -->|"Authorized domain commands"| Backend
 ~~~
 
-A straightforward deployment has tenant-specific gateway deployments pointing to a shared access
-service and a shared backend. The access service's shared-client topology is compatible when it is
+A straightforward deployment has tenant-specific gateway deployments pointing to a shared Access and a shared backend. Access's shared-client topology is compatible when it is
 configured explicitly and covered by the compatibility tests.
 
 The backend does not change how the gateway selects an identity provider. Ingress to the data
@@ -175,7 +174,7 @@ The deployer provides an immutable configuration for every accepted gateway rout
 | `id` | Local route name, for diagnostics. |
 | `host` | The exact signed public authority, with the port when there is one. |
 | `upstreamPathPattern` | The path the backend receives, with the workspace parameter. |
-| `routeId` | The access service route scope for this route. |
+| `routeId` | Access route scope for this route. |
 | `identity` | How the route's signatures are verified: version, algorithm and key file. |
 | `expectedTenantId` | Optional restriction for a tenant-specific gateway. |
 
@@ -230,9 +229,7 @@ gateway contract. Values MUST NOT be normalized before the signed bytes are rebu
 The release `1.0.0` gateway writes the identity **subject** as is: it never rewrites it, and
 refuses with a `500` a subject that cannot be written into a header. The backend MUST read the
 header as is and MUST NOT trim or normalize the subject: the signed bytes are the header bytes, and
-signature verification refuses any subject other than the one the gateway wrote. The access
-service's identity subject is a UUID, and the backend requires one: the principal is the access
-service principal's UUID, so the two services never disagree about the caller.
+signature verification refuses any subject other than the one the gateway wrote. The Access's identity subject is a UUID, and the backend requires one: the principal is the Access principal's UUID, so the two services never disagree about the caller.
 
 The backend receives the gateway's **public** key, never `GATEWAY_SESSION_SECRET` and never the
 gateway's private key. A backend that can verify an identity cannot mint one: the trust boundary is
@@ -255,13 +252,13 @@ a protected transport.
 
 ### 4.3 Credential handling
 
-The backend MUST NOT create a second browser session or reimplement the access service login. The
+The backend MUST NOT create a second browser session or reimplement Access login. The
 caller's headers and cookies are not used to resolve data permissions.
 
 Gateway routes SHOULD set `forwardAuthorization: false` when the upstream does not need the
 caller's bearer token. The backend MUST NOT log forwarded credentials.
 
-The principal is the access service principal UUID that the gateway carries as its subject. The
+The principal is Access principal UUID that the gateway carries as its subject. The
 e-mail is an optional display value. Forwarded roles are optional diagnostic context and MUST NOT
 determine data access.
 
@@ -271,12 +268,12 @@ tenant detail.
 
 ## 5. Access context contract
 
-**Integration status:** implemented. The access service has carried both endpoints since
+**Integration status:** implemented. Access has carried both endpoints since
 `4cedcfc48e9bb4eb556d2316eb502e1ab87d3105`, and the §1.1 baseline is a repository revision. The
-change lives in the access service workspace, not in a copy here; the compatibility harness proves
-the contract against the real access service.
+change lives in the Access workspace, not in a copy here; the compatibility harness proves
+the contract against the real Access.
 
-The backend MUST NOT substitute the access service admin API, direct SQL, forwarded roles or the
+The backend MUST NOT substitute Access admin API, direct SQL, forwarded roles or the
 boolean answer of `/v1/decisions` for this contract. The gateway keeps using its own decisions
 endpoint.
 
@@ -287,9 +284,9 @@ transport:
 
 `Authorization: Bearer <the service credential of the access context>`
 
-The access service MUST restrict that credential to an explicit set of tenants. A platform-wide
+Access MUST restrict that credential to an explicit set of tenants. A platform-wide
 credential is allowed for a shared backend; that scope is a deployment choice, not the default for a
-tenant credential. These credentials do not authorize access service administration or grant
+tenant credential. These credentials do not authorize Access administration or grant
 creation.
 
 `GET /v1/access-context` returns:
@@ -328,7 +325,7 @@ contract version stops readiness.
 
 The body is bounded to 64 KiB; unknown fields and invalid types are rejected.
 
-The access service MUST evaluate one consistent policy snapshot and require that:
+Access MUST evaluate one consistent policy snapshot and require that:
 
 1. the service credential may ask about the requested tenant,
 2. the principal exists, is active and belongs to that tenant,
@@ -338,8 +335,8 @@ The access service MUST evaluate one consistent policy snapshot and require that
 5. every returned permission comes from a grant whose workspace and route scope matches the request,
    or is unrestricted.
 
-In the baseline, the access service owns no workspace catalog; the tenant-workspace relationship is
-the backend's responsibility. The access service MUST still verify the principal's tenant, not
+In the baseline, Access owns no workspace catalog; the tenant-workspace relationship is
+the backend's responsibility. Access MUST still verify the principal's tenant, not
 merely echo the requested one.
 
 ### 5.3 Context response
@@ -391,7 +388,7 @@ By default, the context is not cached between requests. Every mutation and backg
 obtain a fresh context. A read-only cache MAY be configured explicitly, from 0 to 5000 ms.
 
 The cache key holds the credential scope, principal, tenant, workspace and route. Cached data MUST
-expire at the earlier of the validity the access service announced and the local lifetime. A
+expire at the earlier of the validity Access announced and the local lifetime. A
 failure MUST NOT extend a cached allowance or fall back to stale roles.
 
 No transaction may start with an expired context, and no business SQL may run after the known
@@ -400,15 +397,15 @@ expired context rolls the transaction back. A commit already in progress may com
 instant and cannot be undone: the service MUST resolve the committed or unknown outcome correctly
 rather than report a durable effect as rolled back.
 
-Authorization is evaluated when the access service decides. A revocation after that may leave an
+Authorization is evaluated when Access decides. A revocation after that may leave an
 operation in flight. The documented bound is the configured read-cache lifetime plus the bounded
 in-flight operation duration, subject to the grants' known expiry. This is not a distributed
-transaction with the access service.
+transaction with Access.
 
 Servers MUST keep clocks synchronized within one second. A response evaluated more than one second in
 the future, an expired response, and a response whose validity exceeds the contractual maximum are
 unusable. The client also bounds validity with a local monotonic deadline that starts when its
-request to the access service starts.
+request to Access starts.
 
 ## 6. Workspaces, context and isolation
 
@@ -417,14 +414,14 @@ request to the access service starts.
 | Field | Type | Rule |
 | --- | --- | --- |
 | `id` | UUID | Globally unique and immutable. |
-| `tenant_id` | UUID | Access service tenant reference, immutable. |
+| `tenant_id` | UUID | Access tenant reference, immutable. |
 | `slug` | text | Unique within a tenant: 1 to 63 lowercase letters, digits, underscores or hyphens, starting with a letter. |
 | `display_name` | text | 1 to 200 characters. |
 | `status` | enum | `active` or `disabled`. |
 | `created_at`, `updated_at` | timestamp | Server UTC values. |
 
 Creating and disabling a workspace are operator commands, not generic collection CRUD. The operator
-supplies an existing access service tenant. A workspace authorizes nobody until the access service
+supplies an existing Access tenant. A workspace authorizes nobody until Access
 confirms the tenant and the user's grants.
 
 The registry stores external identifiers. It grants no access by itself.
@@ -459,7 +456,7 @@ In order:
 2. look up the exact workspace UUID in the registry, together with the workspace catalog,
 3. reject an unknown or disabled workspace with `404 NOT_FOUND`,
 4. check the binding's tenant restriction,
-5. ask the access service for the context, using the registry's tenant,
+5. ask Access for the context, using the registry's tenant,
 6. resolve the schema and policy bundle,
 7. execute the scoped domain operation.
 
@@ -495,8 +492,7 @@ owner, registry reader, runtime role, delivery role and maintenance role are sep
 even when their credentials point at the same server.
 
 The delivery role may claim delivery metadata for every workspace. It MUST NOT read or mutate a
-business record. A worker's business operation uses the ordinary scoped role, after a fresh access
-service authorization.
+business record. A worker's business operation uses the ordinary scoped role, after a fresh Access authorization.
 
 Relations require composite tenant and workspace foreign keys, or equivalent constraints that reject
 references into another scope. A business reference is not authorized just because a UUID exists.
@@ -599,10 +595,10 @@ Rules:
 - The narrow reader reads the catalog registry with the workspace registry, in one statement. The
   tables keep row-level security, and the API role reads them within its transaction scope.
 - Publishing a bundle is an operator command: a local administrative entry point, not an HTTP route
-  that bypasses the access service.
+  that bypasses Access.
 - Registering a collection is also an operator command, and a workspace administrator may write it
   through the API with capability `data.model.write`. That route goes through the gateway and the
-  access service like every other route and never bypasses them.
+  Access like every other route and never bypasses them.
 
 A workspace's schema is the deployment schema restricted to its collections. Its schema version is
 the deployment's, and cursors bind it: a cursor from a workspace whose catalog changed is stale.
@@ -642,7 +638,7 @@ Rules:
 
 ### 8.1 Policies and capabilities
 
-The access service owns capability assignment. The backend owns what a capability means for a
+Access owns capability assignment. The backend owns what a capability means for a
 collection.
 
 A policy holds a stable identifier, the permission key it requires, the collection, the action, the
@@ -748,7 +744,7 @@ it published none.
 - A bundle is validated against the deployment manifest before publication: a bundle naming an
   unknown collection or field is refused, and nothing is written.
 - A bundle is published by an operator command, never by a tenant request: a bundle says what a
-  permission grants, and a principal's grants are the access service's business.
+  permission grants, and a principal's grants are Access's business.
 - Publication history is kept. A version is never changed or removed; the applicable version is the
   last one published.
 - The bundle is parsed again on resolution. A bundle edited in the database, or published against
@@ -780,7 +776,7 @@ Release endpoints:
 
 | Method | Path after the prefix | Purpose |
 | --- | --- | --- |
-| `GET` | `/me` | Principal, tenant, workspace and local API version. No credential and no raw access service response. |
+| `GET` | `/me` | Principal, tenant, workspace and local API version. No credential and no raw Access response. |
 | `GET` | `/schema` | Collection, field and relation metadata, filtered by policy. |
 | `GET` | `/schema/{collection}` | The same metadata for one visible collection. |
 | `GET` | `/items/{collection}` | A bounded, filtered, permission-aware list. |
@@ -803,12 +799,12 @@ Release endpoints:
 | `PATCH`, `DELETE` | `/model/collections/{collection}/relations/{relation}` | Set a model relation's attributes; remove the relation from the model. |
 | `GET` | `/openapi.json` | The versioned API description. |
 
-`/me` and schema metadata still require a valid, positive access service context. They do not make a
+`/me` and schema metadata still require a valid, positive Access context. They do not make a
 principal without a grant a workspace member.
 
 Schema metadata exposes only collections for which the caller holds at least one applicable action
 policy. It may describe a write-only collection without exposing its records. It MUST NOT hold a SQL
-identifier, an internal row predicate, a secret, subscriber configuration, access service grants or
+identifier, an internal row predicate, a secret, subscriber configuration, Access grants or
 studio instructions.
 
 Metadata responses hold: the fields in the union of applicable policies with their types and bounds,
@@ -823,7 +819,7 @@ change.
 
 A mutation follows this sequence:
 
-1. verify the identity, resolve the workspace and obtain a fresh access service context, outside the
+1. verify the identity, resolve the workspace and obtain a fresh Access context, outside the
    data transaction,
 2. validate the requested action, input shape, field grants and preliminary query budget,
 3. acquire a data connection within a bounded wait,
@@ -837,7 +833,7 @@ A mutation follows this sequence:
     the bounded model of §5.4,
 11. answer success only after the commit succeeds.
 
-A failure before commit rolls back every effect. The backend MUST NOT call the access service or a
+A failure before commit rolls back every effect. The backend MUST NOT call Access or a
 remote subscriber while it holds the business transaction open.
 
 Every successful update, including one that supplies the existing values, increments the record
@@ -946,8 +942,8 @@ The transaction captures deliveries for the subscriber configuration active at m
 Registering a new subscriber affects future events only. Events with no matching subscriber have no
 pending delivery and remain subject to completed-event retention.
 
-Execution uses a configured access service principal and the worker route. Before every command and
-read, the access service resolves that principal's current grants for the workspace scope. The
+Execution uses a configured Access principal and the worker route. Before every command and
+read, Access resolves that principal's current grants for the workspace scope. The
 identity of the user who initiated the work is attribution, never the worker's reusable authority.
 
 A subscriber MUST NOT reach business records through the delivery store's credentials, a raw SQL
@@ -1032,7 +1028,7 @@ The repository publishes a client package that:
 - implements collection and schema queries, cursor traversal, idempotency keys and record
   preconditions,
 - exposes stable error codes without hiding authorization or concurrency refusals,
-- never issues a signature, stores access service credentials, runs a login flow or depends on Studio.
+- never issues a signature, stores Access credentials, runs a login flow or depends on Studio.
 
 The OpenAPI document covers the fixed protocol, envelopes, endpoints and error cases. It describes
 gateway credentials as the external authentication boundary and never asks a client to manufacture
@@ -1050,8 +1046,8 @@ The client is a **bun** and **node** library: it carries its own files and has n
 the packaging check calls the API with it once on each runtime.
 
 A studio consumes the same public APIs as any client, with no privileged database connection and no
-shortcut to secrets. A future access service administration screen requires a separately authorized
-server-side adapter to the access service admin API, outside this release.
+shortcut to secrets. A future Access administration screen requires a separately authorized
+server-side adapter to Access admin API, outside this release.
 
 ## 13. Architecture
 
@@ -1098,7 +1094,7 @@ Variables, defaults and bounds are in [Configuration](configuration.md). Rules:
 - Production MUST refuse absent or placeholder secrets, unprotected remote dependency URLs, unsafe
   database roles, schema drift, unverified bindings and unsupported access context versions. Secrets
   come from files and mounts, never from a command-line value echoed in logs.
-- Development may use gateway and access service fixtures. Production requires a PostgreSQL server.
+- Development may use gateway and Access fixtures. Production requires a PostgreSQL server.
   Integration tests against a real server remain mandatory: an embedded engine alone does not
   establish isolation, locking or the correctness of worker claims.
 
@@ -1116,11 +1112,11 @@ The readiness statuses are shared by the three services: `ready`, `draining` and
 draining service answers `draining` before it stops admitting requests, so the deployment takes the
 instance out of rotation.
 
-Readiness may reuse a successful authenticated access service discovery for at most ten seconds.
+Readiness may reuse a successful authenticated Access discovery for at most ten seconds.
 Workers also require access to the delivery store and a valid subscriber configuration. Probes are
 not routed through ordinary workspace authorization.
 
-Metrics cover: request counts and durations by normalized route and status; access service duration
+Metrics cover: request counts and durations by normalized route and status; Access duration
 and failures; context cache hits; database pool waits; authorization refusals; transaction rollbacks;
 outbox backlog and age; failed deliveries; retries; drain state; and catalog cache hits and misses.
 
@@ -1134,7 +1130,7 @@ dependency durations, and internal tenant and workspace identifiers where operat
 
 Credentials, cookies, signatures, complete filters and bodies, business field values, and connection
 strings holding a secret are redacted. Authorization refusals are observable, without returning the
-access service's raw reasons to the caller.
+Access's raw reasons to the caller.
 
 ### 15.3 Shutdown and cancellation
 
@@ -1187,7 +1183,7 @@ Required scenarios:
 - mixed create and read traffic under tenant isolation,
 - concurrent updates of one record,
 - multiple backend replicas and lease recovery,
-- access service outage, slow SQL, expired authorization and dependency recovery,
+- Access outage, slow SQL, expired authorization and dependency recovery,
 - maximum filters, page sizes, expansions and response budgets.
 
 A deployment declares its own request rate and latency objective; no capacity number is a release
@@ -1209,7 +1205,7 @@ No item is complete until an appropriate automated check demonstrates its behavi
 | Gateway compatibility | The workspace's unmodified gateway forwards real `ES256`-signed requests that the backend accepts with the public key; forged signatures, tampered identities and workspace mismatches fail; a current-format route refuses the legacy format. |
 | Client packaging | The client tarball installs outside the repository, imports by its public name, and resolves its own files without the service's dependencies. |
 | Baseline drift | The baseline manifest, this specification's baseline block and the workflows agree. |
-| Access service compatibility | The real context implementation returns the complete user and group key set and preserves the existing decisions contract. |
+| Access compatibility | The real context implementation returns the complete user and group key set and preserves the existing decisions contract. |
 | PostgreSQL integration | Row-level security, composite reference constraints, refusal of a missing context, pool reuse, concurrent version checks, migration drift and role restrictions. |
 | Transaction failure | A failure injected at every mutation stage leaves record, audit, event and receipt all committed or all absent. |
 | Version history | A version image is written by the change statement; a change the guard refuses writes no image; a version the caller may not read is not found; the deployment's policies authorize a rollback. |
@@ -1221,7 +1217,7 @@ No item is complete until an appropriate automated check demonstrates its behavi
 Mandatory adversarial cases:
 
 1. A grant for workspace A cannot read, write, count, reference or expand workspace B's data.
-2. An access service grant for one tenant does not make another tenant's registered workspace
+2. Access grant for one tenant does not make another tenant's registered workspace
    accessible.
 3. A forged tenant, forged route, e-mail address match or stale role claim cannot influence
    authorization.
@@ -1237,11 +1233,11 @@ Mandatory adversarial cases:
 10. A `POST` retried after a committed but lost response creates one record and returns its original
     receipt.
 11. Reusing a create key with another body cannot create another record within the retention window.
-12. An expired or malformed access service context, wrong context identifiers and incomplete
+12. An expired or malformed Access context, wrong context identifiers and incomplete
     capability sets never allow a data operation.
 13. A pooled connection never keeps a previous tenant, workspace or principal scope.
 14. Runtime credentials cannot disable row-level security, alter the schema, edit audit history, or
-    query the access service's tables.
+    query Access's tables.
 15. A subscriber cannot turn an actor's attribution into current authorization.
 16. All backend functionality and API tests run without any Studio process or package.
 

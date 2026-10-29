@@ -26,7 +26,7 @@ export interface AccessServiceOptions {
   policy?: AccessPolicy
   /** Optional service token that callers must present. */
   token?: string
-  /** Simulates an unavailable access service (used to test fail-closed behaviour). */
+  /** Simulates an unavailable Access (used to test fail-closed behaviour). */
   unavailable?: boolean
   /** The port to listen on, 0 picks a free one. */
   port?: number
@@ -83,7 +83,7 @@ export interface StartedAccessService {
   /**
    * Makes the service unavailable, and available again.
    *
-   * The tests use it to simulate an outage of the access service: the
+   * The tests use it to simulate an outage of Access: the
    * gateway has to refuse the request, and it has to say that the service
    * is unavailable and not that the caller may not use the workspace.
    */
@@ -95,12 +95,12 @@ export interface StartedAccessService {
  * Starts the access fixture.
  *
  * The fixture makes the authorization decisions with a static policy: it is
- * a stand in for a real access service, never one itself.
+ * a stand in for a real Access, never one itself.
  */
 export async function startAccessService(
   options: AccessServiceOptions = {}
 ): Promise<StartedAccessService> {
-  assertFixtureAllowed('access service')
+  assertFixtureAllowed('Access')
   let policy = options.policy ?? DEFAULT_POLICY
   let unavailable = options.unavailable ?? false
   const requests: StartedAccessService['requests'] = []
@@ -198,7 +198,7 @@ if (import.meta.main) {
       console.error(
         JSON.stringify({
           level: 'error',
-          msg: 'the development access service must not run in production',
+          msg: 'the development Access must not run in production',
           error: error.message,
         })
       )

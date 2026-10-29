@@ -9,8 +9,8 @@
  *                              or a container when the machine has no
  *                              binaries of PostgreSQL)
  *   - the identity provider   (the fixture of the gateway, on :5556)
- *   - the access service      (:8081)
- *   - the data service        (:8082)
+ *   - Access      (:8081)
+ *   - Data        (:8082)
  *   - the gateway             (:8080)
  *   - the console             (:8083)
  *
@@ -24,20 +24,20 @@
  *   --help    the usage of the command
  *
  * The runner writes the files of the machine in `.tmp/dev/`: the route
- * table of the gateway, the bindings of the data service, the key of the
+ * table of the gateway, the bindings of Data, the key of the
  * cursors and the credential of the access context contract. The files
  * are generated: they are not in the repository.
  *
  * The machine has **one** PostgreSQL server, and every service has its
- * own database on it: `data` for the data service, `access` for the
- * access service. The state of the machine is therefore the data
+ * own database on it: `data` for Data, `access` for the
+ * Access. The state of the machine is therefore the data
  * directory of the server alone (`.pg/`, or the volume of the container
  * when the machine has no binaries of PostgreSQL).
  *
- * The runner seeds the access service with a tenant, a principal, a
+ * The runner seeds Access with a tenant, a principal, a
  * group, the roles of the permissions and the grants of the development
  * and the grants of the console, and it registers the workspace in the
- * registry of the data service. The seed is idempotent: a run
+ * registry of Data. The seed is idempotent: a run
  * that finds the tenant of the development changes it.
  *
  * The runner of the gateway alone is `bun run dev:gateway`: it starts
@@ -66,7 +66,7 @@ const PORTS = {
   identity: 5556,
 } as const
 
-/** The url of the access service. */
+/** The url of Access. */
 const accessUrl = `http://127.0.0.1:${PORTS.access}`
 
 /** The url of the identity provider of the development. */
@@ -83,7 +83,7 @@ const consoleUrl = `http://localhost:${PORTS.console}`
  *
  * The route table names a host without a port: the gateway strips the
  * port of the host of the caller before it matches it. The bindings of
- * the data service name the host as the gateway writes it in
+ * Data name the host as the gateway writes it in
  * `x-forwarded-host`, and the port is part of it.
  */
 const routeHost = 'localhost'
@@ -113,7 +113,7 @@ const SECRETS = {
 const TENANT = {
   slug: 'acme',
   displayName: 'Acme',
-  /** The client of the gateway at the access service. */
+  /** The client of the gateway at Access. */
   clientId: 'platform',
 } as const
 
@@ -133,10 +133,10 @@ const PRINCIPAL = {
 /** The group of the principals of the development. */
 const GROUP = 'editors'
 
-/** The route of the data service. */
+/** The route of Data. */
 const ROUTE = 'data-api'
 
-/** The route of the console in the access service. */
+/** The route of the console in Access. */
 const CONSOLE_ROUTE = 'console'
 
 /** The services of the run, and the way to stop them. */
@@ -341,7 +341,7 @@ async function waitFor(name: string, url: string, timeoutMs = 60_000): Promise<v
   throw new Error(`${name} did not answer at ${url}`)
 }
 
-/** Calls the administration of the access service. */
+/** Calls the administration of Access. */
 async function admin(
   path: string,
   body: unknown,
@@ -357,7 +357,7 @@ async function admin(
   })
   const text = await response.text()
   if (!response.ok) {
-    throw new Error(`the administration of the access service failed at ${path}: ${text}`)
+    throw new Error(`the administration of Access failed at ${path}: ${text}`)
   }
   return JSON.parse(text) as Record<string, unknown>
 }
@@ -366,7 +366,7 @@ async function admin(
  * Writes the files of the development machine.
  *
  * The pair of the identity signature is generated for the run: the
- * gateway holds the private half and the data service holds the public
+ * gateway holds the private half and Data holds the public
  * one, and the upstreams of the run verify the identities with it.
  */
 async function writeFiles(): Promise<{
@@ -384,7 +384,7 @@ async function writeFiles(): Promise<{
   const publicKeyFile = join(work, 'identity-signing.public.pem')
   await writeFile(publicKeyFile, pair.publicKey.export({ type: 'spki', format: 'pem' }).toString())
 
-  // The key of the tokens of the access service: the gateway reads it
+  // The key of the tokens of Access: the gateway reads it
   // in the JWKS of the service, and a service without a key cannot issue
   // a token. The tokens of the service are signed with RS256.
   const signing = generateKeyPairSync('rsa', { modulusLength: 2048 })
@@ -449,13 +449,13 @@ async function writeFiles(): Promise<{
 }
 
 /**
- * Seeds the access service.
+ * Seeds Access.
  *
  * The tenant of the development is registered against the identity
  * provider of the run, the principal is the one of the provider, the
  * group holds the rights of the editors, the roles are the named sets
  * of the permissions, and the grants are the ones of the route of the
- * data service and the ones of the route of the console.
+ * Data and the ones of the route of the console.
  *
  * The answer is the identifier of the tenant: the registry of the data
  * service holds the tenant of every workspace.
@@ -479,7 +479,7 @@ async function seed(): Promise<string> {
   })
   const tenantId = String(tenant.id ?? '')
   if (!tenantId) {
-    throw new Error('the administration of the access service did not answer the identifier')
+    throw new Error('the administration of Access did not answer the identifier')
   }
 
   const principal = await admin('/v1/admin/users', {
@@ -489,7 +489,7 @@ async function seed(): Promise<string> {
   })
   const principalId = String(principal.id ?? '')
   if (!principalId) {
-    throw new Error('the administration of the access service did not answer the identifier')
+    throw new Error('the administration of Access did not answer the identifier')
   }
 
   await admin('/v1/admin/groups', {
@@ -550,7 +550,7 @@ async function seed(): Promise<string> {
     'PUT'
   )
 
-  // The permissions of the console: the keys that the access service
+  // The permissions of the console: the keys that Access
   // holds for the caller on the route of the console. The workspace of
   // the grant is the tenant: the contract of the access context asks
   // about the tenant of the caller.
@@ -642,7 +642,7 @@ async function main(): Promise<void> {
   postgres = server
   say(`  postgres        ${postgresLine()}`)
 
-  // The roles of the data service and the schema of its deployment.
+  // The roles of Data and the schema of its deployment.
   // The administrator of the server is reached the way the server
   // answers: through the socket of the development when the server
   // runs in the working tree, and through the published port of the
@@ -652,7 +652,7 @@ async function main(): Promise<void> {
   const runtimeUrl = `postgres://data_runtime:${SECRETS.runtimePassword}@127.0.0.1:${server.port}/data`
   const registryUrl = `postgres://data_registry:${SECRETS.registryPassword}@127.0.0.1:${server.port}/data`
   await run(
-    'the provisioning of the data service',
+    'the provisioning of Data',
     ['bun', 'run', 'scripts/cli/provision.ts'],
     join(root, 'packages', 'data'),
     {
@@ -665,7 +665,7 @@ async function main(): Promise<void> {
     }
   )
   await run(
-    'the migrations of the data service',
+    'the migrations of Data',
     ['bun', 'run', 'scripts/cli/migrate.ts'],
     join(root, 'packages', 'data'),
     {
@@ -673,12 +673,12 @@ async function main(): Promise<void> {
     }
   )
 
-  // The database of the access service is a database of the same
+  // The database of Access is a database of the same
   // server: the machine of the development has one PostgreSQL, and the
   // services have their own database on it.
   const accessDatabaseUrl = `postgres://access_owner:${SECRETS.accessOwnerPassword}@127.0.0.1:${server.port}/access`
   await run(
-    'the provisioning of the access service',
+    'the provisioning of Access',
     ['bun', 'run', 'scripts/cli/provision.ts'],
     join(root, 'packages', 'access'),
     {
@@ -692,7 +692,7 @@ async function main(): Promise<void> {
   const files = await writeFiles()
 
   // The identity provider of the development: the fixture of the
-  // gateway, and the provider of the tenant of the access service.
+  // gateway, and the provider of the tenant of Access.
   start(
     'identity provider',
     ['bun', 'run', 'services/fixtures/oidc-provider.ts'],
@@ -707,9 +707,9 @@ async function main(): Promise<void> {
   )
   await waitFor('the identity provider', `${identityUrl}/.well-known/openid-configuration`)
 
-  // The access service: it holds the tenants, the principals and the
+  // Access: it holds the tenants, the principals and the
   // decisions. Its database is a database of the server of the machine.
-  start('access service', ['bun', 'run', 'src/main.ts'], join(root, 'packages', 'access'), {
+  start('Access', ['bun', 'run', 'src/main.ts'], join(root, 'packages', 'access'), {
     ACCESS_ENVIRONMENT: 'development',
     ACCESS_HOST: '127.0.0.1',
     ACCESS_PORT: String(PORTS.access),
@@ -732,15 +732,15 @@ async function main(): Promise<void> {
     ACCESS_SIGNING_KID: 'dev-1',
     ACCESS_LOG_LEVEL: 'info',
   })
-  await waitFor('the access service', `${accessUrl}/healthz`)
+  await waitFor('Access', `${accessUrl}/healthz`)
 
   // The tenant of the development, the principal and the grants.
   const tenantId = await seed()
   say('  the tenant      acme, with alice, the group of the editors, the roles and the grants')
 
-  // The data service: the workspace of the development is registered in
+  // Data: the workspace of the development is registered in
   // the registry of the service.
-  start('data service', ['bun', 'run', 'src/main.ts'], join(root, 'packages', 'data'), {
+  start('Data', ['bun', 'run', 'src/main.ts'], join(root, 'packages', 'data'), {
     DATA_ENVIRONMENT: 'development',
     DATA_HOST: '127.0.0.1',
     DATA_PORT: String(PORTS.data),
@@ -755,7 +755,7 @@ async function main(): Promise<void> {
     DATA_CURSOR_KEY_FILE: files.cursorKeyFile,
     DATA_LOG_LEVEL: 'info',
   })
-  await waitFor('the data service', `http://127.0.0.1:${PORTS.data}/healthz`)
+  await waitFor('Data', `http://127.0.0.1:${PORTS.data}/healthz`)
   await run(
     'the workspace of the development',
     [
@@ -776,7 +776,7 @@ async function main(): Promise<void> {
     { DATA_OWNER_DATABASE_URL: ownerUrl }
   )
 
-  // The gateway: the caller reaches it, and it reaches the data service.
+  // The gateway: the caller reaches it, and it reaches Data.
   start('gateway', ['bun', 'run', 'src/main.ts'], join(root, 'packages', 'gateway'), {
     GATEWAY_CONFIG: files.routesFile,
     GATEWAY_HOST: '127.0.0.1',
@@ -801,7 +801,7 @@ async function main(): Promise<void> {
   await waitFor('the gateway', `http://127.0.0.1:${PORTS.gateway}/healthz`)
 
   // The console: the web application of the platform. It is a client of
-  // the access service and of the gateway, and it holds the token of the
+  // Access and of the gateway, and it holds the token of the
   // caller on its own server.
   start('console', ['bun', 'run', 'src/main.ts'], join(root, 'packages', 'console'), {
     CONSOLE_ENVIRONMENT: 'development',
@@ -826,8 +826,8 @@ async function main(): Promise<void> {
   say('  The platform is up')
   say('  ─────────────────────────────────────────────')
   say(`  gateway         ${gatewayUrl}`)
-  say(`  access service  ${accessUrl}`)
-  say(`  data service    http://127.0.0.1:${PORTS.data}`)
+  say(`  Access  ${accessUrl}`)
+  say(`  Data    http://127.0.0.1:${PORTS.data}`)
   say(`  console         ${consoleUrl}`)
   say(`  identity        ${identityUrl}`)
   say(`  postgres        ${postgresLine()}`)

@@ -76,23 +76,21 @@ describe('the two sides of the surface', () => {
   })
 
   test('a route that the documentation does not name is a problem', () => {
-    const problems = problemsOf('data service', [{ method: 'GET', path: '/healthz' }], [])
-    expect(problems).toEqual([
-      'the data service serves GET /healthz, and its documentation does not name it',
-    ])
+    const problems = problemsOf('Data', [{ method: 'GET', path: '/healthz' }], [])
+    expect(problems).toEqual(['Data serves GET /healthz, and its documentation does not name it'])
   })
 
   test('an endpoint the documentation names and the service does not serve is a problem', () => {
-    const problems = problemsOf('data service', [], [{ method: 'GET', path: '/healthz' }])
+    const problems = problemsOf('Data', [], [{ method: 'GET', path: '/healthz' }])
     expect(problems).toEqual([
-      'the documentation of the data service names GET /healthz, and the service does not serve it',
+      'the documentation of Data names GET /healthz, and the service does not serve it',
     ])
   })
 
   test('the two sides that share their endpoints have no problem', () => {
     expect(
       problemsOf(
-        'data service',
+        'Data',
         [{ method: 'GET', path: '/ws/:workspaceId/v1/me' }],
         [{ method: 'GET', path: '/ws/{workspaceId}/v1/me' }]
       )
@@ -104,7 +102,7 @@ describe('the probes of the services', () => {
   test('the probes of two surfaces that agree have no problem', () => {
     const descriptions = [
       { name: 'the gateway', ...probes() },
-      { name: 'the access service', ...probes() },
+      { name: 'Access', ...probes() },
     ]
     expect(probeProblemsOf(descriptions)).toEqual([])
   })
@@ -113,7 +111,7 @@ describe('the probes of the services', () => {
     const descriptions = [
       { name: 'the gateway', ...probes() },
       {
-        name: 'the access service',
+        name: 'Access',
         ...probes(),
         refused: {
           type: 'object',
@@ -129,7 +127,7 @@ describe('the probes of the services', () => {
     const descriptions = [
       { name: 'the gateway', ...probes() },
       {
-        name: 'the access service',
+        name: 'Access',
         ...probes(),
         health: {
           type: 'object',
@@ -139,7 +137,7 @@ describe('the probes of the services', () => {
       },
     ]
     expect(probeProblemsOf(descriptions)).toEqual([
-      'the health of the access service does not carry version, and the health of every service carries it',
+      'the health of Access does not carry version, and the health of every service carries it',
     ])
   })
 
@@ -165,10 +163,10 @@ describe('the surface of the services of the platform', () => {
     // documentation share their endpoints.
     const access = await readFile(join(root, 'packages/access/src/app/app.ts'), 'utf8')
     const document = await readFile(join(root, 'docs/access/api.md'), 'utf8')
-    expect(problemsOf('access service', routesOf([access]), documentedOf(document))).toEqual([])
+    expect(problemsOf('Access', routesOf([access]), documentedOf(document))).toEqual([])
   })
 
-  test('the data service publishes the endpoints it serves', async () => {
+  test('Data publishes the endpoints it serves', async () => {
     const { openapiDocument } = await import('../packages/data/src/app/openapi')
     const document = openapiDocument('1', '1.0.0') as {
       paths: Record<string, Record<string, unknown>>
@@ -183,10 +181,10 @@ describe('the surface of the services of the platform', () => {
       ],
       { scope: { name: 'scope', prefix: '/ws/:workspaceId/v1' } }
     )
-    expect(problemsOf('data service', routes, described)).toEqual([])
+    expect(problemsOf('Data', routes, described)).toEqual([])
   })
 
-  test('the access service publishes the endpoints it serves', async () => {
+  test('Access publishes the endpoints it serves', async () => {
     const { openapiDocument } = await import('../packages/access/src/app/openapi')
     const document = openapiDocument('1.0.0') as {
       paths: Record<string, Record<string, unknown>>
@@ -195,7 +193,7 @@ describe('the surface of the services of the platform', () => {
       Object.keys(methods).map((method) => ({ method: method.toUpperCase(), path }))
     )
     const routes = routesOf([await readFile(join(root, 'packages/access/src/app/app.ts'), 'utf8')])
-    expect(problemsOf('access service', routes, described)).toEqual([])
+    expect(problemsOf('Access', routes, described)).toEqual([])
   })
 
   test('the gateway publishes the endpoints it serves', async () => {

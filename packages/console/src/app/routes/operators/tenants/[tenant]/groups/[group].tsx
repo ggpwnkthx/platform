@@ -1,7 +1,7 @@
 /**
  * A group: its members and its rights.
  *
- * The membership is written whole: the access service replaces the
+ * The membership is written whole: Access replaces the
  * members of a group with the ones the form names.
  */
 

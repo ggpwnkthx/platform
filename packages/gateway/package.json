@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "The gateway of the platform: it authenticates a caller, asks an access service and forwards the request to an upstream of its route.",
+  "description": "The gateway of the platform: it authenticates a caller, asks Access and forwards the request to an upstream of its route.",
   "scripts": {
     "dev": "bun run scripts/dev/dev.ts",
     "start": "bun run src/main.ts",

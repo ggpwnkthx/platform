@@ -166,7 +166,7 @@ async function main(): Promise<void> {
   const removed = await call(`/v1/admin/roles/${role.body.id}`, 'DELETE')
   if (removed.status !== 204) fail('the role could not be removed', removed)
 
-  // 12. the revocation, when the access service has to end
+  // 12. the revocation, when Access has to end
   const revoked = await call(`/v1/admin/grants/${grant.body.id}`, 'DELETE')
   if (revoked.status !== 204) fail('the grant could not be revoked', revoked)
 

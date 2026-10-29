@@ -7,8 +7,8 @@
 <!-- Which one of the three, and why the change belongs to it. -->
 
 - [ ] `packages/gateway/` — the gateway
-- [ ] `packages/access/` — the access service
-- [ ] `packages/data/` — the data service
+- [ ] `packages/access/` — Access
+- [ ] `packages/data/` — Data
 - [ ] the platform — the repository, the continuous integration, the release
 
 ## The contract

@@ -381,7 +381,7 @@ if (import.meta.main) {
     : undefined
   // The redirect uris the provider accepts, separated by commas. The
   // runner of the platform starts the provider as a process, and the
-  // callback of the access service is not the callback of the gateway.
+  // callback of Access is not the callback of the gateway.
   const redirectUris = process.env.GATEWAY_OIDC_REDIRECT_URIS
     ? process.env.GATEWAY_OIDC_REDIRECT_URIS.split(',')
         .map((uri) => uri.trim())

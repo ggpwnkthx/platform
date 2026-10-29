@@ -1,5 +1,5 @@
 /**
- * The paths of the description of the API of the access service.
+ * The paths of the description of the API of Access.
  *
  * The module holds the paths of the contract and the parameters and the
  * responses they use. The document itself is in openapi.ts.
@@ -112,7 +112,7 @@ function readyPath(): Record<string, unknown> {
   }
 }
 
-/** The paths of the description of the API of the access service. */
+/** The paths of the description of the API of Access. */
 export function apiPaths(): Record<string, unknown> {
   return {
     '/healthz': healthPath('access'),
@@ -133,7 +133,7 @@ export function apiPaths(): Record<string, unknown> {
       get: {
         summary: 'This document.',
         description:
-          'The description of the API of the access service: the paths it serves and the shape of their answers.',
+          'The description of the API of Access: the paths it serves and the shape of their answers.',
         responses: {
           200: jsonResponse('The description of the API.'),
         },
@@ -142,8 +142,7 @@ export function apiPaths(): Record<string, unknown> {
     '/.well-known/openid-configuration': {
       get: {
         summary: 'The discovery document of the provider of the gateway.',
-        description:
-          'The fields of the discovery document are in the specification of the access service.',
+        description: 'The fields of the discovery document are in the specification of Access.',
         responses: {
           200: jsonResponse('The discovery document.'),
         },
@@ -153,7 +152,7 @@ export function apiPaths(): Record<string, unknown> {
       get: {
         summary: 'The authorization endpoint.',
         description:
-          'The gateway sends the browser of a caller here. The access service authenticates the caller against the provider of the tenant.',
+          'The gateway sends the browser of a caller here. Access authenticates the caller against the provider of the tenant.',
         parameters: [
           {
             name: 'client_id',
@@ -192,7 +191,7 @@ export function apiPaths(): Record<string, unknown> {
     },
     '/oauth/tenant/callback': {
       get: {
-        summary: 'The callback of the access service at the provider of a tenant.',
+        summary: 'The callback of Access at the provider of a tenant.',
         description:
           'The provider of the tenant sends the browser back here with the code of the authorization.',
         responses: {
@@ -215,7 +214,7 @@ export function apiPaths(): Record<string, unknown> {
     },
     '/oauth/jwks': {
       get: {
-        summary: 'The public keys of the access service.',
+        summary: 'The public keys of Access.',
         description:
           'The keys are in the JWKS format. The provider of the tenant uses them to sign the identity of a request.',
         responses: {
@@ -236,11 +235,11 @@ export function apiPaths(): Record<string, unknown> {
     },
     '/v1/decisions': {
       post: {
-        summary: 'The decision of the access service.',
+        summary: 'The decision of Access.',
         description:
-          'The contract the gateway already speaks: the caller, the workspace and the action, and the answer of the access service.',
+          'The contract the gateway already speaks: the caller, the workspace and the action, and the answer of Access.',
         responses: {
-          200: jsonResponse('The decision of the access service.'),
+          200: jsonResponse('The decision of Access.'),
           400: errorResponse('The request is not a valid decision.'),
         },
       },

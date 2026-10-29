@@ -49,7 +49,7 @@ The gateway refuses to start in production without these. The error names the mi
 | `GATEWAY_OIDC_ALLOW_INSECURE` | `true` outside production | Accept a provider not served over https. |
 | `GATEWAY_OIDC_ALLOW_PUBLIC_CLIENT` | `false` | Accept a provider client without a secret. |
 
-## Access service
+## Access
 
 | Variable | Default | Effect |
 | --- | --- | --- |
@@ -59,7 +59,7 @@ The gateway refuses to start in production without these. The error names the mi
 | `GATEWAY_ACCESS_TIMEOUT_MS` | `3000` | Wait for a decision. |
 | `GATEWAY_ACCESS_CACHE_TTL_MS` | `5000` | Decision cache lifetime, which is the revocation latency. Routes override it with `accessCacheTtlMs`. |
 | `GATEWAY_ACCESS_STALE_GRACE_MS` | `0` | Serve the last allow decision this long into an outage ([spec §6.2](spec.md#62-outage-grace)). Routes override it with `accessStaleGraceMs`. Max `3600000`. |
-| `GATEWAY_ACCESS_BREAKER_FAILURES` | `5` | Consecutive failures before the service is no longer called. `0` disables the breaker ([spec §6.4](spec.md#64-access-service-breaker)). |
+| `GATEWAY_ACCESS_BREAKER_FAILURES` | `5` | Consecutive failures before the service is no longer called. `0` disables the breaker ([spec §6.4](spec.md#64-access-breaker)). |
 | `GATEWAY_ACCESS_BREAKER_COOLDOWN_MS` | `5000` | How long the open breaker skips the service. |
 
 ## Sessions and identity signing
@@ -130,7 +130,7 @@ WebSocket upstreams always use plain http ([spec §11.1.2](spec.md#1112-upstream
 | `GATEWAY_ALLOW_NO_RATE_LIMITS` | `false` | Allow production with every rate limit off. |
 | `GATEWAY_MAX_BODY_BYTES` | `10485760` | Default request body limit. |
 | `GATEWAY_MAX_CONCURRENT_REQUESTS` | `1000` | Concurrent upstream exchanges. |
-| `GATEWAY_MAX_PENDING_REQUESTS` | `1000` | Requests inside the gateway, including those waiting on the access service. Overflow gets `503 gateway_overloaded` ([spec §2.4](spec.md#24-admission)). |
+| `GATEWAY_MAX_PENDING_REQUESTS` | `1000` | Requests inside the gateway, including those waiting on Access. Overflow gets `503 gateway_overloaded` ([spec §2.4](spec.md#24-admission)). |
 | `GATEWAY_UPSTREAM_ATTEMPT_TIMEOUT_MS` | `2000` | Budget of one attempt when a route has several upstreams; resendable requests only. Routes override it with `timeouts.upstreamAttemptMs`. |
 | `GATEWAY_REPLAY_MAX_BYTES` | `65536` | Largest body held in memory so it can be resent to the next upstream. Routes override it with `replayMaxBytes`. |
 | `GATEWAY_UPSTREAM_BREAKER_FAILURES` | `3` | Consecutive failures before an upstream moves to the end of the list ([spec §11.4](spec.md#114-multiple-upstreams)). |
@@ -181,5 +181,5 @@ Read by `gateway-control` only ([spec §12.7](spec.md#127-control-plane)).
 ## Test suite
 
 Read by tests, not the gateway: `GATEWAY_TEST_REDIS_URL`, `GATEWAY_TEST_POSTGRES_URL`, and the
-`GATEWAY_TEST_ACCESS_*` variables of the access-service conformance suite (see
-[Operations](operations.md#access-service)).
+`GATEWAY_TEST_ACCESS_*` variables of the Access conformance suite (see
+[Operations](operations.md#access)).

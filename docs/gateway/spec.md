@@ -1,7 +1,7 @@
 # Specification
 
 The gateway authenticates a caller against an OpenID Connect provider, asks an
-access service whether the caller may use a workspace, and forwards the request
+Access whether the caller may use a workspace, and forwards the request
 to the matched route's upstream. This page is normative for product behavior and
 source organization.
 
@@ -24,11 +24,11 @@ implementation guide is not a requirement until it is recorded here.
 | **route** | A host and path match with one policy and either one upstream or an ordered list of upstreams tried one at a time. |
 | **workspace** | The unit of access control, named by a path placeholder (`{workspaceId}`). |
 | **upstream** | The application a request is forwarded to. |
-| **access service** | The external service that decides whether a subject may use a workspace. |
+| **Access** | The external service that decides whether a subject may use a workspace. |
 
 Invariants (enforced in code, not configurable):
 
-- The gateway never decides access on its own. It asks the access service and
+- The gateway never decides access on its own. It asks Access and
   fails closed.
 - Only the gateway writes its identity headers. A copy sent by a client is
   always stripped.
@@ -102,8 +102,8 @@ Every other request runs these steps, in this order:
 10. **Cross-site guard.** Applied when the request carries the session cookie
     (§8). Refusal → `403 cross_site_request`.
 11. **Workspace check.** Read the placeholder, validate it as a UUID when
-    `requireUuid` is set, and ask the access service (§6). Denial → `403
-    workspace_forbidden`; access service outage → `503 access_unavailable`.
+    `requireUuid` is set, and ask Access (§6). Denial → `403
+    workspace_forbidden`; Access outage → `503 access_unavailable`.
 12. **Dispatch.** WebSocket upgrade (§10) or HTTP proxying (§11).
 
 Responses the gateway generates itself are JSON
@@ -172,7 +172,7 @@ Top level (each `defaults.*` value applies to routes that declare none):
 | `defaults.crossSite` | Cross-site policy (§8). Default `navigation`. |
 | `defaults.forwardAuthorization` | Whether the caller's `Authorization` header is forwarded upstream (§7.1). Default `true`. |
 | `defaults.accessCacheTtlMs` | Lifetime of a cached access decision (§6). Default: the environment's value. |
-| `defaults.accessStaleGraceMs` | Access-service outage grace (§6.2). Default: the environment's value. |
+| `defaults.accessStaleGraceMs` | Access outage grace (§6.2). Default: the environment's value. |
 | `defaults.replayMaxBytes` | Largest body that may be resent to a second upstream (§11.4). Default: the environment's value. |
 | `trustedProxies` | Ranges whose forwarding headers are honored (§7.3). `GATEWAY_TRUSTED_PROXIES` replaces them when set. |
 | `reservedPaths` | Paths the gateway keeps for itself, in addition to §2.2. |
@@ -195,8 +195,8 @@ Route:
 | `crossSite` | `navigation` (default) or `strict` (§8). Replaces `defaults.crossSite`. |
 | `forwardAuthorization` | Whether the caller's `Authorization` header is forwarded (§7.1). Replaces `defaults.forwardAuthorization`. |
 | `accessCacheTtlMs` | Lifetime of a cached access decision, in ms (§6). Replaces `defaults.accessCacheTtlMs`. `0` asks the service on every request. |
-| `accessStaleGraceMs` | How long, in ms, a decision may be served after the access service became unreachable (§6.2). Precedence: route, then `defaults.accessStaleGraceMs`, then `GATEWAY_ACCESS_STALE_GRACE_MS`. `0` disables the grace. |
-| `accessCheck` | Ask the access service about a route that names no workspace (§6.3). Default `false` (not checked). Requires an authentication mode other than `none`. |
+| `accessStaleGraceMs` | How long, in ms, a decision may be served after Access became unreachable (§6.2). Precedence: route, then `defaults.accessStaleGraceMs`, then `GATEWAY_ACCESS_STALE_GRACE_MS`. `0` disables the grace. |
+| `accessCheck` | Ask Access about a route that names no workspace (§6.3). Default `false` (not checked). Requires an authentication mode other than `none`. |
 | `websocket` | Accept WebSocket upgrades. Default `false`. |
 
 An unknown key is a configuration error, never silently ignored.
@@ -293,8 +293,8 @@ its default. A production deployment must set:
 | `GATEWAY_OIDC_CLIENT_ID` | The gateway's client ID. |
 | `GATEWAY_OIDC_REDIRECT_URI` | URL the provider sends the browser back to. |
 | `GATEWAY_OIDC_CLIENT_SECRET` | Client secret. `GATEWAY_OIDC_ALLOW_PUBLIC_CLIENT=true` replaces it when the provider accepts a public client. |
-| `GATEWAY_ACCESS_URL` | Access service URL. |
-| `GATEWAY_ACCESS_TOKEN` | Token the gateway authenticates to the access service with. `GATEWAY_ACCESS_ALLOW_ANONYMOUS=true` replaces it when the service authenticates the gateway by other means. |
+| `GATEWAY_ACCESS_URL` | Access URL. |
+| `GATEWAY_ACCESS_TOKEN` | Token the gateway authenticates to Access with. `GATEWAY_ACCESS_ALLOW_ANONYMOUS=true` replaces it when the service authenticates the gateway by other means. |
 | One rate limit | At least one of `GATEWAY_RATE_LIMIT_MAX`, `GATEWAY_RATE_LIMIT_GLOBAL_MAX`, `GATEWAY_RATE_LIMIT_PRINCIPAL_MAX` and `GATEWAY_RATE_LIMIT_TOTAL_MAX` must be non-zero. `GATEWAY_ALLOW_NO_RATE_LIMITS=true` replaces them when another layer protects the deployment. |
 | Shared state | `GATEWAY_SESSION_URL` and `GATEWAY_SHARED_STATE_URL` must name a Redis or Postgres server. A session in one replica's memory is unknown to the others, and a limit in one replica's memory limits only that replica. `GATEWAY_ALLOW_MEMORY_STATE=true` replaces them for a single-node deployment that accepts this. |
 
@@ -443,7 +443,7 @@ cookie could fix a browser's session to an ID of its choice (§7.2).
 
 ## 6. Workspace access
 
-For each request that needs a decision, the gateway calls the access service
+For each request that needs a decision, the gateway calls Access
 (protocol: §6.1):
 
 ```
@@ -495,9 +495,9 @@ A route may set its own lifetime with `accessCacheTtlMs`, which replaces
 every request, making revocation on that route immediate. Routes usually share
 one lifetime; a route serving a sensitive workspace may need its own.
 
-### 6.1 Access service protocol
+### 6.1 Access protocol
 
-The access service is a deployment dependency, not part of the gateway; a
+Access is a deployment dependency, not part of the gateway; a
 deployment may implement it in any language. The protocol is published so a
 service can be written and checked against it.
 
@@ -555,7 +555,7 @@ drift.
 
 ### 6.2 Outage grace
 
-An access service outage stops the deployment's traffic: every request on a
+Access outage stops the deployment's traffic: every request on a
 route that needs a decision gets `503 access_unavailable`.
 
 A route may opt into a **grace**: `accessStaleGraceMs`
@@ -612,9 +612,9 @@ workspaces.
 - The identity written upstream carries no workspace, and the identity
   signature is the request's (§7.4).
 
-### 6.4 Access service breaker
+### 6.4 Access breaker
 
-The access service is on the path of every request to a route that names a
+Access is on the path of every request to a route that names a
 workspace. A down service makes requests **slow** as well as refused: each
 waits out the call budget (`GATEWAY_ACCESS_TIMEOUT_MS`, 3 s by default), so
 requests pile up and the outage amplifies itself.
@@ -715,7 +715,7 @@ characters.
 control character or is longer than 512 characters cannot be written to a
 header, so the request fails with `500 internal_error` and the upstream never
 receives an identity it cannot trust. Rewriting the subject could merge two
-callers: the access service would decide on one subject while the upstream
+callers: Access would decide on one subject while the upstream
 read another.
 
 ### 7.2 Upstream → client
@@ -825,7 +825,7 @@ upstream rebuilds the payload byte for byte.
 The signature covers exactly the header values: the **unchanged** subject,
 the **sanitized** email and workspace, and the **filtered** roles. A role
 containing a comma or control character is dropped because it would make the
-comma-separated `x-gateway-roles` ambiguous. Roles sent to the access service
+comma-separated `x-gateway-roles` ambiguous. Roles sent to Access
 are not filtered. A subject that cannot be written to a header fails the
 request with `500` (§7.1).
 
@@ -1072,8 +1072,8 @@ any fails:
 
 1. the **route** still exists and still accepts WebSockets;
 2. the **session** still exists, if the connection was opened with one;
-3. the **access service** still allows the workspace, asked fresh rather than
-   from the cache. A route without a workspace that asks the access service
+3. the **Access** still allows the workspace, asked fresh rather than
+   from the cache. A route without a workspace that asks Access
    about itself is asked again too, and the decision is never stale (§6.2).
 
 A revalidation that cannot be performed closes the connection: the gateway
@@ -1083,7 +1083,7 @@ must not keep a connection it cannot vouch for. `0` disables revalidation.
 the interval, and its period is drawn from a band of forty percent around the
 interval. A fixed interval would make connections opened together revalidate
 at the same instant, and because revalidation bypasses the cache (§6.2), the
-burst would hit the access service directly.
+burst would hit Access directly.
 
 **Guards.**
 
@@ -1341,9 +1341,9 @@ is not sent twice.
 | `gateway_requests_total` | `route`, `method`, `status` | Every request the gateway answered, refusals included. |
 | `gateway_request_errors_total` | `route` | Responses with a 5xx status. |
 | `gateway_auth_failures_total` | `route`, `reason` | Rejected callers. |
-| `gateway_access_unavailable_total` | `route` | Requests refused because the access service could not be reached. |
-| `gateway_access_stale_total` | `route` | Decisions served while the access service was unreachable (§6.2). |
-| `gateway_access_stale_age_seconds` | `route` | Age of decisions served while the access service was unreachable. |
+| `gateway_access_unavailable_total` | `route` | Requests refused because Access could not be reached. |
+| `gateway_access_stale_total` | `route` | Decisions served while Access was unreachable (§6.2). |
+| `gateway_access_stale_age_seconds` | `route` | Age of decisions served while Access was unreachable. |
 | `gateway_cross_site_refusals_total` | `route` | Requests refused as cross-site. |
 | `gateway_websocket_connections_total` | `route` | Accepted upgrades. |
 | `gateway_websocket_refusals_total` | `reason` | Refused handshakes. |
@@ -1351,7 +1351,7 @@ is not sent twice.
 | `gateway_upstream_duration_seconds` | `route` | Upstream latency: from the request leaving the gateway to the final response headers. |
 | `gateway_upstream_failures_total` | — | Upstream failures: a refused connection, an attempt that ran out of time. |
 | `gateway_upstreams_skipped_total` | — | Times an upstream was moved to the end of the list after failing recently (§11.4). |
-| `gateway_access_duration_seconds` | `route` | Latency of calls that reached the access service (cache hits are not counted). |
+| `gateway_access_duration_seconds` | `route` | Latency of calls that reached Access (cache hits are not counted). |
 | `gateway_bytes_in_total`, `gateway_bytes_out_total` | — | Bytes actually transferred. |
 | `gateway_active_requests` | — | Requests in flight. |
 | `gateway_config_reloads_total` | `result` | Configuration reloads. |
@@ -1397,7 +1397,7 @@ permissive setting:
 | Warning | Meaning |
 | --- | --- |
 | `unauthenticated_route` | The route forwards unauthenticated callers. |
-| `no_workspace_check` | The route authenticates the caller but never asks the access service. |
+| `no_workspace_check` | The route authenticates the caller but never asks Access. |
 | `authorization_forwarded` | The caller's credential reaches the route's upstream. |
 | `cross_site_allowed` | The route accepts cross-site navigations while accepting a session. |
 | `unbounded_body` | The route accepts a body of any size. |
@@ -1647,7 +1647,7 @@ The gateway does not:
 | `src/domains/routing/` | Route identity, host and path matching, parameters, precedence, ambiguity detection. |
 | `src/domains/configuration/` | File schema, strict validation, effective defaults, immutable compiled snapshots, atomic last-good publication. |
 | `src/domains/authentication/` | Principal, mode policy, credential selection, OIDC and JWKS, browser login and logout, signed state, sessions, expiry, cookies. |
-| `src/domains/workspace-access/` | Workspace validation, access-service requests and decisions, cache keys, TTL, cache adapters. |
+| `src/domains/workspace-access/` | Workspace validation, Access requests and decisions, cache keys, TTL, cache adapters. |
 | `src/domains/forwarding/` | Peer and proxy trust, cross-site policy, header and cookie filtering, target URL, sanitized identity, signature. |
 | `src/domains/rate-limiting/` | Sliding windows, scopes, `retry-after`, bounded memory, shared-state counters. |
 | `src/domains/proxying/` | Exchange state, body limits, phase and idle budgets, cancellation, commitment outcomes, active-exchange registry. |
@@ -1666,8 +1666,8 @@ The gateway does not:
 | `src/platform/postgres/` | Construction, pool, TLS settings, schema and disposal of the shared Postgres clients. |
 | `src/runtime/` | Environment, composition root, file watcher, signals, drain. |
 | `src/observability/` | Logging, metrics and observation handles. Knows nothing else. |
-| `services/fixtures/` | Deterministic fixtures for the identity provider, the access service and the upstreams. |
-| `services/` | The access service reference implementation: a runnable deployment component, not a fixture. |
+| `services/fixtures/` | Deterministic fixtures for the identity provider, Access and the upstreams. |
+| `services/` | Access reference implementation: a runnable deployment component, not a fixture. |
 | `test/` | Checks that are not a domain's unit tests. Shared helpers are in `test/support/`. |
 
 ### 14.3 Dependency rules
@@ -1699,7 +1699,7 @@ rules for that table, and for a decision that changes the contract, are in
 ## 16. Release compatibility
 
 The gateway sits on the path of every request to the applications behind it,
-and deployments write their own access service and upstreams against it. Those
+and deployments write their own Access and upstreams against it. Those
 contracts are **versioned promises**; this section says which promise holds
 for which release.
 
@@ -1708,7 +1708,7 @@ for which release.
 | Contract | Defined in |
 | --- | --- |
 | Gateway behavior | This page. |
-| Access service protocol | §6.1, with its conformance suite. |
+| Access protocol | §6.1, with its conformance suite. |
 | Identity signature format | §7.4, with the [upstream-identity.md](upstream-identity.md) guide. |
 | Route table format | §3. |
 | Environment variable names | §4 and [.env.example](../../packages/gateway/.env.example). |
@@ -1740,7 +1740,7 @@ Rules that hold in every release, including after `1.0`:
 1. **The route table is extended, never changed.** An added field has a
    default. Removing a field or changing its meaning is a `MAJOR` change. An
    unknown field is and stays a configuration error (§3.1).
-2. **The access service protocol is extended, never changed.** Request fields
+2. **Access protocol is extended, never changed.** Request fields
    are added, and service answers keep their meaning. Removing a field is a
    `MAJOR` change, and the changelog says how a service migrates.
 3. **The identity signature format is versioned.** The version is in the value

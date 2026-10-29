@@ -1,6 +1,6 @@
-# The access service of the composition.
+# Access of the composition.
 #
-# The base of the gateway points at the access service of the example,
+# The base of the gateway points at Access of the example,
 # and the overlay points it at the service of the platform.
 apiVersion: apps/v1
 kind: Deployment

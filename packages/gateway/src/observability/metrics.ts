@@ -112,7 +112,7 @@ const DURATION_BUCKETS_SECONDS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2
  * The reasons a caller was rejected. They are a closed set on purpose.
  *
  * `missing_role` is not a decision of the gateway: the gateway does not check
- * roles itself. It is reported when the access service denies a caller
+ * roles itself. It is reported when Access denies a caller
  * because of a missing role.
  */
 export type AuthFailureReason = 'unauthenticated' | 'missing_role' | 'access_denied'
@@ -157,12 +157,12 @@ export interface Observer {
   recordUpstreamFailure(): void
   /** An upstream was skipped because it failed recently. */
   recordUpstreamSkipped(): void
-  /** The access service answered a decision request. */
+  /** Access answered a decision request. */
   recordAccess(routeId: string, durationMs: number): void
-  /** The access service could not be asked. */
+  /** Access could not be asked. */
   recordAccessUnavailable(routeId: string): void
   /**
-   * A decision was served while the access service was unreachable.
+   * A decision was served while Access was unreachable.
    *
    * The age of the decision is reported: it is the time the revocation of
    * the caller was late by.
@@ -241,19 +241,19 @@ export class MetricsStore implements Observer {
     })
     this.#accessUnavailable = new Counter({
       name: 'gateway_access_unavailable_total',
-      help: 'Requests that were refused because the access service could not be reached.',
+      help: 'Requests that were refused because Access could not be reached.',
       labelNames: ['route'],
       registers: [this.#registry],
     })
     this.#accessStale = new Counter({
       name: 'gateway_access_stale_total',
-      help: 'Decisions that were served while the access service was unreachable.',
+      help: 'Decisions that were served while Access was unreachable.',
       labelNames: ['route'],
       registers: [this.#registry],
     })
     this.#accessStaleAge = new Histogram({
       name: 'gateway_access_stale_age_seconds',
-      help: 'The age of the decisions that were served while the access service was unreachable.',
+      help: 'The age of the decisions that were served while Access was unreachable.',
       labelNames: ['route'],
       buckets: [1, 5, 15, 30, 60, 300, 900, 3_600],
       registers: [this.#registry],
@@ -379,7 +379,7 @@ export class MetricsStore implements Observer {
   }
 
   recordAccess(routeId: string, durationMs: number): void {
-    // The latency of the call to the access service, and not the latency of
+    // The latency of the call to Access, and not the latency of
     // the gateway: the service is a dependency of its own, and an operator
     // looks at this one when the service is slow.
     //
@@ -389,7 +389,7 @@ export class MetricsStore implements Observer {
   }
 
   recordAccessUnavailable(routeId: string): void {
-    // An outage of the access service is not a denial of a caller: it is
+    // An outage of Access is not a denial of a caller: it is
     // counted apart, so an operator can tell the two apart.
     this.#accessUnavailable.inc({ route: this.#route(routeId) })
   }

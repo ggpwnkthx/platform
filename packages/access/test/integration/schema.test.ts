@@ -63,7 +63,7 @@ async function user(tenantId: string, subject: string): Promise<string> {
   return rows[0]!.id
 }
 
-describe('the schema of the access service', () => {
+describe('the schema of Access', () => {
   test('the migration is applied and it is idempotent', async () => {
     const applied = await database.query<{ name: string }>(
       `select name from ${MIGRATIONS_TABLE} order by name`

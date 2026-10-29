@@ -1,20 +1,20 @@
 # Deployment
 
-Every deployment file lives here. Each service (gateway, access service, data service) can be deployed alone or as part of the full platform composition. The first-deployment procedure is in [Operations](../docs/platform/operations.md).
+Every deployment file lives here. Each service (Gateway, Access, Data) can be deployed alone or as part of the full platform composition. The first-deployment procedure is in [Operations](../docs/platform/operations.md).
 
 ```
 deploy/
   compose/                 Compose stacks
     platform.compose.yaml    all three services and the console
-    gateway.compose.yaml     gateway only
-    access.compose.yaml      access service only
-    data.compose.yaml        data service only
-    console.compose.yaml     console only
+    gateway.compose.yaml     Gateway only
+    access.compose.yaml      Access only
+    data.compose.yaml        Data only
+    console.compose.yaml     Console only
     production/              the same stacks, with deployment secrets
   kubernetes/              cluster manifests
-    base/gateway/            gateway only
-    base/access/             access service only
-    base/data/               data service only
+    base/gateway/            Gateway only
+    base/access/             Access only
+    base/data/               Data only
     overlays/platform/       all three
   config/                  deployment configuration
   dex/                     identity provider for development
@@ -51,7 +51,7 @@ Both approaches use the same services, ports and environment variable names. A s
 
 ## Compose stacks
 
-The stacks in `deploy/compose/` are for **development**: they build local images, use development passwords, and include repository fixtures (identity provider, sample upstreams, data service credentials).
+The stacks in `deploy/compose/` are for **development**: they build local images, use development passwords, and include repository fixtures (identity provider, sample upstreams, Data credentials).
 
 The stacks in `deploy/compose/production/` are for **deployments**: they use registry images, read secrets from the shell environment (a secret store, vault agent or orchestrator secrets), and refuse to start if a secret is missing.
 
@@ -72,19 +72,19 @@ Each base in `deploy/kubernetes/base/` applies on its own; the `deploy/kubernete
 
 Secrets are **not** in the manifests. Each base has a `secret.example.yaml` naming the secret's keys; apply the real secret from your secret store (sealed secrets, the external secrets operator, or equivalent).
 
-The data service migration is an operator command, not a base resource. Apply it by hand, once per deployment, with `deploy/kubernetes/base/data/migrate-job.yaml`.
+Data migration is an operator command, not a base resource. Apply it by hand, once per deployment, with `deploy/kubernetes/base/data/migrate-job.yaml`.
 
 ## Configuration
 
 | File in `deploy/config/` | Contents |
 | --- | --- |
-| `routes.json` | Composition route table: the gateway forwards to the data service. |
+| `routes.json` | Composition route table: the gateway forwards to Data. |
 | `routes.gateway.json` | Gateway-only route table: forwards to the development sample upstreams. |
 | `routes.local.json` | Route table for running from source, with upstreams on loopback. Generated. |
-| `bindings.json` | Data service bindings: gateway routes and the key that verifies request identities. |
+| `bindings.json` | Data bindings: gateway routes and the key that verifies request identities. |
 | `bindings.local.json` | Bindings for running from source, with the key at its on-disk path. Generated. |
 | `control-tokens.example.json` | Example control plane token map. The real map is a secret. |
-| `access-policy.json` | Policy of the reference access service used in development. |
+| `access-policy.json` | Policy of the reference Access used in development. |
 
 ## Development keys
 
@@ -97,7 +97,7 @@ export GATEWAY_IDENTITY_SIGNING_KEY="$(cat deploy/secrets/identity-signing.pem)"
 
 The script writes both halves of the pair to `deploy/secrets/`, and the two source-run config files (`routes.local.json`, `bindings.local.json`) to `deploy/config/`.
 
-The data service's development credentials are deliberately committed fixtures in [`deploy/fixtures/secrets/`](fixtures/secrets/README.md).
+Data's development credentials are deliberately committed fixtures in [`deploy/fixtures/secrets/`](fixtures/secrets/README.md).
 
 ## Rules
 

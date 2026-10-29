@@ -2,7 +2,7 @@
  * The cache of the decisions that lives in a Redis server.
  *
  * A deployment with more than one replica uses it, so every replica answers
- * with the same decision and the access service sees one request instead of
+ * with the same decision and Access sees one request instead of
  * one per replica.
  *
  * The cache is a cache: when the server cannot be reached, the decision is

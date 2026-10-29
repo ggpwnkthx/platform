@@ -18,7 +18,7 @@ afterAll(async () => {
   await database.close()
 })
 
-describe('the principals of the access service', () => {
+describe('the principals of Access', () => {
   test('a principal is created and read back', async () => {
     const created = await users.create({
       tenantId,

@@ -1,7 +1,7 @@
 import { createRoute } from 'honox/factory'
 
 /**
- * The console is ready when the access service answers its discovery
+ * The console is ready when Access answers its discovery
  * document: a console that cannot sign anybody in is not ready to be
  * reached.
  */

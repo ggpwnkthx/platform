@@ -1,5 +1,5 @@
 /**
- * The administration of the access service.
+ * The administration of Access.
  *
  * The domain owns the twelve endpoints, the validation of their bodies and
  * the audit of every change. It is the whole administration surface of the

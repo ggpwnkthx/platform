@@ -1,13 +1,13 @@
 # Internals
 
-Maintainer reference for the data service: how it is built and tested, what it measured, how it
+Maintainer reference for Data: how it is built and tested, what it measured, how it
 proves platform compatibility, and what its release and security review leave open.
 
 ## Architecture
 
 A headless modular monolith with an optional worker process and no user interface
 ([spec §13](spec.md#13-architecture)). Studios, websites, scripts and services are all API clients;
-none has a privileged database connection. The backend never reads access-service tables, never
+none has a privileged database connection. The backend never reads Access tables, never
 mints an identity (it holds only the gateway's public key), and never creates a session or runs a
 login flow ([spec §1.2](spec.md#12-ownership)).
 
@@ -17,7 +17,7 @@ login flow ([spec §1.2](spec.md#12-ownership)).
    canonical payload from method, path, query, host and headers and verifies it with the route's
    public key, never trusting the transmitted payload.
 2. One statement reads the workspace and its catalog (collections, policy bundle).
-3. The access service answers the principal's permission keys for subject, tenant, workspace and
+3. Access answers the principal's permission keys for subject, tenant, workspace and
    route, or a refusal, outside the business-data transaction.
 4. The scoped transaction projects only granted fields, authorizes a write by one complete policy,
    and commits record, audit entry, domain event and receipt together
@@ -85,7 +85,7 @@ Installation and platform-wide commands: [platform development](../platform/deve
 | Boundaries | `bun test test/architecture` | Imports, cycles, private adapter construction. |
 | Suite strength | `bun run test:mutation` | Breaks code on purpose; the suites must notice. |
 | Client | `bun test packages/client/test` | The client against a mocked API. |
-| Platform | `bun run test:compat` | Real gateway, access service and data service. |
+| Platform | `bun run test:compat` | Real gateway, Access and Data. |
 
 Differential tests (`test/integration/filter.property.test.ts`, `write-guard.test.ts`) compare
 generated predicates and write policies in memory and in the database; fuzzing
@@ -112,8 +112,7 @@ update the mutation, or the gate fails it as stale.
 
 ### Scripts
 
-Operator commands run on the deployment machine, are never HTTP routes and never bypass the access
-service. Credentials: [Configuration](configuration.md#operator-commands).
+Operator commands run on the deployment machine, are never HTTP routes and never bypass the Access. Credentials: [Configuration](configuration.md#operator-commands).
 
 | Directory | Commands |
 | --- | --- |
@@ -136,7 +135,7 @@ tags a release whose version increased.
 
 ## Capacity
 
-`bun run scripts/ops/capacity.ts` starts PostgreSQL, a fixture access service, the backend and
+`bun run scripts/ops/capacity.ts` starts PostgreSQL, a fixture Access, the backend and
 concurrent clients that sign like the pinned gateway, then runs the scenarios of
 [spec §15.5](spec.md#155-capacity-and-rollout). Tune with `CAPACITY_CLIENTS` (default 16) and
 `CAPACITY_DURATION_MS` (default 10000 per scenario). The numbers describe one machine at one moment;
@@ -147,7 +146,7 @@ a deployment measures its own with the same command.
 | Hardware | 16 cores, x86_64, 31 GiB, Linux 7.2.9, Bun 1.4.3 |
 | Database | PostgreSQL 18.6 on the same machine, `fsync=off` and `synchronous_commit=off` |
 | Deployment | One api process, `DATA_DB_POOL_MAX=20`, registry and delivery pools of 5 |
-| Context cache | `DATA_CONTEXT_CACHE_TTL_MS=0`: every request asks the access service |
+| Context cache | `DATA_CONTEXT_CACHE_TTL_MS=0`: every request asks Access |
 | Catalog | The workspace registered nothing; the deployment catalog is read with the registry in one statement |
 | Data | 1000 articles in one workspace, one policy per action, pages of 50 |
 
@@ -160,12 +159,12 @@ Release candidate `1.0.0`, guarded write path:
 | Read heavy, a page of 50 | 15102 | 1510/s | 10.4 ms | 13.4 ms | 15.5 ms | 0 |
 | Mixed, half creations | 21491 | 2149/s | 7.3 ms | 9.4 ms | 10.7 ms | 0 |
 | Concurrent updates of one record | 6011 | 601/s | 26.6 ms | 30.9 ms | 33.8 ms | 0 (379 successes, 5632 precondition failures) |
-| Access service down | 62617 | 6262/s | 2.5 ms | 3.2 ms | 4.6 ms | 62617 answers 503 |
+| Access down | 62617 | 6262/s | 2.5 ms | 3.2 ms | 4.6 ms | 62617 answers 503 |
 
 - Reads hold with a context fetch per request: it precedes the statement, the cheap part.
 - No lost update: an update without the current validator gets `412 PRECONDITION_FAILED`; latency is
   the row lock's.
-- With the access service down, requests fail closed in about two milliseconds
+- With Access down, requests fail closed in about two milliseconds
   (`503 AUTHORIZATION_UNAVAILABLE`), with no queue.
 - Version `1.0.0` on PostgreSQL 15.19 measured 991/s, 1251/s, 313/s and 4280/s (p50 15.8, 11.6, 50.8
   and 3.6 ms); runs on different database versions are not comparable.
@@ -203,7 +202,7 @@ A deployment declares these items, measures them on its own hardware and publish
 | Policy complexity | Policies per collection, fields per policy | One policy per action, five fields each |
 | Pool | `DATA_DB_POOL_MAX`, database size | `DATA_DB_POOL_MAX=20`, registry and delivery pools of five |
 | Replicas | API processes and workers | One of each, on the measurement machine |
-| Availability | Cache lifetime and revocation bound | `DATA_CONTEXT_CACHE_TTL_MS=0`: revocation shows on the next request; an access-service outage answers `503` |
+| Availability | Cache lifetime and revocation bound | `DATA_CONTEXT_CACHE_TTL_MS=0`: revocation shows on the next request; an Access outage answers `503` |
 
 The reference objectives add a 50% margin to the measurement (1 510 and 2 149 requests per second at
 p95 of 13.4 and 9.4 ms). A deployment that declares more than its machine holds answers `503` when
@@ -211,7 +210,7 @@ full.
 
 ## Compatibility
 
-The harness runs this repository's real gateway, access service and data service against a real
+The harness runs this repository's real gateway, Access and Data against a real
 PostgreSQL server.
 
 ### Integration baseline
@@ -250,15 +249,15 @@ against them ([spec §1.1](spec.md#11-integration-baseline)).
 <!-- compatibility-manifest:end -->
 
 References, candidates and overrides work as in
-[platform compatibility](../platform/internals.md#compatibility): here the gateway and access service
-are references and the data service is the candidate. `bun run check:compatibility` proves the spec's
+[platform compatibility](../platform/internals.md#compatibility): here the gateway and Access
+are references and Data is the candidate. `bun run check:compatibility` proves the spec's
 baseline block agrees with the manifest and refuses a CI workflow that pins its own revision.
 
 ### Harness
 
 ```bash
-bun run --cwd packages/data test:compat   # data service harness
-bun run compatibility                     # access-service contract and platform acceptance suites
+bun run --cwd packages/data test:compat   # Data harness
+bun run compatibility                     # Access contract and platform acceptance suites
 GATEWAY_REPOSITORY=/srv/mirrors/gateway ACCESS_REPOSITORY=/srv/mirrors/access \
   bun run --cwd packages/data test:compat
 ```
@@ -273,12 +272,12 @@ local path, cloned without network), the `COMPAT_MIRROR` directory of bare `gate
 the same mirror. `GATEWAY_COMMIT` and `ACCESS_COMMIT` must be full revisions (anything else is an
 error, with no fallback). `COMPAT_KEEP` keeps the run's temporary directory.
 
-### Access service extension
+### Access extension
 
-Without an access service answering `/v1/access-context`, the data service fails closed: the
+Without Access answering `/v1/access-context`, Data fails closed: the
 extension is a required dependency, and it lives upstream
-([decision 15](decisions.md#15-the-access-service-extension-lives-in-the-access-service)). To change
-it, land the change in the access service workspace (keeping the gateway decision contract), then
+([decision 15](decisions.md#15-the-access-extension-lives-in-access)). To change
+it, land the change in the Access workspace (keeping the gateway decision contract), then
 pass the harness against the new revision.
 
 ### Signature fixtures
@@ -294,16 +293,16 @@ its key derivation is kept locally.
 
 ### Platform release 1.0.0
 
-A **MAJOR** change to the gateway and access-service contracts; the data service contract (`v1`
+A **MAJOR** change to the gateway and Access contracts; Data contract (`v1`
 routes, `v5` identity, access context `1`), route table format, decision protocol and identity headers
-are unchanged. Impact on the data service:
+are unchanged. Impact on Data:
 
 | Change | Impact |
 | --- | --- |
-| The gateway writes the caller subject as is (an unwritable one gets `500`). | Subjects are access-service UUIDs. The backend MUST NOT trim or normalize the header; the unit suite proves a subject the gateway did not write is refused. |
+| The gateway writes the caller subject as is (an unwritable one gets `500`). | Subjects are Access UUIDs. The backend MUST NOT trim or normalize the header; the unit suite proves a subject the gateway did not write is refused. |
 | The gateway decides the host before the method. | Bindings are per signed host; a deployment relying on a catch-all naming `GET` must move the hosts it names into the catch-all. |
 | Gateway: `GATEWAY_TRUSTED_PROXY_HOPS` (default one), ranges only from `GATEWAY_TRUSTED_PROXIES`, password-free Redis user rules (passwords set after start). | Gateway deployment only. |
-| Access service: tenant-scoped gateway credentials (deployment bearer token deprecated), platform-owned `shared_client` and `is_default` flags, limiter budget spent by failing calls, provider calls to the checked address, browser headers, uncached token answers. | None: the data service calls no decision endpoint or provider, holds no tenant, reads only the access context body, and its credential is scoped to the tenants it may ask about. |
+| Access: tenant-scoped gateway credentials (deployment bearer token deprecated), platform-owned `shared_client` and `is_default` flags, limiter budget spent by failing calls, provider calls to the checked address, browser headers, uncached token answers. | None: Data calls no decision endpoint or provider, holds no tenant, reads only the access context body, and its credential is scoped to the tenants it may ask about. |
 
 ## Release readiness
 
@@ -328,7 +327,7 @@ pre-production until both outside gates are met. The suites make requirements **
 ### Releasing
 
 Follow the [platform release steps](../platform/internals.md#release); the tag's workflows publish the
-image, binaries for seven platforms, the client and checksums. For the data service:
+image, binaries for seven platforms, the client and checksums. For Data:
 
 - Update `README.md`, `docs/data/README.md`, `CHANGELOG.md` and `docs/data/internals.md`: retire the
   pre-production wording, and write "proved" only where someone else's check proves it.
@@ -389,7 +388,7 @@ Fixed:
 | # | Finding | Severity | State and plan |
 | --- | --- | --- | --- |
 | 1 | A write's predicate was evaluated twice (SQL for reads, memory for writes) and diverged three times. | Medium | **Closed** by [decision 5](decisions.md#5-one-policy-authorizes-a-write-and-the-database-evaluates-its-predicates); the generated guard check compares both answers. |
-| 2 | Service availability is the access service's: with no cache, an outage answers `503` to every call. | Medium | **Open, with a decision.** A deployment preferring availability sets `DATA_CONTEXT_CACHE_TTL_MS` and declares the revocation bound (cache lifetime plus running request). The reference deployment declares no cache ([Capacity](#deployment-declaration)). |
+| 2 | Service availability is Access's: with no cache, an outage answers `503` to every call. | Medium | **Open, with a decision.** A deployment preferring availability sets `DATA_CONTEXT_CACHE_TTL_MS` and declares the revocation bound (cache lifetime plus running request). The reference deployment declares no cache ([Capacity](#deployment-declaration)). |
 | 3 | The driver reads timestamps in milliseconds while statements compare microseconds, so a sub-millisecond value compares differently on the two paths; likewise a JSON field holding JSON `null`. | Low | **Open, outside the contract.** API writes normalize to the millisecond; only rows written directly to the database, against the migration contract, are affected. |
 | 4 | The service has never run outside its own harness; an author's check is not an assurance. | Medium | **Open.** `1.0.0` is marked pre-production. The first real deployment is the review the harness cannot replace. |
 | 5 | Suites and code share assumptions; the mutation gate covers only imagined mutations. | Medium | **Open.** The gate runs in CI and grows with the code: each reviewed behavior has a mutation naming the suite that catches it, fourteen trust-boundary mutations so far. |

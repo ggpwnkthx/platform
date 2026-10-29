@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * The provisioning of the role and of the database of the access service
+ * The provisioning of the role and of the database of Access
  * (spec §3.8).
  *
  * The script runs once per deployment, with the credentials of an

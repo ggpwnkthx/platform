@@ -3,7 +3,7 @@
  *
  * The console reads the data through the gateway, with the access token
  * of the caller as a bearer token: the gateway authenticates it, asks the
- * access service, signs the identity and forwards the request. The data
+ * Access, signs the identity and forwards the request. The data
  * service decides what the caller sees and what it may change; the
  * console shows the answer and decides nothing.
  */

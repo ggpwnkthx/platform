@@ -12,7 +12,7 @@ import { formOf } from '../../middleware/forms'
 import { flash, sessionOf } from '../../middleware/session'
 import { knownWorkspaces } from '../../middleware/workspaces'
 
-/** What the data service answers for a workspace the caller may hold. */
+/** What Data answers for a workspace the caller may hold. */
 interface Probe {
   readonly id: string
   readonly me: Me | null
@@ -33,7 +33,7 @@ export default createRoute(async (c) => {
   const services = c.get('services')
   const session = sessionOf(c)
   const known = await knownWorkspaces(c)
-  // The data service answers whether the caller may read a workspace:
+  // Data answers whether the caller may read a workspace:
   // the console asks it for every workspace it knows, at most two dozen.
   const probes: Probe[] = await Promise.all(
     known.ids.slice(0, 24).map(async (id) => {
@@ -54,12 +54,12 @@ export default createRoute(async (c) => {
       <PageHead
         eyebrow="Data"
         title="Workspaces"
-        lede="Workspaces your rights name, plus any you opened. The data service decides what you can see in each."
+        lede="Workspaces your rights name, plus any you opened. Data decides what you can see in each."
       />
       {!known.rightsRead ? (
         <Notice tone="warn" title="Your rights could not be read">
-          The console has no admin credential for your tenant, or the access service did not answer.
-          Only workspaces you opened are listed; open another by its ID below.
+          The console has no admin credential for your tenant, or Access did not answer. Only
+          workspaces you opened are listed; open another by its ID below.
         </Notice>
       ) : null}
       {known.everyWorkspace ? (
@@ -89,7 +89,7 @@ export default createRoute(async (c) => {
                   <h2 class="mono small">{probe.id}</h2>
                   <Badge tone="error">{probe.refusal ?? 'refused'}</Badge>
                 </header>
-                <p class="small muted">The data service doesn't open this workspace to you.</p>
+                <p class="small muted">Data doesn't open this workspace to you.</p>
                 <CopyText text={probe.id} />
               </article>
             )

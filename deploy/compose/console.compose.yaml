@@ -3,11 +3,11 @@
 #   docker compose -f deploy/compose/console.compose.yaml up --build
 #
 # The console is a **client** of the platform: it authenticates the
-# caller against the access service, it reads the data of a workspace
-# through the gateway and it acts for the access service with the
+# caller against Access, it reads the data of a workspace
+# through the gateway and it acts for Access with the
 # credential of the operator.
 #
-# This stack brings the console and nothing else: the access service and
+# This stack brings the console and nothing else: Access and
 # the gateway of a deployment are its own, and the urls below point at
 # them. A stack that wants the whole platform is
 # `deploy/compose/platform.compose.yaml`.
@@ -30,24 +30,24 @@ services:
       CONSOLE_HOST: 0.0.0.0
       CONSOLE_PORT: '8083'
       CONSOLE_PUBLIC_URL: http://localhost:8083
-      # The access service: the console is a client of it, and it
+      # Access: the console is a client of it, and it
       # authenticates the caller against it.
       CONSOLE_ACCESS_URL: ${CONSOLE_ACCESS_URL:-http://access.internal:8081}
-      # The client of the console at the access service: the client of
+      # The client of the console at Access: the client of
       # the tenant of the deployment.
       CONSOLE_CLIENT_ID: ${CONSOLE_CLIENT_ID:-platform}
       CONSOLE_CLIENT_SECRET: ${CONSOLE_CLIENT_SECRET:-the-client-secret-of-the-development}
       # The gateway: the console reads the data through it, with the
       # token of the caller. The url names the host of the route of the
-      # data service, because the gateway matches the host of the caller
+      # Data, because the gateway matches the host of the caller
       # against its route table.
       CONSOLE_GATEWAY_URL: ${CONSOLE_GATEWAY_URL:-http://api.gateway.test:8080}
-      # The data service: the console reads the data through the
-      # gateway, and it reads the probes of the data service here. The
-      # variable is optional: a stack that has no data service of its
+      # Data: the console reads the data through the
+      # gateway, and it reads the probes of Data here. The
+      # variable is optional: a stack that has no Data of its
       # own leaves it unset, and the console does not probe it.
       CONSOLE_DATA_URL: ${CONSOLE_DATA_URL-}
-      # The credential of the administration of the access service, and
+      # The credential of the administration of Access, and
       # the credential of the contract of the access context. A
       # deployment brings its own, from its secret manager.
       CONSOLE_ADMIN_TOKEN: ${CONSOLE_ADMIN_TOKEN:-the-admin-token-of-the-development}

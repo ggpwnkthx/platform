@@ -13,8 +13,8 @@ import { login, request, waitFor } from './browser'
  * The compatibility suite (spec §15.1).
  *
  * The gateway of the reference runs, unchanged, with its own configuration
- * and with the access service in place of the two fixtures: the access service is the provider of the
- * identity and the access service of the gateway. The gateway is started
+ * and with Access in place of the two fixtures: Access is the provider of the
+ * identity and Access of the gateway. The gateway is started
  * as a process of the reference: the tree of the reference is read-only
  * and it is never modified.
  */
@@ -27,7 +27,7 @@ const METRICS_TOKEN = 'the-metrics-token-of-the-gateway'
 /** The workspace of the tests. */
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111'
 
-/** The access service under test: the one of the process, or the one of the environment. */
+/** Access under test: the one of the process, or the one of the environment. */
 let accessUnderTest: AccessUnderTest
 let accessUrl: string
 let provider: ProviderFixture
@@ -47,7 +47,7 @@ const upstream = Bun.serve({
   },
 })
 
-/** Calls the administration of the access service. */
+/** Calls the administration of Access. */
 let admin: (path: string, method: string, body: Record<string, unknown>) => Promise<void>
 
 beforeAll(async () => {
@@ -55,13 +55,13 @@ beforeAll(async () => {
   upstreamUrl = `http://127.0.0.1:${upstream.port}`
   provider = await startProviderFixture()
 
-  // The access service under test: the one of the process of the test, or the one
+  // Access under test: the one of the process of the test, or the one
   // that the environment names — the image of a release, for instance.
   accessUnderTest = await startAccessUnderTest()
   accessUrl = accessUnderTest.url
   admin = createTestClient(accessUrl, accessUnderTest.adminToken).strict
 
-  // The issuer of the access service is the url the gateway reaches: the discovery
+  // The issuer of Access is the url the gateway reaches: the discovery
   // document of the provider is read at that address.
   const gatewayPort = await freePort()
   gatewayUrl = `http://127.0.0.1:${gatewayPort}`
@@ -148,7 +148,7 @@ beforeAll(async () => {
           },
           {
             // The route of the bearer token: the gateway validates the
-            // token of the access service against the provider it
+            // token of Access against the provider it
             // discovers for the browser, and the rules of that validation
             // are the ones of the release `1.0.0` of the platform.
             id: 'api-jwt',
@@ -163,7 +163,7 @@ beforeAll(async () => {
     )
   )
 
-  // The gateway of the reference, unchanged, with the access service in place of the two
+  // The gateway of the reference, unchanged, with Access in place of the two
   // fixtures.
   gateway = Bun.spawn(['bun', 'run', join(reference, 'src', 'main.ts')], {
     cwd: reference,
@@ -207,11 +207,11 @@ afterAll(async () => {
 })
 
 /**
- * The tokens of the access service for the gateway.
+ * The tokens of Access for the gateway.
  *
  * The suite plays the client that the gateway is: it logs a browser in at
- * the provider of the tenant, it comes back to the access service with the code, and it
- * exchanges the code at the token endpoint of the access service. The access token it
+ * the provider of the tenant, it comes back to Access with the code, and it
+ * exchanges the code at the token endpoint of Access. The access token it
  * keeps is the credential that the gateway validates against the provider
  * it discovers for the browser.
  */
@@ -258,18 +258,16 @@ async function tokensOfAccess(): Promise<{ accessToken: string; idToken: string 
     }).toString(),
   })
   if (!token.ok) {
-    throw new Error(
-      `the token endpoint of the access service answered ${token.status}: ${await token.text()}`
-    )
+    throw new Error(`the token endpoint of Access answered ${token.status}: ${await token.text()}`)
   }
   const body = (await token.json()) as { access_token?: string; id_token?: string }
   if (!body.access_token || !body.id_token) {
-    throw new Error('the token endpoint of the access service answered no token')
+    throw new Error('the token endpoint of Access answered no token')
   }
   return { accessToken: body.access_token, idToken: body.id_token }
 }
 
-describe('the compatibility of the access service with the gateway', () => {
+describe('the compatibility of Access with the gateway', () => {
   test('a browser logs in at the provider of the tenant and comes back with a session', async () => {
     const cookie = await login(gatewayUrl)
     expect(cookie).toContain('gateway_session=')
@@ -288,9 +286,9 @@ describe('the compatibility of the access service with the gateway', () => {
   test('the gateway writes the subject of the principal as it is', async () => {
     // The gateway of the release `1.0.0` of the platform writes the
     // subject of the identity **as it is**: a subject that is rewritten
-    // would speak of two different callers to the access service, which
+    // would speak of two different callers to Access, which
     // decides with the subject it was given, and to the upstream, which
-    // reads the subject of the header. The subject of the access service
+    // reads the subject of the header. The subject of Access
     // is the id of a principal, and the header carries it character for
     // character.
     provider.authenticateAs(provider.subject)
@@ -303,7 +301,7 @@ describe('the compatibility of the access service with the gateway', () => {
 
   test('a principal without a grant is refused by the gateway', async () => {
     // The principal that has no grant at all reaches nothing: the
-    // decision of the access service denies it and the gateway fails closed.
+    // decision of Access denies it and the gateway fails closed.
     provider.authenticateAs('the-subject-without-a-grant')
     const cookie = await login(gatewayUrl)
     const response = await request(gatewayUrl, `/ws/${WORKSPACE_ID}/`, cookie, 'api.gateway.test')
@@ -323,14 +321,14 @@ describe('the compatibility of the access service with the gateway', () => {
     expect(text).toContain('missing_role')
   })
 
-  test('the gateway discovers the access service and accepts its tokens', async () => {
+  test('the gateway discovers Access and accepts its tokens', async () => {
     const discovery = await fetch(`${accessUrl}/.well-known/openid-configuration`)
     const document = (await discovery.json()) as Record<string, unknown>
     expect(document.issuer).toBe(accessUrl)
     expect(document.jwks_uri).toBe(`${accessUrl}/oauth/jwks`)
   })
 
-  test('the gateway accepts the bearer token of the access service', async () => {
+  test('the gateway accepts the bearer token of Access', async () => {
     // The gateway of the release `1.0.0` of the platform refuses a
     // bearer token that carries no expiry, and it bounds the lifetime of
     // a token with the moment it was issued: the token of the access
@@ -347,10 +345,10 @@ describe('the compatibility of the access service with the gateway', () => {
     expect(body.headers['x-gateway-roles']).toContain('workspace.read')
   })
 
-  test('the gateway refuses the id token of the access service as a bearer credential', async () => {
+  test('the gateway refuses the id token of Access as a bearer credential', async () => {
     // The id token travels through the browser: it lands in the history,
     // in the logs and in the referrers. The gateway refuses a bearer
-    // token that carries a nonce, and the id token of the access service carries one.
+    // token that carries a nonce, and the id token of Access carries one.
     provider.authenticateAs(provider.subject)
     const { idToken } = await tokensOfAccess()
     const response = await fetch(`${gatewayUrl}/jwt/`, {

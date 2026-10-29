@@ -1,7 +1,7 @@
 /**
  * The runtime of the tests of the http surface.
  *
- * A test of the contract starts a deployment of the access service in the process of the
+ * A test of the contract starts a deployment of Access in the process of the
  * test, reaches it at a url of the loopback and stops it when it is
  * done. The three steps are the same in every file of the suite: they
  * live here, once, and the file of the test says what is specific to it.
@@ -30,7 +30,7 @@ export const TEST_ENCRYPTION_KEY = 'a'.repeat(64)
 /** The secret of the state of the deployments of the tests. */
 const TEST_STATE_SECRET = 'b'.repeat(64)
 
-/** A deployment of the access service that a test started. */
+/** A deployment of Access that a test started. */
 export interface TestRuntime {
   /** The runtime of the service. */
   runtime: AccessRuntime
@@ -58,7 +58,7 @@ export function loginEnv(adminToken: string, signingKey: string): Env {
 }
 
 /**
- * Starts a deployment of the access service in the process of the test.
+ * Starts a deployment of Access in the process of the test.
  *
  * The environment of the deployment is the one of the tests, and the
  * values of the caller are merged into it: a test that needs a token or

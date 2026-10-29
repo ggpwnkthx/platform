@@ -1,6 +1,6 @@
 /**
  * The records of a collection: searched, filtered, sorted and paged by
- * the data service, with the policies of the caller.
+ * Data, with the policies of the caller.
  */
 
 import { createRoute } from 'honox/factory'

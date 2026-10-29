@@ -1,5 +1,5 @@
 /**
- * The discovery document of the access service (spec §7.5).
+ * The discovery document of Access (spec §7.5).
  *
  * The gateway reads the document once and caches it for ten minutes. The
  * issuer of the document is exactly the issuer of the service: the
@@ -23,7 +23,7 @@ export interface DiscoveryDocument {
   token_endpoint_auth_methods_supported: string[]
 }
 
-/** The scopes the access service accepts (§7.4): a scope it does not know is ignored. */
+/** The scopes Access accepts (§7.4): a scope it does not know is ignored. */
 export const SUPPORTED_SCOPES = ['openid', 'profile', 'email', 'groups']
 
 /** Builds the discovery document of the service. */
@@ -49,9 +49,9 @@ export function discoveryDocument(options: {
 }
 
 /**
- * The scopes of a request, as the access service accepts them.
+ * The scopes of a request, as Access accepts them.
  *
- * A scope the access service does not know is ignored, not refused: the gateway asks
+ * A scope Access does not know is ignored, not refused: the gateway asks
  * for `groups` by default and a broker that refused an unknown scope
  * would break a gateway that never changed.
  */

@@ -23,7 +23,7 @@ export default createRoute(requireSession, async (c) => {
       <PageHead
         eyebrow="Account"
         title="You"
-        lede="Your identity comes from your sign-in. Your console keys are read from the access service on every page, never cached."
+        lede="Your identity comes from your sign-in. Your console keys are read from Access on every page, never cached."
       />
       <div class="grid grid-wide">
         <section class="card">

@@ -22,7 +22,7 @@ async function json<T = any>(response: Response): Promise<T> {
   return (await response.json()) as T
 }
 
-/** Gives the permissions of a principal to the access service of the tests. */
+/** Gives the permissions of a principal to Access of the tests. */
 function grants(principal: string, permissionKeys: string[]): void {
   harness.access.grants.set(principal, [{ tenantId: TENANT_ID, permissionKeys }])
 }

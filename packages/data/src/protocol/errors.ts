@@ -109,7 +109,7 @@ export interface ErrorDetail {
  * An error of the service.
  *
  * The message is a safe summary: it never carries a stack trace, a SQL
- * text, a name of a constraint, a reason of the access service or a credential.
+ * text, a name of a constraint, a reason of Access or a credential.
  */
 export class ServiceError extends Error {
   /**

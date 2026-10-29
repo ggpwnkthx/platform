@@ -13,7 +13,7 @@
  * 7. the caller is authenticated
  * 8. the cross site guard is applied to the requests that carry the cookie
  *    of the session
- * 9. the access service is asked about the workspace
+ * 9. Access is asked about the workspace
  * 10. the request is dispatched
  */
 
@@ -96,7 +96,7 @@ function recordOutcome(
  * the phase that waits for a dependency — the limits, the session and the
  * decision of access. The cap of the exchanges bounds the
  * phase of the proxying; without the admission, a request that waits for
- * a hanging access service would never reach that cap.
+ * a hanging Access would never reach that cap.
  */
 export async function dispatch(
   context: Context<GatewayEnv>,
@@ -317,7 +317,7 @@ async function dispatchRequest(
     }
   }
 
-  // 9. The workspace. The access service decides, the gateway asks and
+  // 9. The workspace. Access decides, the gateway asks and
   // fails closed.
   let workspaceId: string | undefined
   if (route.auth.workspace) {
@@ -337,7 +337,7 @@ async function dispatchRequest(
     }
     workspaceId = validation.workspaceId
   }
-  // The access service is asked about the workspace of the route, or about
+  // Access is asked about the workspace of the route, or about
   // the route itself when the route asks for it and names no workspace: the
   // service then decides on the subject, the route and the roles.
   if (principal && (workspaceId !== undefined || route.accessCheck)) {
@@ -350,7 +350,7 @@ async function dispatchRequest(
       },
       // The lifetime of the cached decision is the latency of a
       // revocation on this route: a route that asks for zero asks the
-      // access service for every request.
+      // Access for every request.
       {
         cacheTtlMs: route.accessCacheTtlMs,
         // The grace of an outage: a decision that is served while the
@@ -371,27 +371,23 @@ async function dispatchRequest(
       })
     }
     if (!decision.allow) {
-      // An outage of the access service is not a denial: the service
+      // An outage of Access is not a denial: the service
       // could not be asked, or its answer could not be read. The caller
       // is refused either way — the gateway fails closed — but the answer
       // is `503` and not `403`, so the client knows it may retry and the
       // operator sees an outage and not a policy.
       if (decision.kind === 'unavailable') {
         observer.recordAccessUnavailable(route.id)
-        logger.error('the access service is not available', {
+        logger.error('Access is not available', {
           requestId,
           routeId: route.id,
           subject: principal.subject,
           workspaceId,
         })
         recordOutcome(dependencies, route.id, method, 503, started)
-        return jsonError(
-          503,
-          'access_unavailable',
-          'the access service could not be reached',
-          undefined,
-          { 'retry-after': '1' }
-        )
+        return jsonError(503, 'access_unavailable', 'Access could not be reached', undefined, {
+          'retry-after': '1',
+        })
       }
       observer.recordAuthFailure(route.id, authFailureReason(decision.reasonCode, decision.reason))
       logger.warn('workspace access denied', {
@@ -401,7 +397,7 @@ async function dispatchRequest(
         workspaceId,
         reason: decision.reason,
       })
-      // The reason of the access service is not given to the caller: it
+      // The reason of Access is not given to the caller: it
       // describes the policy of the platform and it is not the business
       // of the client.
       recordOutcome(dependencies, route.id, method, 403, started)
@@ -575,7 +571,7 @@ async function dispatchRequest(
       })
       // The latency of the upstream is a different number from the latency
       // of the gateway: the time the gateway spent on the authentication,
-      // on the limits and on the access service is not part of it.
+      // on the limits and on Access is not part of it.
       if (finalized.upstreamDurationMs !== undefined) {
         dependencies.observer.recordUpstream(route.id, finalized.upstreamDurationMs)
       }

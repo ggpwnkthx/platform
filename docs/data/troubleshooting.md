@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Data service failures by symptom: what to check and how to fix it. Alarms and metrics are in
+Data failures by symptom: what to check and how to fix it. Alarms and metrics are in
 [Operations](operations.md#alarms); every error code is listed in [API](api.md#error-codes).
 
 ## 401 UNAUTHENTICATED
@@ -19,13 +19,13 @@ The request didn't come through the gateway, or its signature doesn't match. See
 
 ## 403 FORBIDDEN
 
-The access service refused the context, or the principal lacks a capability. See
+Access refused the context, or the principal lacks a capability. See
 [spec §8](spec.md#8-data-authorization).
 
 | Check | Fix |
 | --- | --- |
-| The access service credential is the access context contract's, scoped to the deployment's tenants. | Replace `DATA_ACCESS_CONTEXT_TOKEN_FILE`. |
-| The grant matches the workspace and the route; the route is the binding's `routeId`, not the collection. | Grant the right route at the access service. |
+| Access credential is the access context contract's, scoped to the deployment's tenants. | Replace `DATA_ACCESS_CONTEXT_TOKEN_FILE`. |
+| The grant matches the workspace and the route; the route is the binding's `routeId`, not the collection. | Grant the right route at Access. |
 | A grant was just revoked. | Expected: answers aren't cached by default, so revocation applies on the next request. |
 | The request searches a field a policy hides. | Search visible fields only. |
 | Audit reads lack `data.audit.read`, or model writes lack `data.model.write`. | Grant the permission. |
@@ -41,12 +41,12 @@ The access service refused the context, or the principal lacks a capability. See
 
 ## 503 AUTHORIZATION_UNAVAILABLE
 
-The access service is down or doesn't speak the contract version
+Access is down or doesn't speak the contract version
 ([spec §5](spec.md#5-access-context-contract)).
 
 | Check | Fix |
 | --- | --- |
-| The access service answers `/v1/access-context`. Revisions before `4cedcfc` don't; the baseline revision is in `compatibility.json`. | Upgrade the access service. |
+| Access answers `/v1/access-context`. Revisions before `4cedcfc` don't; the baseline revision is in `compatibility.json`. | Upgrade Access. |
 | The context credential is the deployment's, scoped to the workspace's tenant. | Rotate both sides ([Operations](operations.md#rotating-secrets)). |
 | The servers' clocks agree within a second; an answer evaluated in the future is refused. | Fix time sync. |
 
@@ -61,7 +61,7 @@ The access service is down or doesn't speak the contract version
 
 ## 503 on readiness
 
-The response names the failing part: connection role, migrations, access service or delivery store.
+The response names the failing part: connection role, migrations, Access or delivery store.
 A migration edited after being applied is drift: revert the edit and write a new migration.
 
 ## 429 TOO_MANY_REQUESTS
@@ -108,7 +108,7 @@ reading the right workspace and hold `data.audit.read`.
 | Check | Fix |
 | --- | --- |
 | The subscriber is registered in this deployment; otherwise its delivery fails. | Register it, then requeue. |
-| The worker's service principal holds the subscriber's permission, or its fresh context is refused. | Grant it at the access service. |
+| The worker's service principal holds the subscriber's permission, or its fresh context is refused. | Grant it at Access. |
 | The event chain is deeper than ten. | Expected: the depth bound fails it. Stop subscribers from triggering each other. |
 
 Inspect and requeue with `scripts/cli/delivery.ts`

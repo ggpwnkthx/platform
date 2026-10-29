@@ -3,7 +3,7 @@
  *
  * The test builds the console with Vite, the way an image is built, and
  * serves the build against two fakes that speak the contracts the
- * console is a client of: the access service (the sign-in, the access
+ * console is a client of: Access (the sign-in, the access
  * context, the administration) and the gateway (the data of a
  * workspace). The fakes answer what the contracts say, and they record
  * what the console sent them.
