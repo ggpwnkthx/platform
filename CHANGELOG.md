@@ -10,6 +10,12 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The copy buttons of the code blocks are an island
+
+The islands of the console were listed without the copy buttons of the
+code blocks of the documentation, and the island that adds them is one
+of them. The list of the islands names it now.
+
 ### The places of the console are the places of the console
 
 The places of the console were five, and the page of the caller was not

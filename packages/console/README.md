@@ -36,7 +36,7 @@ packages/console/
 └── test/
 ```
 
-Islands: the status board (re-polls probes), the platform map, the list filter builder, the group member picker, the JSON field, the data access clock, the theme switch, confirmation of irreversible actions, and copy-ID.
+Islands: the status board (re-polls probes), the platform map, the list filter builder, the group member picker, the JSON field, the data access clock, the theme switch, confirmation of irreversible actions, copy-ID, and the copy buttons of the code blocks of the documentation.
 
 ## Commands
 
