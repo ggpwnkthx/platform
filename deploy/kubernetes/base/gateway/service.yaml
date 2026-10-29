@@ -9,6 +9,7 @@ spec:
   type: ClusterIP
   selector:
     app.kubernetes.io/name: platform-gateway
+    app.kubernetes.io/component: gateway
   ports:
     - name: http
       port: 80
@@ -64,8 +65,12 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: platform-gateway
+      app.kubernetes.io/component: gateway
 ---
-# The gateway only accepts the traffic of the ingress.
+# The gateway accepts the traffic of the ingress and reaches Access, Data
+# and the state the replicas share. The egress is part of the policy: the
+# gateway is the edge of the deployment, and a pod of the namespace that
+# reaches the gateway does not reach anything behind it.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -74,7 +79,8 @@ spec:
   podSelector:
     matchLabels:
       app.kubernetes.io/name: platform-gateway
-  policyTypes: ["Ingress"]
+      app.kubernetes.io/component: gateway
+  policyTypes: ["Ingress", "Egress"]
   ingress:
     - from:
         - namespaceSelector:
@@ -83,3 +89,47 @@ spec:
       ports:
         - protocol: TCP
           port: 8080
+  egress:
+    # Access decides which caller may use a workspace.
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: platform-access
+      ports:
+        - protocol: TCP
+          port: 8081
+    # Data is the api of the data of the workspace.
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: platform-data
+      ports:
+        - protocol: TCP
+          port: 8082
+    # The state the replicas share: the sessions, the limits and the
+    # cached decisions. The server is outside of the namespace of the
+    # platform, so the policy names the port and not the address.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 5432
+    # The names of the cluster.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # The identity provider of the callers.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443

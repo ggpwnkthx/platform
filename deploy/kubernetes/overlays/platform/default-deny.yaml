@@ -1,0 +1,20 @@
+# The default of the network of the namespace of the platform.
+#
+# Every pod of the namespace is denied every ingress and every egress, and
+# the policies of the services open what each of them needs. A pod that is
+# compromised in the namespace therefore reaches nothing that it was not
+# given, and a service that is added to the namespace is denied until its
+# policy says otherwise.
+#
+# The policy belongs to the composition and not to a base: the bases are
+# deployed on their own, and a base that denies everything would deny the
+# traffic of its own service until the policies of the others are applied.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: platform-default-deny
+  labels:
+    app.kubernetes.io/part-of: platform
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]

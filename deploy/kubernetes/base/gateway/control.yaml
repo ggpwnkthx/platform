@@ -158,6 +158,10 @@ spec:
 ---
 # Only the pods of the platform reach the control plane: the administrative
 # surface of the deployment is not reachable from anywhere else.
+#
+# The egress is part of the policy: the control plane writes the route
+# table and it revokes the sessions, so it reaches the state the replicas
+# share and nothing else.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -167,7 +171,7 @@ spec:
     matchLabels:
       app.kubernetes.io/name: platform-gateway
       app.kubernetes.io/component: control
-  policyTypes: ["Ingress"]
+  policyTypes: ["Ingress", "Egress"]
   ingress:
     - from:
         - namespaceSelector:
@@ -176,3 +180,24 @@ spec:
       ports:
         - protocol: TCP
           port: 9090
+  egress:
+    # The state the replicas share: the route table, the sessions and the
+    # cached decisions. The server is outside of the namespace of the
+    # platform, so the policy names the port and not the address.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 5432
+    # The names of the cluster.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0/0
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

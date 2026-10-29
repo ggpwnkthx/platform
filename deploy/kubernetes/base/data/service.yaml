@@ -9,6 +9,7 @@ spec:
   type: ClusterIP
   selector:
     app.kubernetes.io/name: platform-data
+    app.kubernetes.io/component: data
   ports:
     - name: http
       port: 80
@@ -56,9 +57,13 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: platform-data
+      app.kubernetes.io/component: data
 ---
 # The service is reached by the gateway of the platform, and by nothing
 # else.
+#
+# The egress is part of the policy: Data holds the data of the workspaces,
+# and it reaches the database of that data and nothing else.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -67,12 +72,32 @@ spec:
   podSelector:
     matchLabels:
       app.kubernetes.io/name: platform-data
-  policyTypes: ["Ingress"]
+      app.kubernetes.io/component: data
+  policyTypes: ["Ingress", "Egress"]
   ingress:
     - from:
-        - namespaceSelector:
+        - podSelector:
             matchLabels:
-              kubernetes.io/metadata.name: platform
+              app.kubernetes.io/name: platform-gateway
+              app.kubernetes.io/component: gateway
       ports:
         - protocol: TCP
           port: 8082
+  egress:
+    # The database of the data. The server is outside of the namespace of
+    # the platform, so the policy names the port and not the address.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 5432
+    # The names of the cluster.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

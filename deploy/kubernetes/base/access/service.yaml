@@ -9,6 +9,7 @@ spec:
   type: ClusterIP
   selector:
     app.kubernetes.io/name: platform-access
+    app.kubernetes.io/component: access
   ports:
     - name: http
       port: 80
@@ -56,9 +57,17 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: platform-access
+      app.kubernetes.io/component: access
 ---
 # The service is reached by the gateway and by Data of the
 # platform, and by nothing else.
+#
+# The browsers of the deployment reach the issuer through the ingress, and
+# the console of the platform reaches the service of the decisions.
+#
+# The egress is part of the policy: Access holds the policy of the
+# deployment, and it reaches the database of that policy, the state of the
+# logins and the provider of the identity of the tenants.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -67,12 +76,65 @@ spec:
   podSelector:
     matchLabels:
       app.kubernetes.io/name: platform-access
-  policyTypes: ["Ingress"]
+      app.kubernetes.io/component: access
+  policyTypes: ["Ingress", "Egress"]
   ingress:
+    # The browsers of the deployment reach the issuer through the ingress.
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: platform
+              kubernetes.io/metadata.name: ingress
       ports:
         - protocol: TCP
           port: 8081
+    # The gateway asks Access about the workspaces, and Data asks it about
+    # the scope of a record.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: platform-gateway
+              app.kubernetes.io/component: gateway
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: platform-data
+              app.kubernetes.io/component: data
+      ports:
+        - protocol: TCP
+          port: 8081
+    # The console of the platform reaches the service of the decisions.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: platform-console
+      ports:
+        - protocol: TCP
+          port: 8081
+  egress:
+    # The database of the policy and the state of the logins. The server
+    # is outside of the namespace of the platform, so the policy names the
+    # port and not the address.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+    # The names of the cluster.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # The provider of the identity of the tenants: Access is a broker, and
+    # a broker reaches the provider of the tenant.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443

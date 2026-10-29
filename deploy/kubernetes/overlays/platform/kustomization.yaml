@@ -19,6 +19,11 @@ resources:
   - ../../base/gateway
   - ../../base/access
   - ../../base/data
+  # The default of the network of the namespace: every pod is denied every
+  # ingress and every egress, and the policies of the services open what
+  # each of them needs. A pod that is compromised in the namespace reaches
+  # nothing that it was not given.
+  - default-deny.yaml
 patches:
   # The route table of the composition: the gateway forwards to the data
   # service of the platform.

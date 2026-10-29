@@ -290,6 +290,8 @@ kubectl apply -k deploy/kubernetes/overlays/platform
 
 The production Compose stack reads secrets from the shell environment and refuses to start when one is missing; the Kubernetes bases carry only a `secret.example.yaml` naming each key, and you apply the real secrets from your store ([deploy/README.md](../../deploy/README.md#compose-stacks)). Replace every `.env.min` value before real traffic.
 
+The Kubernetes overlay denies every ingress and every egress in its namespace and lets each service through its own policy: the gateway reaches Access, Data and the state, Access reaches the database of the policy and the provider of the tenants, and Data reaches the database of the data. The policies name the namespace of the ingress (`ingress`) and the pods of the platform, so a deployment whose ingress controller lives in another namespace names it in the policy of the service it fronts. The control plane is reached by the pods of the namespace only, and the operator reaches it with a port forward from a pod of the namespace.
+
 ### 13. Wire up monitoring
 
 Point your scraper at each `/metrics` endpoint with its token and load the alerts before the first tenant goes live. The signals and thresholds are in [Monitor the platform](monitor-the-platform.md); walk the gateway's [deployment review](../gateway/operations.md#deployment-review) once as well.
