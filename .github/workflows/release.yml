@@ -688,9 +688,10 @@ jobs:
           # reachable under the name of the release. The command of the
           # builder that removes an image does not exist, and the
           # packages API is the way a package of a registry is removed.
-          package="ggpwnkthx%2F${{ matrix.service }}"
+          owner="ggpwnkthx"
+          package="${owner}%2F${{ matrix.service }}"
           if gh api --method DELETE \
-            "/users/ggpwnkthx/packages/container/${package}/versions/${digest}" 2>/dev/null; then
+            "/users/${owner}/packages/container/${package}/versions/${digest}" 2>/dev/null; then
             echo "the image $digest is withdrawn from the registry"
           else
             echo "the image $digest could not be withdrawn: it must be removed by hand"
