@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { run, scanWords, type CliRuntime } from '../src/app/cli'
 import type { CommandSpec, GroupSpec, Services } from '../src/app/commands'
 import { CliFailure } from '../src/domains/failure'
-import { FakeHttp } from './support'
+import { FakeHttp, FakeInfrastructure } from './support'
 
 /** The commands of the test. */
 const hello: CommandSpec = {
@@ -49,6 +49,7 @@ function servicesOf(): Services {
       randomBytes: (size: number) => new Uint8Array(size).fill(7),
       sha256: (value: Uint8Array) => new Uint8Array(value.length).fill(9),
     },
+    infrastructure: new FakeInfrastructure(),
     files: { profiles: '/tmp/profiles.json', credentials: '/tmp/credentials.json' },
   }
 }

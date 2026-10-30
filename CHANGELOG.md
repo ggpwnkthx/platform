@@ -10,6 +10,28 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The CLI drives the tool that writes the infrastructure
+
+The deployment of the platform is written in OpenTofu, and the CLI had
+no word for it: an operator ran the tool by hand and read its output.
+The CLI now runs the tool, reads the plan the tool answers with, and
+draws what the tool decided.
+
+The CLI decides nothing about the infrastructure, for the same reason it
+decides nothing about the access of a caller: a plan that the CLI reads
+is the plan of the tool, and a plan that the CLI computes is a plan that
+nobody proved. The CLI never writes a file of the deployment either: the
+state, the values and the plan belong to the deployment, and the tool
+writes them. The plan is read from the json the tool writes, and the
+text the tool writes is never parsed.
+
+`platformctl infra plan` shows what the deployment would change,
+`platformctl infra apply` writes the plan, shows it, and applies **that**
+plan once the reader confirms it, and `platformctl infra output` reads
+the facts the deployment answers with. A credential of the deployment
+never reaches a line of a terminal: the outputs are held back before
+they are drawn.
+
 ### The deployment on Azure is written in OpenTofu
 
 The deployment of the platform had three shapes: the Compose stacks, the

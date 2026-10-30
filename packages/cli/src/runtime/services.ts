@@ -12,7 +12,8 @@ import { loopbackCallback } from '../platform/callback'
 import { machineCrypto } from '../platform/crypto'
 import { FileCredentialStore, FileProfileStore } from '../platform/files'
 import { DryRunHttp, FetchHttp } from '../platform/http'
-import { credentialsPath, profilesPath, timeoutMs } from './env'
+import { TofuInfrastructure } from '../platform/tofu'
+import { credentialsPath, environment, profilesPath, timeoutMs } from './env'
 
 /**
  * The ports of a command.
@@ -29,6 +30,7 @@ export function servicesOf(globals: GlobalOptions): Services {
     browser: browserOf(),
     callback: loopbackCallback,
     crypto: machineCrypto,
+    infrastructure: new TofuInfrastructure(environment),
     files: { profiles: profilesPath, credentials: credentialsPath },
   }
 }

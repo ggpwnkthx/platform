@@ -22,11 +22,11 @@ Status: 1.0.0. Runtime: Bun ≥ 1.4.3. Program name:
 
 The code enforces these, and no setting turns them off:
 
-- The CLI **decides nothing**. A decision is Access's answer, and the CLI shows it.
+- The CLI **decides nothing**. A decision is Access's answer, and the CLI shows it. The deployment of the platform is written in OpenTofu, and the same rule holds there: the tool decides what the deployment is, and the CLI shows the plan the tool wrote.
 - The CLI **never reaches a database**. It speaks HTTP to the services and holds no policy of its own.
 - The CLI **never becomes an administrative endpoint**. Gateway administration is the control plane, and the CLI is one of its clients.
 - A refused request is **never retried with another credential**. A token that is refused stays refused.
-- A secret is **never printed**. A credential is read from the machine's credential file or from the environment, and written only to that file, which only its owner can read.
+- A secret is **never printed**. A credential is read from the machine's credential file or from the environment, and written only to that file, which only its owner can read. The outputs of a deployment carry the credentials of the deployment, and they are held back before they are drawn.
 
 ---
 
@@ -206,6 +206,30 @@ Every data command goes through the gateway and works on one workspace: the prof
 
 A write's body is JSON, read from a file (`--body`) or from the command line (`--data`). A change carries the validator of the record it expects to change (`--etag`), and a creation may carry a key that makes it safe to repeat (`--idempotency-key`).
 
+### 5.7 Infrastructure
+
+The deployment of the platform is written in OpenTofu. The CLI runs the tool, it reads the plan the tool answers with, and it draws what the tool decided. The CLI never computes a plan, never interprets a change, and never writes a file of the deployment: the state, the values and the plan belong to the deployment, and the tool writes them.
+
+| Command | Effect |
+| --- | --- |
+| `infra plan` | Writes the plan of the deployment and shows what it changes. Nothing is applied. |
+| `infra apply` | Writes the plan, shows it, and applies **that** plan once the reader confirms it. |
+| `infra output` | The outputs of the deployment. |
+| `infra validate` | Checks the templates against the schemas of the providers. No cloud is needed. |
+
+The commands of the group take the same options:
+
+| Option | Effect |
+| --- | --- |
+| `--directory <path>` | The directory of the templates. The default is `deploy/tofu/azure`. |
+| `--runtime <path>` | The directory of the files of the deployment: the values, the plan and the configuration of the backend. The default is `deploy/tofu/runtime/<profile>`. |
+| `--var-file <path>` | The file of the values of the deployment. The default is the values of the runtime directory. |
+| `--name <name>` | One output of the deployment. |
+
+The tool is found on the path, or in the variable `TOFU_BINARY`. The CLI refuses a tool that is older than the version the templates ask for, and it refuses a tool that is not there. The plan is read from the json the tool writes, and the text the tool writes is never parsed: a plan that the CLI reads another way is a plan nobody proved.
+
+`infra apply` asks before it applies, and the question names what the plan destroys. `--dry-run` writes the plan and applies nothing.
+
 ---
 
 ## 6. Output
@@ -244,6 +268,7 @@ The service's error code decides the status; when the code is unknown, the HTTP 
 - `--dry-run` sends nothing: the answer holds the request that would have been sent.
 - A route table write names the revision it replaces.
 - A record change carries the validator of the record it expects to change, and a failed precondition has its own status.
+- An apply of the deployment applies the plan that was shown, and the question names what the plan destroys.
 
 ---
 
@@ -255,3 +280,5 @@ The service's error code decides the status; when the code is unknown, the HTTP 
 | `${XDG_DATA_HOME:-$HOME/.local/share}/platformctl/credentials.json` | The caller's credential, readable by its owner only. |
 
 The CLI writes nothing else: no cache, no log, and no state whose meaning someone would have to guess.
+
+The tool that writes the infrastructure writes its own files: the working directory of the tool, the plan and the state of the deployment. They belong to the deployment and not to the CLI, and the CLI writes none of them itself.

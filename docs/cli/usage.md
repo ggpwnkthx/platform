@@ -109,6 +109,46 @@ platformctl --output json access grants list --tenant acme \
 
 The statuses a script most often meets are `3` (the credential is no longer valid), `5` (the thing changed underneath the command) and `7` (a service could not be reached). The full table is in [spec §6.2](spec.md#62-exit-status).
 
+## The infrastructure of the deployment
+
+The deployment is written in OpenTofu. The CLI runs the tool and shows what it decided:
+
+```bash
+# what would change
+platformctl infra plan
+
+# what would change, as a script reads it
+platformctl --output json infra plan | jq -r '.changes[] | "\(.action) \(.address)"'
+
+# the templates hold against the schemas of the providers
+platformctl infra validate
+
+# the addresses the deployment answers with
+platformctl infra output
+```
+
+`infra apply` writes the plan, shows it, and applies **that** plan once you confirm it. The plan that is applied is the plan you read:
+
+```bash
+platformctl infra apply
+```
+
+The commands work on the deployment of the profile, and the directories are named when they are not the ones the profile says:
+
+```bash
+platformctl infra plan \
+  --directory deploy/tofu/azure \
+  --runtime deploy/tofu/runtime/production
+```
+
+The tool is found on the path, or in `TOFU_BINARY`:
+
+```bash
+export TOFU_BINARY=/usr/local/bin/tofu
+```
+
+The values of the deployment, the plan and the state of the deployment belong to the deployment: they live in the runtime directory, and the CLI writes none of them itself.
+
 ## When something refuses
 
 | The message starts with | Meaning | Fix |
@@ -122,3 +162,8 @@ The statuses a script most often meets are `3` (the credential is no longer vali
 | `the active revision is not the expected one` | The route table moved underneath the write | Read the revision again, then write |
 | `the service cannot be reached` | The network or the service is down | Check `platformctl status` |
 | `the command changes something and nobody can confirm it` | No terminal to ask for confirmation | Pass `--yes` |
+| `the tool that writes the infrastructure is not on the path` | OpenTofu is not installed, or not on the path | Install it, or set `TOFU_BINARY` |
+| `the tool that writes the infrastructure is too old` | The tool is older than the templates ask for | Install a newer OpenTofu |
+| `the directory of the deployment is not there` | The runtime directory of the profile does not exist | Pass `--runtime`, or create it |
+| `the values of the deployment are not there` | The file of the values is missing | Copy `terraform.tfvars.example` into the runtime directory |
+| `the deployment is not initialized` | The tool has no working directory for the templates | Run the `tofu init` the message names |

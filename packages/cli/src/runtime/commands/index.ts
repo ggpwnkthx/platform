@@ -12,6 +12,7 @@ import { accessGroup } from './access'
 import { contextGroup } from './context'
 import { dataGroup } from './data'
 import { doctor, login, logout, status, version, whoami } from './identity'
+import { infrastructureGroup } from './infrastructure'
 import { routesGroup, sessionsGroup } from './routes'
 
 /** The commands of the root of the CLI. */
@@ -24,4 +25,5 @@ export const groups: readonly GroupSpec[] = [
   sessionsGroup,
   accessGroup,
   dataGroup,
+  infrastructureGroup,
 ]

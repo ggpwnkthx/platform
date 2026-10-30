@@ -9,6 +9,7 @@
 
 import type { Environment, ResolvedContext } from '../domains/context'
 import { CliFailure, type ExitCode } from '../domains/failure'
+import type { InfrastructurePort } from '../domains/infrastructure'
 import type {
   BrowserPort,
   CallbackPort,
@@ -38,6 +39,8 @@ export interface Services {
   readonly callback: CallbackPort
   /** The randomness of the login. */
   readonly crypto: CryptoPort
+  /** The tool that writes the infrastructure of the deployment. */
+  readonly infrastructure: InfrastructurePort
   /** The files of the CLI on the machine of the caller. */
   readonly files: {
     /** The file of the profiles of the deployments. */
