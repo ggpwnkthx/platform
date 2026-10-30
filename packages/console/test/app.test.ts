@@ -25,12 +25,87 @@ type App = { fetch: (request: Request) => Promise<Response> }
 let app: App
 let access: ReturnType<typeof Bun.serve>
 let gateway: ReturnType<typeof Bun.serve>
-const seen: { idempotencyKeys: string[]; bearers: string[]; adminCalls: string[] } = {
+const seen: {
+  idempotencyKeys: string[]
+  bearers: string[]
+  adminCalls: string[]
+  contextChecks: string[]
+} = {
   idempotencyKeys: [],
   bearers: [],
   adminCalls: [],
+  contextChecks: [],
 }
 let consoleKeys = ['console.admin', 'console.status']
+
+/** What the fake Access holds of the administration of acme. */
+const policy = {
+  grants: [] as Record<string, unknown>[],
+  roles: [] as Record<string, unknown>[],
+  groups: [] as Record<string, unknown>[],
+  writes: [] as { method: string; path: string; body: unknown }[],
+}
+
+function resetPolicy() {
+  policy.writes.length = 0
+  policy.grants = [
+    {
+      id: 'g-1',
+      tenant: 'acme',
+      userId: PRINCIPAL,
+      permission: 'content.reader',
+      workspaceId: WORKSPACE,
+      routeId: 'data-api',
+      expiresAt: null,
+      revokedAt: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+  ]
+  policy.roles = [
+    {
+      id: 'r-reader',
+      tenant: 'acme',
+      key: 'reader',
+      displayName: 'Readers',
+      description: null,
+      permissions: ['content.read'],
+      roles: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      id: 'r-editor',
+      tenant: 'acme',
+      key: 'editor',
+      displayName: 'Editors',
+      description: null,
+      permissions: ['content.write'],
+      roles: ['reader'],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+  ]
+  policy.groups = [
+    {
+      id: 'grp-1',
+      tenant: 'acme',
+      key: 'team',
+      displayName: 'The team',
+      members: ['user-alice'],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+  ]
+}
+resetPolicy()
+
+const ALICE = {
+  id: PRINCIPAL,
+  tenant: 'acme',
+  externalSubject: 'user-alice',
+  email: 'alice@acme.test',
+  displayName: 'Alice',
+  status: 'active',
+  lastLoginAt: null,
+  createdAt: '2026-01-01T00:00:00.000Z',
+}
 
 beforeAll(async () => {
   const { privateKey, publicKey } = await generateKeyPair('RS256')
@@ -81,7 +156,15 @@ beforeAll(async () => {
       if (url.pathname === '/v1/access-context') {
         const body = (await request.json()) as Record<string, unknown>
         expect(body.tenantId).toBe(TENANT_ID)
-        expect(body.routeId).toBe('console')
+        if (body.routeId !== 'console') {
+          seen.contextChecks.push(`${body.subject} ${body.workspaceId} ${body.routeId}`)
+          return Response.json({
+            version: 1,
+            allow: true,
+            permissionKeys: ['content.read', 'content.write'],
+            validUntil: new Date(Date.now() + 1).toISOString(),
+          })
+        }
         return Response.json({
           version: 1,
           allow: consoleKeys.length > 0,
@@ -114,31 +197,69 @@ beforeAll(async () => {
             ],
           })
         }
-        if (url.pathname === '/v1/admin/grants') {
-          return Response.json({
-            grants: [
-              {
-                id: 'g-1',
-                tenant: 'acme',
-                userId: PRINCIPAL,
-                permission: 'content.reader',
-                workspaceId: WORKSPACE,
-                routeId: 'data-api',
-                expiresAt: null,
-                revokedAt: null,
-                createdAt: '2026-01-01T00:00:00.000Z',
-              },
-            ],
-            total: 1,
-            limit: 200,
-            offset: 0,
-          })
+        const page = (key: string, rows: unknown[]) =>
+          Response.json({ [key]: rows, total: rows.length, limit: 200, offset: 0 })
+        const write = async () => {
+          const body = await request.json()
+          policy.writes.push({ method: request.method, path: url.pathname, body })
+          return body as Record<string, unknown>
+        }
+        if (url.pathname === '/v1/admin/grants' && request.method === 'GET') {
+          const live = url.searchParams.get('live')
+          return page(
+            'grants',
+            policy.grants.filter((grant) =>
+              live === 'true'
+                ? !grant.revokedAt
+                : live === 'false'
+                  ? Boolean(grant.revokedAt)
+                  : true
+            )
+          )
+        }
+        if (url.pathname === '/v1/admin/grants' && request.method === 'PUT') {
+          const body = await write()
+          const grant = {
+            id: `g-${policy.grants.length + 1}`,
+            permission: null,
+            role: null,
+            revokedAt: null,
+            createdAt: '2026-02-01T00:00:00.000Z',
+            ...body,
+          }
+          policy.grants.push(grant)
+          return Response.json(grant)
+        }
+        if (url.pathname.startsWith('/v1/admin/grants/') && request.method === 'DELETE') {
+          policy.writes.push({ method: 'DELETE', path: url.pathname, body: null })
+          return new Response(null, { status: 204 })
         }
         if (url.pathname === '/v1/admin/users') {
-          return Response.json({ principals: [], total: 0, limit: 50, offset: 0 })
+          return Response.json({ principals: [ALICE], total: 1, limit: 50, offset: 0 })
         }
-        if (url.pathname === '/v1/admin/groups') {
-          return Response.json({ groups: [], total: 0, limit: 50, offset: 0 })
+        if (url.pathname === '/v1/admin/groups' && request.method === 'GET') {
+          const key = url.searchParams.get('key')
+          return page(
+            'groups',
+            policy.groups.filter((group) => !key || group.key === key)
+          )
+        }
+        if (url.pathname === '/v1/admin/groups' && request.method === 'POST') {
+          const body = await write()
+          return Response.json({ ...policy.groups[0], ...body })
+        }
+        if (url.pathname === '/v1/admin/roles' && request.method === 'GET') {
+          const key = url.searchParams.get('key')
+          return page(
+            'roles',
+            policy.roles.filter((role) => !key || role.key === key)
+          )
+        }
+        if (url.pathname === '/v1/admin/roles' && request.method === 'PUT') {
+          const body = await write()
+          const role = { id: `r-${body.key}`, createdAt: '2026-02-01T00:00:00.000Z', ...body }
+          policy.roles = [...policy.roles.filter((entry) => entry.key !== body.key), role]
+          return Response.json(role)
         }
         if (url.pathname === '/v1/admin/audit') {
           return Response.json({ records: [], total: 0, limit: 8, offset: 0 })
@@ -371,6 +492,33 @@ describe('the console', () => {
     expect(seen.bearers.every((bearer) => bearer.startsWith('Bearer ey'))).toBe(true)
   })
 
+  test('an action the caller may not take is drawn disabled, with its reason', async () => {
+    const browser = new Browser()
+    await browser.signIn()
+    const html = await (
+      await browser.request(
+        `/workspaces/${WORKSPACE}/collections/articles/records/44444444-4444-4444-8444-444444444444`
+      )
+    ).text()
+    expect(html).toContain('aria-disabled="true"')
+    expect(html).toContain('do not let you delete records of Articles')
+    expect(html).toContain('You cannot change this record')
+    expect(html).toContain(`href="/workspaces/${WORKSPACE}/access#articles"`)
+  })
+
+  test('the access of a workspace is a grid, with the reasons of every no', async () => {
+    const browser = new Browser()
+    await browser.signIn()
+    seen.contextChecks.length = 0
+    const html = await (await browser.request(`/workspaces/${WORKSPACE}/access`)).text()
+    expect(html).toContain('Your access')
+    expect(html).toContain('id="articles"')
+    expect(html).toContain('do not let you change records of Articles')
+    expect(html).toContain('id="c-articles-why-1"')
+    expect(html).toContain('<code>content.write</code>')
+    expect(seen.contextChecks).toEqual([`${PRINCIPAL} ${WORKSPACE} data-api`])
+  })
+
   test('a creation carries the key of its form, and a refusal is shown as it is', async () => {
     const browser = new Browser()
     await browser.signIn()
@@ -416,6 +564,150 @@ describe('the console', () => {
     expect(seen.adminCalls.every((call) => call.endsWith('Bearer the-acme-token-00001'))).toBe(true)
     const other = await browser.request('/operators/tenants/globex')
     expect(other.status).toBe(403)
+  })
+
+  test('the rights page names a role grant once, with what the role holds', async () => {
+    resetPolicy()
+    policy.grants.push({
+      id: 'g-role',
+      tenant: 'acme',
+      group: 'team',
+      permission: null,
+      role: 'editor',
+      workspaceId: null,
+      routeId: null,
+      expiresAt: null,
+      revokedAt: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })
+    const browser = new Browser()
+    await browser.signIn()
+    const html = await (await browser.request('/operators/tenants/acme/rights')).text()
+    expect(html).toContain('content.read, content.write')
+    expect(html).not.toContain('through the role editor')
+    expect(html).toContain('href="/operators/tenants/acme/groups/team"')
+    expect(html).toContain('will hold')
+    const filtered = await (
+      await browser.request('/operators/tenants/acme/rights?holder=alice')
+    ).text()
+    expect(filtered).toContain('content.reader')
+    expect(filtered).not.toContain('g-role')
+  })
+
+  test('a permission nobody names is not created until the operator confirms it', async () => {
+    resetPolicy()
+    const browser = new Browser()
+    await browser.signIn()
+    const fields = {
+      _action: 'grant',
+      _form: 'grant',
+      back: '/operators/tenants/acme/rights',
+      holder: `user:${PRINCIPAL}`,
+      kind: 'permission',
+      permission: 'content.raed',
+      workspace: 'all',
+      routeId: '',
+      expires: 'never',
+    }
+    const refused = await browser.post('/operators/tenants/acme/rights', fields)
+    expect(refused.status).toBe(302)
+    expect(policy.writes).toEqual([])
+    const again = await (await browser.request('/operators/tenants/acme/rights')).text()
+    expect(again).toContain('Check the spelling')
+    expect(again).toContain('value="content.raed"')
+
+    await browser.post('/operators/tenants/acme/rights', { ...fields, createPermission: 'yes' })
+    expect(policy.writes.map((entry) => entry.body)).toEqual([
+      expect.objectContaining({ userId: PRINCIPAL, permission: 'content.raed', workspaceId: null }),
+    ])
+  })
+
+  test('a role key written as a permission is refused, and a role is granted as a role', async () => {
+    resetPolicy()
+    const browser = new Browser()
+    await browser.signIn()
+    const fields = {
+      _action: 'grant',
+      _form: 'grant',
+      back: '/operators/tenants/acme/groups/team',
+      holder: 'group:team',
+      kind: 'permission',
+      permission: 'editor',
+      workspace: 'one',
+      workspaceId: WORKSPACE,
+      routeId: 'data-api',
+      expires: '7d',
+    }
+    await browser.post('/operators/tenants/acme/rights', fields)
+    expect(policy.writes).toEqual([])
+    await browser.post('/operators/tenants/acme/rights', {
+      ...fields,
+      kind: 'role',
+      role: 'editor',
+    })
+    const body = policy.writes[0]?.body as Record<string, unknown>
+    expect(body).toMatchObject({ group: 'team', role: 'editor', workspaceId: WORKSPACE })
+    expect(body.permission).toBeUndefined()
+    expect(Date.parse(String(body.expiresAt))).toBeGreaterThan(Date.now() + 6 * 86_400_000)
+  })
+
+  test('a user page shows what the user can do, and checks a workspace with Access', async () => {
+    resetPolicy()
+    policy.grants.push({
+      id: 'g-role',
+      tenant: 'acme',
+      group: 'team',
+      permission: null,
+      role: 'editor',
+      workspaceId: null,
+      routeId: null,
+      expiresAt: null,
+      revokedAt: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })
+    const browser = new Browser()
+    await browser.signIn()
+    seen.contextChecks.length = 0
+    const html = await (
+      await browser.request(
+        `/operators/tenants/acme/users/${PRINCIPAL}?workspace=${WORKSPACE}&route=data-api`
+      )
+    ).text()
+    expect(html).toContain('What Alice can do')
+    expect(html).toContain('role editor → reader')
+    expect(seen.contextChecks).toEqual([`${PRINCIPAL} ${WORKSPACE} data-api`])
+    expect(html).toContain('allowed')
+  })
+
+  test('a role is created once, and edited on its own page', async () => {
+    resetPolicy()
+    const browser = new Browser()
+    await browser.signIn()
+    const duplicate = await browser.post('/operators/tenants/acme/roles', {
+      _action: 'save',
+      key: 'editor',
+      permissions: 'content.admin',
+    })
+    expect(duplicate.headers.get('location')).toBe('/operators/tenants/acme/roles')
+    expect(policy.writes).toEqual([])
+    const page = await (await browser.request('/operators/tenants/acme/roles')).text()
+    expect(page).toContain('exists already')
+
+    const created = await browser.post('/operators/tenants/acme/roles', {
+      _action: 'save',
+      key: 'auditor',
+      description: 'Reads the audit',
+      permissions: 'audit.read',
+    })
+    expect(created.headers.get('location')).toBe('/operators/tenants/acme/roles/auditor')
+    expect(policy.writes[0]?.body).toMatchObject({
+      key: 'auditor',
+      description: 'Reads the audit',
+      permissions: ['audit.read'],
+    })
+    const detail = await (await browser.request('/operators/tenants/acme/roles/editor')).text()
+    expect(detail).toContain('Holds in effect')
+    expect(detail).toContain('included reader')
   })
 
   test('an operator whose keys were revoked is refused at once', async () => {
