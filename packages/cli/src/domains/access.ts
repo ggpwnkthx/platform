@@ -9,10 +9,22 @@
  * The decision contract is a contract of its own: the CLI may ask for a
  * decision, and it may ask for the context of a principal, and it never
  * computes either of them locally.
+ *
+ * The contract is read in the client of the platform (`@platform/client`):
+ * the console and the CLI speak to the same services and read the same
+ * paths. What is the CLI's is the way it turns a refusal into the
+ * failure that carries the status the process ends with.
  */
 
+import {
+  AccessAdminClient as PlatformAdminClient,
+  AccessClient as PlatformAccessClient,
+  bodyOf,
+  decide as platformDecide,
+} from '@platform/client'
+import { failureOf } from './answer'
 import type { HttpPort } from './contracts'
-import { expectSuccess } from './answer'
+import { transportOf } from './transport'
 
 /** The parameters of a call to Access. */
 export interface AccessCall {
@@ -24,52 +36,31 @@ export interface AccessCall {
   readonly token: string
 }
 
+/** The client of the administration of Access. */
+function clientOf(call: AccessCall): PlatformAdminClient {
+  return new PlatformAdminClient({
+    baseUrl: call.baseUrl,
+    credential: call.token,
+    transport: transportOf(call.http),
+  })
+}
+
 /**
- * Sends a request to Access.
+ * Reads the answer of the client, or turns its refusal into a failure.
  *
- * @param call the parameters of the call.
- * @param method the method of the request.
- * @param path the path of the request.
- * @param query the query of the request.
- * @param body the body of the request.
- * @param token the credential of the request, when it is not the one of the call.
+ * @param call the call that was made.
  */
-export async function accessRequest(
-  call: AccessCall,
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
-  path: string,
-  query?: Readonly<Record<string, string | number | undefined>>,
-  body?: unknown,
-  token?: string
-): Promise<unknown> {
-  const url = new URL(`${call.baseUrl}${path}`)
-  for (const [key, value] of Object.entries(query ?? {})) {
-    if (value === undefined) continue
-    url.searchParams.set(key, String(value))
+async function read<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call()
+  } catch (error) {
+    throw failureOf(error)
   }
-  const request: {
-    method: 'GET' | 'POST' | 'PUT' | 'DELETE'
-    url: string
-    token: string
-    headers: Record<string, string>
-    body?: string
-  } = {
-    method,
-    url: url.toString(),
-    token: token ?? call.token,
-    headers: {},
-  }
-  if (body !== undefined) {
-    request.headers['content-type'] = 'application/json'
-    request.body = JSON.stringify(body)
-  }
-  const answer = await call.http.send(request)
-  return expectSuccess(answer, `${method} ${path}`)
 }
 
 /** The tenants of the deployment. */
 export async function listTenants(call: AccessCall): Promise<unknown> {
-  return accessRequest(call, 'GET', '/v1/admin/tenants')
+  return await read(() => clientOf(call).send('GET', '/tenants').then(bodyOf))
 }
 
 /**
@@ -82,7 +73,7 @@ export async function listTenants(call: AccessCall): Promise<unknown> {
  * @param tenant the tenant to write.
  */
 export async function writeTenant(call: AccessCall, tenant: unknown): Promise<unknown> {
-  return accessRequest(call, 'POST', '/v1/admin/tenants', undefined, tenant)
+  return await read(() => clientOf(call).send('POST', '/tenants', {}, tenant).then(bodyOf))
 }
 
 /**
@@ -95,7 +86,11 @@ export async function listPrincipals(
   call: AccessCall,
   query: Readonly<Record<string, string | number | undefined>>
 ): Promise<unknown> {
-  return accessRequest(call, 'GET', '/v1/admin/users', query)
+  return await read(() =>
+    clientOf(call)
+      .send('GET', '/users', query as Record<string, string>)
+      .then(bodyOf)
+  )
 }
 
 /**
@@ -105,7 +100,7 @@ export async function listPrincipals(
  * @param principal the principal, or the batch of them.
  */
 export async function writePrincipal(call: AccessCall, principal: unknown): Promise<unknown> {
-  return accessRequest(call, 'POST', '/v1/admin/users', undefined, principal)
+  return await read(() => clientOf(call).send('POST', '/users', {}, principal).then(bodyOf))
 }
 
 /**
@@ -118,7 +113,11 @@ export async function listGrants(
   call: AccessCall,
   query: Readonly<Record<string, string | number | undefined>>
 ): Promise<unknown> {
-  return accessRequest(call, 'GET', '/v1/admin/grants', query)
+  return await read(() =>
+    clientOf(call)
+      .send('GET', '/grants', query as Record<string, string>)
+      .then(bodyOf)
+  )
 }
 
 /**
@@ -128,7 +127,7 @@ export async function listGrants(
  * @param grant the grant to write.
  */
 export async function writeGrant(call: AccessCall, grant: unknown): Promise<unknown> {
-  return accessRequest(call, 'PUT', '/v1/admin/grants', undefined, grant)
+  return await read(() => clientOf(call).send('PUT', '/grants', {}, grant).then(bodyOf))
 }
 
 /**
@@ -138,7 +137,11 @@ export async function writeGrant(call: AccessCall, grant: unknown): Promise<unkn
  * @param id the id of the grant.
  */
 export async function revokeGrant(call: AccessCall, id: string): Promise<unknown> {
-  return accessRequest(call, 'DELETE', `/v1/admin/grants/${encodeURIComponent(id)}`)
+  return await read(() =>
+    clientOf(call)
+      .send('DELETE', `/grants/${encodeURIComponent(id)}`)
+      .then(bodyOf)
+  )
 }
 
 /**
@@ -151,7 +154,11 @@ export async function listGroups(
   call: AccessCall,
   query: Readonly<Record<string, string | number | undefined>>
 ): Promise<unknown> {
-  return accessRequest(call, 'GET', '/v1/admin/groups', query)
+  return await read(() =>
+    clientOf(call)
+      .send('GET', '/groups', query as Record<string, string>)
+      .then(bodyOf)
+  )
 }
 
 /**
@@ -161,7 +168,7 @@ export async function listGroups(
  * @param group the group to write.
  */
 export async function writeGroup(call: AccessCall, group: unknown): Promise<unknown> {
-  return accessRequest(call, 'POST', '/v1/admin/groups', undefined, group)
+  return await read(() => clientOf(call).send('POST', '/groups', {}, group).then(bodyOf))
 }
 
 /**
@@ -174,7 +181,11 @@ export async function listRoles(
   call: AccessCall,
   query: Readonly<Record<string, string | number | undefined>>
 ): Promise<unknown> {
-  return accessRequest(call, 'GET', '/v1/admin/roles', query)
+  return await read(() =>
+    clientOf(call)
+      .send('GET', '/roles', query as Record<string, string>)
+      .then(bodyOf)
+  )
 }
 
 /**
@@ -187,7 +198,7 @@ export async function listRoles(
  * @param role the role to write.
  */
 export async function writeRole(call: AccessCall, role: unknown): Promise<unknown> {
-  return accessRequest(call, 'PUT', '/v1/admin/roles', undefined, role)
+  return await read(() => clientOf(call).send('PUT', '/roles', {}, role).then(bodyOf))
 }
 
 /**
@@ -197,7 +208,11 @@ export async function writeRole(call: AccessCall, role: unknown): Promise<unknow
  * @param id the id of the role.
  */
 export async function removeRole(call: AccessCall, id: string): Promise<unknown> {
-  return accessRequest(call, 'DELETE', `/v1/admin/roles/${encodeURIComponent(id)}`)
+  return await read(() =>
+    clientOf(call)
+      .send('DELETE', `/roles/${encodeURIComponent(id)}`)
+      .then(bodyOf)
+  )
 }
 
 /**
@@ -210,7 +225,11 @@ export async function audit(
   call: AccessCall,
   query: Readonly<Record<string, string | number | undefined>>
 ): Promise<unknown> {
-  return accessRequest(call, 'GET', '/v1/admin/audit', query)
+  return await read(() =>
+    clientOf(call)
+      .send('GET', '/audit', query as Record<string, string>)
+      .then(bodyOf)
+  )
 }
 
 /**
@@ -225,7 +244,16 @@ export async function decide(
   decision: unknown,
   token?: string
 ): Promise<unknown> {
-  return accessRequest(call, 'POST', '/v1/decisions', undefined, decision, token)
+  return await read(() =>
+    platformDecide(
+      {
+        baseUrl: call.baseUrl,
+        transport: transportOf(call.http),
+      },
+      decision,
+      token ?? call.token
+    )
+  )
 }
 
 /**
@@ -240,5 +268,10 @@ export async function accessContext(
   request: unknown,
   token?: string
 ): Promise<unknown> {
-  return accessRequest(call, 'POST', '/v1/access-context', undefined, request, token)
+  return await read(() =>
+    new PlatformAccessClient({
+      baseUrl: call.baseUrl,
+      transport: transportOf(call.http),
+    }).context(request, token ?? call.token)
+  )
 }

@@ -140,6 +140,10 @@ export const PLATFORM_VERSION_SOURCES: readonly VersionSource[] = [
     read: (content) => /export const VERSION = '(.+)'/.exec(content)?.[1]?.trim() ?? null,
   },
   {
+    path: 'packages/client/package.json',
+    read: (content) => versionOfPackage(content),
+  },
+  {
     path: 'CHANGELOG.md',
     // The latest release of the changelog: the first heading of a version.
     read: (content) => /^##\s+(\d+\.\d+\.\d+)/m.exec(content)?.[1]?.trim() ?? null,

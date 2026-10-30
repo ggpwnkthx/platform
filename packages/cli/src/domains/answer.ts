@@ -10,6 +10,7 @@
  * what a human reads: the CLI never guesses the meaning of a message.
  */
 
+import { ClientError } from '@platform/client'
 import type { HttpAnswer } from './contracts'
 import { CliFailure, exitCodeOf } from './failure'
 
@@ -88,6 +89,27 @@ export function expectSuccess(answer: HttpAnswer, what: string): unknown {
     refusal.code,
     refusal.details
   )
+}
+
+/**
+ * Reads the refusal of the client of the platform.
+ *
+ * The client of the platform raises the refusal of a service as it read
+ * it, and the CLI turns it into the failure that carries the status the
+ * process ends with.
+ *
+ * @param error the failure of the client.
+ */
+export function failureOf(error: unknown): CliFailure {
+  if (error instanceof ClientError) {
+    return new CliFailure(
+      error.message,
+      exitCodeOf(error.status, error.code),
+      error.code,
+      error.details
+    )
+  }
+  throw error
 }
 
 /**

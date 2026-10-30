@@ -69,6 +69,11 @@
       "ignoreExportsUsedInFile": true,
       "includeEntryExports": true
     },
+    "packages/client": {
+      "entry": ["test/**/*.ts", "scripts/**/*.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"],
+      "ignoreExportsUsedInFile": true
+    },
     "packages/cli": {
       "entry": ["src/main.ts", "test/**/*.ts", "scripts/**/*.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"],

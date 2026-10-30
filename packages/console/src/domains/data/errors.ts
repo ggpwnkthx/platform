@@ -7,7 +7,7 @@
  * service said.
  */
 
-import { bodyOf } from '../transport'
+import { ClientError } from '@platform/client'
 
 /** A refusal of Data, or of the gateway. */
 export class DataError extends Error {
@@ -32,40 +32,26 @@ export class DataError extends Error {
   }
 }
 
-/** Reads the refusal of an answer that is not a success. */
-export async function refusalOf(response: Response): Promise<DataError> {
-  const body = (await bodyOf(response)) as Record<string, unknown> | string | null
-  const envelope = typeof body === 'object' && body !== null ? body : {}
-  const error = envelope.error
-  const requestId =
-    (typeof envelope.requestId === 'string' ? envelope.requestId : null) ??
-    response.headers.get('x-request-id')
-  // The envelope of Data: `{ error: { code, message, details } }`.
-  if (typeof error === 'object' && error !== null) {
-    const detail = error as Record<string, unknown>
+/**
+ * Reads the refusal of the client of the platform.
+ *
+ * The client of the platform raises the refusal of a service as it read
+ * it, and the console shows it as it is: it never rewrites a refusal
+ * into one of its own.
+ *
+ * @param error the failure of the client.
+ */
+export function failureOf(error: unknown): DataError {
+  if (error instanceof ClientError) {
     return new DataError({
-      status: response.status,
-      code: typeof detail.code === 'string' ? detail.code : `HTTP_${response.status}`,
-      message:
-        typeof detail.message === 'string'
-          ? detail.message
-          : `the request failed (${response.status})`,
-      details: Array.isArray(detail.details)
-        ? (detail.details as { field: string; code: string }[])
+      status: error.status,
+      code: error.code,
+      message: error.message,
+      details: Array.isArray(error.details)
+        ? (error.details as { field: string; code: string }[])
         : [],
-      requestId,
+      requestId: error.requestId ?? null,
     })
   }
-  // The envelope of the gateway: `{ error: "<code>", message }`.
-  return new DataError({
-    status: response.status,
-    code: typeof error === 'string' ? error : `HTTP_${response.status}`,
-    message:
-      typeof envelope.message === 'string'
-        ? envelope.message
-        : typeof body === 'string' && body.length > 0 && body.length < 300
-          ? body
-          : `the gateway answered ${response.status}`,
-    requestId,
-  })
+  throw error
 }

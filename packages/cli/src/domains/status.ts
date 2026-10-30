@@ -5,9 +5,16 @@
  * process is alive, and one that says it may serve. The CLI reads both
  * and shows them, and it never guesses: a service that does not answer
  * is unreachable, and that is what it is told.
+ *
+ * The probes are read in the client of the platform (`@platform/client`):
+ * the console and the CLI read the same probes, and a probe that
+ * answers differently in one of them is a probe a deployment cannot
+ * read.
  */
 
+import { probeOf } from '@platform/client'
 import type { HttpPort } from './contracts'
+import { transportOf } from './transport'
 
 /** The answer of a probe. */
 export interface Probe {
@@ -55,30 +62,14 @@ export async function probe(
   path: string
 ): Promise<Probe> {
   const address = `${url.replace(/\/+$/, '')}${path}`
-  try {
-    const answer = await http.send({ method: 'GET', url: address })
-    let body: unknown = null
-    try {
-      body = answer.body.trim() === '' ? null : JSON.parse(answer.body)
-    } catch {
-      body = answer.body
-    }
-    return {
-      name,
-      url: address,
-      status: answer.status,
-      ok: answer.status >= 200 && answer.status < 300,
-      body,
-    }
-  } catch (error) {
-    return {
-      name,
-      url: address,
-      status: 0,
-      ok: false,
-      body: null,
-      error: error instanceof Error ? error.message : String(error),
-    }
+  const answer = await probeOf(transportOf(http), address)
+  return {
+    name,
+    url: address,
+    status: answer.status ?? 0,
+    ok: answer.ok,
+    body: answer.body,
+    ...(answer.error === null ? {} : { error: answer.error }),
   }
 }
 

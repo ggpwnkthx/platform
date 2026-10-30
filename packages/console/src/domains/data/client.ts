@@ -2,14 +2,20 @@
  * The client of the data of a workspace.
  *
  * The console reads the data through the gateway, with the access token
- * of the caller as a bearer token: the gateway authenticates it, asks the
- * Access, signs the identity and forwards the request. The data
+ * of the caller as a bearer token: the gateway authenticates it, asks
+ * the Access, signs the identity and forwards the request. The data
  * service decides what the caller sees and what it may change; the
  * console shows the answer and decides nothing.
+ *
+ * The contract is read in the client of the platform (`@platform/client`):
+ * the console and the CLI speak to the same services and read the same
+ * paths. What is the console's is the way it shows a refusal and the
+ * way it reads the envelope of the contract.
  */
 
-import { bodyOf, call, type Fetch } from '../transport'
-import { refusalOf } from './errors'
+import { DataClient as PlatformDataClient } from '@platform/client'
+import { transportOf, type Fetch } from '../transport'
+import { failureOf } from './errors'
 import type {
   Aggregate,
   AuditEntry,
@@ -36,7 +42,7 @@ export interface DataClientOptions {
 }
 
 /** The options of a list. */
-export interface ListQuery {
+export type ListQuery = {
   readonly fields?: readonly string[]
   readonly filter?: unknown
   readonly search?: string
@@ -48,7 +54,7 @@ export interface ListQuery {
 }
 
 /** The options of an aggregate. */
-export interface AggregateQuery {
+export type AggregateQuery = {
   readonly groupBy?: readonly string[]
   readonly metrics?: readonly string[]
   readonly filter?: unknown
@@ -64,108 +70,74 @@ export interface Validated {
 
 /** The client of the data of one workspace, for one caller. */
 export class DataClient {
-  readonly #options: DataClientOptions
-  readonly #fetch: Fetch
+  readonly #client: PlatformDataClient
 
   constructor(options: DataClientOptions) {
-    this.#options = options
-    this.#fetch = options.fetch ?? fetch
+    this.#client = new PlatformDataClient({
+      baseUrl: options.gatewayUrl,
+      workspaceId: options.workspaceId,
+      token: options.token,
+      transport: transportOf('gateway', options.fetch ?? fetch, options.timeoutMs),
+    })
   }
 
-  get #prefix(): string {
-    return `${this.#options.gatewayUrl}/ws/${encodeURIComponent(this.#options.workspaceId)}/v1`
-  }
-
-  async #send(
-    method: string,
-    path: string,
-    options: { body?: unknown; headers?: Record<string, string> } = {}
-  ): Promise<{ body: unknown; headers: Headers; status: number }> {
-    const headers: Record<string, string> = {
-      authorization: `Bearer ${this.#options.token}`,
-      accept: 'application/json',
-      ...(options.headers ?? {}),
+  /**
+   * Reads the data of an answer of the contract.
+   *
+   * The contract of the data API wraps the value in an envelope: the
+   * answer of `GET /me` is `{"data":{...}}`, and the console reads the
+   * value out of it.
+   */
+  async #data<T>(call: () => Promise<unknown>): Promise<T> {
+    try {
+      const body = await call()
+      if (typeof body !== 'object' || body === null) return body as T
+      return (body as { data: T }).data
+    } catch (error) {
+      throw failureOf(error)
     }
-    if (options.body !== undefined) headers['content-type'] = 'application/json'
-    const response = await call(
-      'gateway',
-      this.#fetch,
-      `${this.#prefix}${path}`,
-      {
-        method,
-        headers,
-        ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
-      },
-      this.#options.timeoutMs
-    )
-    if (!response.ok) throw await refusalOf(response)
-    return { body: await bodyOf(response), headers: response.headers, status: response.status }
-  }
-
-  async #data<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const answer = await this.#send(method, path, body === undefined ? {} : { body })
-    return (answer.body as { data: T }).data
   }
 
   /** The identity of the caller in the workspace. */
   async me(): Promise<Me> {
-    return await this.#data<Me>('GET', '/me')
+    return await this.#data<Me>(() => this.#client.me())
   }
 
   /** The metadata of the collections the caller may use. */
   async schema(): Promise<SchemaMetadata> {
-    return await this.#data<SchemaMetadata>('GET', '/schema')
+    return await this.#data<SchemaMetadata>(() => this.#client.schema())
   }
 
   /** The metadata of one collection. */
   async collection(key: string): Promise<CollectionMetadata> {
-    return await this.#data<CollectionMetadata>('GET', `/schema/${encodeURIComponent(key)}`)
+    return await this.#data<CollectionMetadata>(() => this.#client.collection(key))
   }
 
   /** A page of the records of a collection. */
   async list(key: string, query: ListQuery = {}): Promise<Page> {
-    const search = new URLSearchParams()
-    if (query.fields?.length) search.set('fields', query.fields.join(','))
-    if (query.filter !== undefined) search.set('filter', JSON.stringify(query.filter))
-    if (query.search) search.set('search', query.search)
-    if (query.sort?.length) search.set('sort', query.sort.join(','))
-    if (query.limit !== undefined) search.set('limit', String(query.limit))
-    if (query.cursor) search.set('cursor', query.cursor)
-    if (query.include?.length) search.set('include', query.include.join(','))
-    if (query.includeCount) search.set('include_count', 'true')
-    const suffix = search.toString()
-    const answer = await this.#send(
-      'GET',
-      `/items/${encodeURIComponent(key)}${suffix ? `?${suffix}` : ''}`
-    )
-    return answer.body as Page
+    try {
+      return (await this.#client.list(key, query)) as Page
+    } catch (error) {
+      throw failureOf(error)
+    }
   }
 
   /** The groups of an aggregate. */
   async aggregate(key: string, query: AggregateQuery = {}): Promise<Aggregate> {
-    const search = new URLSearchParams()
-    if (query.groupBy?.length) search.set('group_by', query.groupBy.join(','))
-    if (query.metrics?.length) search.set('metrics', query.metrics.join(','))
-    if (query.filter !== undefined) search.set('filter', JSON.stringify(query.filter))
-    if (query.search) search.set('search', query.search)
-    if (query.limit !== undefined) search.set('limit', String(query.limit))
-    const suffix = search.toString()
-    const answer = await this.#send(
-      'GET',
-      `/aggregate/${encodeURIComponent(key)}${suffix ? `?${suffix}` : ''}`
-    )
-    return answer.body as Aggregate
+    try {
+      return (await this.#client.aggregate(key, query)) as Aggregate
+    } catch (error) {
+      throw failureOf(error)
+    }
   }
 
   /** One record and its validator. */
   async get(key: string, id: string): Promise<Validated> {
-    const answer = await this.#send(
-      'GET',
-      `/items/${encodeURIComponent(key)}/${encodeURIComponent(id)}`
-    )
-    return {
-      record: (answer.body as { data: RecordValue }).data,
-      etag: answer.headers.get('etag') ?? '',
+    try {
+      const answer = await this.#client.get(key, id)
+      return { record: (answer.body as { data: RecordValue }).data, etag: answer.etag }
+    } catch (error) {
+      throw failureOf(error)
     }
   }
 
@@ -180,12 +152,13 @@ export class DataClient {
     values: Record<string, unknown>,
     idempotencyKey: string
   ): Promise<{ id: string; version: number; replayed: boolean }> {
-    const answer = await this.#send('POST', `/items/${encodeURIComponent(key)}`, {
-      body: values,
-      headers: { 'idempotency-key': idempotencyKey },
-    })
-    const receipt = (answer.body as { data: { id: string; version: number } }).data
-    return { ...receipt, replayed: answer.headers.get('idempotency-replayed') === 'true' }
+    try {
+      const answer = await this.#client.create(key, values, idempotencyKey)
+      const receipt = (answer.body as { data: { id: string; version: number } }).data
+      return { ...receipt, replayed: answer.replayed }
+    } catch (error) {
+      throw failureOf(error)
+    }
   }
 
   /** Updates a record, against the validator the caller read. */
@@ -195,50 +168,40 @@ export class DataClient {
     values: Record<string, unknown>,
     etag: string
   ): Promise<Validated> {
-    const answer = await this.#send(
-      'PATCH',
-      `/items/${encodeURIComponent(key)}/${encodeURIComponent(id)}`,
-      { body: values, headers: { 'if-match': etag } }
-    )
-    return {
-      record: (answer.body as { data: RecordValue }).data,
-      etag: answer.headers.get('etag') ?? '',
+    try {
+      const answer = await this.#client.update(key, id, values, etag)
+      return { record: (answer.body as { data: RecordValue }).data, etag: answer.etag }
+    } catch (error) {
+      throw failureOf(error)
     }
   }
 
   /** Deletes a record, against the validator the caller read. */
   async remove(key: string, id: string, etag: string): Promise<void> {
-    await this.#send('DELETE', `/items/${encodeURIComponent(key)}/${encodeURIComponent(id)}`, {
-      headers: { 'if-match': etag },
-    })
+    try {
+      await this.#client.remove(key, id, etag)
+    } catch (error) {
+      throw failureOf(error)
+    }
   }
 
   /** The history of the versions of a record. */
   async versions(key: string, id: string): Promise<readonly VersionEntry[]> {
-    return await this.#data<VersionEntry[]>(
-      'GET',
-      `/items/${encodeURIComponent(key)}/${encodeURIComponent(id)}/versions`
-    )
+    return await this.#data<VersionEntry[]>(() => this.#client.versions(key, id))
   }
 
   /** One version of a record. */
   async version(key: string, id: string, version: number): Promise<RecordValue> {
-    return await this.#data<RecordValue>(
-      'GET',
-      `/items/${encodeURIComponent(key)}/${encodeURIComponent(id)}/versions/${version}`
-    )
+    return await this.#data<RecordValue>(() => this.#client.version(key, id, version))
   }
 
   /** Rolls a record back to one of its versions. */
   async rollback(key: string, id: string, version: number, etag: string): Promise<Validated> {
-    const answer = await this.#send(
-      'POST',
-      `/items/${encodeURIComponent(key)}/${encodeURIComponent(id)}/rollback`,
-      { body: { version }, headers: { 'if-match': etag } }
-    )
-    return {
-      record: (answer.body as { data: RecordValue }).data,
-      etag: answer.headers.get('etag') ?? '',
+    try {
+      const answer = await this.#client.rollback(key, id, version, etag)
+      return { record: (answer.body as { data: RecordValue }).data, etag: answer.etag }
+    } catch (error) {
+      throw failureOf(error)
     }
   }
 
@@ -247,27 +210,37 @@ export class DataClient {
     data: readonly AuditEntry[]
     meta: { limit: number; nextCursor: string | null }
   }> {
-    const search = new URLSearchParams()
-    if (query.limit !== undefined) search.set('limit', String(query.limit))
-    if (query.cursor) search.set('cursor', query.cursor)
-    const suffix = search.toString()
-    const answer = await this.#send('GET', `/audit${suffix ? `?${suffix}` : ''}`)
-    return answer.body as { data: AuditEntry[]; meta: { limit: number; nextCursor: string | null } }
+    try {
+      return (await this.#client.audit(query)) as {
+        data: AuditEntry[]
+        meta: { limit: number; nextCursor: string | null }
+      }
+    } catch (error) {
+      throw failureOf(error)
+    }
   }
 
   /** The model of the workspace. */
   async model(): Promise<Model> {
-    return await this.#data<Model>('GET', '/model')
+    return await this.#data<Model>(() => this.#client.model())
   }
 
   /** Serves a collection of the deployment in the workspace. */
   async registerCollection(key: string): Promise<void> {
-    await this.#send('POST', '/model/collections', { body: { key } })
+    try {
+      await this.#client.registerCollection(key)
+    } catch (error) {
+      throw failureOf(error)
+    }
   }
 
   /** Stops serving a collection in the workspace. */
   async unregisterCollection(key: string): Promise<void> {
-    await this.#send('DELETE', `/model/collections/${encodeURIComponent(key)}`)
+    try {
+      await this.#client.removeCollection(key)
+    } catch (error) {
+      throw failureOf(error)
+    }
   }
 
   /** Changes the label and the description of a collection. */
@@ -275,54 +248,64 @@ export class DataClient {
     key: string,
     attributes: { label?: string; description?: string }
   ): Promise<void> {
-    await this.#send('PATCH', `/model/collections/${encodeURIComponent(key)}`, { body: attributes })
+    try {
+      await this.#client.updateCollection(key, attributes)
+    } catch (error) {
+      throw failureOf(error)
+    }
   }
 
   /** Holds a field of the collection in the model. */
   async addField(key: string, name: string, attributes: FieldAttributes): Promise<void> {
-    await this.#send('POST', `/model/collections/${encodeURIComponent(key)}/fields`, {
-      body: { name, ...attributes },
-    })
+    try {
+      await this.#client.addField(key, { name, ...attributes })
+    } catch (error) {
+      throw failureOf(error)
+    }
   }
 
   /** Changes the attributes of a field of the model. */
   async changeField(key: string, name: string, attributes: FieldAttributes): Promise<void> {
-    await this.#send(
-      'PATCH',
-      `/model/collections/${encodeURIComponent(key)}/fields/${encodeURIComponent(name)}`,
-      { body: attributes }
-    )
+    try {
+      await this.#client.updateField(key, name, attributes)
+    } catch (error) {
+      throw failureOf(error)
+    }
   }
 
   /** Removes a field from the model: the column stays. */
   async removeField(key: string, name: string): Promise<void> {
-    await this.#send(
-      'DELETE',
-      `/model/collections/${encodeURIComponent(key)}/fields/${encodeURIComponent(name)}`
-    )
+    try {
+      await this.#client.removeField(key, name)
+    } catch (error) {
+      throw failureOf(error)
+    }
   }
 
   /** Moves a field of the model up or down. */
   async moveField(key: string, name: string, direction: 'up' | 'down'): Promise<void> {
-    await this.#send(
-      'POST',
-      `/model/collections/${encodeURIComponent(key)}/fields/${encodeURIComponent(name)}/move`,
-      { body: { direction } }
-    )
+    try {
+      await this.#client.moveField(key, name, direction)
+    } catch (error) {
+      throw failureOf(error)
+    }
   }
 
   /** Adds a relation to the model of a collection. */
   async addRelation(key: string, name: string, attributes: RelationAttributes): Promise<void> {
-    await this.#send('POST', `/model/collections/${encodeURIComponent(key)}/relations`, {
-      body: { name, ...attributes },
-    })
+    try {
+      await this.#client.addRelation(key, { name, ...attributes })
+    } catch (error) {
+      throw failureOf(error)
+    }
   }
 
   /** Removes a relation from the model of a collection. */
   async removeRelation(key: string, name: string): Promise<void> {
-    await this.#send(
-      'DELETE',
-      `/model/collections/${encodeURIComponent(key)}/relations/${encodeURIComponent(name)}`
-    )
+    try {
+      await this.#client.removeRelation(key, name)
+    } catch (error) {
+      throw failureOf(error)
+    }
   }
 }

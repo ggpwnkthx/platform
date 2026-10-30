@@ -10,8 +10,9 @@
  * A context is kept until its `validUntil`, and never longer.
  */
 
-import { bodyOf, call, type Fetch } from '../transport'
-import { refusalOf } from './errors'
+import { AccessContextClient as PlatformContextClient } from '@platform/client'
+import { transportOf, type Fetch } from '../transport'
+import { failureOf } from './errors'
 import type { AccessContext } from './types'
 
 /** The options of the client of the access context. */
@@ -33,15 +34,15 @@ export interface ContextQuestion {
 
 /** The client of the contract of the access context. */
 export class ContextClient {
-  readonly #options: ContextClientOptions
-  readonly #fetch: Fetch
-  readonly #clock: () => number
-  readonly #cache = new Map<string, { context: AccessContext; until: number }>()
+  readonly #client: PlatformContextClient
 
   constructor(options: ContextClientOptions) {
-    this.#options = options
-    this.#fetch = options.fetch ?? fetch
-    this.#clock = options.clock ?? Date.now
+    this.#client = new PlatformContextClient({
+      baseUrl: options.accessUrl,
+      credential: options.credential,
+      transport: transportOf('Access', options.fetch ?? fetch, options.timeoutMs),
+      ...(options.clock ? { clock: options.clock } : {}),
+    })
   }
 
   /** The context of a principal, fresh or from the cache when it is still valid. */
@@ -49,43 +50,10 @@ export class ContextClient {
     question: ContextQuestion,
     options: { fresh?: boolean } = {}
   ): Promise<AccessContext> {
-    const key = [question.subject, question.tenantId, question.workspaceId, question.routeId].join(
-      '\u0000'
-    )
-    const now = this.#clock()
-    const cached = this.#cache.get(key)
-    if (!options.fresh && cached && cached.until > now) return cached.context
-
-    const response = await call(
-      'Access',
-      this.#fetch,
-      `${this.#options.accessUrl}/v1/access-context`,
-      {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${this.#options.credential}`,
-          'content-type': 'application/json',
-          accept: 'application/json',
-        },
-        body: JSON.stringify({ version: 1, ...question }),
-      },
-      this.#options.timeoutMs
-    )
-    if (!response.ok) throw await refusalOf(response)
-    const body = (await bodyOf(response)) as Record<string, unknown> | null
-    const context: AccessContext = {
-      allow: body?.allow === true,
-      permissionKeys: Array.isArray(body?.permissionKeys)
-        ? body.permissionKeys.filter((key): key is string => typeof key === 'string')
-        : [],
-      validUntil: typeof body?.validUntil === 'string' ? body.validUntil : null,
+    try {
+      return await this.#client.context(question, options)
+    } catch (error) {
+      throw failureOf(error)
     }
-    if (context.allow && context.validUntil) {
-      const until = Date.parse(context.validUntil)
-      if (Number.isFinite(until)) this.#cache.set(key, { context, until })
-    } else {
-      this.#cache.delete(key)
-    }
-    return context
   }
 }

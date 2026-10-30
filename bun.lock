@@ -35,12 +35,20 @@
       "bin": {
         "platformctl": "./src/main.ts",
       },
+      "dependencies": {
+        "@platform/client": "workspace:*",
+      },
+    },
+    "packages/client": {
+      "name": "@platform/client",
+      "version": "1.0.0",
     },
     "packages/console": {
       "name": "@platform/console",
       "version": "1.0.0",
       "dependencies": {
         "@casl/ability": "7.0.2",
+        "@platform/client": "workspace:*",
         "hono": "4.13.13",
         "honox": "0.1.62",
         "jose": "6.2.12",
@@ -292,6 +300,8 @@
     "@platform/access": ["@platform/access@workspace:packages/access"],
 
     "@platform/cli": ["@platform/cli@workspace:packages/cli"],
+
+    "@platform/client": ["@platform/client@workspace:packages/client"],
 
     "@platform/console": ["@platform/console@workspace:packages/console"],
 

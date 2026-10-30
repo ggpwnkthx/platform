@@ -6,9 +6,20 @@
  * a tenant, a caller or an operator: the summary of the status is a page
  * that anybody may read, and its detail is for the operators who hold
  * `console.status`.
+ *
+ * The probes are read in the client of the platform (`@platform/client`):
+ * the console and the CLI read the same probes, and a probe that
+ * answers differently in one of them is a probe a deployment cannot
+ * read.
  */
 
-import { bodyOf, type Fetch } from '../transport'
+import {
+  overallOf as platformOverallOf,
+  probeService as platformProbeService,
+  summaryOf as platformSummaryOf,
+  type ServiceStatus as PlatformServiceStatus,
+} from '@platform/client'
+import { transportOf, type Fetch } from '../transport'
 
 /** The state of a service, as its probes tell it. */
 export type ServiceState = 'up' | 'degraded' | 'down' | 'unconfigured'
@@ -44,49 +55,9 @@ export interface ProbeTarget {
   readonly url: string | null
 }
 
-/** Reads one probe within a budget. */
-async function probe(fetcher: Fetch, url: string, timeoutMs: number): Promise<ProbeAnswer> {
-  const started = performance.now()
-  try {
-    const response = await fetcher(url, {
-      signal: AbortSignal.timeout(timeoutMs),
-      headers: { accept: 'application/json' },
-      redirect: 'manual',
-    })
-    const body = await bodyOf(response)
-    return {
-      status: response.status,
-      ok: response.ok,
-      latencyMs: Math.round(performance.now() - started),
-      body: typeof body === 'string' && body.length > 500 ? `${body.slice(0, 500)}…` : body,
-      error: null,
-    }
-  } catch (error) {
-    const timedOut = error instanceof Error && error.name === 'TimeoutError'
-    return {
-      status: null,
-      ok: false,
-      latencyMs: Math.round(performance.now() - started),
-      body: null,
-      error: timedOut ? `no answer within ${timeoutMs} ms` : (error as Error).message,
-    }
-  }
-}
-
-/** The state of a service from the answers of its two probes. */
-export function stateOf(health: ProbeAnswer, ready: ProbeAnswer): ServiceState {
-  if (!health.ok) return 'down'
-  return ready.ok ? 'up' : 'degraded'
-}
-
-/** The version a service answers in its health probe. */
-function versionOf(answer: ProbeAnswer): string | null {
-  const body = answer.body
-  if (typeof body === 'object' && body !== null && 'version' in body) {
-    const version = (body as { version: unknown }).version
-    return typeof version === 'string' ? version : null
-  }
-  return null
+/** The transport of the probes of the console. */
+function transportOfProbes(fetcher: Fetch, timeoutMs: number): ReturnType<typeof transportOf> {
+  return transportOf('the platform', fetcher, timeoutMs)
 }
 
 /** Probes a service. */
@@ -94,46 +65,19 @@ export async function probeService(
   target: ProbeTarget,
   options: { fetch?: Fetch; timeoutMs: number }
 ): Promise<ServiceStatus> {
-  const checkedAt = new Date().toISOString()
-  if (!target.url) {
-    return {
-      id: target.id,
-      name: target.name,
-      state: 'unconfigured',
-      version: null,
-      health: null,
-      ready: null,
-      checkedAt,
-    }
-  }
-  const fetcher = options.fetch ?? fetch
-  const [health, ready] = await Promise.all([
-    probe(fetcher, `${target.url}/healthz`, options.timeoutMs),
-    probe(fetcher, `${target.url}/readyz`, options.timeoutMs),
-  ])
-  return {
-    id: target.id,
-    name: target.name,
-    state: stateOf(health, ready),
-    version: versionOf(health),
-    health,
-    ready,
-    checkedAt,
-  }
+  const status = await platformProbeService(
+    transportOfProbes(options.fetch ?? fetch, options.timeoutMs),
+    target
+  )
+  return status as unknown as ServiceStatus
 }
 
 /** The state of the platform: the worst state of its services. */
 export function overallOf(services: readonly ServiceStatus[]): ServiceState {
-  const states = services
-    .map((service) => service.state)
-    .filter((state) => state !== 'unconfigured')
-  if (states.length === 0) return 'unconfigured'
-  if (states.includes('down')) return 'down'
-  if (states.includes('degraded')) return 'degraded'
-  return 'up'
+  return platformOverallOf(services as readonly PlatformServiceStatus[])
 }
 
 /** The summary of a status that anybody may read: the states, and nothing else. */
 export function summaryOf(service: ServiceStatus): ServiceStatus {
-  return { ...service, version: null, health: null, ready: null }
+  return platformSummaryOf(service as unknown as PlatformServiceStatus) as unknown as ServiceStatus
 }

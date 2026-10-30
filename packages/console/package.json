@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@casl/ability": "7.0.2",
+    "@platform/client": "workspace:*",
     "hono": "4.13.13",
     "honox": "0.1.62",
     "jose": "6.2.12"

@@ -45,6 +45,8 @@ jobs:
             path: packages/console
           - workspace: cli
             path: packages/cli
+          - workspace: client
+            path: packages/client
     steps:
       - uses: actions/checkout@v7
 

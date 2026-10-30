@@ -66,6 +66,7 @@ const TSCONFIGS = [
   'packages/data/packages/client/tsconfig.json',
   'packages/console/tsconfig.json',
   'packages/cli/tsconfig.json',
+  'packages/client/tsconfig.json',
 ]
 
 /** Turns a pattern of a tool into the expression that matches a path. */

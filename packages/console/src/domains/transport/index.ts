@@ -1,10 +1,16 @@
 /**
- * The calls of the console to the services of the platform.
+ * The transport of the console to the services of the platform.
  *
  * Every call has a budget: a service that does not answer in time is a
  * service that is not reachable, and the page says so instead of
  * waiting with the caller.
+ *
+ * The transport is also the port of the clients of the platform
+ * (`@platform/client`): the console answers with the network and with a
+ * budget of time, and the client of the platform knows the contracts.
  */
+
+import type { ClientTransport } from '@platform/client'
 
 /** The transport of a client: `fetch`, or the fake of a test. */
 export type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
@@ -49,5 +55,38 @@ export async function bodyOf(response: Response): Promise<unknown> {
     return JSON.parse(text)
   } catch {
     return text
+  }
+}
+
+/**
+ * The transport of the clients of the platform.
+ *
+ * The clients of the platform speak with a port of their own: this is
+ * the adapter that answers it with the network of the console.
+ *
+ * @param service the name of the service the calls are for.
+ * @param fetcher the transport of the calls.
+ * @param timeoutMs the budget of a call.
+ */
+export function transportOf(service: string, fetcher: Fetch, timeoutMs: number): ClientTransport {
+  return {
+    send: async (request) => {
+      const response = await call(
+        service,
+        fetcher,
+        request.url,
+        {
+          method: request.method,
+          headers: { ...(request.headers ?? {}) },
+          ...(request.body === undefined ? {} : { body: request.body }),
+        },
+        timeoutMs
+      )
+      const headers: Record<string, string> = {}
+      response.headers.forEach((value, key) => {
+        headers[key.toLowerCase()] = value
+      })
+      return { status: response.status, headers, body: await response.text() }
+    },
   }
 }

@@ -6,7 +6,7 @@
  * never rewrites a refusal into one of its own.
  */
 
-import { bodyOf } from '../transport'
+import { ClientError } from '@platform/client'
 
 /** A refusal of Access. */
 export class AccessError extends Error {
@@ -28,19 +28,23 @@ export class AccessError extends Error {
   }
 }
 
-/** Reads the refusal of an answer that is not a success. */
-export async function refusalOf(response: Response): Promise<AccessError> {
-  const body = (await bodyOf(response)) as Record<string, unknown> | string | null
-  const envelope = typeof body === 'object' && body !== null ? body : {}
-  return new AccessError({
-    status: response.status,
-    code: typeof envelope.error === 'string' ? envelope.error : `http_${response.status}`,
-    message:
-      typeof envelope.message === 'string'
-        ? envelope.message
-        : typeof body === 'string' && body.length > 0 && body.length < 300
-          ? body
-          : `Access answered ${response.status}`,
-    requestId: response.headers.get('x-request-id'),
-  })
+/**
+ * Reads the refusal of the client of the platform.
+ *
+ * The client of the platform raises the refusal of a service as it read
+ * it, and the console shows it as it is: it never rewrites a refusal
+ * into one of its own.
+ *
+ * @param error the failure of the client.
+ */
+export function failureOf(error: unknown): AccessError {
+  if (error instanceof ClientError) {
+    return new AccessError({
+      status: error.status,
+      code: error.code,
+      message: error.message,
+      requestId: error.requestId ?? null,
+    })
+  }
+  throw error
 }

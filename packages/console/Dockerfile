@@ -23,6 +23,7 @@ COPY packages/gateway/package.json ./packages/gateway/
 COPY packages/access/package.json ./packages/access/
 COPY packages/data/package.json ./packages/data/
 COPY packages/data/packages/client/package.json ./packages/data/packages/client/
+COPY packages/client/package.json ./packages/client/
 COPY packages/console/package.json ./packages/console/
 RUN bun install --frozen-lockfile && \
     rm -rf /root/.bun/install/cache
@@ -32,6 +33,7 @@ COPY tsconfig.base.json ./
 # nothing else, and the documents are a part of that build.
 COPY docs ./docs
 COPY tooling ./tooling
+COPY packages/client ./packages/client
 COPY packages/console ./packages/console
 RUN bun run --cwd packages/console build
 

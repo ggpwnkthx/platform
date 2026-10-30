@@ -18,7 +18,8 @@
     "packages/access",
     "packages/data",
     "packages/console",
-    "packages/cli"
+    "packages/cli",
+    "packages/client"
   ],
   "scripts": {
     "dev": "bun run scripts/dev.ts",

@@ -7,10 +7,17 @@
  *
  * The workspace is part of every path: a command of the data works on
  * one workspace, and the CLI never guesses it.
+ *
+ * The contract is read in the client of the platform (`@platform/client`):
+ * the console and the CLI speak to the same services and read the same
+ * paths. What is the CLI's is the way it turns a refusal into the
+ * failure that carries the status the process ends with.
  */
 
+import { DataClient as PlatformDataClient } from '@platform/client'
+import { failureOf } from './answer'
 import type { HttpPort } from './contracts'
-import { expectSuccess } from './answer'
+import { transportOf } from './transport'
 
 /** The parameters of a call to the data API. */
 export interface DataCall {
@@ -24,47 +31,27 @@ export interface DataCall {
   readonly workspaceId: string
 }
 
-/**
- * Sends a request to the data API.
- *
- * @param call the parameters of the call.
- * @param method the method of the request.
- * @param path the path of the request, after the workspace.
- * @param query the query of the request.
- * @param body the body of the request.
- * @param headers the headers of the request.
- */
-export async function dataRequest(
-  call: DataCall,
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
-  path: string,
-  query?: Readonly<Record<string, string | number | undefined>>,
-  body?: unknown,
-  headers?: Readonly<Record<string, string>>
-): Promise<unknown> {
-  const url = new URL(`${call.baseUrl}/ws/${call.workspaceId}/v1${path}`)
-  for (const [key, value] of Object.entries(query ?? {})) {
-    if (value === undefined) continue
-    url.searchParams.set(key, String(value))
-  }
-  const request: {
-    method: 'GET' | 'POST' | 'PATCH' | 'DELETE'
-    url: string
-    token: string
-    headers: Record<string, string>
-    body?: string
-  } = {
-    method,
-    url: url.toString(),
+/** The client of the data of the workspace of a call. */
+function clientOf(call: DataCall): PlatformDataClient {
+  return new PlatformDataClient({
+    baseUrl: call.baseUrl,
+    workspaceId: call.workspaceId,
     token: call.token,
-    headers: { ...(headers ?? {}) },
+    transport: transportOf(call.http),
+  })
+}
+
+/**
+ * Reads the answer of the client, or turns its refusal into a failure.
+ *
+ * @param call the call that was made.
+ */
+async function read<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call()
+  } catch (error) {
+    throw failureOf(error)
   }
-  if (body !== undefined) {
-    request.headers['content-type'] = 'application/json'
-    request.body = JSON.stringify(body)
-  }
-  const answer = await call.http.send(request)
-  return expectSuccess(answer, `${method} ${path}`)
 }
 
 /**
@@ -73,7 +60,7 @@ export async function dataRequest(
  * @param call the parameters of the call.
  */
 export async function me(call: DataCall): Promise<unknown> {
-  return dataRequest(call, 'GET', '/me')
+  return await read(() => clientOf(call).me())
 }
 
 /**
@@ -82,17 +69,16 @@ export async function me(call: DataCall): Promise<unknown> {
  * @param call the parameters of the call.
  */
 export async function schema(call: DataCall): Promise<unknown> {
-  return dataRequest(call, 'GET', '/schema')
+  return await read(() => clientOf(call).schema())
 }
 
 /**
  * The metadata of one collection.
- *
  * @param call the parameters of the call.
  * @param collection the key of the collection.
  */
 export async function collection(call: DataCall, collection: string): Promise<unknown> {
-  return dataRequest(call, 'GET', `/schema/${encodeURIComponent(collection)}`)
+  return await read(() => clientOf(call).collection(collection))
 }
 
 /**
@@ -107,7 +93,7 @@ export async function listItems(
   collection: string,
   query: Readonly<Record<string, string | number | undefined>>
 ): Promise<unknown> {
-  return dataRequest(call, 'GET', `/items/${encodeURIComponent(collection)}`, query)
+  return await read(() => clientOf(call).list(collection, query))
 }
 
 /**
@@ -118,11 +104,7 @@ export async function listItems(
  * @param id the id of the record.
  */
 export async function getItem(call: DataCall, collection: string, id: string): Promise<unknown> {
-  return dataRequest(
-    call,
-    'GET',
-    `/items/${encodeURIComponent(collection)}/${encodeURIComponent(id)}`
-  )
+  return await read(async () => (await clientOf(call).get(collection, id)).body)
 }
 
 /**
@@ -139,15 +121,8 @@ export async function createItem(
   record: unknown,
   idempotencyKey?: string
 ): Promise<unknown> {
-  const headers: Record<string, string> = {}
-  if (idempotencyKey) headers['idempotency-key'] = idempotencyKey
-  return dataRequest(
-    call,
-    'POST',
-    `/items/${encodeURIComponent(collection)}`,
-    undefined,
-    record,
-    headers
+  return await read(
+    async () => (await clientOf(call).create(collection, record, idempotencyKey)).body
   )
 }
 
@@ -167,16 +142,7 @@ export async function updateItem(
   change: unknown,
   etag?: string
 ): Promise<unknown> {
-  const headers: Record<string, string> = {}
-  if (etag) headers['if-match'] = etag
-  return dataRequest(
-    call,
-    'PATCH',
-    `/items/${encodeURIComponent(collection)}/${encodeURIComponent(id)}`,
-    undefined,
-    change,
-    headers
-  )
+  return await read(async () => (await clientOf(call).update(collection, id, change, etag)).body)
 }
 
 /**
@@ -193,16 +159,7 @@ export async function removeItem(
   id: string,
   etag?: string
 ): Promise<unknown> {
-  const headers: Record<string, string> = {}
-  if (etag) headers['if-match'] = etag
-  return dataRequest(
-    call,
-    'DELETE',
-    `/items/${encodeURIComponent(collection)}/${encodeURIComponent(id)}`,
-    undefined,
-    undefined,
-    headers
-  )
+  return await read(() => clientOf(call).remove(collection, id, etag))
 }
 
 /**
@@ -213,11 +170,7 @@ export async function removeItem(
  * @param id the id of the record.
  */
 export async function versions(call: DataCall, collection: string, id: string): Promise<unknown> {
-  return dataRequest(
-    call,
-    'GET',
-    `/items/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/versions`
-  )
+  return await read(() => clientOf(call).versions(collection, id))
 }
 
 /**
@@ -234,11 +187,7 @@ export async function version(
   id: string,
   version: number
 ): Promise<unknown> {
-  return dataRequest(
-    call,
-    'GET',
-    `/items/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/versions/${version}`
-  )
+  return await read(() => clientOf(call).version(collection, id, version))
 }
 
 /**
@@ -257,16 +206,7 @@ export async function rollback(
   target: number,
   etag?: string
 ): Promise<unknown> {
-  const headers: Record<string, string> = {}
-  if (etag) headers['if-match'] = etag
-  return dataRequest(
-    call,
-    'POST',
-    `/items/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/rollback`,
-    undefined,
-    { version: target },
-    headers
-  )
+  return await read(async () => (await clientOf(call).rollback(collection, id, target, etag)).body)
 }
 
 /**
@@ -281,7 +221,7 @@ export async function aggregate(
   collection: string,
   query: Readonly<Record<string, string | number | undefined>>
 ): Promise<unknown> {
-  return dataRequest(call, 'GET', `/aggregate/${encodeURIComponent(collection)}`, query)
+  return await read(() => clientOf(call).aggregate(collection, query))
 }
 
 /**
@@ -294,7 +234,7 @@ export async function audit(
   call: DataCall,
   query: Readonly<Record<string, string | number | undefined>>
 ): Promise<unknown> {
-  return dataRequest(call, 'GET', '/audit', query)
+  return await read(() => clientOf(call).audit(query))
 }
 
 /**
@@ -303,7 +243,7 @@ export async function audit(
  * @param call the parameters of the call.
  */
 export async function model(call: DataCall): Promise<unknown> {
-  return dataRequest(call, 'GET', '/model')
+  return await read(() => clientOf(call).model())
 }
 
 /**
@@ -313,7 +253,9 @@ export async function model(call: DataCall): Promise<unknown> {
  * @param collection the collection to register.
  */
 export async function registerCollection(call: DataCall, collection: unknown): Promise<unknown> {
-  return dataRequest(call, 'POST', '/model/collections', undefined, collection)
+  return await read(() =>
+    clientOf(call).registerCollection(collection as string | Record<string, unknown>)
+  )
 }
 
 /**
@@ -328,13 +270,7 @@ export async function updateCollection(
   key: string,
   change: unknown
 ): Promise<unknown> {
-  return dataRequest(
-    call,
-    'PATCH',
-    `/model/collections/${encodeURIComponent(key)}`,
-    undefined,
-    change
-  )
+  return await read(() => clientOf(call).updateCollection(key, change))
 }
 
 /**
@@ -344,7 +280,7 @@ export async function updateCollection(
  * @param key the key of the collection.
  */
 export async function removeCollection(call: DataCall, key: string): Promise<unknown> {
-  return dataRequest(call, 'DELETE', `/model/collections/${encodeURIComponent(key)}`)
+  return await read(() => clientOf(call).removeCollection(key))
 }
 
 /**
@@ -359,13 +295,7 @@ export async function addField(
   collection: string,
   field: unknown
 ): Promise<unknown> {
-  return dataRequest(
-    call,
-    'POST',
-    `/model/collections/${encodeURIComponent(collection)}/fields`,
-    undefined,
-    field
-  )
+  return await read(() => clientOf(call).addField(collection, field))
 }
 
 /**
@@ -382,13 +312,7 @@ export async function updateField(
   field: string,
   change: unknown
 ): Promise<unknown> {
-  return dataRequest(
-    call,
-    'PATCH',
-    `/model/collections/${encodeURIComponent(collection)}/fields/${encodeURIComponent(field)}`,
-    undefined,
-    change
-  )
+  return await read(() => clientOf(call).updateField(collection, field, change))
 }
 
 /**
@@ -403,11 +327,7 @@ export async function removeField(
   collection: string,
   field: string
 ): Promise<unknown> {
-  return dataRequest(
-    call,
-    'DELETE',
-    `/model/collections/${encodeURIComponent(collection)}/fields/${encodeURIComponent(field)}`
-  )
+  return await read(() => clientOf(call).removeField(collection, field))
 }
 
 /**
@@ -424,13 +344,7 @@ export async function moveField(
   field: string,
   direction: 'up' | 'down'
 ): Promise<unknown> {
-  return dataRequest(
-    call,
-    'POST',
-    `/model/collections/${encodeURIComponent(collection)}/fields/${encodeURIComponent(field)}/move`,
-    undefined,
-    { direction }
-  )
+  return await read(() => clientOf(call).moveField(collection, field, direction))
 }
 
 /**
@@ -445,13 +359,7 @@ export async function addRelation(
   collection: string,
   relation: unknown
 ): Promise<unknown> {
-  return dataRequest(
-    call,
-    'POST',
-    `/model/collections/${encodeURIComponent(collection)}/relations`,
-    undefined,
-    relation
-  )
+  return await read(() => clientOf(call).addRelation(collection, relation))
 }
 
 /**
@@ -468,13 +376,7 @@ export async function updateRelation(
   relation: string,
   change: unknown
 ): Promise<unknown> {
-  return dataRequest(
-    call,
-    'PATCH',
-    `/model/collections/${encodeURIComponent(collection)}/relations/${encodeURIComponent(relation)}`,
-    undefined,
-    change
-  )
+  return await read(() => clientOf(call).updateRelation(collection, relation, change))
 }
 
 /**
@@ -489,9 +391,5 @@ export async function removeRelation(
   collection: string,
   relation: string
 ): Promise<unknown> {
-  return dataRequest(
-    call,
-    'DELETE',
-    `/model/collections/${encodeURIComponent(collection)}/relations/${encodeURIComponent(relation)}`
-  )
+  return await read(() => clientOf(call).removeRelation(collection, relation))
 }
