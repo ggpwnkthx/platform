@@ -83,7 +83,6 @@ resource "azurerm_container_app" "gateway" {
   ingress {
     external_enabled = true
     target_port      = 8080
-    exposed_port     = 8080
     # The gateway speaks the websocket of the upstream it forwards to,
     # and the transport is the one that carries it.
     transport = "auto"
@@ -297,7 +296,6 @@ resource "azurerm_container_app" "control" {
   ingress {
     external_enabled = false
     target_port      = 9090
-    exposed_port     = 9090
     transport        = "auto"
 
     traffic_weight {
@@ -438,7 +436,6 @@ resource "azurerm_container_app" "access" {
   ingress {
     external_enabled = true
     target_port      = 8081
-    exposed_port     = 8081
     transport        = "auto"
 
     traffic_weight {
@@ -604,7 +601,6 @@ resource "azurerm_container_app" "data" {
   ingress {
     external_enabled = false
     target_port      = 8082
-    exposed_port     = 8082
     transport        = "auto"
 
     traffic_weight {
@@ -768,7 +764,6 @@ resource "azurerm_container_app" "console" {
   ingress {
     external_enabled = true
     target_port      = 8083
-    exposed_port     = 8083
     transport        = "auto"
 
     traffic_weight {

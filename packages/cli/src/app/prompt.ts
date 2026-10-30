@@ -66,16 +66,23 @@ export async function ask(
 /**
  * Asks the reader to confirm.
  *
+ * The context is what the reader reads before it answers: the plan of
+ * the deployment, for the command that applies it. A reader that
+ * answers with the question of a plan it has not seen is a reader that
+ * answers blind.
+ *
  * @param question the question the reader is asked.
  * @param confirmed true when the reader asked for no question.
  * @param input the stream the question is asked on.
  * @param output the stream the answer is written on.
+ * @param context the lines the reader reads before the question.
  */
 export async function confirm(
   question: string,
   confirmed: boolean,
   input: NodeJS.ReadStream = process.stdin,
-  output: NodeJS.WriteStream = process.stdout
+  output: NodeJS.WriteStream = process.stdout,
+  context: readonly string[] = []
 ): Promise<void> {
   if (confirmed) return
   if (!input.isTTY) {
@@ -88,6 +95,7 @@ export async function confirm(
   const { createInterface } = await import('node:readline')
   const reader = createInterface({ input, output })
   try {
+    for (const line of context) output.write(`${line}\n`)
     const answer = await new Promise<string>((resolve) => {
       reader.question(`${question} [y/N] `, resolve)
     })

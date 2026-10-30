@@ -31,7 +31,10 @@ resource "azurerm_container_app_environment" "platform" {
   infrastructure_subnet_id = azurerm_subnet.infrastructure.id
 
   workload_profile {
-    name                  = "default"
+    # The name of the profile is the name of the tier: the provider
+    # sends the counts of a profile it does not know as a consumption
+    # one, and the service refuses the counts of a consumption profile.
+    name                  = "Consumption"
     workload_profile_type = "Consumption"
   }
 

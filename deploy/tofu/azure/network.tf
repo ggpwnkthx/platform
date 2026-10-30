@@ -83,7 +83,7 @@ resource "azurerm_private_dns_zone" "postgres" {
 
 # The private zone of the cache.
 resource "azurerm_private_dns_zone" "redis" {
-  name                = "privatelink.redis.cache.windows.net"
+  name                = "privatelink.redisenterprise.cache.windows.net"
   resource_group_name = azurerm_resource_group.platform.name
   tags                = local.tags
 }
@@ -98,8 +98,8 @@ resource "azurerm_private_endpoint" "redis" {
 
   private_service_connection {
     name                           = "${local.prefix}-redis"
-    private_connection_resource_id = azurerm_redis_cache.platform.id
-    subresource_names              = ["redisCache"]
+    private_connection_resource_id = azurerm_managed_redis.platform.id
+    subresource_names              = ["redisEnterprise"]
     is_manual_connection           = false
   }
 

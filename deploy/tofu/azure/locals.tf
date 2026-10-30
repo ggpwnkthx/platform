@@ -81,8 +81,8 @@ locals {
 
   # The address of the cache, without the credentials. The credentials
   # are the ones of the access key of the cache.
-  redis_host = azurerm_redis_cache.platform.hostname
-  redis_port = azurerm_redis_cache.platform.port
+  redis_host = azurerm_managed_redis.platform.hostname
+  redis_port = azurerm_managed_redis.platform.default_database[0].port
 }
 
 # The secrets of the deployment.
@@ -236,8 +236,8 @@ locals {
   # The addresses of the cache. The credential is the access key of the
   # cache; the README describes the access control list that narrows it
   # to the keys of the platform.
-  redis_session_url      = "redis://:${azurerm_redis_cache.platform.primary_access_key}@${local.redis_host}:${local.redis_port}/${local.redis_session_database}"
-  redis_shared_state_url = "redis://:${azurerm_redis_cache.platform.primary_access_key}@${local.redis_host}:${local.redis_port}/${local.redis_shared_state_database}"
+  redis_session_url      = "rediss://:${azurerm_managed_redis.platform.default_database[0].primary_access_key}@${local.redis_host}:${local.redis_port}/${local.redis_session_database}"
+  redis_shared_state_url = "rediss://:${azurerm_managed_redis.platform.default_database[0].primary_access_key}@${local.redis_host}:${local.redis_port}/${local.redis_shared_state_database}"
 }
 
 # The route table of the deployment.
@@ -413,7 +413,7 @@ locals {
     "access-database-url"    = local.access_database_url
     "data-database-url"      = local.data_runtime_url
     "data-registry-url"      = local.data_registry_url
-    "redis-access-key"       = azurerm_redis_cache.platform.primary_access_key
+    "redis-access-key"       = azurerm_managed_redis.platform.default_database[0].primary_access_key
     "redis-session-url"      = local.redis_session_url
     "redis-shared-state-url" = local.redis_shared_state_url
 

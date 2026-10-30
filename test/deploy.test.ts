@@ -141,6 +141,34 @@ async function templatesOf(directory: string): Promise<string> {
   return templates
 }
 
+/**
+ * A repository that holds the templates.
+ *
+ * The check reads the index of the repository, and the index is what
+ * tells a file of the repository from a file of the machine of the
+ * operator.
+ *
+ * @param directory the root of the repository.
+ */
+async function repositoryOf(directory: string): Promise<void> {
+  spawnSync(['git', 'init', '--quiet'], { cwd: directory })
+  spawnSync(['git', 'add', '.'], { cwd: directory })
+  spawnSync(
+    [
+      'git',
+      '-c',
+      'user.email=operator@example.com',
+      '-c',
+      'user.name=operator',
+      'commit',
+      '--quiet',
+      '-m',
+      'the templates',
+    ],
+    { cwd: directory }
+  )
+}
+
 describe('the infrastructure as code of the deployment', () => {
   test('the templates of the repository hold what they should hold', async () => {
     expect(await checkInfrastructure(root)).toEqual([])
@@ -237,6 +265,38 @@ describe('the infrastructure as code of the deployment', () => {
     try {
       const templates = await templatesOf(directory)
       await writeFile(join(templates, 'terraform.tfstate'), '{}\n')
+      const findings = await checkInfrastructure(directory)
+      expect(findings).toEqual([
+        {
+          file: 'deploy/tofu/azure/terraform.tfstate',
+          message: 'the state of a deployment holds the credentials of the deployment',
+        },
+      ])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the state of a deployment that is not committed is not reported', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
+    try {
+      const templates = await templatesOf(directory)
+      await repositoryOf(directory)
+      await writeFile(join(templates, 'terraform.tfstate'), '{}\n')
+      const findings = await checkInfrastructure(directory)
+      expect(findings).toEqual([])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the state of a deployment that is committed is reported', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
+    try {
+      const templates = await templatesOf(directory)
+      await repositoryOf(directory)
+      await writeFile(join(templates, 'terraform.tfstate'), '{}\n')
+      spawnSync(['git', 'add', 'deploy/tofu/azure/terraform.tfstate'], { cwd: directory })
       const findings = await checkInfrastructure(directory)
       expect(findings).toEqual([
         {

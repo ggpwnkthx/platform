@@ -31,6 +31,7 @@ import {
 import {
   actionOf,
   type AppliedInfrastructure,
+  type InfrastructureBootstrap,
   type InfrastructurePlan,
   type InfrastructurePort,
   type InfrastructureRun,
@@ -48,6 +49,49 @@ import {
  * written.
  */
 export const MINIMUM_TOFU = '1.9.0'
+
+/** The number of times the templates are initialized again. */
+const RETRIES = 3
+
+/** The wait between two attempts, in milliseconds. */
+const WAIT_MS = 20_000
+
+/**
+ * The hint of a resource that is already there.
+ *
+ * A resource that a failed apply left in the cloud is not in the state
+ * of the deployment, and the next apply refuses to create it again: the
+ * reader is told how to write it in the state.
+ *
+ * @param reason what the tool said.
+ */
+export function hintOf(reason: string): string {
+  if (!/already exists|alreadyexists|already in use|alreadyexists/i.test(reason)) return ''
+  return '\nA resource that a failed apply left in the cloud is written in the state with: platformctl infra import <address> <id>'
+}
+
+/**
+ * Reports whether the tool refused because the configuration of the
+ * backend changed.
+ *
+ * The tool refuses to change the configuration of the backend on its
+ * own: the state of the deployment may have to move with it, and the
+ * move is a decision.
+ *
+ * @param stderr what the tool wrote.
+ */
+export function changedBackend(stderr: string): boolean {
+  return stderr.includes('Backend configuration changed')
+}
+
+/**
+ * Waits.
+ *
+ * @param milliseconds the time of the wait.
+ */
+async function sleep(milliseconds: number): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, milliseconds))
+}
 
 /**
  * The values of the environment that refuse the download of the tool.
@@ -101,6 +145,31 @@ const SENSITIVE_NAMES = new Set([
 
 /** The value that stands for a credential in an answer. */
 export const REDACTED = '(sensitive value)'
+
+/**
+ * Reports whether a text is the configuration of the backend of the
+ * state.
+ *
+ * The configuration of the backend is a set of attributes, and every
+ * one of them holds a name and a value: a name in quotes, a number, or
+ * a boolean. The tool answers with a diagnostic instead of the
+ * configuration when the state of the bootstrap holds no output: a
+ * diagnostic is not a configuration, and the CLI never writes a
+ * diagnostic in the file of the backend.
+ *
+ * @param text what the tool answered with.
+ */
+export function isBackendConfiguration(text: string): boolean {
+  if (text === '') return false
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '')
+  if (lines.length === 0) return false
+  return lines.every((line) =>
+    /^[A-Za-z_][A-Za-z0-9_]*\s*=\s*(?:"[^"]*"|true|false|[0-9]+)$/.test(line)
+  )
+}
 
 /**
  * Reports whether the name of an output carries a credential.
@@ -182,6 +251,12 @@ export class TofuInfrastructure implements InfrastructurePort {
   /** The transport that reads the release of the tool. */
   readonly #download?: Download
 
+  /** The number of times the templates are initialized again. */
+  readonly #retries: number
+
+  /** The wait between two attempts, in milliseconds. */
+  readonly #waitMs: number
+
   /**
    * The tool that writes the infrastructure of the deployment.
    *
@@ -190,11 +265,18 @@ export class TofuInfrastructure implements InfrastructurePort {
    */
   constructor(
     environment: Readonly<Record<string, string | undefined>>,
-    options: { readonly working?: string; readonly download?: Download } = {}
+    options: {
+      readonly working?: string
+      readonly download?: Download
+      readonly retries?: number
+      readonly waitMs?: number
+    } = {}
   ) {
     this.#environment = environment
     this.#working = options.working ?? process.cwd()
     this.#download = options.download
+    this.#retries = options.retries ?? RETRIES
+    this.#waitMs = options.waitMs ?? WAIT_MS
   }
 
   /**
@@ -325,6 +407,161 @@ export class TofuInfrastructure implements InfrastructurePort {
     return version
   }
 
+  /**
+   * Creates the place where the state of the deployment lives.
+   *
+   * The bootstrap runs once per deployment, before the first apply of
+   * the templates, and it is the only stack that runs without a
+   * backend. The tool writes the configuration of the backend of the
+   * state, and the deployment writes it down as `backend.hcl`.
+   *
+   * A bootstrap that fails is a failure, and it is the failure of the
+   * tool: the CLI never answers a configuration the tool did not write,
+   * and it never hides a failure of the tool behind a configuration it
+   * read before.
+   *
+   * @param directory the directory of the bootstrap.
+   * @param variables the values of the bootstrap, as the tool takes them.
+   */
+  async bootstrap(
+    directory: string,
+    variables: Readonly<Record<string, string>>
+  ): Promise<InfrastructureBootstrap> {
+    const initialized = await this.#run(
+      [`-chdir=${directory}`, 'init', '-input=false', '-no-color'],
+      process.cwd()
+    )
+    if (initialized.status !== 0) {
+      throw new CliFailure(
+        `the place where the state of the deployment lives cannot be created: ${initialized.stderr.trim()}`,
+        1,
+        'tool_failed'
+      )
+    }
+    const args = [`-chdir=${directory}`, 'apply', '-input=false', '-no-color', '-auto-approve']
+    for (const [name, value] of Object.entries(variables)) {
+      args.push(`-var=${name}=${value}`)
+    }
+    const applied = await this.#run(args, process.cwd())
+    if (applied.status !== 0) {
+      throw new CliFailure(
+        `the place where the state of the deployment lives was not created: ${applied.stderr.trim() || applied.stdout.trim()}`,
+        1,
+        'tool_failed'
+      )
+    }
+    const configuration = await this.#backendConfiguration(directory)
+    if (configuration === undefined) {
+      throw new CliFailure(
+        'the configuration of the backend of the state cannot be read: the tool answered with something that is not a configuration',
+        1,
+        'tool_failed'
+      )
+    }
+    return { backendConfig: configuration, created: true }
+  }
+
+  /**
+   * The configuration of the backend of the state, as the tool writes it.
+   *
+   * The tool answers with the configuration of the backend, and it
+   * answers with a diagnostic when the state of the bootstrap holds no
+   * output: a diagnostic is not a configuration, and a file of the
+   * backend that holds one is a file the tool cannot read.
+   *
+   * @param directory the directory of the bootstrap.
+   */
+  async #backendConfiguration(directory: string): Promise<string | undefined> {
+    const answer = await this.#run(
+      [`-chdir=${directory}`, 'output', '-raw', 'backend_config_hcl', '-no-color'],
+      process.cwd()
+    )
+    if (answer.status !== 0) return undefined
+    const configuration = answer.stdout.trim()
+    return isBackendConfiguration(configuration) ? configuration : undefined
+  }
+
+  /**
+   * Initializes the templates of the deployment against the backend of
+   * the state.
+   *
+   * The place where the state lives was created a moment ago, and the
+   * data plane of the account sees the container of the state a little
+   * after the management plane created it: the init is run again while
+   * it fails.
+   *
+   * @param directory the directory of the templates.
+   * @param run what the run needs to know.
+   */
+  async initialize(directory: string, run: InfrastructureRun): Promise<void> {
+    const args = [`-chdir=${directory}`, 'init', '-input=false', '-no-color']
+    if (run.backendConfig) args.push(`-backend-config=${run.backendConfig}`)
+    let answer = await this.#run(args, process.cwd())
+
+    // The configuration of the backend changed: the state of the
+    // deployment may have to move with it, and the tool never moves it
+    // on its own.
+    if (answer.status !== 0 && changedBackend(answer.stderr)) {
+      const migrated = await this.#run([...args, '-migrate-state'], process.cwd())
+      if (migrated.status === 0) return
+      const reconfigured = await this.#run([...args, '-reconfigure'], process.cwd())
+      if (reconfigured.status === 0) {
+        process.stderr.write(
+          'the state of the deployment was not migrated: the plan that follows is the plan of a deployment whose state is empty\n'
+        )
+        return
+      }
+      answer = migrated
+    }
+
+    for (let attempt = 0; attempt < this.#retries && answer.status !== 0; attempt += 1) {
+      process.stderr.write(
+        `the state of the deployment is not reachable yet: the templates are initialized again in ${this.#waitMs / 1000} seconds\n`
+      )
+      await sleep(this.#waitMs)
+      answer = await this.#run(args, process.cwd())
+    }
+    if (answer.status !== 0) {
+      throw new CliFailure(
+        `the templates of the deployment cannot be initialized: ${answer.stderr.trim()}`,
+        8,
+        'not_initialized'
+      )
+    }
+  }
+
+  /**
+   * Writes a resource of the cloud into the state of the deployment.
+   *
+   * The import reads the templates of the deployment, and the
+   * templates read the values of the deployment: the import is told
+   * where the values are, or the templates ask for them and the import
+   * stops.
+   *
+   * @param directory the directory of the templates.
+   * @param address the address of the resource in the state.
+   * @param id the identifier of the resource in the cloud.
+   * @param run what the run needs to know.
+   */
+  async import(
+    directory: string,
+    address: string,
+    id: string,
+    run: InfrastructureRun
+  ): Promise<void> {
+    const args = [`-chdir=${directory}`, 'import', '-input=false', '-no-color']
+    if (run.varFile) args.push(`-var-file=${run.varFile}`)
+    args.push(address, id)
+    const answer = await this.#run(args, process.cwd())
+    if (answer.status !== 0) {
+      throw new CliFailure(
+        `the resource ${address} was not written in the state: ${answer.stderr.trim()}`,
+        1,
+        'tool_failed'
+      )
+    }
+  }
+
   /** The plan of the deployment. */
   async plan(directory: string, run: InfrastructureRun): Promise<InfrastructurePlan> {
     const args = ['plan', '-input=false', '-no-color', '-detailed-exitcode']
@@ -397,8 +634,9 @@ export class TofuInfrastructure implements InfrastructurePort {
       process.cwd()
     )
     if (answer.status !== 0) {
+      const reason = answer.stderr.trim() || answer.stdout.trim()
       throw new CliFailure(
-        `the deployment was not applied: ${answer.stderr.trim() || answer.stdout.trim()}`,
+        `the deployment was not applied: ${reason}${hintOf(reason)}`,
         1,
         'apply_failed'
       )

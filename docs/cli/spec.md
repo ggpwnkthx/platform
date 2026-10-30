@@ -216,6 +216,7 @@ The deployment of the platform is written in OpenTofu. The CLI runs the tool, it
 | `infra apply` | Writes the plan, shows it, and applies **that** plan once the reader confirms it. |
 | `infra output` | The outputs of the deployment. |
 | `infra validate` | Checks the templates against the schemas of the providers. No cloud is needed. |
+| `infra import <address> <id>` | Writes a resource that a failed apply left in the cloud into the state of the deployment. |
 
 The commands of the group take the same options:
 
@@ -228,7 +229,17 @@ The commands of the group take the same options:
 
 The tool is found on the path, or in the variable `TOFU_BINARY`. A machine that holds no tool takes the one of the release of the tool: the CLI reads the archive of the system it runs on, proves it against the digest the release published, and writes the tool in the directory `.platform/tofu/<version>` of the working directory. The variable `TOFU_DOWNLOAD` set to `off` refuses that download, and the variable `TOFU_DIRECTORY` names the directory the tool is written in. The CLI refuses a tool that is older than the version the templates ask for, and it refuses a tool that is not there. The plan is read from the json the tool writes, and the text the tool writes is never parsed: a plan that the CLI reads another way is a plan nobody proved.
 
-`infra apply` asks before it applies, and the question names what the plan destroys. `--dry-run` writes the plan and applies nothing.
+`infra apply` shows the plan and asks before it applies: the plan is what the reader answers about, and the question names what the plan does, counted. `--dry-run` writes the plan and applies nothing.
+
+A resource that a failed apply left in the cloud is not in the state, and the next apply refuses to create it again. `infra import` writes it into the state, and the deployment goes on. The identifier of the resource is the one the cloud names it by.
+
+The wizard of a deployment does the same on its own: an apply that is refused because a resource is already there makes the wizard look for that resource in the cloud, write it in the state, and run the plan again. The resource is found by the name the refusal carries, and the provider of the deployment is the one that looks for it.
+
+A refusal names the resource and the group of the resources it belongs to, and the two names are not to be mixed: the wizard takes the name that carries the kind of the resource. A resource that lives in another group, or in another subscription, holds the name the deployment wants and cannot be taken over: the wizard refuses and says where the name is held.
+
+A resource that was deleted and not purged keeps the name it had, and the name cannot be used again: the cloud cannot see the resource, and the wizard cannot import it. The wizard asks the operator, and purges the resource when the operator says yes; what is left of the resource is lost. `--yes` answers the question of the purge with yes.
+
+A resource that the deployment cannot take over, and whose name the deployment can change, is named differently: the wizard asks the operator, the name of the resource of the deployment changes, the values are written again, and the plan is run again with them. A wizard that did not find the resource says where it looked, and what the operator can do about it.
 
 ### 5.8 Deploy
 
@@ -236,13 +247,21 @@ The wizard of a deployment collects the values of a deployment and signs the ope
 
 | Command | Effect |
 | --- | --- |
-| `deploy azure` | Signs the operator in to Azure, asks the questions the deployment needs, writes the file of the values, and tells the operator what to do next. |
+| `deploy azure` | Signs the operator in to Azure, asks the questions the deployment needs, writes the file of the values, creates the place where the state of the deployment lives, initializes the templates, shows the plan, and applies the plan once the operator confirms it. |
 
 The wizard asks a question when it cannot answer it itself. A question that has a value in the example of the templates shows the value the operator may take, and a question that names the deployment has no default: the operator types it. The facts the provider reads from its own system are never asked again.
 
+The values of a deployment that is already there are the defaults of the questions: the wizard reads the file of the values of the deployment of the environment and offers every answer of it, so a second run is a matter of confirming them. The example of the templates is the default of everything the deployment does not hold, and the environment of the deployment that is already there is the default of the environment when it is the only one that is there.
+
 The digests of the images of the platform are read from the release of the platform: the release carries the digest of every image it published, and a digest that is copied by hand is a digest that is wrong the day the tag moves. The release is read before the provider is asked for a session, and a release the reader named and that is not there is a failure that names the release. The digest of the image of the client of PostgreSQL is read from the registry that holds it: it is the one image of a deployment that the platform does not publish. What cannot be read is asked, and the wizard says why.
 
-The wizard writes one file: the file of the values of the deployment, in the runtime directory of the deployment. It refuses to write it over the values that are there, unless `--force` is given. The state, the plan and the configuration of the backend belong to the tool, and the wizard writes none of them.
+The wizard writes the file of the values of the deployment, in the runtime directory of the deployment. It refuses to write it over the values that are there, unless `--force` is given.
+
+The wizard goes on with the deployment. The place where the state of the deployment lives is the bootstrap of the templates, and the account of that state is closed to every address but the ones of the operator: the wizard reads the public address of the machine of the operator and offers it as the default of the question, and the operator confirms it by answering nothing or changes it by typing another address. The service that holds the state refuses a range of one address, so the range of an address is the range of four addresses that holds it, and a range that is narrower than the service takes is widened to the range that holds it. The variable `PLATFORMCTL_ADDRESS_SERVICE` names the service the address is read from, and `PLATFORMCTL_ADDRESS_LOOKUP` set to `off` refuses the reading. The group of the state is named after the deployment and the word `state`, and it is not the group of the deployment: the templates create that one. The configuration of the backend of the state is what the bootstrap answers, and the wizard writes it in the runtime directory as `backend.hcl`. The templates are then initialized against that backend, the plan is written and shown, and the plan that was shown is the plan that is applied, once the operator confirms it.
+
+The shared key of the account of the state is off, and the access to the state is a role of Entra ID: the bootstrap grants the operator the role that reads and writes the state, and the identity of the operator is the one of the session of the client of Azure. The place where the state lives was created a moment ago, and the data plane of the account sees the container of the state a little after the management plane created it: the templates are initialized again while the init fails. The configuration of the backend may have changed, and the state of the deployment may have to move with it: the tool migrates the state when it can, and keeps it where it is when it cannot, and the operator is told when the state did not move. The wizard writes the configuration of the backend only when the tool answered with one: a tool that answers with a diagnostic instead of a configuration is a failure of the bootstrap, and the failure names what the tool said. A bootstrap that fails is a failure of the tool, and the wizard never hides it behind a configuration it read before.
+
+The state of the deployment belongs to the tool: the wizard writes the values and the configuration of the backend, and the tool writes the state and the plan.
 
 The wizard takes the options of the group:
 

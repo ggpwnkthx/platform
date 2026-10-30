@@ -6,6 +6,7 @@ terraform {
     azuread = { source = "hashicorp/azuread", version = "~> 2.0" }
     random  = { source = "hashicorp/random", version = "~> 3.6" }
     tls     = { source = "hashicorp/tls", version = "~> 4.0" }
+    time    = { source = "hashicorp/time", version = "~> 0.13" }
   }
 
   # The state of a deployment holds the credentials of the deployment:

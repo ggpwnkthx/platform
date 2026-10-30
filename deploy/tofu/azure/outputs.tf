@@ -128,5 +128,5 @@ output "postgres_host" {
 
 output "redis_host" {
   description = "The address of the cache of the deployment."
-  value       = azurerm_redis_cache.platform.hostname
+  value       = azurerm_managed_redis.platform.hostname
 }

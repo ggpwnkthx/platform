@@ -10,6 +10,7 @@
 import type { HttpAnswer, HttpPort, HttpRequest } from '../src/domains/contracts'
 import type {
   AppliedInfrastructure,
+  InfrastructureBootstrap,
   InfrastructurePlan,
   InfrastructurePort,
   InfrastructureRun,
@@ -92,10 +93,45 @@ export class FakeInfrastructure implements InfrastructurePort {
   readonly runs: { directory: string; run: InfrastructureRun }[] = []
   /** The plans the tool was asked to apply. */
   readonly applied: InfrastructurePlan[] = []
+  /** The bootstraps the tool was asked for. */
+  readonly bootstraps: { directory: string; variables: Readonly<Record<string, string>> }[] = []
+  /** The templates the tool was asked to initialize. */
+  readonly initialized: { directory: string; run: InfrastructureRun }[] = []
+  /** The configuration of the backend the tool answers with. */
+  backendConfig = 'resource_group_name = "platform-production-state"'
+  /** The failure the tool refuses the apply with, when the test sets one. */
+  failure?: Error
 
   /** The version of the tool, as the tool names itself. */
   async version(): Promise<string> {
     return this.toolVersion
+  }
+
+  /** Creates the place where the state of the deployment lives. */
+  async bootstrap(
+    directory: string,
+    variables: Readonly<Record<string, string>>
+  ): Promise<InfrastructureBootstrap> {
+    this.bootstraps.push({ directory, variables })
+    return { backendConfig: this.backendConfig, created: true }
+  }
+
+  /** Initializes the templates of the deployment. */
+  async initialize(directory: string, run: InfrastructureRun): Promise<void> {
+    this.initialized.push({ directory, run })
+  }
+
+  /** The resources that were written in the state. */
+  readonly imported: { address: string; id: string }[] = []
+
+  /** Writes a resource of the cloud into the state of the deployment. */
+  async import(
+    _directory: string,
+    address: string,
+    id: string,
+    _run: InfrastructureRun
+  ): Promise<void> {
+    this.imported.push({ address, id })
   }
 
   /** The plan of the deployment. */
@@ -106,6 +142,13 @@ export class FakeInfrastructure implements InfrastructurePort {
 
   /** Applies a plan that the tool has written. */
   async apply(directory: string, plan: InfrastructurePlan): Promise<AppliedInfrastructure> {
+    if (this.failure !== undefined) {
+      // The tool refuses once, and the test writes the resource that
+      // is already there in the state before the apply runs again.
+      const failure = this.failure
+      this.failure = undefined
+      throw failure
+    }
     this.applied.push(plan)
     return { directory, applied: plan.changes, summary: plan.summary }
   }

@@ -69,6 +69,57 @@ export interface DeploymentProvider {
    * @param ask asks the operator a question and waits for the answer.
    */
   signIn(ask: Asker): Promise<SignIn>
+  /**
+   * The resource of the system that a failed apply left behind, when
+   * the reason of the failure names it.
+   *
+   * A resource of the system that is already there is not in the state
+   * of the deployment, and the next apply refuses to create it again.
+   * The resource is alive, and the state has to learn about it.
+   *
+   * @param reason what the tool said about the failure.
+   * @param region the region the deployment runs in, which is where the
+   * resource of a failed apply was made.
+   */
+  leftoverOf?(reason: string, region?: string): Promise<Leftover | undefined>
+  /**
+   * Frees the name of a resource that was deleted and not purged.
+   *
+   * A resource that was deleted and not purged keeps the name it had,
+   * and the name cannot be used again: the resource has to be purged,
+   * and what is left of it is lost.
+   *
+   * @param leftover the resource that holds the name.
+   */
+  release?(leftover: Leftover): Promise<void>
+}
+
+/** A resource of the system that a failed apply left behind. */
+export interface Leftover {
+  /** The name of the resource. */
+  readonly name: string
+  /**
+   * The identifiers of the resources of the system that carry the name,
+   * in the order they are to be tried.
+   */
+  readonly ids: readonly string[]
+  /** Where the name is held, when the deployment cannot take the resource over. */
+  readonly place?: string
+  /**
+   * The region the resource was in, when the resource was deleted and
+   * its name has to be freed.
+   */
+  readonly location?: string
+  /**
+   * What the provider looked for, and did not find, when the resource
+   * is nowhere the provider can see.
+   */
+  readonly searched?: string
+  /**
+   * The values that free the name, when the resource cannot be taken
+   * over and the name of the resource of the deployment can change.
+   */
+  readonly values?: Readonly<Values>
 }
 
 /** The values the wizard writes, in the order of the questions. */

@@ -6,30 +6,26 @@
 # network of the deployment, and it answers on the private addresses of
 # it.
 #
-# The tier is Premium: the tier that holds more than one database, and
-# the tier that knows the access control list of the users. The
+# The cache is an Azure Managed Redis: the service that replaces Azure
+# Cache for Redis, which is retired and refuses to be created. The
 # deployment puts the sessions in one database and the state that the
 # replicas share in another.
-resource "azurerm_redis_cache" "platform" {
+resource "azurerm_managed_redis" "platform" {
   name                = "${local.prefix}-redis"
   resource_group_name = azurerm_resource_group.platform.name
   location            = azurerm_resource_group.platform.location
   sku_name            = var.redis_sku_name
-  family              = "P"
-  capacity            = var.redis_capacity
-  redis_version       = var.redis_version
 
-  minimum_tls_version  = "1.2"
-  non_ssl_port_enabled = false
+  # The cache is not published: the private endpoint of the network of
+  # the deployment is the only way in.
+  public_network_access = "Disabled"
 
   # The credentials of the cache are the access key of the deployment.
   # The README describes the access control list that narrows them to
   # the keys of the platform.
-  access_keys_authentication_enabled = true
-
-  # The cache is not published: the private endpoint of the network of
-  # the deployment is the only way in.
-  public_network_access_enabled = false
+  default_database {
+    access_keys_authentication_enabled = true
+  }
 
   tags = local.tags
 }

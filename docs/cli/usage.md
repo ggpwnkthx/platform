@@ -125,6 +125,10 @@ platformctl infra validate
 
 # the addresses the deployment answers with
 platformctl infra output
+
+# write a resource that a failed apply left in the cloud into the state
+platformctl infra import azurerm_key_vault.platform \
+  /subscriptions/…/resourceGroups/…/providers/Microsoft.KeyVault/vaults/…
 ```
 
 `infra apply` writes the plan, shows it, and applies **that** plan once you confirm it. The plan that is applied is the plan you read:
@@ -132,6 +136,8 @@ platformctl infra output
 ```bash
 platformctl infra apply
 ```
+
+`deploy azure` recovers on its own from the failures a leftover of an earlier run causes. A resource that is already in the cloud and not in the state is imported into the state, and the plan is run again. A resource that was deleted and not purged still holds its name, and the name cannot be used again: the wizard asks before it purges the resource, and purging it loses what is left of it. A resource that cannot be taken over at all, and whose name the deployment can change, is named differently: the wizard asks before it changes the name. Pass `--yes` to answer yes to the questions.
 
 The commands work on the deployment of the profile, and the directories are named when they are not the ones the profile says:
 
@@ -157,13 +163,15 @@ The values of the deployment, the plan and the state of the deployment belong to
 
 ## Prepare a deployment
 
-The wizard of a deployment signs you in to the provider, asks what the deployment needs, writes the file of the values, and tells you what to do next:
+The wizard of a deployment signs you in to the provider, asks what the deployment needs, writes the file of the values, and goes on with the deployment:
 
 ```bash
 platformctl deploy azure
 ```
 
 It signs you in with the Azure CLI, so it opens a browser the first time and it lets you pick the subscription when you hold more than one. It asks only what it cannot answer itself: the names the deployment answers under and the identifiers of the tenant and of the workspace.
+
+The values of a deployment that is already there are the defaults of the questions: the wizard reads the file of the values of the deployment of the environment and offers every answer of it, so a second run is a matter of pressing enter. The example of the templates is the default of everything the deployment does not hold.
 
 The digests of the images are not asked: they are read from the release of the platform, and the release carries the digest of every image it published. The release is the version of the CLI by default, because the CLI, the templates of the deployment and the images are one version line. To run another release:
 
@@ -174,7 +182,17 @@ platformctl deploy azure --release latest
 
 `latest` is the release the platform published last. The digests it names are written into the values of the deployment, so the deployment stays pinned even when the latest release moves.
 
-The wizard writes one file, `deploy/tofu/runtime/production/terraform.tfvars`, and prints the rest of the procedure — the state of the deployment, the configuration of the backend, the plan and the apply.
+The wizard writes the file of the values, `deploy/tofu/runtime/production/terraform.tfvars`, and then it continues:
+
+1. It asks for the addresses that reach the account of the state of the deployment. The account holds the state and the secrets of the deployment, and it is closed to every other address. The public address of your machine is read and offered as the default, so answering nothing takes it; type another address when your machine reaches the internet through another one.
+
+The service that holds the state refuses a range of one address, so the range of the address of your machine is the range of four addresses that holds it: `159.96.225.85` becomes `159.96.225.84/30`. A range you name yourself is used as it is, and a range that is narrower than the service takes is widened to the range that holds it.
+2. It runs the bootstrap of the templates, which creates the resource group and the storage account of the state.
+3. It writes the configuration of the backend of the state, `deploy/tofu/runtime/production/backend.hcl`.
+4. It initializes the templates against that backend.
+5. It writes the plan, shows it, and applies it once you confirm it. The plan that is applied is the plan you read.
+
+The OpenTofu binary is found on the path, or downloaded by the CLI when the machine holds none, so the steps above need no tool installed by hand.
 
 To answer without a terminal, put the answers in a file:
 
@@ -182,7 +200,25 @@ To answer without a terminal, put the answers in a file:
 platformctl deploy azure --answers ./answers.tfvars
 ```
 
-The file holds the values in the shape of the example of the templates. The wizard refuses to write the values over the values that are there unless you pass `--force`.
+The file holds the values in the shape of the example of the templates, and the addresses of the operator in one value:
+
+```bash
+name_prefix = "platform"
+operator_addresses = "203.0.113.4/32"
+```
+
+The public address of your machine is read from a service that answers with it, and the reader of the CLI can name another service, or refuse the reading:
+
+```bash
+export PLATFORMCTL_ADDRESS_SERVICE=https://my-service.example/ip
+export PLATFORMCTL_ADDRESS_LOOKUP=off
+```
+
+The wizard refuses to write the values over the values that are there unless you pass `--force`. A dry run writes the values, tells you the steps, and applies nothing:
+
+```bash
+platformctl deploy azure --dry-run
+```
 
 ## When something refuses
 
@@ -207,3 +243,9 @@ The file holds the values in the shape of the example of the templates. The wiza
 | `the operator holds no subscription of Azure` | The account holds no subscription | A deployment needs one |
 | `the deployment is not ready` | An answer is not the shape the deployment needs | Read the message: it names the value |
 | `the values of the deployment are already there` | The runtime directory holds a deployment | Pass `--force`, or name another `--runtime` |
+| `the templates of the deployment hold no bootstrap` | The templates hold no stack that creates the place where the state lives | Check out the templates of the release |
+| `the addresses that reach the account of the state … are needed` | The account of the state is closed to every address | Name the addresses of the operator in the file of the answers |
+| `the address … is not a range` | The address is not in the notation of a network | Write the address with its mask, for example `203.0.113.4/32` |
+| `the place where the state of the deployment lives cannot be created` | The bootstrap of the templates failed | Read the message of the tool, and run `tofu -chdir=deploy/tofu/azure/bootstrap apply` yourself |
+| `the place where the state of the deployment lives was not created` | The bootstrap of the templates failed | Read the message of the tool: it names the resource that could not be created |
+| `the configuration of the backend of the state cannot be read` | The tool answered with something that is not a configuration | Run `tofu -chdir=deploy/tofu/azure/bootstrap apply` and read what it says |

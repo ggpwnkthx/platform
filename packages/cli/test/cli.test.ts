@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { run, scanWords, type CliRuntime } from '../src/app/cli'
 import type { CommandSpec, GroupSpec, Services } from '../src/app/commands'
 import { CliFailure } from '../src/domains/failure'
+import { confirm } from '../src/app/prompt'
 import { FakeHttp, FakeInfrastructure } from './support'
 
 /** The commands of the test. */
@@ -85,6 +86,29 @@ describe('the words of the reader', () => {
 
   test('the scan takes the value of an unknown option for a word', () => {
     expect(scanWords(['greet', 'hello', '--body', './body.json'])).toEqual(['greet', 'hello'])
+  })
+})
+
+describe('the confirmation of the reader', () => {
+  test('the reader reads the context before it answers', async () => {
+    const { PassThrough } = await import('node:stream')
+    const input = new PassThrough() as unknown as NodeJS.ReadStream
+    ;(input as unknown as { isTTY: boolean }).isTTY = true
+    const output = new PassThrough() as unknown as NodeJS.WriteStream
+    const written: string[] = []
+    output.write = ((chunk: string) => {
+      written.push(chunk)
+      return true
+    }) as unknown as NodeJS.WriteStream['write']
+
+    const answering = confirm('the deployment is applied?', false, input, output, [
+      'action  kind',
+      'create  azurerm_resource_group',
+    ])
+    input.write('y\n')
+    await answering
+    expect(written.join('')).toContain('create  azurerm_resource_group')
+    expect(written.join('')).toContain('the deployment is applied?')
   })
 })
 

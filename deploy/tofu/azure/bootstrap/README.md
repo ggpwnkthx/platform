@@ -14,8 +14,60 @@ runs without a backend:
 tofu -chdir=deploy/tofu/azure/bootstrap init
 tofu -chdir=deploy/tofu/azure/bootstrap apply \
   -var name_prefix=platform -var environment=production \
-  -var 'operator_addresses=["203.0.113.4/32"]'
+  -var resource_group_name=platform-production-state \
+  -var 'operator_addresses=["203.0.113.4/30"]' \
+  -var operator_principal_id=00000000-0000-0000-0000-000000000000
 ```
+
+## What the subscription needs
+
+The templates of the deployment do not register the resource providers
+of the subscription: registering one is a permission that a deployment
+of the platform does not need and does not have. This stack runs as the
+operator, and it registers the providers the deployment needs:
+
+```text
+Microsoft.App             the container apps and the job of the migration
+Microsoft.Cache           the cache of the deployment
+Microsoft.Cdn             the edge of the deployment
+Microsoft.ContainerRegistry  the registry of the images
+Microsoft.DBforPostgreSQL   the database of the deployment
+Microsoft.Insights        the workspace of the logs
+Microsoft.KeyVault        the vault of the secrets
+Microsoft.Network         the network of the deployment and the edge
+Microsoft.Storage         the account of the state
+```
+
+The registration takes a minute, and the first apply of this stack waits
+for it. A subscription that forbids the registration needs the providers
+registered by hand, and this stack then refuses to register them.
+
+## Who reads the state
+
+The shared key of the account is off, and the access to the state is a
+role of Entra ID: the tool signs its requests with the token of the
+operator, and the operator holds the **Storage Blob Data Contributor**
+role on the account. This stack grants that role to the identity of the
+operator, whose identifier is the value of `operator_principal_id` — the
+identity of the `az login` session of the operator:
+
+```bash
+az account show --query user.id --output tsv
+```
+
+Granting the role needs the permission to grant roles: the operator
+holds **Owner** or **User Access Administrator** on the subscription, or
+**Role Based Access Control Administrator** on the resource group. The
+role reaches the token of the operator a little after it is created, and
+the container waits a minute for it. A first apply that is refused
+because of it is an apply that is run again.
+
+The value of `operator_principal_id` is empty when the operator is not
+known: the stack then creates the account and the container with the
+permissions the operator already holds, and a contributor that is not an
+owner has to create the container itself.
+
+## The configuration of the backend
 
 The output `backend_config_hcl` is the configuration of the backend of
 the deployment. Write it to the runtime directory of the deployment, as
@@ -26,6 +78,11 @@ mkdir -p deploy/tofu/runtime/production
 tofu -chdir=deploy/tofu/azure/bootstrap output -raw backend_config_hcl \
   > deploy/tofu/runtime/production/backend.hcl
 ```
+
+The configuration carries the name of the file of the state: the key of
+the backend is the name of the blob that holds the state, and the tool
+asks for it. The shared key of the account is off, and the access to the
+state is a role of Entra ID.
 
 The state of **this** stack is local, and it holds the name of the
 account of the state of the deployment. It is not committed, and the

@@ -42,6 +42,14 @@ resource "azurerm_postgresql_flexible_server" "platform" {
     type = "SystemAssigned"
   }
 
+  # The zone of the server and the zone of its standby are the ones
+  # Azure gives it, and the provider reads both of them: a plan that
+  # tries to change a zone is a plan the service refuses, because a
+  # zone only moves when it is exchanged with the standby zone.
+  lifecycle {
+    ignore_changes = [zone, high_availability[0].standby_availability_zone]
+  }
+
   tags = local.tags
 }
 

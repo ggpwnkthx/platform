@@ -79,6 +79,14 @@ export interface InfrastructureValidation {
   readonly errors: readonly string[]
 }
 
+/** The place where the state of a deployment lives. */
+export interface InfrastructureBootstrap {
+  /** The configuration of the backend of the state, as it is written to `backend.hcl`. */
+  readonly backendConfig: string
+  /** True when the tool created the place where the state of the deployment lives. */
+  readonly created: boolean
+}
+
 /** What a run of the tool needs to know. */
 export interface InfrastructureRun {
   /** The file of the values of the deployment. */
@@ -99,6 +107,43 @@ export interface InfrastructureRun {
 export interface InfrastructurePort {
   /** The version of the tool, as the tool names itself. */
   version(): Promise<string>
+  /**
+   * Creates the place where the state of the deployment lives.
+   *
+   * The place is the bootstrap of the deployment: it runs once, before
+   * the first apply of the templates, and it answers the configuration
+   * of the backend of the state.
+   *
+   * @param directory the directory of the bootstrap.
+   * @param variables the values of the bootstrap, as the tool takes them.
+   */
+  bootstrap(
+    directory: string,
+    variables: Readonly<Record<string, string>>
+  ): Promise<InfrastructureBootstrap>
+  /**
+   * Initializes the templates of the deployment against the backend of
+   * the state.
+   *
+   * @param directory the directory of the templates.
+   * @param run what the run needs to know.
+   */
+  initialize(directory: string, run: InfrastructureRun): Promise<void>
+  /**
+   * Writes a resource of the cloud into the state of the deployment.
+   *
+   * A resource that a failed apply left in the cloud is not in the
+   * state, and the next apply refuses to create it again.
+   *
+   * The import reads the templates, and the templates read the values
+   * of the deployment: the import is told where they are.
+   *
+   * @param directory the directory of the templates.
+   * @param address the address of the resource in the state.
+   * @param id the identifier of the resource in the cloud.
+   * @param run what the run needs to know.
+   */
+  import(directory: string, address: string, id: string, run: InfrastructureRun): Promise<void>
   /** The plan of the deployment. */
   plan(directory: string, run: InfrastructureRun): Promise<InfrastructurePlan>
   /** Applies a plan that the tool has written. */
@@ -200,4 +245,23 @@ export function isTooOld(version: string, minimum: string): boolean {
  */
 export function destroys(plan: InfrastructurePlan): boolean {
   return plan.changes.some((change) => change.action === 'delete' || change.action === 'replace')
+}
+
+/**
+ * The question of an apply, as the operator reads it.
+ *
+ * The question names what the plan does, counted: the operator answers
+ * about resources it can count, and the destruction of a resource is
+ * named first.
+ *
+ * @param plan the plan of the deployment.
+ */
+export function questionOf(plan: InfrastructurePlan): string {
+  const destroys = plan.summary.delete + plan.summary.replace
+  const parts: string[] = []
+  if (destroys > 0) parts.push(`destroys ${destroys} resources`)
+  if (plan.summary.create > 0) parts.push(`creates ${plan.summary.create} resources`)
+  if (plan.summary.update > 0) parts.push(`changes ${plan.summary.update} resources`)
+  if (parts.length === 0) return 'the deployment is applied?'
+  return `the plan ${parts.join(', ')}: the deployment is applied?`
 }

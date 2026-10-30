@@ -44,6 +44,17 @@ variable "resource_group_name" {
   default     = ""
 }
 
+variable "operator_principal_id" {
+  description = "The identifier of the identity of the operator, which writes the secrets of the deployment in the vault."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.operator_principal_id == "" || can(regex("^[0-9a-fA-F-]{36}$", var.operator_principal_id))
+    error_message = "The identifier of the identity of the operator is a GUID."
+  }
+}
+
 variable "tenant_id" {
   description = "The identifier of the Entra ID tenant of the deployment."
   type        = string
@@ -304,21 +315,9 @@ variable "postgresql_backup_retention_days" {
 # --------------------------------------------------------------------------
 
 variable "redis_sku_name" {
-  description = "The size of the cache of Redis."
+  description = "The size of the cache of Redis: the name of the tier of Azure Managed Redis."
   type        = string
-  default     = "P1"
-}
-
-variable "redis_capacity" {
-  description = "The number of shards of the cache of Redis."
-  type        = number
-  default     = 1
-}
-
-variable "redis_version" {
-  description = "The version of Redis the deployment runs."
-  type        = string
-  default     = "6"
+  default     = "Balanced_B0"
 }
 
 # --------------------------------------------------------------------------

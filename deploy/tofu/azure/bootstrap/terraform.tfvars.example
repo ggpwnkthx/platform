@@ -22,4 +22,14 @@ resource_group_name = "platform-production"
 # The addresses that reach the account of the state. They are the
 # addresses of the operator that applies the deployment: the account is
 # closed to everything else, and the shared key of the account is off.
-operator_addresses = ["203.0.113.4/32"]
+#
+# The service refuses a range of one address: the range is the range of
+# four addresses that holds the address of the operator.
+operator_addresses = ["203.0.113.4/30"]
+
+# The identifier of the identity of the operator, which reads and writes
+# the state of the deployment. The identity of the `az login` session
+# of the operator:
+#
+#   az account show --query user.id --output tsv
+operator_principal_id = "00000000-0000-0000-0000-000000000000"

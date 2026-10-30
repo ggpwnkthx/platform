@@ -16,10 +16,10 @@ import { confirm } from '../../app/prompt'
 import { CliFailure } from '../../domains/failure'
 import {
   changesNothing,
-  destroys,
   type InfrastructurePlan,
   type InfrastructurePort,
   isTooOld,
+  questionOf,
 } from '../../domains/infrastructure'
 import { MINIMUM_TOFU, redact } from '../../platform/tofu'
 
@@ -94,6 +94,24 @@ function requireRuntime(runtime: string): string {
 }
 
 /**
+ * The file of the values of the deployment, when it is there.
+ *
+ * The import reads the templates, and the templates read the values of
+ * the deployment: the import is told where they are, when they are
+ * there. A deployment that has no values yet imports without them,
+ * and the templates ask for what they need.
+ *
+ * @param input what the command received.
+ * @param runtime the directory of the files of the deployment.
+ */
+function valuesWhenThere(input: CommandInput, runtime: string): string | undefined {
+  const named = stringOf(input.options, 'var-file')
+  if (named) return resolve(named)
+  const file = join(runtime, 'terraform.tfvars')
+  return existsSync(file) ? file : undefined
+}
+
+/**
  * The tool that writes the infrastructure, when it is new enough.
  *
  * The templates ask for a version of the tool, and a tool that is older
@@ -102,7 +120,7 @@ function requireRuntime(runtime: string): string {
  *
  * @param input what the command received.
  */
-async function toolOf(input: CommandInput): Promise<InfrastructurePort> {
+export async function toolOf(input: CommandInput): Promise<InfrastructurePort> {
   const port = input.services.infrastructure
   const version = await port.version()
   if (isTooOld(version, MINIMUM_TOFU)) {
@@ -120,7 +138,7 @@ async function toolOf(input: CommandInput): Promise<InfrastructurePort> {
  *
  * @param plan the plan of the deployment.
  */
-function linesOfPlan(plan: InfrastructurePlan): string[] {
+export function linesOfPlan(plan: InfrastructurePlan): string[] {
   if (changesNothing(plan)) return ['the deployment is already what it should be']
   const rows = plan.changes.map((change) => [change.action, change.kind, change.address])
   const header = ['action', 'kind', 'address']
@@ -241,12 +259,15 @@ export const infrastructureGroup: GroupSpec = {
         if (changesNothing(plan)) {
           return { value, lines, message: 'the deployment is already what it should be' }
         }
-        const destroyed = destroys(plan)
+        // The plan is what the reader answers about: it is shown
+        // before the question, and the question names what the plan
+        // does, counted.
         await confirm(
-          destroyed
-            ? `the plan destroys ${plan.summary.delete + plan.summary.replace} resources and changes ${plan.summary.create + plan.summary.update}: the deployment is applied?`
-            : `the plan changes ${plan.summary.create + plan.summary.update} resources: the deployment is applied?`,
-          input.globals.yes
+          questionOf(plan),
+          input.globals.yes,
+          process.stdin,
+          process.stdout,
+          input.globals.output === 'table' && !input.globals.quiet ? lines : []
         )
         const applied = await port.apply(directory, plan)
         return {
@@ -307,6 +328,62 @@ export const infrastructureGroup: GroupSpec = {
         return {
           value: { name, value },
           lines: [`${name} = ${formatOf(value)}`],
+        }
+      },
+    },
+    {
+      name: 'import',
+      summary: 'write a resource of the cloud into the state of the deployment',
+      description:
+        'A resource that a failed apply left in the cloud is not in the state of the deployment, and the next apply refuses to create it again. The import writes the resource into the state, and the deployment goes on.',
+      arguments: [
+        {
+          name: 'address',
+          summary: 'the address of the resource in the state of the deployment',
+          required: true,
+        },
+        {
+          name: 'id',
+          summary: 'the identifier of the resource in the cloud',
+          required: true,
+        },
+      ],
+      options: [
+        {
+          name: 'directory',
+          kind: 'string',
+          summary: 'the directory of the templates of the deployment',
+        },
+        {
+          name: 'runtime',
+          kind: 'string',
+          summary: 'the directory of the files of the deployment',
+        },
+        {
+          name: 'var-file',
+          kind: 'string',
+          summary: 'the file of the values of the deployment',
+        },
+      ],
+      examples: ['platformctl infra import azurerm_key_vault.platform /subscriptions/…/vaults/…'],
+      async run(input: CommandInput): Promise<CommandResult> {
+        const port = await toolOf(input)
+        const address = input.args[0]
+        const id = input.args[1]
+        if (address === undefined || id === undefined) {
+          throw new CliFailure(
+            'the import needs the address of the resource and its identifier',
+            2,
+            'missing_argument'
+          )
+        }
+        const runtime = runtimeOf(input)
+        await port.import(directoryOf(input), address, id, {
+          varFile: valuesWhenThere(input, runtime),
+        })
+        return {
+          value: { address, id },
+          message: `${address} is written in the state of the deployment`,
         }
       },
     },

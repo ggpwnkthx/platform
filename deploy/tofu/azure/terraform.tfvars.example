@@ -39,6 +39,12 @@ registry_name  = ""
 # The tenant of Entra ID that holds the application of Access.
 tenant_id = "00000000-0000-0000-0000-000000000000"
 
+# The identity of the operator. It writes the secrets of the deployment
+# in the vault of the deployment, and it pushes the console to the
+# registry of the deployment. The wizard of the deployment reads it from
+# the client of Azure and writes it here.
+operator_principal_id = ""
+
 # --------------------------------------------------------------------------
 # The images
 #
@@ -135,9 +141,7 @@ postgresql_backup_retention_days = 7
 # the tier that knows the access control list of the users.
 # --------------------------------------------------------------------------
 
-redis_sku_name = "P1"
-redis_capacity = 1
-redis_version  = "6"
+redis_sku_name = "Balanced_B0"
 
 # --------------------------------------------------------------------------
 # The edge
@@ -145,8 +149,10 @@ redis_version  = "6"
 
 frontdoor_sku_name = "Standard_Azure"
 
-# The addresses of the proxies the gateway trusts. The edge of Azure
-# publishes its ranges, and a range that covers more than sixteen
-# addresses is refused by the gateway: name the ranges of the deployment
-# and not the ranges of the platform.
+# The addresses of the proxies the gateway trusts. The ingress of the
+# environment is the peer of the gateway, and it is the address of every
+# caller until the gateway trusts it. A range that covers more than
+# sixteen addresses is refused by the gateway: name the addresses of the
+# proxies of the deployment and not the ranges of the platform. The
+# decision is open, and the list is empty until it is made.
 trusted_proxy_cidrs = []

@@ -19,6 +19,29 @@ provider "azurerm" {
   features {}
 
   resource_provider_registrations = "none"
+
+  # The shared key of the account of the state is off, and the provider
+  # signs its requests to the account with that key unless it is told
+  # otherwise: the access of the operator is a role of Entra ID, and
+  # the requests are signed with the token of the operator.
+  storage_use_azuread = true
+
+  # The templates of the deployment do not register the resource
+  # providers of the subscription: registering one is a permission that
+  # a deployment of the platform does not need and does not have. This
+  # stack runs as the operator, and it registers the providers the
+  # deployment needs, once, before the first apply of the templates.
+  resource_providers_to_register = [
+    "Microsoft.App",
+    "Microsoft.Cache",
+    "Microsoft.Cdn",
+    "Microsoft.ContainerRegistry",
+    "Microsoft.DBforPostgreSQL",
+    "Microsoft.Insights",
+    "Microsoft.KeyVault",
+    "Microsoft.Network",
+    "Microsoft.Storage",
+  ]
 }
 
 variable "name_prefix" {
@@ -56,6 +79,12 @@ variable "operator_addresses" {
     ])
     error_message = "Every address of the operator is a range, in the notation of a network."
   }
+}
+
+variable "operator_principal_id" {
+  description = "The identifier of the identity of the operator, which reads and writes the state of the deployment."
+  type        = string
+  default     = ""
 }
 
 locals {
@@ -122,11 +151,45 @@ resource "azurerm_storage_account" "state" {
   }
 }
 
+# The permission that reads and writes the state.
+#
+# The state of the deployment holds the value of every secret of the
+# deployment, and the tool writes it in the account with the token of
+# the operator: the operator holds the permission that reads and writes
+# the blobs of the account, and the permission is a role of Entra ID.
+resource "azurerm_role_assignment" "state_data_owner" {
+  count = var.operator_principal_id == "" ? 0 : 1
+
+  scope                = azurerm_storage_account.state.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = var.operator_principal_id
+}
+
+# The permission of the operator reaches the token of the operator a
+# little after the role is created, and the container is created with
+# that token: the container waits for the permission.
+resource "time_sleep" "state_permission" {
+  count = var.operator_principal_id == "" ? 0 : 1
+
+  depends_on      = [azurerm_role_assignment.state_data_owner]
+  create_duration = "60s"
+}
+
 # The container of the state.
 resource "azurerm_storage_container" "state" {
   name                  = "tfstate"
   storage_account_name  = azurerm_storage_account.state.name
   container_access_type = "private"
+
+  depends_on = [time_sleep.state_permission]
+}
+
+# The container is visible to the data plane a little after the
+# management plane created it, and the tool reads the state of the
+# deployment right after this stack: the wait is here.
+resource "time_sleep" "state_container" {
+  depends_on      = [azurerm_storage_container.state]
+  create_duration = "30s"
 }
 
 # The configuration of the backend of the deployment.
@@ -137,6 +200,7 @@ output "backend_config" {
     storage_account_name = azurerm_storage_account.state.name
     container_name       = azurerm_storage_container.state.name
     use_azuread_auth     = true
+    key                  = "${local.prefix}.tfstate"
   }
 }
 
@@ -147,5 +211,9 @@ output "backend_config_hcl" {
     "storage_account_name = \"${azurerm_storage_account.state.name}\"",
     "container_name       = \"${azurerm_storage_container.state.name}\"",
     "use_azuread_auth     = true",
+    # The key of the backend is the name of the file of the state, and
+    # the tool asks for it: the shared key of the account is off, and
+    # the access to the state is a role of Entra ID.
+    "key                  = \"${local.prefix}.tfstate\"",
   ])
 }

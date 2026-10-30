@@ -10,7 +10,7 @@
 # credential that is shared by a password is a credential that a person
 # holds.
 resource "azurerm_container_registry" "platform" {
-  name                   = replace("${local.prefix}registry", "-", "")
+  name                   = local.registry_name
   resource_group_name    = azurerm_resource_group.platform.name
   location               = azurerm_resource_group.platform.location
   sku                    = "Premium"
@@ -24,4 +24,17 @@ resource "azurerm_role_assignment" "registry_pull" {
   scope                = azurerm_container_registry.platform.id
   role_definition_name = "AcrPull"
   principal_id         = azurerm_user_assigned_identity.platform.principal_id
+}
+
+# The permission of the operator on the registry.
+#
+# The console of the platform has no published image: the operator
+# builds it and pushes it to the registry of the deployment, and the
+# permission to push is a role of Entra ID.
+resource "azurerm_role_assignment" "registry_push_operator" {
+  count = var.operator_principal_id == "" ? 0 : 1
+
+  scope                = azurerm_container_registry.platform.id
+  role_definition_name = "AcrPush"
+  principal_id         = var.operator_principal_id
 }

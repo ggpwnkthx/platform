@@ -38,6 +38,35 @@ resource "azurerm_key_vault" "platform" {
   }
 }
 
+# The permission of the operator on the vault.
+#
+# The vault is written through its data plane, and the data plane
+# answers to the roles of Entra ID: the operator writes the secrets of
+# the deployment, and the role that lets it is a role of Entra ID.
+#
+# The role of the operator is not the role of the services: the services
+# read the secrets, and the operator writes them.
+resource "azurerm_role_assignment" "vault_secrets_officer" {
+  count = var.operator_principal_id == "" ? 0 : 1
+
+  scope                = azurerm_key_vault.platform.id
+  role_definition_name = "Key Vault Secrets Officer"
+  principal_id         = var.operator_principal_id
+}
+
+# The permission of the operator reaches the token of the operator a
+# little after the role is created, and the secrets are written with
+# that token: the secrets wait for the permission.
+resource "time_sleep" "vault_permission" {
+  count = var.operator_principal_id == "" ? 0 : 1
+
+  depends_on = [
+    azurerm_role_assignment.vault_secrets_officer,
+    azurerm_role_assignment.vault_secrets_user,
+  ]
+  create_duration = "60s"
+}
+
 # The secrets of the deployment.
 #
 # Every secret of the platform is written here, and the services read
@@ -52,5 +81,5 @@ resource "azurerm_key_vault_secret" "platform" {
   value        = local.secret_values[each.key]
   content_type = "text/plain"
 
-  depends_on = [azurerm_role_assignment.vault_secrets_user]
+  depends_on = [time_sleep.vault_permission]
 }

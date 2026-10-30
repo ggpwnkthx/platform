@@ -695,6 +695,27 @@ async function filesUnder(root: string, directory: string): Promise<string[]> {
   return found.sort()
 }
 
+/**
+ * The files of the templates that the index of the repository holds.
+ *
+ * The check reads the index and not the tree: the files of a
+ * deployment are in the tree of the machine of the operator, and they
+ * are never in the index. The index is unknown when the directory is
+ * not a repository, and every file is then a file of the repository.
+ *
+ * @param root the root of the repository.
+ */
+function trackedTemplates(root: string): Set<string> | undefined {
+  const result = git(['ls-files', '--', TOFU], root)
+  if (result.status !== 0) return undefined
+  const tracked = new Set<string>()
+  for (const line of result.stdout.split('\n')) {
+    const file = line.trim()
+    if (file !== '') tracked.add(file)
+  }
+  return tracked
+}
+
 /** The sources of the templates of a stack. */
 async function sourcesOf(root: string, directory: string): Promise<string[]> {
   const path = join(root, directory)
@@ -863,11 +884,20 @@ export function providerVersionsOf(versions: string): { provider: string; versio
  * deployment, and the values of a deployment name one deployment. A file
  * of a deployment that is committed is a credential that everybody
  * reads.
+ *
+ * The check reads the index of the repository and not the tree: the
+ * files of a deployment are in the tree of the machine of the operator,
+ * and they are never in the index. The state of the bootstrap lives
+ * next to the templates of the bootstrap, and it is not committed: it
+ * is the state of the machine of the operator, and the check says
+ * nothing about it.
  */
 export async function checkRuntimeFiles(root: string): Promise<DeployFinding[]> {
   const findings: DeployFinding[] = []
+  const tracked = trackedTemplates(root)
   for (const file of await filesUnder(root, TOFU)) {
     if (file.startsWith(`${RUNTIME}/`)) continue
+    if (tracked !== undefined && !tracked.has(file)) continue
     const name = file.slice(file.lastIndexOf('/') + 1)
     if (name.endsWith('.tfstate') || name.includes('.tfstate.')) {
       findings.push({
