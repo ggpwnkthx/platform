@@ -43,7 +43,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: data
-          image: ghcr.io/ggpwnkthx/data:1.0.2
+          image: ghcr.io/ggpwnkthx/data:1.0.3
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

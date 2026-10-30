@@ -319,7 +319,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${{ needs.version.outputs.version }}"
-          tar -xzf "dist/platformctl-linux-x64/platformctl-${version}-linux-x64.tar.gz" -C dist
+          tar -xzf "dist/platformctl-${version}-linux-x64.tar.gz" -C dist
           cd "dist/platformctl-${version}-linux-x64"
           ./platformctl --help | head -5
           ./platformctl version
@@ -388,7 +388,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${{ needs.version.outputs.version }}"
-          tar -xzf "dist/gateway-linux-x64/gateway-${version}-linux-x64.tar.gz" -C dist
+          tar -xzf "dist/gateway-${version}-linux-x64.tar.gz" -C dist
           cd "dist/gateway-${version}-linux-x64"
           cat > routes.json <<'JSON'
           {
@@ -440,7 +440,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${{ needs.version.outputs.version }}"
-          tar -xzf "dist/access-linux-x64/access-${version}-linux-x64.tar.gz" -C dist
+          tar -xzf "dist/access-${version}-linux-x64.tar.gz" -C dist
           cd "dist/access-${version}-linux-x64"
           openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out access-key.pem 2>/dev/null
           ACCESS_ENVIRONMENT=development \
@@ -480,7 +480,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${{ needs.version.outputs.version }}"
-          tar -xzf "dist/data-linux-x64/data-${version}-linux-x64.tar.gz" -C dist
+          tar -xzf "dist/data-${version}-linux-x64.tar.gz" -C dist
           cd "dist/data-${version}-linux-x64"
           DATA_ENVIRONMENT=development \
           DATA_HOST=127.0.0.1 \

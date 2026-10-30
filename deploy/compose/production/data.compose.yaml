@@ -23,7 +23,7 @@ services:
   # service waits for them: it refuses to start against a database that
   # is not migrated.
   data-migrate:
-    image: ghcr.io/ggpwnkthx/data:1.0.2
+    image: ghcr.io/ggpwnkthx/data:1.0.3
     restart: on-failure
     command: ['sh', '-c', 'bun run scripts/cli/provision.ts && bun run scripts/cli/migrate.ts']
     environment:
@@ -36,7 +36,7 @@ services:
       DATA_MAINTENANCE_PASSWORD: ${DATA_MAINTENANCE_PASSWORD:?the password of the role of the retention is required}
 
   data:
-    image: ghcr.io/ggpwnkthx/data:1.0.2
+    image: ghcr.io/ggpwnkthx/data:1.0.3
     restart: unless-stopped
     depends_on:
       data-migrate:

@@ -4,7 +4,7 @@
 # image: an operator has to know what is running without reading the logs.
 ARG BUN_VERSION=1.4.3
 ARG BUN_DIGEST=sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349437206c6b0b7422373
-ARG VERSION=1.0.2
+ARG VERSION=1.0.3
 ARG REVISION=unknown
 
 # ---------------------------------------------------------------- dependencies
@@ -145,7 +145,7 @@ HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 \
 
 # The control plane is the same image with another command:
 #
-#   docker run --rm -p 9090:9090 ghcr.io/ggpwnkthx/gateway:1.0.2 \
+#   docker run --rm -p 9090:9090 ghcr.io/ggpwnkthx/gateway:1.0.3 \
 #     bun run src/control-main.ts
 #
 # It is never published to the callers: it is internal.

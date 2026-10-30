@@ -2,7 +2,7 @@
 
 The normative contract of the gateway's external behavior: the request pipeline, the route table, authentication, access decisions, headers, limits, proxying, operational interfaces and release compatibility. It is for implementers and reviewers; code that cites `§N` refers to this page, and this page wins any disagreement.
 
-Status: 1.0.2. Runtime: Bun ≥ 1.4.3 ([decisions.md](decisions.md), decision 36);
+Status: 1.0.3. Runtime: Bun ≥ 1.4.3 ([decisions.md](decisions.md), decision 36);
 the gateway **refuses to start** on an older runtime (§4.2). Listener: HTTP and
 WebSocket on `GATEWAY_HOST:GATEWAY_PORT` (default `0.0.0.0:8080`).
 

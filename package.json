@@ -1,6 +1,6 @@
 {
   "name": "platform",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "type": "module",
   "description": "The platform: an application gateway, Access, a Data and the console that is the interface of the three, as workspaces of one repository.",

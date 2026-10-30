@@ -375,7 +375,7 @@ jobs:
             -e GATEWAY_OIDC_REDIRECT_URI=https://platform.example.com/auth/callback \
             -e GATEWAY_ACCESS_URL=https://access.example.com \
             -e GATEWAY_ACCESS_TOKEN=release-access-token-of-the-release \
-            -e GATEWAY_METRICS_TOKEN=release-metrics-token \
+            -e GATEWAY_METRICS_TOKEN=release-metrics-token-of-the-release \
             -e GATEWAY_RATE_LIMIT_TOTAL_MAX=1000 \
             -e GATEWAY_SESSION_URL=redis://host.docker.internal:6379/0 \
             -e GATEWAY_SHARED_STATE_URL=redis://host.docker.internal:6379/1 \
@@ -482,6 +482,31 @@ jobs:
         if: matrix.service == 'data'
         run: |
           set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/secrets" "$RUNNER_TEMP/config"
+          openssl rand -hex 24 > "$RUNNER_TEMP/secrets/access-context.token"
+          openssl rand -base64 32 > "$RUNNER_TEMP/secrets/cursor.key"
+          openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 \
+            -out "$RUNNER_TEMP/identity-key.pem" 2>/dev/null
+          openssl pkey -in "$RUNNER_TEMP/identity-key.pem" -pubout \
+            -out "$RUNNER_TEMP/secrets/identity-signing.public.pem"
+          cat > "$RUNNER_TEMP/config/bindings.json" <<'JSON'
+          {
+            "version": 2,
+            "bindings": [
+              {
+                "id": "data-api",
+                "host": "api.platform.test",
+                "upstreamPathPattern": "/ws/{workspaceId}/v1/*",
+                "routeId": "data-api",
+                "identity": {
+                  "version": "v5",
+                  "algorithm": "ES256",
+                  "publicKeyFile": "/run/secrets/identity-signing.public.pem"
+                }
+              }
+            ]
+          }
+          JSON
           docker run -d --name data -p 8082:8082 \
             --add-host host.docker.internal:host-gateway \
             -e DATA_ENVIRONMENT=development \
@@ -495,8 +520,8 @@ jobs:
             -e DATA_ACCESS_URL=http://host.docker.internal:5557 \
             -e DATA_ACCESS_CONTEXT_TOKEN_FILE=/run/secrets/access-context.token \
             -e DATA_CURSOR_KEY_FILE=/run/secrets/cursor.key \
-            -v "$PWD/deploy/fixtures/bindings.json:/etc/data/bindings.json:ro" \
-            -v "$PWD/deploy/fixtures/secrets:/run/secrets:ro" \
+            -v "$RUNNER_TEMP/config/bindings.json:/etc/data/bindings.json:ro" \
+            -v "$RUNNER_TEMP/secrets:/run/secrets:ro" \
             "$IMAGE"
           for _ in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8082/healthz > /dev/null; then
@@ -534,8 +559,8 @@ jobs:
             -e DATA_GATEWAY_BINDINGS_FILE=/etc/data/bindings.json \
             -e DATA_ACCESS_URL=http://host.docker.internal:5557 \
             -e DATA_ACCESS_CONTEXT_TOKEN_FILE=/run/secrets/access-context.token \
-            -v "$PWD/deploy/fixtures/bindings.json:/etc/data/bindings.json:ro" \
-            -v "$PWD/deploy/fixtures/secrets:/run/secrets:ro" \
+            -v "$RUNNER_TEMP/config/bindings.json:/etc/data/bindings.json:ro" \
+            -v "$RUNNER_TEMP/secrets:/run/secrets:ro" \
             "$IMAGE"; then
             echo "the service started without the key that signs the cursors"
             exit 1
@@ -658,18 +683,14 @@ jobs:
             echo "the build of the release did not publish anything: there is nothing to withdraw"
             exit 0
           fi
-          # The tags of the release are removed first: a digest that
-          # two tags name cannot be removed while the tags are there,
-          # and the image of a failed release must not stay reachable
-          # under the name of the release.
-          for tag in "${{ needs.version.outputs.tag }}" "${{ needs.version.outputs.version }}"; do
-            if docker buildx imagetools rm "${{ env.REGISTRY }}/${{ matrix.service }}:${tag}"; then
-              echo "the tag ${tag} is withdrawn from the registry"
-            else
-              echo "the tag ${tag} could not be withdrawn: it must be removed by hand"
-            fi
-          done
-          if docker buildx imagetools rm "${{ env.REGISTRY }}/${{ matrix.service }}@${digest}"; then
+          # The version of the package is removed: it holds the tags of
+          # the release, and an image of a failed release must not stay
+          # reachable under the name of the release. The command of the
+          # builder that removes an image does not exist, and the
+          # packages API is the way a package of a registry is removed.
+          package="ggpwnkthx%2F${{ matrix.service }}"
+          if gh api --method DELETE \
+            "/users/ggpwnkthx/packages/container/${package}/versions/${digest}" 2>/dev/null; then
             echo "the image $digest is withdrawn from the registry"
           else
             echo "the image $digest could not be withdrawn: it must be removed by hand"

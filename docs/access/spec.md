@@ -8,7 +8,7 @@ Access is a separate deployable, not a gateway feature. It sits between browsers
 
 Request and response bodies are in [API](api.md), every environment variable is in [Configuration](configuration.md), the design is in [Internals](internals.md), and the code is in `src/`. A behavior change updates this document in the same commit as the code.
 
-Status: 1.0.2. Runtime: Bun ≥ 1.4.3. Listener: HTTP on `ACCESS_HOST:ACCESS_PORT` (default `0.0.0.0:8081`).
+Status: 1.0.3. Runtime: Bun ≥ 1.4.3. Listener: HTTP on `ACCESS_HOST:ACCESS_PORT` (default `0.0.0.0:8081`).
 
 ## 1. Scope
 

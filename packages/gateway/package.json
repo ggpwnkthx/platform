@@ -1,6 +1,6 @@
 {
   "name": "@platform/gateway",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "type": "module",
   "description": "The gateway of the platform: it authenticates a caller, asks Access and forwards the request to an upstream of its route.",
