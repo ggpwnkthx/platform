@@ -31,7 +31,7 @@ const root = join(import.meta.dir, '..')
 const docs = join(root, 'docs')
 
 /** The directories that hold no document. */
-const SKIPPED = ['node_modules', '.git', '.pg', '.access', 'dist', 'coverage']
+const SKIPPED = ['node_modules', '.git', '.pg', '.access', 'dist', 'coverage', '.terraform']
 
 /** The directories of the documentation, and the service each one holds. */
 const DIRECTORIES = ['platform', 'gateway', 'access', 'data', 'console', 'cli', 'roles', 'guides']

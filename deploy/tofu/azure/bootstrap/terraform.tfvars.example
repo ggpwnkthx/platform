@@ -1,0 +1,25 @@
+# The values of the bootstrap.
+#
+# The bootstrap creates the place where the state of the deployment
+# lives. It runs once per deployment, before the first apply of the
+# templates.
+#
+#   tofu -chdir=deploy/tofu/azure/bootstrap plan \
+#     -var-file=terraform.tfvars.example
+
+# The prefix of the name of every resource of the deployment.
+name_prefix = "platform"
+
+# The environment of the deployment.
+environment = "production"
+
+# The region of Azure the deployment runs in.
+location = "westeurope"
+
+# The name of the resource group of the deployment.
+resource_group_name = "platform-production"
+
+# The addresses that reach the account of the state. They are the
+# addresses of the operator that applies the deployment: the account is
+# closed to everything else, and the shared key of the account is off.
+operator_addresses = ["203.0.113.4/32"]

@@ -28,6 +28,16 @@ pids
 *.pid.lock
 *.seed
 
+# The infrastructure as code: the working directories of the tools, the
+# state of a deployment and the files of a deployment. The state of a
+# deployment holds the credentials of the deployment, and the files of a
+# deployment belong to one deployment and not to the repository.
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+deploy/tofu/runtime/
+
 # The state of a development machine
 .pg/
 .tmp/

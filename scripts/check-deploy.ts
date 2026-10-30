@@ -19,6 +19,8 @@
  *   carry the version of the platform?
  * - Does the minimum environment of the platform hold every variable a
  *   stack refuses to start without?
+ * - Do the templates of the deployment hold every variable in their
+ *   example, and do they name no file of a deployment?
  *
  *   bun run deploy:check
  */
@@ -27,6 +29,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { readdir, readFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { parseAllDocuments } from 'yaml'
+import { git } from '../tooling/compatibility/reference'
 
 /** A disagreement between the directory of the deployment and the platform. */
 export interface DeployFinding {
@@ -115,6 +118,67 @@ const PRODUCTION = join(COMPOSE, 'production')
 
 /** The manifests of a cluster. */
 const KUBERNETES = join(DEPLOY, 'kubernetes')
+
+/** The directory of the infrastructure as code. */
+const TOFU = join(DEPLOY, 'tofu')
+
+/** The templates of the deployment on Azure. */
+const TEMPLATES = join(TOFU, 'azure')
+
+/** The stack that creates the place where the state of a deployment lives. */
+const BOOTSTRAP = join(TEMPLATES, 'bootstrap')
+
+/** The files of a deployment: they belong to one deployment. */
+const RUNTIME = join(TOFU, 'runtime')
+
+/**
+ * The files the templates of a deployment are made of.
+ *
+ * The list is the shape of the deployment: a template that is missing is
+ * a part of the deployment that nobody wrote, and a file that is not in
+ * the list is a file that nobody owns.
+ */
+export const TEMPLATE_FILES: readonly string[] = [
+  'versions.tf',
+  'providers.tf',
+  'variables.tf',
+  'locals.tf',
+  'network.tf',
+  'registry.tf',
+  'observability.tf',
+  'postgres.tf',
+  'redis.tf',
+  'keyvault.tf',
+  'identity.tf',
+  'containerapps.tf',
+  'edge.tf',
+  'outputs.tf',
+  'terraform.tfvars.example',
+  '.terraform.lock.hcl',
+]
+
+/**
+ * The files of the bootstrap.
+ *
+ * The bootstrap is a stack of its own, and it has the same shape as the
+ * templates: the versions of the tools, the stack itself, the example
+ * of the values and the lock of the providers.
+ */
+export const BOOTSTRAP_FILES: readonly string[] = [
+  'versions.tf',
+  'main.tf',
+  'terraform.tfvars.example',
+  '.terraform.lock.hcl',
+]
+
+/** The name of the file that holds the example of the values of a stack. */
+const EXAMPLE = 'terraform.tfvars.example'
+
+/** The name of the file that holds the lock of the providers. */
+const LOCK = '.terraform.lock.hcl'
+
+/** The pattern of the digest of an image. */
+const DIGEST = /@sha256:[0-9a-f]{64}$/
 
 /** A value of a yaml that is not known. */
 type Unknown = Record<string, unknown>
@@ -607,6 +671,364 @@ export async function checkMinimumEnvironment(root: string): Promise<DeployFindi
   return findings
 }
 
+/**
+ * The files of a directory, recursively.
+ *
+ * The directories whose name starts with a dot are not walked: they are
+ * the working directories of the tools, and they hold the code of the
+ * tools and not the code of the platform.
+ */
+async function filesUnder(root: string, directory: string): Promise<string[]> {
+  const path = join(root, directory)
+  if (!existsSync(path)) return []
+  const entries = await readdir(path, { withFileTypes: true })
+  const found: string[] = []
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue
+    const child = join(directory, entry.name)
+    if (entry.isDirectory()) {
+      found.push(...(await filesUnder(root, child)))
+      continue
+    }
+    found.push(child)
+  }
+  return found.sort()
+}
+
+/** The sources of the templates of a stack. */
+async function sourcesOf(root: string, directory: string): Promise<string[]> {
+  const path = join(root, directory)
+  if (!existsSync(path)) return []
+  const entries = await readdir(path, { withFileTypes: true })
+  const sources: string[] = []
+  for (const entry of entries) {
+    if (!entry.isFile()) continue
+    if (!entry.name.endsWith('.tf')) continue
+    sources.push(readFileSync(join(path, entry.name), 'utf8'))
+  }
+  return sources.sort()
+}
+
+/**
+ * The brackets a text opens and closes.
+ *
+ * The brackets inside a string are not brackets: a value of the example
+ * may carry one, and the example of a map is read by its brackets.
+ */
+function bracketsOf(text: string): number {
+  let depth = 0
+  let quoted = false
+  for (const character of text) {
+    if (character === '"') {
+      quoted = !quoted
+      continue
+    }
+    if (quoted) continue
+    if (character === '{' || character === '[') depth += 1
+    if (character === '}' || character === ']') depth -= 1
+  }
+  return depth
+}
+
+/**
+ * The names the example of the values of a stack assigns.
+ *
+ * A line that is empty, that is a comment or that holds no value
+ * assigns nothing: the value of a variable that is commented out is the
+ * one of the example of the service, and not the one of the file.
+ *
+ * The names inside a value that spans several lines are the names of
+ * the value, and not the names of the variables: the example of a map
+ * of the sizes of the services holds a name per service, and those
+ * names are not variables.
+ */
+export function assignmentsOf(example: string): string[] {
+  const names = new Set<string>()
+  let depth = 0
+  for (const line of example.split('\n')) {
+    const trimmed = line.trim()
+    if (depth === 0) {
+      if (trimmed === '' || trimmed.startsWith('#')) continue
+      const separator = trimmed.indexOf('=')
+      if (separator <= 0) continue
+      const name = trimmed.slice(0, separator).trim()
+      if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) names.add(name)
+      depth += bracketsOf(trimmed.slice(separator + 1))
+      continue
+    }
+    depth += bracketsOf(trimmed)
+  }
+  return [...names].sort()
+}
+
+/** The value the example of the values of a stack gives to a name. */
+export function valueOfAssignment(example: string, name: string): string | undefined {
+  let depth = 0
+  let current: string | undefined
+  for (const line of example.split('\n')) {
+    const trimmed = line.trim()
+    if (depth === 0) {
+      if (trimmed === '' || trimmed.startsWith('#')) continue
+      const separator = trimmed.indexOf('=')
+      if (separator <= 0) continue
+      if (trimmed.slice(0, separator).trim() !== name) {
+        depth += bracketsOf(trimmed.slice(separator + 1))
+        continue
+      }
+      current = trimmed.slice(separator + 1).trim()
+      depth += bracketsOf(current)
+      if (depth <= 0) return current.replace(/^"(.*)"$/, '$1')
+      continue
+    }
+    depth += bracketsOf(trimmed)
+    if (current === undefined) continue
+    current += `\n${line}`
+    if (depth <= 0) return current.replace(/^"(.*)"$/, '$1')
+  }
+  return current
+}
+
+/**
+ * The variables the templates of a stack declare.
+ *
+ * A variable that the example of the values does not name is a variable
+ * that the operator discovers when the deployment is already running.
+ */
+export function variablesOfTemplates(sources: readonly string[]): string[] {
+  const names = new Set<string>()
+  for (const source of sources) {
+    for (const match of source.matchAll(/^[ \t]*variable[ \t]+"([^"]+)"[ \t]*\{/gm)) {
+      names.add(match[1]!)
+    }
+  }
+  return [...names].sort()
+}
+
+/**
+ * The images the templates name.
+ *
+ * An image that a template names is an image that a deployment pulls:
+ * an image that is a tag is an image that moves, and a deployment that
+ * runs an image that moves runs bytes that nothing proved.
+ */
+export function imagesOfTemplates(sources: readonly string[]): string[] {
+  const images: string[] = []
+  for (const source of sources) {
+    for (const match of source.matchAll(/(^|[ \t])image[ \t]*=[ \t]*"([^"]+)"/gm)) {
+      images.push(match[2]!)
+    }
+  }
+  return images
+}
+
+/** The text of a block, from its opening brace to the brace that closes it. */
+function blockOf(text: string, open: number): string {
+  let depth = 0
+  for (let index = open; index < text.length; index += 1) {
+    if (text[index] === '{') depth += 1
+    if (text[index] === '}') {
+      depth -= 1
+      if (depth === 0) return text.slice(open + 1, index)
+    }
+  }
+  return text.slice(open + 1)
+}
+
+/**
+ * The versions the templates pin the providers to.
+ *
+ * A provider without a version is a provider that changes under the
+ * feet of the deployment, and the state of a deployment is read by the
+ * version of the provider that wrote it.
+ */
+export function providerVersionsOf(versions: string): { provider: string; version: string }[] {
+  const start = versions.indexOf('required_providers')
+  if (start < 0) return []
+  const open = versions.indexOf('{', start)
+  if (open < 0) return []
+  const block = blockOf(versions, open)
+  const found: { provider: string; version: string }[] = []
+  for (const match of block.matchAll(/([A-Za-z0-9_]+)[ \t]*=[ \t]*\{/g)) {
+    const entry = blockOf(block, match.index + match[0].length - 1)
+    const version = entry.match(/version[ \t]*=[ \t]*"([^"]+)"/)?.[1] ?? ''
+    found.push({ provider: match[1]!, version })
+  }
+  return found
+}
+
+/**
+ * Checks that the files of a deployment are not in the templates.
+ *
+ * The state of a deployment holds the value of every secret of the
+ * deployment, and the values of a deployment name one deployment. A file
+ * of a deployment that is committed is a credential that everybody
+ * reads.
+ */
+export async function checkRuntimeFiles(root: string): Promise<DeployFinding[]> {
+  const findings: DeployFinding[] = []
+  for (const file of await filesUnder(root, TOFU)) {
+    if (file.startsWith(`${RUNTIME}/`)) continue
+    const name = file.slice(file.lastIndexOf('/') + 1)
+    if (name.endsWith('.tfstate') || name.includes('.tfstate.')) {
+      findings.push({
+        file,
+        message: 'the state of a deployment holds the credentials of the deployment',
+      })
+      continue
+    }
+    if (name.endsWith('.tfvars') && !name.endsWith('.tfvars.example')) {
+      findings.push({
+        file,
+        message: 'the values of a deployment belong to one deployment and not to the repository',
+      })
+      continue
+    }
+    if (name.endsWith('.bin') || name.endsWith('.tfplan')) {
+      findings.push({
+        file,
+        message: 'a plan of a deployment is not a file of the repository',
+      })
+    }
+  }
+  return findings
+}
+
+/**
+ * Checks the templates of the deployment.
+ *
+ * The templates are the platform's artifacts, and the values of one
+ * deployment are not. The check holds three lines:
+ *
+ * - Every variable of the templates is in the example of the values, and
+ *   the example names no variable that the templates do not declare: an
+ *   example that is short is an example that stops a deployment, and a
+ *   name that is left over is a name that nobody reads.
+ * - Every image is a digest: an image that is a tag is an image that
+ *   moves.
+ * - Every provider is pinned: a provider without a version changes
+ *   under the feet of the deployment.
+ */
+export async function checkInfrastructure(root: string): Promise<DeployFinding[]> {
+  const findings: DeployFinding[] = []
+
+  const stacks: { directory: string; files: readonly string[] }[] = [
+    { directory: TEMPLATES, files: TEMPLATE_FILES },
+    { directory: BOOTSTRAP, files: BOOTSTRAP_FILES },
+  ]
+
+  for (const stack of stacks) {
+    for (const file of stack.files) {
+      if (!existsSync(join(root, stack.directory, file))) {
+        findings.push({
+          file: join(stack.directory, file),
+          message: 'the file of the templates is not there',
+        })
+      }
+    }
+  }
+  if (findings.length > 0) return findings
+
+  findings.push(...(await checkRuntimeFiles(root)))
+
+  for (const stack of stacks) {
+    const sources = await sourcesOf(root, stack.directory)
+    const example = readFileSync(join(root, stack.directory, EXAMPLE), 'utf8')
+    const declared = new Set(variablesOfTemplates(sources))
+    const assigned = new Set(assignmentsOf(example))
+
+    for (const variable of declared) {
+      if (assigned.has(variable)) continue
+      findings.push({
+        file: join(stack.directory, EXAMPLE),
+        message: `the variable ${variable} is not in the example of the values`,
+      })
+    }
+    for (const name of assigned) {
+      if (declared.has(name)) continue
+      findings.push({
+        file: join(stack.directory, EXAMPLE),
+        message: `the example names ${name}, which the templates do not declare`,
+      })
+    }
+
+    // The images are digests. The value of an image is in the example of
+    // the values, and the image of a template that is written down is a
+    // value of the platform that nobody proved.
+    for (const variable of declared) {
+      if (!variable.endsWith('_image')) continue
+      const value = valueOfAssignment(example, variable)
+      if (value === undefined) continue
+      if (DIGEST.test(value)) continue
+      findings.push({
+        file: join(stack.directory, EXAMPLE),
+        message: `the image ${variable} is not a digest: the deployment runs the bytes that the release proved`,
+      })
+    }
+    for (const image of imagesOfTemplates(sources)) {
+      if (image.includes('${')) continue
+      if (DIGEST.test(image)) continue
+      findings.push({
+        file: stack.directory,
+        message: `the image ${image} is not a digest`,
+      })
+    }
+
+    // The providers are pinned.
+    const versions = sources.find((source) => source.includes('required_providers')) ?? ''
+    for (const { provider, version } of providerVersionsOf(versions)) {
+      if (version !== '') continue
+      findings.push({
+        file: join(stack.directory, 'versions.tf'),
+        message: `the provider ${provider} is not pinned: a provider that changes changes the deployment`,
+      })
+    }
+  }
+
+  // The runtime directory is not committed: the files of a deployment
+  // are the files of one deployment.
+  let ignore = ''
+  try {
+    ignore = readFileSync(join(root, '.gitignore'), 'utf8')
+  } catch {
+    findings.push({ file: '.gitignore', message: 'the file of the ignored files is not there' })
+  }
+  if (!ignore.split('\n').some((line) => line.trim() === `${RUNTIME}/`)) {
+    findings.push({
+      file: '.gitignore',
+      message: `the directory ${RUNTIME} is not ignored: the files of a deployment are not files of the repository`,
+    })
+  }
+
+  return findings
+}
+
+/**
+ * Checks that the files of the templates that are tracked are the files
+ * of the templates.
+ *
+ * The check reads the index of the repository and not the tree: the
+ * files of a deployment are in the tree of the machine of the operator,
+ * and they are never in the index.
+ */
+export function checkTrackedInfrastructure(root: string): DeployFinding[] {
+  const findings: DeployFinding[] = []
+  const result = git(['ls-files', '--', TOFU], root)
+  if (result.status !== 0) return findings
+  for (const line of result.stdout.split('\n')) {
+    const file = line.trim()
+    if (file === '') continue
+    const name = file.slice(file.lastIndexOf('/') + 1)
+    const allowed =
+      name.endsWith('.tf') || name.endsWith('.md') || name === EXAMPLE || name === LOCK
+    if (allowed) continue
+    findings.push({
+      file,
+      message: 'the file is not a file of the templates of the platform',
+    })
+  }
+  return findings
+}
+
 /** Checks the directory of the deployment. */
 export async function checkDeploy(root: string): Promise<DeployFinding[]> {
   const version = readVersion(root)
@@ -616,6 +1038,8 @@ export async function checkDeploy(root: string): Promise<DeployFinding[]> {
   findings.push(...(await checkFiles(root, version)))
   findings.push(...(await checkManifests(root, version)))
   findings.push(...(await checkMinimumEnvironment(root)))
+  findings.push(...(await checkInfrastructure(root)))
+  findings.push(...checkTrackedInfrastructure(root))
   return findings
 }
 

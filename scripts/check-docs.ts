@@ -33,8 +33,14 @@ import { GEOMETRY, MAP_HOPS, MAP_REQUESTS, MAP_STATIONS } from '../packages/cons
 /** The root of the repository. */
 const root = resolve(import.meta.dir, '..')
 
-/** The directories that hold no document. */
-const SKIPPED = ['node_modules', '.git', '.pg', '.access', 'dist', 'coverage']
+/**
+ * The directories that hold no document.
+ *
+ * The working directories of the tools that write the infrastructure as
+ * code are among them: they hold the documentation of the providers,
+ * and a provider is not a document of the platform.
+ */
+const SKIPPED = ['node_modules', '.git', '.pg', '.access', 'dist', 'coverage', '.terraform']
 
 /**
  * The files that are not checked for repetition.

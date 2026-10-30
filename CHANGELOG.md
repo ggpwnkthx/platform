@@ -10,6 +10,43 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The deployment on Azure is written in OpenTofu
+
+The deployment of the platform had three shapes: the Compose stacks, the
+Kubernetes manifests and a document. The document told the operator what
+to do, and nothing proved that the thing the operator did was the thing
+the platform expected. The templates of the deployment on Azure are now
+part of the repository, next to the Compose stacks and the Kubernetes
+manifests, and the continuous integration proves that they hold against
+the schemas of the providers on every change.
+
+The templates are the platform's artifacts and they are versioned with
+it. The values of one deployment — the values it runs with, the place
+where its state lives and the plan that waits for its approval — are
+not: they live in `deploy/tofu/runtime/`, which is not committed, the
+way the generated keys of a development machine are not.
+
+The deployment holds the same services as the Compose stack, with the
+same ports and the same names of the environment: the gateway, Access,
+Data, the console and the control plane of the gateway, over an Azure
+Database for PostgreSQL Flexible Server and an Azure Cache for Redis,
+behind an Azure Front Door that terminates the transport. The secrets
+live in a Key Vault and the images are pulled by digest, so the
+deployment runs the bytes that the gates of the release proved.
+
+Three things about the deployment are not like the Compose stack, and
+the README of the templates says so: the access control list of the
+cache is made by hand, the transport of the database asks for
+`sslmode=require` and not for a verified certificate, and the
+delegation of the subnet of the environment is the one the provider of
+Azure accepts.
+
+The check of the deployment holds the templates to the same lines the
+rest of the directory is held to: every variable of the templates is in
+the example of the values, every image is a digest, every provider is
+pinned, and no file of a deployment — a state, a plan, the values of a
+deployment — is ever committed.
+
 ### The clients of the platform read their contracts in one place
 
 The console and the CLI are the two clients of the platform, and each of

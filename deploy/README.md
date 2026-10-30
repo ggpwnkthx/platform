@@ -18,6 +18,9 @@ deploy/
     base/access/             Access only
     base/data/               Data only
     overlays/platform/       all three
+  tofu/                    the infrastructure as code
+    azure/                   the templates of the deployment on Azure
+    runtime/                 the files of a given deployment, not committed
   config/                  deployment configuration
   dex/                     identity provider for development
   fixtures/                development fixtures
@@ -80,6 +83,12 @@ Each base in `deploy/kubernetes/base/` applies on its own. The `deploy/kubernete
 Secrets are **not** in the manifests. Each base has a `secret.example.yaml` that names the secret's keys. Apply the real secret from your secret store (sealed secrets, the external secrets operator, or an equivalent).
 
 Data migration is an operator command, not a base resource. Run it by hand, once per deployment, with `deploy/kubernetes/base/data/migrate-job.yaml`.
+
+## Infrastructure as code
+
+`deploy/tofu/azure/` holds the templates of the deployment on Azure, written in OpenTofu. The templates are the platform's artifacts and they are versioned with it; the values of one deployment are in `deploy/tofu/runtime/<environment>/`, which is not committed.
+
+The procedure is in [the README of the templates](tofu/azure/README.md), and the layout is in [the README of the directory](tofu/README.md).
 
 ## Configuration
 

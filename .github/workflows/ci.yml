@@ -186,6 +186,35 @@ jobs:
         # gate that is wrong is a gate that is worth nothing.
         run: bun run coverage:check
 
+  infrastructure:
+    name: the infrastructure as code of the deployment
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: the tool that writes the deployment
+        # The version of the tool is pinned: a tool that reads a
+        # template another way changes what a deployment is.
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: '1.13.2'
+          tofu_wrapper: false
+
+      - name: the templates are written in the shape of the tool
+        run: tofu fmt -check -recursive deploy/tofu
+
+      - name: the templates of the deployment are valid
+        # The templates are checked without a cloud: the check reads the
+        # templates and the schemas of the providers, and it needs
+        # neither a subscription nor a login. A template that does not
+        # hold against the schema of the provider is a deployment that
+        # refuses to start.
+        run: |
+          for stack in deploy/tofu/azure deploy/tofu/azure/bootstrap; do
+            tofu -chdir="$stack" init -backend=false -input=false
+            tofu -chdir="$stack" validate
+          done
+
   integration:
     name: the shared state of ${{ matrix.workspace }}
     runs-on: ubuntu-latest
