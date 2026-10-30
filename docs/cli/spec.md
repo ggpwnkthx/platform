@@ -226,7 +226,7 @@ The commands of the group take the same options:
 | `--var-file <path>` | The file of the values of the deployment. The default is the values of the runtime directory. |
 | `--name <name>` | One output of the deployment. |
 
-The tool is found on the path, or in the variable `TOFU_BINARY`. The CLI refuses a tool that is older than the version the templates ask for, and it refuses a tool that is not there. The plan is read from the json the tool writes, and the text the tool writes is never parsed: a plan that the CLI reads another way is a plan nobody proved.
+The tool is found on the path, or in the variable `TOFU_BINARY`. A machine that holds no tool takes the one of the release of the tool: the CLI reads the archive of the system it runs on, proves it against the digest the release published, and writes the tool in the directory `.platform/tofu/<version>` of the working directory. The variable `TOFU_DOWNLOAD` set to `off` refuses that download, and the variable `TOFU_DIRECTORY` names the directory the tool is written in. The CLI refuses a tool that is older than the version the templates ask for, and it refuses a tool that is not there. The plan is read from the json the tool writes, and the text the tool writes is never parsed: a plan that the CLI reads another way is a plan nobody proved.
 
 `infra apply` asks before it applies, and the question names what the plan destroys. `--dry-run` writes the plan and applies nothing.
 

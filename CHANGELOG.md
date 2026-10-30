@@ -10,6 +10,17 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The tool that writes the infrastructure is downloaded when the machine holds none
+
+A machine that holds no OpenTofu took the tool from the path and
+refused the command when the tool was not there. The CLI now reads the
+archive of the release for the system it runs on, proves it against the
+digest the release published, and writes the tool in the directory
+`.platform/tofu/<version>` of the working directory. The tool of the
+path of the machine still comes first, `TOFU_BINARY` still names the
+tool to run, `TOFU_DOWNLOAD` set to `off` refuses the download, and
+`TOFU_DIRECTORY` names the directory the tool is written in.
+
 ## 1.0.4
 
 The versions 1.0.1 to 1.0.3 were attempted and never shipped: the

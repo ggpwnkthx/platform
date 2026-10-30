@@ -9,12 +9,25 @@
  * of the platform either: it is a program of the machine of the
  * operator, it is found on the path, and the CLI refuses to run it when
  * it is too old for the templates of the deployment.
+ *
+ * A machine that holds no tool is a machine that needs one: the CLI
+ * writes the tool of the release in the working directory and runs it
+ * from there. The download can be refused, and a reader who refuses it
+ * is told that the tool is not there.
  */
 
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { CliFailure } from '../domains/failure'
 import { type Answer, run } from './process'
+import {
+  binaryNameOf,
+  type Download,
+  installDirectoryOf,
+  installTofu,
+  targetOf,
+  TOFU_VERSION,
+} from './tofu-release'
 import {
   actionOf,
   type AppliedInfrastructure,
@@ -35,6 +48,16 @@ import {
  * written.
  */
 export const MINIMUM_TOFU = '1.9.0'
+
+/**
+ * The values of the environment that refuse the download of the tool.
+ *
+ * A machine that holds no tool is a machine that needs one, and the
+ * release of the tool is where the right one is. A reader who wants no
+ * download says so: the tool is then installed by hand, or named with
+ * `TOFU_BINARY`.
+ */
+const REFUSES_DOWNLOAD = new Set(['0', 'off', 'false', 'no'])
 
 /**
  * The names whose values never reach the answer of the CLI.
@@ -153,30 +176,99 @@ export class TofuInfrastructure implements InfrastructurePort {
   /** The environment of the process. */
   readonly #environment: Readonly<Record<string, string | undefined>>
 
+  /** The directory the CLI runs in. */
+  readonly #working: string
+
+  /** The transport that reads the release of the tool. */
+  readonly #download?: Download
+
   /**
    * The tool that writes the infrastructure of the deployment.
    *
    * @param environment the environment of the process.
+   * @param options what the tool needs to know of the machine.
    */
-  constructor(environment: Readonly<Record<string, string | undefined>>) {
+  constructor(
+    environment: Readonly<Record<string, string | undefined>>,
+    options: { readonly working?: string; readonly download?: Download } = {}
+  ) {
     this.#environment = environment
+    this.#working = options.working ?? process.cwd()
+    this.#download = options.download
   }
 
-  /** The path of the tool, as the operator named it or as the path holds it. */
-  #binary(): string {
+  /**
+   * The path of the tool, as the operator named it or as the path holds
+   * it.
+   *
+   * The tool of the machine of the operator comes first: a tool that is
+   * installed is a tool the machine proved. A machine that holds no tool
+   * takes the one of the release, and the CLI writes it in the working
+   * directory.
+   */
+  async #binary(): Promise<string> {
     const named = this.#environment.TOFU_BINARY
     if (named) return named
+    const onPath = this.#onPath()
+    if (onPath !== undefined) return onPath
+    const written = this.#written()
+    if (written !== undefined) return written
+    if (!this.#mayDownload()) {
+      throw new CliFailure(
+        'the tool that writes the infrastructure is not on the path: install OpenTofu, or name it with TOFU_BINARY',
+        4,
+        'tool_missing'
+      )
+    }
+    const directory = this.#installDirectory()
+    process.stderr.write(
+      `the tool that writes the infrastructure is not on the path: the release ${TOFU_VERSION} is written in ${directory}\n`
+    )
+    return await installTofu({
+      version: TOFU_VERSION,
+      directory,
+      platform: process.platform,
+      arch: process.arch,
+      download: this.#download,
+    })
+  }
+
+  /** The tool of the path of the machine, when the path holds one. */
+  #onPath(): string | undefined {
     const path = this.#environment.PATH ?? ''
     for (const directory of path.split(':')) {
       if (directory === '') continue
       const candidate = join(directory, 'tofu')
       if (existsSync(candidate)) return candidate
     }
-    throw new CliFailure(
-      'the tool that writes the infrastructure is not on the path: install OpenTofu, or name it with TOFU_BINARY',
-      4,
-      'tool_missing'
-    )
+    return undefined
+  }
+
+  /** The tool the CLI wrote in the working directory, when it wrote one. */
+  #written(): string | undefined {
+    const candidate = join(this.#installDirectory(), this.#name())
+    if (existsSync(candidate)) return candidate
+    return undefined
+  }
+
+  /** The directory the tool is written in. */
+  #installDirectory(): string {
+    const named = this.#environment.TOFU_DIRECTORY
+    if (named) return named
+    return installDirectoryOf(this.#working, TOFU_VERSION)
+  }
+
+  /** The name of the tool on the machine of the operator. */
+  #name(): string {
+    const target = targetOf(process.platform, process.arch)
+    return target === null ? 'tofu' : binaryNameOf(target)
+  }
+
+  /** True when the reader lets the CLI write the tool of the release. */
+  #mayDownload(): boolean {
+    const named = this.#environment.TOFU_DOWNLOAD
+    if (named === undefined) return true
+    return !REFUSES_DOWNLOAD.has(named.trim().toLowerCase())
   }
 
   /** The environment of the tool: the environment of the process, without the empty names. */
@@ -197,7 +289,7 @@ export class TofuInfrastructure implements InfrastructurePort {
    * @param directory the directory the tool runs in.
    */
   async #run(args: readonly string[], directory: string): Promise<Answer> {
-    const binary = this.#binary()
+    const binary = await this.#binary()
     try {
       return await run(binary, args, {
         cwd: directory,

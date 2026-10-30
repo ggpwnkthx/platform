@@ -478,7 +478,11 @@ describe('the tool that writes the infrastructure', () => {
   })
 
   test('a tool that is not there is refused', async () => {
-    const tool = new TofuInfrastructure({ PATH: '', TOFU_BINARY: undefined })
+    const tool = new TofuInfrastructure({
+      PATH: '',
+      TOFU_BINARY: undefined,
+      TOFU_DOWNLOAD: 'off',
+    })
     await expect(tool.version()).rejects.toThrow(
       'the tool that writes the infrastructure is not on the path'
     )

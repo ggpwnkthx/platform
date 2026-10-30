@@ -43,6 +43,11 @@ deploy/tofu/runtime/
 .tmp/
 .access/
 
+# The tools the CLI writes in the working directory: the tool that
+# writes the infrastructure is downloaded from its release when the
+# machine holds none.
+.platform/
+
 # The keys and the configuration of the development machine: they are
 # generated, and they are not secrets. The script
 # `bun run scripts/dev-keys.ts` writes them.

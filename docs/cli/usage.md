@@ -147,6 +147,12 @@ The tool is found on the path, or in `TOFU_BINARY`:
 export TOFU_BINARY=/usr/local/bin/tofu
 ```
 
+A machine that holds no tool does not need one installed by hand: the CLI reads the archive of the tool for the system it runs on, proves it against the digest the release published, and writes it in `.platform/tofu/<version>` of the directory you run the CLI in. The next run finds it there. To refuse the download:
+
+```bash
+export TOFU_DOWNLOAD=off
+```
+
 The values of the deployment, the plan and the state of the deployment belong to the deployment: they live in the runtime directory, and the CLI writes none of them itself.
 
 ## Prepare a deployment
@@ -191,7 +197,7 @@ The file holds the values in the shape of the example of the templates. The wiza
 | `the active revision is not the expected one` | The route table moved underneath the write | Read the revision again, then write |
 | `the service cannot be reached` | The network or the service is down | Check `platformctl status` |
 | `the command changes something and nobody can confirm it` | No terminal to ask for confirmation | Pass `--yes` |
-| `the tool that writes the infrastructure is not on the path` | OpenTofu is not installed, or not on the path | Install it, or set `TOFU_BINARY` |
+| `the tool that writes the infrastructure is not on the path` | OpenTofu is not installed, and the download of the release is refused | Install it, set `TOFU_BINARY`, or unset `TOFU_DOWNLOAD` |
 | `the tool that writes the infrastructure is too old` | The tool is older than the templates ask for | Install a newer OpenTofu |
 | `the directory of the deployment is not there` | The runtime directory of the profile does not exist | Pass `--runtime`, or create it |
 | `the values of the deployment are not there` | The file of the values is missing | Copy `terraform.tfvars.example` into the runtime directory |
