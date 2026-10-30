@@ -36,6 +36,12 @@ You must open a workspace by ID when one of your rights covers every workspace i
 
 The workspace page lists the collections Data opens to you and what you may do with each.
 
+## See what you may do
+
+Open the **Your access** tab of a workspace. Each collection has a grid: the rows are its records and each of its fields, the columns are read, create, change and delete. Every "no" carries a numbered note with its reason. Beside the grids are the permissions Access gives you on the workspace, which Data's policies read. A "yes" is the most you may do: Data still checks each record.
+
+Elsewhere, an action you may not take is shown disabled rather than hidden. Hover over it or move to it with the keyboard to read why. A field you may read but not change appears in the change form as read-only, with its reason.
+
 ## Browse records
 
 Open a collection to see its records, then narrow the list:
@@ -93,10 +99,12 @@ Open **Operators**. Platform operators see every tenant and can create one; an o
 | --- | --- |
 | Tenant | See counts and recent changes; edit the tenant's settings. |
 | Users | Filter by exact e-mail and status. Register one user by provider identity, e-mail and name, or register a team: one user per line as `identity, e-mail, name`, at most 1 000 lines; a failing line does not stop the others. |
-| A user | See the user's rights, both direct and through groups, live or also revoked and expired; their groups; edit or disable their registration. |
+| A user | See what the user can do in effect: every live permission with roles expanded and where it comes from (directly, through a group, through a chain of roles). See and grant their direct rights and the rights of their groups; check one workspace and route against Access; edit their name and e-mail; disable or enable them with a confirmation. |
 | Groups | Create a group by key and name, then add members. A right granted to a group is held by every member. |
-| Rights | List every right, live or revoked/expired. Grant a permission or role on a workspace and route to a user or group, optionally with an expiry; revoke a right. |
-| Roles | Save a role: a key, a name, its permissions and the roles it includes. Grant roles on the Rights page. |
+| A group | Search and add members; the page marks changes that are not saved yet and asks before you leave with them. Grant and revoke the group's rights; rename it. |
+| Rights | Filter by holder, role or permission, and workspace; switch between live, revoked or ended, and all. Grant a role or a single permission to a user or group, on all workspaces or one, on a route, until never or a chosen moment; a line under the form says the right in words before you grant it. A permission that no grant or role of the tenant names is created only once you confirm it. Revoke a right. |
+| Roles | List roles with the permissions they hold in effect, the roles they include and how many live grants name them. Create a role. |
+| A role | Edit its name, description, permissions and included roles by adding and removing chips; see what it holds in effect and who holds it; remove it once no grant and no role names it. |
 | Audit | Every change to the tenant, newest first, filterable by action; export it as CSV or JSONL. |
 
 Your operator keys are read again on every page. If someone revokes them, administration closes from your next page on.

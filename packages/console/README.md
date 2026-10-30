@@ -45,7 +45,7 @@ packages/console/
 
 A domain holds rules and never transport; the app holds routes and never rules. The core imports neither the interface nor HonoX. `bun run architecture` rejects imports that break this direction, and CI runs it.
 
-Islands: the status board (re-polls probes), the platform map, the list filter builder, the group member picker, the JSON field, the data access clock, the theme switch, confirmation of irreversible actions, copy-ID, and the copy buttons on documentation code blocks.
+Islands: the status board (re-polls probes), the platform map, the list filter builder, the chip picker (group members, role permissions, the holder of a right), the grant form, the JSON field, the data access clock, the theme switch, confirmation of irreversible actions, copy-ID, and the copy buttons on documentation code blocks.
 
 ## Decisions
 

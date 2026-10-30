@@ -124,7 +124,7 @@ The console acts with the operator's **tenant credential** when it holds one (`C
 
 The ability renders the scope and a workspace's grants. Access decides who holds a permission; Data decides what a permission grants.
 
-Every ability rule must be an **upper bound**, never a lower one: the console hides what services refuse and shows what they allow. A button that is shown but refused by Data is an annoyance; a button that is hidden although allowed is a fault.
+Every ability rule must be an **upper bound**, never a lower one: the console refuses what the services refuse and allows what they allow, and it says why. A refusal is drawn as a disabled action with the reason of it, so a reader learns what is missing instead of finding an absence. A button that is offered and then refused by Data is an annoyance; a button that is hidden although it is allowed is a fault.
 
 The ability library has two wildcards, the action `manage` and the subject `all`. The console uses neither: every rule names its action and subject, and the wildcards match no rule.
 
@@ -149,6 +149,7 @@ The ability library has two wildcards, the action `manage` and the subject `all`
 | `/` | The places and service state. | The three services' probes. |
 | `/workspaces` | Workspaces named by the caller's grants, plus ones it opened. A workspace can also be opened by ID. | The caller's grants, read with its tenant's credential; `GET /ws/{id}/v1/me` per workspace. |
 | `/workspaces/{id}` | Collections the policies open to the caller, and what it may do with them. | `/me`, `/schema` |
+| `/workspaces/{id}/access` | What the caller may do with each collection, field by field, and the reason of every refusal. | `/me`, `/schema`, and the access context of the caller |
 | `/workspaces/{id}/collections/{key}` | Records: searched, filtered (by rows or as JSON), sorted, cursor-paged. | `/schema/{key}`, `/items/{key}` |
 | `/workspaces/{id}/collections/{key}/new` | Record creation. The form carries an idempotency key, so submitting twice creates one record. | `POST /items/{key}` |
 | `/workspaces/{id}/collections/{key}/records/{id}` | A record: form, history, deletion. Changes carry the validator of the version the caller read. | `/items/{key}/{id}`, `PATCH`, `DELETE`, `/versions` |
@@ -163,6 +164,7 @@ The ability library has two wildcards, the action `manage` and the subject `all`
 | `/operators/tenants/{slug}/groups` | Groups, members and rights. | Same. |
 | `/operators/tenants/{slug}/rights` | Every right of the tenant, live or ended; granting to a user or group, and revoking. | Same. |
 | `/operators/tenants/{slug}/roles` | The tenant's roles. | Same. |
+| `/operators/tenants/{slug}/roles/{key}` | One role of the tenant: the permissions it holds in effect, the roles it includes, and who holds it. | Same. |
 | `/operators/tenants/{slug}/audit` | Administration audit, exportable as CSV or JSONL. | Same. |
 | `/status` | State of the three services. | Each service's `/healthz` and `/readyz`. |
 | `/docs` | Platform documentation, arranged around the reader's role (§6.4): a choice of roles, or the chosen role's map, then every area. `?role=` records or clears the choice. | Nothing: docs are in the console build. |
