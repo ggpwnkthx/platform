@@ -4,7 +4,7 @@
  */
 
 import { createRoute } from 'honox/factory'
-import { collectionAbility } from '../../../../../../domains/ability'
+import { collectionAbility, reasonOf } from '../../../../../../domains/ability'
 import {
   DataError,
   type FieldMetadata,
@@ -17,7 +17,9 @@ import {
 } from '../../../../../../domains/data'
 import { isUuid } from '../../../../../../domains/operators'
 import { Empty, Notice, PageHead, Refusal, refusalOf } from '../../../../../components/page'
+import { DisabledAction } from '../../../../../components/why'
 import {
+  accessPath,
   collectionPath,
   labelOf,
   recordPath,
@@ -53,6 +55,7 @@ export default createRoute(async (c) => {
   }
 
   const readable = collection.fields.filter((field) => ability.can('read', key, field.name))
+  const hidden = collection.fields.length - readable.length
   const columns: FieldMetadata[] = readable.slice(0, COLUMNS)
   const sortable = new Set(collection.filterableFields)
   const filterFields = collection.fields
@@ -79,7 +82,13 @@ export default createRoute(async (c) => {
               <a class="button" href={`${path}/new`}>
                 New record
               </a>
-            ) : null}
+            ) : (
+              <DisabledAction
+                id="new-record"
+                label="New record"
+                reason={reasonOf(ability, 'create', key) ?? ''}
+              />
+            )}
           </>
         }
       />
@@ -208,6 +217,14 @@ export default createRoute(async (c) => {
                 {readable.length > COLUMNS
                   ? ` · ${readable.length - COLUMNS} more fields on the record`
                   : ''}
+                {hidden > 0 ? (
+                  <>
+                    {' · '}
+                    <a href={accessPath(workspace, key)}>
+                      {hidden} {hidden === 1 ? 'field is' : 'fields are'} hidden from you
+                    </a>
+                  </>
+                ) : null}
               </span>
               <span class="row">
                 {query.cursor ? (

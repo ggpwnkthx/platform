@@ -66,6 +66,10 @@ export const requireOperator: MiddlewareHandler = createMiddleware(async (c, nex
           your tenant.
         </p>
         <p>
+          An operator of your tenant can grant you <code>console.admin</code> on the route of the
+          console, on its Rights tab.
+        </p>
+        <p>
           <a href="/me">See what the console knows about you</a>
         </p>
       </section>,

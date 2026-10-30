@@ -8,7 +8,7 @@
  */
 
 import { createRoute } from 'honox/factory'
-import { collectionAbility } from '../../../../../../../../../domains/ability'
+import { collectionAbility, reasonOf } from '../../../../../../../../../domains/ability'
 import { DataError } from '../../../../../../../../../domains/data'
 import { isUuid } from '../../../../../../../../../domains/operators'
 import { Notice, PageHead } from '../../../../../../../../components/page'
@@ -19,6 +19,7 @@ import {
   Value,
   workspaceCrumbs,
 } from '../../../../../../../../components/workspace'
+import { DisabledAction } from '../../../../../../../../components/why'
 import ConfirmButton from '../../../../../../../../islands/confirm-button'
 import { sessionOf } from '../../../../../../../../middleware/session'
 
@@ -59,7 +60,13 @@ export default createRoute(async (c) => {
             : 'The record does not exist any more: it was deleted.'
         }
         actions={
-          canRollBack && current ? (
+          current && changed > 0 && !ability.can('update', key) ? (
+            <DisabledAction
+              id="roll-back"
+              label={`Roll back to version ${version}`}
+              reason={reasonOf(ability, 'update', key) ?? ''}
+            />
+          ) : canRollBack && current ? (
             <form method="post" action={recordPath(workspace, key, id)}>
               <input type="hidden" name="_action" value="rollback" />
               <input type="hidden" name="_etag" value={current.etag} />

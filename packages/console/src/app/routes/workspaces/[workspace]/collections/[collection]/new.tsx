@@ -8,7 +8,7 @@
 
 import type { Context } from 'hono'
 import { createRoute } from 'honox/factory'
-import { collectionAbility } from '../../../../../../domains/ability'
+import { collectionAbility, reasonOf } from '../../../../../../domains/ability'
 import {
   type CollectionMetadata,
   DataError,
@@ -25,9 +25,12 @@ import {
   type RefusalView,
   refusalOf,
 } from '../../../../../components/page'
+import { ASK_AN_OPERATOR, LessShown } from '../../../../../components/why'
 import {
+  accessPath,
   collectionPath,
   FieldInput,
+  labelOf,
   recordPath,
   workspaceCrumbs,
 } from '../../../../../components/workspace'
@@ -51,6 +54,10 @@ function render(
   const writable = collection.fields.filter((field) =>
     ability.can('create', collection.key, field.name)
   )
+  const fixed = collection.fields.filter(
+    (field) => !ability.can('create', collection.key, field.name)
+  )
+  const refused = reasonOf(ability, 'create', collection.key)
   const problemOf = (name: string) =>
     options.problems?.find((problem) => problem.field === name)?.message ??
     options.refusal?.details.find((detail) => detail.field === name)?.code
@@ -62,6 +69,11 @@ function render(
         lede="Fields you leave empty get Data's default, or are refused if required."
       />
       {options.refusal ? <Refusal refusal={options.refusal} /> : null}
+      {refused ? (
+        <Notice tone="warn" title="You cannot create records here">
+          {refused} {ASK_AN_OPERATOR}
+        </Notice>
+      ) : null}
       {options.problems && options.problems.length > 0 ? (
         <Notice tone="error" title="Some values could not be read">
           Nothing was sent: correct the fields below.
@@ -79,8 +91,14 @@ function render(
             />
           ))}
         </div>
+        {!refused && fixed.length > 0 ? (
+          <LessShown href={accessPath(workspace, collection.key)}>
+            You cannot set {fixed.map((field) => labelOf(field)).join(', ')}: Data gives{' '}
+            {fixed.length === 1 ? 'it its' : 'them their'} default.
+          </LessShown>
+        ) : null}
         <div class="row">
-          <button type="submit" class="button">
+          <button type="submit" class="button" disabled={refused !== null}>
             Create
           </button>
           <a class="button quiet" href={collectionPath(workspace, collection.key)}>

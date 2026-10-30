@@ -28,6 +28,11 @@ export function recordPath(workspace: string, collection: string, id: string): s
   return `${collectionPath(workspace, collection)}/records/${encodeURIComponent(id)}`
 }
 
+/** The path of the page that says what the caller may do in a workspace. */
+export function accessPath(workspace: string, collection?: string): string {
+  return `${workspacePath(workspace)}/access${collection ? `#${encodeURIComponent(collection)}` : ''}`
+}
+
 /** The breadcrumbs of a page of a workspace. */
 export function workspaceCrumbs(id: string, me: Me | null, ...rest: Crumb[]): Crumb[] {
   return [
@@ -38,12 +43,16 @@ export function workspaceCrumbs(id: string, me: Me | null, ...rest: Crumb[]): Cr
 }
 
 /** The tabs of a workspace. */
-export function WorkspaceTabs(props: { id: string; current: 'collections' | 'model' | 'audit' }) {
+export function WorkspaceTabs(props: {
+  id: string
+  current: 'collections' | 'access' | 'model' | 'audit'
+}) {
   const base = workspacePath(props.id)
   return (
     <Tabs
       items={[
         { href: base, label: 'Collections', current: props.current === 'collections' },
+        { href: `${base}/access`, label: 'Your access', current: props.current === 'access' },
         { href: `${base}/model`, label: 'Data model', current: props.current === 'model' },
         { href: `${base}/audit`, label: 'Audit', current: props.current === 'audit' },
       ]}

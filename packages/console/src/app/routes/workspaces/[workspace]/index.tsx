@@ -6,6 +6,7 @@ import { createRoute } from 'honox/factory'
 import { isUuid } from '../../../../domains/operators'
 import { Badge, Empty, KeyValues, PageHead } from '../../../components/page'
 import {
+  accessPath,
   collectionPath,
   WorkspaceTabs,
   workspaceCrumbs,
@@ -83,6 +84,9 @@ export default createRoute(async (c) => {
               ['Policies', <code>{schema.policyBundleVersion}</code>],
             ]}
           />
+          <a class="small" href={accessPath(id)}>
+            What you may do here, field by field →
+          </a>
         </aside>
       </div>
     </>,

@@ -9,7 +9,7 @@
 import type { Context } from 'hono'
 import type { Child } from 'hono/jsx'
 import { createRoute } from 'honox/factory'
-import { collectionAbility } from '../../../../../../../../domains/ability'
+import { collectionAbility, reasonOf } from '../../../../../../../../domains/ability'
 import {
   type CollectionMetadata,
   type DataClient,
@@ -32,6 +32,13 @@ import {
   refusalOf,
 } from '../../../../../../../components/page'
 import {
+  ASK_AN_OPERATOR,
+  DisabledAction,
+  LessShown,
+  ReadOnlyField,
+} from '../../../../../../../components/why'
+import {
+  accessPath,
   collectionPath,
   FieldInput,
   labelOf,
@@ -93,6 +100,11 @@ async function render(
   const writable = collection.fields.filter((field) => ability.can('update', key, field.name))
   const canUpdate = ability.can('update', key) && writable.length > 0
   const canDelete = ability.can('delete', key)
+  const fixed = readable.filter((field) => !ability.can('update', key, field.name))
+  const hidden = collection.fields.length - readable.length
+  const updateRefused =
+    reasonOf(ability, 'update', key) ??
+    (writable.length === 0 ? "Data's policies let you change none of the fields you read." : null)
   const relations = collection.relations.filter((relation) => relation.name in record)
   const problemOf = (name: string) =>
     options.problems?.find((problem) => problem.field === name)?.message ??
@@ -118,7 +130,14 @@ async function render(
                 message="Delete this record? Data keeps its tombstone when the collection keeps a history."
               />
             </form>
-          ) : null
+          ) : (
+            <DisabledAction
+              id="delete-record"
+              label="Delete"
+              tone="danger"
+              reason={reasonOf(ability, 'delete', key) ?? ''}
+            />
+          )
         }
       />
       {options.refusal ? <Refusal refusal={options.refusal} /> : null}
@@ -139,6 +158,12 @@ async function render(
                 ]),
               ]}
             />
+            {hidden > 0 ? (
+              <LessShown href={accessPath(workspace, key)}>
+                {hidden} {hidden === 1 ? 'field of this record is' : 'fields of this record are'}{' '}
+                hidden from you by Data's policies.
+              </LessShown>
+            ) : null}
           </section>
           {canUpdate ? (
             <section class="card">
@@ -160,6 +185,13 @@ async function render(
                       creating={false}
                     />
                   ))}
+                  {fixed.map((field) => (
+                    <ReadOnlyField
+                      label={labelOf(field)}
+                      value={<Value value={record[field.name]} />}
+                      reason={reasonOf(ability, 'update', key, field.name) ?? ''}
+                    />
+                  ))}
                 </div>
                 <div class="row">
                   <button type="submit" class="button">
@@ -169,7 +201,17 @@ async function render(
                 </div>
               </form>
             </section>
-          ) : null}
+          ) : (
+            <section class="card">
+              <h2>Change</h2>
+              <Notice tone="warn" title="You cannot change this record">
+                {updateRefused} {ASK_AN_OPERATOR}
+              </Notice>
+              <p class="small">
+                <a href={accessPath(workspace, key)}>See what you can do in {collection.label}</a>
+              </p>
+            </section>
+          )}
         </div>
         <aside class="stack">
           <section class="card">

@@ -2326,3 +2326,108 @@ body.wide {
 .card-link:hover h2 {
   color: var(--accent);
 }
+/* ------------------------------------------------------------ the reasons of a refusal */
+
+.why {
+  position: relative;
+  display: inline-flex;
+}
+
+.button.is-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.button.is-disabled:hover {
+  filter: none;
+}
+
+.why-tip {
+  display: none;
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  right: 0;
+  width: max-content;
+  max-width: min(22rem, 80vw);
+  padding: 0.5rem 0.7rem;
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 0.8rem;
+  font-weight: 400;
+  line-height: 1.45;
+  white-space: normal;
+  box-shadow: var(--shadow);
+}
+
+.why:hover .why-tip,
+.why:focus-within .why-tip {
+  display: block;
+}
+
+.field.readonly .readonly-value {
+  padding: 0.45rem 0.6rem;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 6px;
+  background: var(--sunk);
+  min-height: 2.4rem;
+  overflow-wrap: anywhere;
+}
+
+.less-shown {
+  margin: 0.5rem 0 0;
+}
+
+.key-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.grant-cell {
+  text-align: center;
+  width: 7rem;
+}
+
+.grid-row-head {
+  font-weight: 500;
+}
+
+.grid-records {
+  background: var(--sunk);
+  font-weight: 600;
+}
+
+.grant-yes {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.grant-no {
+  color: var(--graphite);
+}
+
+.note-ref {
+  text-decoration: none;
+  margin-left: 0.1rem;
+}
+
+.grid-notes {
+  margin: 0.75rem 0 0;
+  padding-left: 1.4rem;
+  color: var(--graphite);
+}
+
+.grid-notes li:target {
+  color: var(--ink);
+  background: var(--accent-soft);
+}
+
+@media (max-width: 640px) {
+  .grant-cell {
+    width: auto;
+    padding-left: 0.4rem;
+    padding-right: 0.4rem;
+  }
+}
