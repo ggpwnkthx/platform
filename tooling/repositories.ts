@@ -2,7 +2,7 @@
  * The one repository of the platform.
  *
  * The platform is one repository, and it names one: the one it lives
- * in, the three images it publishes, and the mirrors of the
+ * in, the images it publishes, and the mirrors of the
  * compatibility suite. The three services were published from three
  * repositories of their own, and those repositories are gone: a clone
  * of one fails, an image published in one is not reachable, a release
@@ -24,8 +24,14 @@ export const PLATFORM_OWNER = 'ggpwnkthx'
 /** The name of the repository of the platform. */
 export const PLATFORM_REPOSITORY = 'platform'
 
-/** The names of the images of the platform. */
-export const PLATFORM_IMAGES: readonly string[] = ['gateway', 'access', 'data']
+/**
+ * The names of the images of the platform.
+ *
+ * The console is published like the three services: the release builds
+ * it, proves it and publishes it, and an image that is published is an
+ * image a deployment may name.
+ */
+export const PLATFORM_IMAGES: readonly string[] = ['gateway', 'access', 'data', 'console']
 
 /** Every name the platform owns: the repository, and the images. */
 export const PLATFORM_NAMES: readonly string[] = [PLATFORM_REPOSITORY, ...PLATFORM_IMAGES]
@@ -103,7 +109,7 @@ export function repositoryReferencesOf(content: string): RepositoryReference[] {
       // The repository of the platform is the only repository: a clone
       // of anything else is a clone of a dead end.
       if (kind === 'repository' && name === PLATFORM_REPOSITORY) continue
-      // The registry of the owner holds the three images, and nothing
+      // The registry of the owner holds the images of the platform, and nothing
       // else: an image of a name that is not one of them is an image
       // that was never published.
       if (kind === 'image' && PLATFORM_IMAGES.includes(name)) continue

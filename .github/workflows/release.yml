@@ -132,7 +132,7 @@ jobs:
       # One service that fails does not hide the state of the others.
       fail-fast: false
       matrix:
-        service: [gateway, access, data]
+        service: [gateway, access, data, console]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -206,7 +206,7 @@ jobs:
       # One service that fails does not hide the state of the others.
       fail-fast: false
       matrix:
-        service: [gateway, access, data]
+        service: [gateway, access, data, console]
     services:
       # A deployment talks to a PostgreSQL server: the image applies the
       # migrations of the schema before it accepts a request.
@@ -459,6 +459,58 @@ jobs:
             exit 1
           fi
 
+      - name: the image of the console starts and answers its probes
+        if: matrix.service == 'console'
+        run: |
+          set -euo pipefail
+          # The console is ready when Access answers its discovery
+          # document, and the release proves it against a document that
+          # answers: the console is a client of the three services, and
+          # it decides nothing by itself.
+          bun -e "Bun.serve({port:5557,fetch:()=>new Response(JSON.stringify({issuer:'https://access.example.com',authorization_endpoint:'https://access.example.com/auth'}),{headers:{'content-type':'application/json'}})})" &
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:5557/.well-known/openid-configuration > /dev/null; then
+              echo 'the discovery document answers'
+              break
+            fi
+            sleep 1
+          done
+          # The credentials of the console are the ones of a deployment
+          # that does not exist: the console refuses a credential that is
+          # too short, and it refuses the ones the repository publishes.
+          docker run -d --name console -p 8083:8083 \
+            -e CONSOLE_ENVIRONMENT=production \
+            -e CONSOLE_HOST=0.0.0.0 -e CONSOLE_PORT=8083 \
+            -e CONSOLE_PUBLIC_URL=https://console.example.com \
+            -e CONSOLE_ACCESS_URL=http://127.0.0.1:5557 \
+            -e CONSOLE_GATEWAY_URL=https://api.example.com \
+            -e CONSOLE_CLIENT_ID=console \
+            -e CONSOLE_CLIENT_SECRET=the-client-secret-of-the-release \
+            -e CONSOLE_SESSION_SECRET=the-session-secret-of-the-release \
+            -e CONSOLE_ACCESS_CONTEXT_TOKEN=the-context-token-of-the-release \
+            -e CONSOLE_COOKIE_SECURE=true \
+            "$IMAGE"
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8083/healthz > /dev/null; then
+              echo 'the console is healthy'
+              break
+            fi
+            sleep 1
+          done
+          # The logs of the container are always printed: a failure that
+          # does not say why is a failure that costs an afternoon.
+          docker logs console || true
+          if ! curl -fsS http://127.0.0.1:8083/healthz; then
+            echo "the console does not answer the probe of the health"
+            exit 1
+          fi
+          status="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8083/readyz)"
+          if [ "$status" != "200" ]; then
+            echo "the readiness answered $status"
+            docker logs console || true
+            exit 1
+          fi
+
       - name: the scan of the image
         run: |
           # A finding of a severity above high fails the release. The
@@ -495,7 +547,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [gateway, access, data]
+        service: [gateway, access, data, console]
     steps:
       - uses: docker/setup-buildx-action@v4
 
@@ -543,22 +595,64 @@ jobs:
           pattern: 'image-*'
           merge-multiple: true
 
+      - uses: actions/download-artifact@v8
+        with:
+          path: digests
+          pattern: 'digest-*'
+          merge-multiple: true
+
       - name: the images of the release
         run: |
           ls -la dist
           test -n "$(ls dist/*.tar.gz)"
 
+      - name: the manifest of the digests
+        run: |
+          set -euo pipefail
+          # The manifest is the reference of the release: it names the
+          # digest of every image, and the digest is what a deployment
+          # pins. A deployment that copies a digest by hand copies the
+          # wrong one the day the tag moves, and the manifest does not
+          # move.
+          for service in gateway access data console; do
+            if [ ! -s "digests/digest-$service.txt" ]; then
+              echo "the digest of the $service is not there"
+              exit 1
+            fi
+          done
+          jq -n \
+            --arg version "${{ needs.version.outputs.version }}" \
+            --arg tag "${{ needs.version.outputs.tag }}" \
+            --arg registry "${{ env.REGISTRY }}" \
+            --arg gateway "$(cat digests/digest-gateway.txt)" \
+            --arg access "$(cat digests/digest-access.txt)" \
+            --arg data "$(cat digests/digest-data.txt)" \
+            --arg console "$(cat digests/digest-console.txt)" \
+            '{
+              version: $version,
+              tag: $tag,
+              registry: $registry,
+              images: {
+                gateway: "\($registry)/gateway@\($gateway)",
+                access: "\($registry)/access@\($access)",
+                data: "\($registry)/data@\($data)",
+                console: "\($registry)/console@\($console)"
+              }
+            }' > dist/digests.json
+          cat dist/digests.json
+
       - name: the notes of the release
         run: |
           cat > notes.md <<EOF
-          The images of the platform: the gateway, Access and
-          Data, at the same version.
+          The images of the platform: the gateway, Access, Data and
+          the console, at the same version.
 
           | Image | What it is |
           | --- | --- |
           | \`${{ env.REGISTRY }}/gateway:${{ needs.version.outputs.version }}\` | The gateway: it authenticates a caller, asks Access and forwards the request to an upstream. |
           | \`${{ env.REGISTRY }}/access:${{ needs.version.outputs.version }}\` | Access: an OpenID Connect broker and an access decision service. |
           | \`${{ env.REGISTRY }}/data:${{ needs.version.outputs.version }}\` | Data: a headless, permission aware data API. |
+          | \`${{ env.REGISTRY }}/console:${{ needs.version.outputs.version }}\` | The console: the web interface of the three services. |
 
           The images carry the runtime of the release (Bun ${{ env.BUN_VERSION }})
           and the version of the platform (${{ needs.version.outputs.version }}).
@@ -569,6 +663,15 @@ jobs:
           docker pull ${{ env.REGISTRY }}/gateway:${{ needs.version.outputs.version }}
           docker pull ${{ env.REGISTRY }}/access:${{ needs.version.outputs.version }}
           docker pull ${{ env.REGISTRY }}/data:${{ needs.version.outputs.version }}
+          docker pull ${{ env.REGISTRY }}/console:${{ needs.version.outputs.version }}
+          \`\`\`
+
+          The file \`digests.json\` of the release names the digest of every
+          image. The digest is what a deployment pins, and the wizard of
+          the deployment reads that file:
+
+          \`\`\`bash
+          platformctl deploy azure
           \`\`\`
           EOF
 

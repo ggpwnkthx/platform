@@ -9,7 +9,9 @@ bun run --cwd packages/console build   # dist/: browser files and the server
 bun run --cwd packages/console start   # src/main.ts serves the build
 ```
 
-The image builds from `packages/console/Dockerfile`. Its build stage runs `vite build` and reads the `docs/` tree into the server build. The final image contains only the build and the process, with no development modules and no secrets: it runs as the non-root `bun` user, exposes port `8083`, writes only to stdout (the file system can be read-only), and checks `GET /healthz` every 15 seconds.
+The release publishes the image of the console like the three services: `ghcr.io/ggpwnkthx/console:<version>`. The image builds from `packages/console/Dockerfile`. Its build stage runs `vite build` and reads the `docs/` tree into the server build. The final image contains only the build and the process, with no development modules and no secrets: it runs as the non-root `bun` user, exposes port `8083`, writes only to stdout (the file system can be read-only), and checks `GET /healthz` every 15 seconds.
+
+The digest of the image is in the file `digests.json` of the release, and a deployment pins the digest rather than the tag.
 
 The standalone stack is `deploy/compose/console.compose.yaml`; the full platform stack includes the console too.
 

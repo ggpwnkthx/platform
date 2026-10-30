@@ -22,7 +22,7 @@ How to deploy and run the whole platform: deployments, environment conventions, 
 
 The gateway also runs a **control plane**, the deployment's administrative surface. It uses the same image with a different command, listens on port `9090`, and is never routed through the gateway.
 
-The console has no published image; see [console operations](../console/operations.md). Compose stacks and Kubernetes manifests are described in [deploy/README.md](../../deploy/README.md).
+The console is published like the three services: `ghcr.io/ggpwnkthx/console`. See [console operations](../console/operations.md). Compose stacks and Kubernetes manifests are described in [deploy/README.md](../../deploy/README.md).
 
 ## Environment conventions
 
@@ -105,6 +105,8 @@ Every service exposes Prometheus metrics on `/metrics`. The gateway and Access r
 | Gateway image | `ghcr.io/ggpwnkthx/gateway:<version>` |
 | Access image | `ghcr.io/ggpwnkthx/access:<version>` |
 | Data image | `ghcr.io/ggpwnkthx/data:<version>` |
+| Console image | `ghcr.io/ggpwnkthx/console:<version>` |
+| Digests | `digests.json`, an asset of the tag's GitHub release |
 | Binaries | Assets of the tag's GitHub release |
 | Data typed client | `data-backend-client-<version>.tgz`, and the package registry |
 | CLI | `platformctl-<version>-<platform>.tar.gz`, an asset of the tag |
@@ -113,15 +115,20 @@ Every service exposes Prometheus metrics on `/metrics`. The gateway and Access r
 docker pull ghcr.io/ggpwnkthx/gateway:1.0.0
 docker pull ghcr.io/ggpwnkthx/access:1.0.0
 docker pull ghcr.io/ggpwnkthx/data:1.0.0
+docker pull ghcr.io/ggpwnkthx/console:1.0.0
 ```
 
-Each release builds its images once, publishes them with provenance and an SBOM, and runs every release gate against that build's **digest**. Pin the digest in your deployments.
+Each release builds its images once, publishes them with provenance and an SBOM, and runs every release gate against that build's **digest**. Pin the digest in your deployments: the file `digests.json` of the release names the digest of every image, and the wizard of the deployment reads that file:
+
+```bash
+platformctl deploy azure
+```
 
 Binaries embed the runtime, so nothing else needs installing. The Access archive includes its schema migrations next to the executable; the Data archive includes its manifests and migrations.
 
 ## Versions
 
-A release carries all three images at the same version. A deployment may run them at different versions; the [compatibility baseline](internals.md#compatibility) shows which combinations are proven.
+A release carries all four images at the same version. A deployment may run them at different versions; the [compatibility baseline](internals.md#compatibility) shows which combinations are proven.
 
 ## Rollback
 

@@ -3,7 +3,7 @@
  * The one repository of the platform.
  *
  * The platform is one repository, and it names one: the one it lives
- * in, the three images it publishes, and the mirrors of the
+ * in, the images it publishes, and the mirrors of the
  * compatibility suite. The three services were published from three
  * repositories of their own, and those repositories are gone: a clone
  * of one fails, an image published in one is not reachable, and a
@@ -66,7 +66,7 @@ async function main(): Promise<void> {
     console.error(`${problems.length} references to a repository that the platform does not have`)
     process.exit(1)
   }
-  console.log(`the ${read} files of the platform name one repository and its three images`)
+  console.log(`the ${read} files of the platform name one repository and its images`)
 }
 
 if (import.meta.main) await main()

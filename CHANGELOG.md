@@ -10,6 +10,26 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The release publishes the image of the console and the digests of every image
+
+The console had no published image: a deployment built it from the
+Dockerfile of the repository, and the digest of the image it built was
+never proved by anything. The release now publishes the console like the
+three services: it is built once, it is published with its provenance
+and its SBOM, it is scanned, it is started against the configuration of
+a deployment, and it is withdrawn with the others when a gate of the
+release fails.
+
+The release carries a file `digests.json` that names the digest of every
+image it published. The digest is what a deployment pins, and a digest
+that is copied by hand is a digest that is wrong the day the tag moves.
+
+The wizard of a deployment reads that file: it resolves the digests of
+the four images of the platform from the release, and the digest of the
+image of the client of PostgreSQL — the one image of a deployment that
+the platform does not publish — from the registry that holds it. What it
+cannot read, it asks, and it says why it asks.
+
 ### The wizard of a deployment signs the operator in
 
 The deployment of the platform is written in OpenTofu, and the values of

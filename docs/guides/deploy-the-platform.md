@@ -26,9 +26,10 @@ Pick one release and resolve each image to its digest. The release gates ran aga
 docker pull ghcr.io/ggpwnkthx/gateway:1.0.0
 docker pull ghcr.io/ggpwnkthx/access:1.0.0
 docker pull ghcr.io/ggpwnkthx/data:1.0.0
+docker pull ghcr.io/ggpwnkthx/console:1.0.0
 ```
 
-The console has no published image: build it from `packages/console/Dockerfile` at the same tag ([console build and run](../console/operations.md#build-and-run)). Which mixed versions are proven to work together is recorded in the [compatibility baseline](../platform/internals.md#compatibility).
+The release carries the digest of every image in the file `digests.json`, and the wizard of the deployment reads that file: `platformctl deploy azure`. Which mixed versions are proven to work together is recorded in the [compatibility baseline](../platform/internals.md#compatibility).
 
 ### 2. Generate the secrets as files
 

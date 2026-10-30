@@ -54,7 +54,7 @@ Both approaches use the same services, ports and environment variable names. A s
 
 ### The console
 
-The console is a client of the platform, not one of the three services, and it is not an upstream of the gateway. The browser reaches the console directly, and the console reaches Data through the gateway like any other client. The console has no published image: build it from `packages/console/Dockerfile`. Its stack is `deploy/compose/console.compose.yaml`.
+The console is a client of the platform, not one of the three services, and it is not an upstream of the gateway. The browser reaches the console directly, and the console reaches Data through the gateway like any other client. The console has a published image like the three services: `ghcr.io/ggpwnkthx/console`. Its stack is `deploy/compose/console.compose.yaml`.
 
 ## Compose stacks
 
