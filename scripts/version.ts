@@ -168,6 +168,23 @@ export const PLATFORM_VERSION_SOURCES: readonly VersionSource[] = [
     read: (content) => /^Status:\s*(\d+\.\d+\.\d+)/m.exec(content)?.[1] ?? null,
   },
   {
+    // The install command of the CLI: it names the asset of the
+    // release the reader downloads.
+    path: 'docs/cli/usage.md',
+    read: (content) => /releases\/download\/v(\d+\.\d+\.\d+)\//.exec(content)?.[1]?.trim() ?? null,
+  },
+  {
+    // The command that installs the client of Data: it names the asset
+    // of the release the reader downloads.
+    path: 'docs/data/client.md',
+    read: (content) => /releases\/download\/v(\d+\.\d+\.\d+)\//.exec(content)?.[1]?.trim() ?? null,
+  },
+  {
+    // The link to the release of the client of Data.
+    path: 'packages/data/README.md',
+    read: (content) => /releases\/tag\/v(\d+\.\d+\.\d+)/.exec(content)?.[1]?.trim() ?? null,
+  },
+  {
     path: 'docs/access/README.md',
     // The state of the release in the documentation of the service.
     read: (content) => /^Version `(\d+\.\d+\.\d+)`/m.exec(content)?.[1] ?? null,

@@ -8,7 +8,7 @@ How to install and use `@data-backend/client`, the typed client for the v1 [API]
 npm install @data-backend/client
 bun add @data-backend/client
 # or pin the release tarball (same package; its version is the client version):
-bun add https://github.com/ggpwnkthx/platform/releases/download/v1.0.0/data-backend-client-1.0.0.tgz
+bun add https://github.com/ggpwnkthx/platform/releases/download/v1.0.1/data-backend-client-1.0.1.tgz
 ```
 
 > [!NOTE]

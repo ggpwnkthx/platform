@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { readFile, readdir } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
+import { VERSION } from '../src/runtime/version'
 import {
   groupsOf,
   headOf,
@@ -184,7 +185,7 @@ describe('the urls of the documentation', () => {
 
   test('a link that leaves the documentation is a link to the repository', () => {
     expect(resolveOf(tree, 'docs/console/spec.md', '../../packages/console/README.md')).toBe(
-      'https://github.com/ggpwnkthx/platform/blob/v1.0.0/packages/console/README.md'
+      `https://github.com/ggpwnkthx/platform/blob/v${VERSION}/packages/console/README.md`
     )
   })
 

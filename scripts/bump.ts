@@ -32,13 +32,34 @@ const PATTERNS: { readonly match: RegExp; readonly replace: string }[] = [
   { match: /^(\s*Status:\s*)\d+\.\d+\.\d+/gm, replace: `$1${next}` },
   // The version of the documentation of a service.
   { match: /^(\s*Version `)\d+\.\d+\.\d+(`)/gm, replace: `$1${next}$2` },
-  // The images of the stacks and of the manifests.
+  // The images of the stacks, of the manifests and of the tables of the
+  // documentation.
   {
-    match: /(image:\s*ghcr\.io\/ggpwnkthx\/(?:gateway|access|data|console):)\d+\.\d+\.\d+/g,
+    match: /(ghcr\.io\/ggpwnkthx\/(?:gateway|access|data|console):)\d+\.\d+\.\d+/g,
     replace: `$1${next}`,
   },
   // The tag of the manifests.
   { match: /^(\s*newTag:\s*)\d+\.\d+\.\d+$/gm, replace: `$1${next}` },
+  // The links to the release and to the assets of the release.
+  { match: /(releases\/(?:download|tag)\/v)\d+\.\d+\.\d+/g, replace: `$1${next}` },
+  { match: /(blob\/v)\d+\.\d+\.\d+/g, replace: `$1${next}` },
+  // The name of a tag, wherever it is written.
+  { match: /(\bv)\d+\.\d+\.\d+\b/g, replace: `$1${next}` },
+  { match: /(platformctl-)\d+\.\d+\.\d+(-)/g, replace: `$1${next}$2` },
+  { match: /(data-backend-client-)\d+\.\d+\.\d+(\.tgz)/g, replace: `$1${next}$2` },
+]
+
+/**
+ * The files that name the release in prose.
+ *
+ * They are not part of the sources of the version: a sentence that
+ * names a tag is an example and not a contract. The bump still raises
+ * them, because a command that names a release that is not there is a
+ * command that does not work.
+ */
+const ALSO_BUMPED: readonly string[] = [
+  'docs/access/internals.md',
+  'docs/gateway/upstream-identity.md',
 ]
 
 for (const source of PLATFORM_VERSION_SOURCES) {
@@ -53,6 +74,16 @@ for (const source of PLATFORM_VERSION_SOURCES) {
     rewritten = rewritten.replace(pattern.match, pattern.replace)
   }
   if (rewritten !== content) writeFileSync(path, rewritten)
+}
+
+for (const path of ALSO_BUMPED) {
+  const file = join(root, path)
+  const content = readFileSync(file, 'utf8')
+  const rewritten = content
+    .replace(/(\bv)\d+\.\d+\.\d+\b/g, `$1${next}`)
+    .replace(/(`)\d+\.\d+\.\d+(`)/g, `$1${next}$2`)
+    .replace(/((?:access|gateway|data)-)\d+\.\d+\.\d+(-linux)/g, `$1${next}$2`)
+  if (rewritten !== content) writeFileSync(file, rewritten)
 }
 
 /**
