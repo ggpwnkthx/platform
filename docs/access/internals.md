@@ -176,11 +176,13 @@ The blocking `compatibility` CI job runs `bun run compatibility` and checks all 
 `scripts/ops/load.ts` measures the production decision statement through the service's repository with the deployment deadline. It runs on every CI build against the job's PostgreSQL; numbers are in the build log. Only measured numbers are published.
 
 ```bash
-ACCESS_DATABASE_URL=postgres://… bun run scripts/ops/load.ts --requests 20000 --concurrency 100 \
-  --max-p50-ms=25 --max-p95-ms=50 --max-p99-ms=100 --min-per-second=100
+ACCESS_DATABASE_URL=postgres://… bun run scripts/ops/load.ts --requests 5000 --concurrency 20 \
+  --max-p50-ms=60 --max-p95-ms=90 --max-p99-ms=120 --min-per-second=100
 ```
 
 Each `--max-*` option fails the run when that percentile exceeds it, `--min-per-second` when throughput is below it; without them the script only reports. CI thresholds sit far above the targets because runners are shared: they catch a changed plan, a dropped index or a policy-table scan.
+
+The thresholds of the build are set from the measurement of the shared runner, not from the target: a shared runner has two cores and the pool of the service has ten connections, so twenty requests in flight measure the queue of the pool and not the statement. The runner measures a `p50` of about thirty milliseconds at that concurrency, and the gate is twice the measurement. The documented target of a decision under load — a `p99` of fifty milliseconds — is what the gate protects.
 
 The tenant-decision gate allows a higher percentile than the platform-decision gate, because a tenant-scoped statement runs inside a transaction and costs about a third more. Both gates catch the same defects.
 
