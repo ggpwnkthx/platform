@@ -10,6 +10,24 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The refusals of the console carry their reason
+
+The console hid the actions it did not allow and showed nothing where a
+permission was missing, so a reader found an absence and had to guess its
+cause. The ability of the console holds a reason with every rule that
+refuses, and the domain finds it: the reason of the rule that decides, or
+a general one when no rule names the action at all. The console keys that
+are not held are refused by name, and the refusals of a collection name
+the policies of Data that hide a field or fix it.
+
+A refused action is drawn as a disabled one that says why, a field that
+cannot be changed appears read-only, and the workspace holds a tab of its
+access: a grid of the records and their fields against the actions of
+read, create, change and delete, with a note for every refusal. The pages
+of a user, a group and a role say what is held in effect and where it
+comes from, and the right of a grant is written in words before it is
+given.
+
 ### The tree of the dependencies is flat
 
 The development machine held a farm of symbolic links: every workspace had
