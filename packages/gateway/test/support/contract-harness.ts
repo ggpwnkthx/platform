@@ -264,20 +264,23 @@ function defaultConfig(
   }
 }
 
+/**
+ * Reports whether an error is a port that another process took.
+ *
+ * The port of the gateway is drawn by a probe that binds it and releases
+ * it: the port may be taken between the probe and the server, and the
+ * server then refuses to bind it. The refusal says nothing about the
+ * gateway, and the harness draws another port.
+ *
+ * @param error the error the server refused with.
+ */
+function portTaken(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /in use|EADDRINUSE/i.test(message)
+}
+
 /** Starts the gateway with the fixtures around it. */
 export async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
-  const gatewayPort = options.gatewayPort ?? (await freePort())
-  const gatewayUrl = `http://localhost:${gatewayPort}`
-
-  const idp = options.issuer
-    ? null
-    : await startOidcProvider({
-        redirectUris: [`${gatewayUrl}/auth/callback`],
-      })
-  // The url of the provider: the fixture and the provider of the
-  // deployment are both reachable, and the flow is driven against one of
-  // them.
-  const providerUrl = options.issuer?.issuer ?? idp!.url
   const access = await startAccessService({ policy: options.policy })
   const upstreamA = await startUpstream({ name: 'upstream-a' })
   const upstreamB = await startUpstream({ name: 'upstream-b' })
@@ -311,39 +314,88 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
   }
   await writeFile(configPath, JSON.stringify(config, null, 2))
 
-  const settings = readEnv({
-    GATEWAY_CONFIG: configPath,
-    GATEWAY_HOST: '127.0.0.1',
-    GATEWAY_PORT: String(gatewayPort),
-    GATEWAY_OIDC_ISSUER: options.issuer?.issuer ?? idp!.issuer,
-    GATEWAY_OIDC_CLIENT_ID: options.issuer?.clientId ?? idp!.clientId,
-    GATEWAY_OIDC_CLIENT_SECRET: options.issuer?.clientSecret ?? idp!.clientSecret,
-    GATEWAY_OIDC_REDIRECT_URI: `${gatewayUrl}/auth/callback`,
-    GATEWAY_OIDC_ALLOW_INSECURE: 'true',
-    GATEWAY_ACCESS_URL: access.url,
-    GATEWAY_SESSION_SECRET: 'test-session-secret',
-    GATEWAY_SESSION_URL: 'memory://local',
-    GATEWAY_SESSION_TTL_MS: '600000',
-    GATEWAY_SESSION_MAX_AGE_MS: '1200000',
-    GATEWAY_SESSION_TOUCH_INTERVAL_MS: '1000',
-    GATEWAY_COOKIE_SECURE: 'false',
-    GATEWAY_LOG_LEVEL: 'error',
-    GATEWAY_SHUTDOWN_TIMEOUT_MS: '2000',
-    GATEWAY_METRICS_TOKEN: METRICS_TOKEN,
-    GATEWAY_MAX_BODY_BYTES: String(options.maxBodyBytes ?? 1024 * 1024),
-    GATEWAY_RATE_LIMIT_MAX: String(options.rateLimitMax ?? 0),
-    GATEWAY_RATE_LIMIT_WINDOW_MS: '60000',
-    GATEWAY_RATE_LIMIT_GLOBAL_MAX: String(options.rateLimitGlobalMax ?? 0),
-    GATEWAY_RATE_LIMIT_GLOBAL_WINDOW_MS: '60000',
-    GATEWAY_LOGIN_RATE_LIMIT_MAX: String(options.loginRateLimitMax ?? 1000),
-    GATEWAY_LOGIN_RATE_LIMIT_WINDOW_MS: '60000',
-    GATEWAY_ALLOWED_ORIGINS: (options.allowedOrigins ?? []).join(','),
-    GATEWAY_CSRF_STRICT: options.csrfStrict ? 'true' : 'false',
-    GATEWAY_TRUSTED_PROXIES: (options.trustedProxies ?? []).join(','),
-    ...options.env,
-  })
+  // The gateway, the identity provider and the port of the gateway are
+  // bound together: the provider of the deployment is configured with
+  // the exact uri of the callback, and the uri carries the port of the
+  // gateway. The three are therefore drawn together, and the drawing
+  // is repeated when the port was taken between the probe and the
+  // server.
+  let gatewayPort = options.gatewayPort ?? 0
+  let gatewayUrl = ''
+  let idp: Awaited<ReturnType<typeof startOidcProvider>> | null = null
+  // The url of the provider: the fixture and the provider of the
+  // deployment are both reachable, and the flow is driven against one of
+  // them.
+  let providerUrl = options.issuer?.issuer ?? ''
+  let runtime: GatewayRuntime | null = null
 
-  const runtime = await createRuntime(settings, { logSink: options.logSink })
+  for (let attempt = 0; attempt < 5 && runtime === null; attempt += 1) {
+    gatewayPort = options.gatewayPort ?? (await freePort())
+    gatewayUrl = `http://localhost:${gatewayPort}`
+    idp = options.issuer
+      ? null
+      : await startOidcProvider({
+          redirectUris: [`${gatewayUrl}/auth/callback`],
+        })
+    providerUrl = options.issuer?.issuer ?? idp!.url
+
+    const settings = readEnv({
+      GATEWAY_CONFIG: configPath,
+      GATEWAY_HOST: '127.0.0.1',
+      GATEWAY_PORT: String(gatewayPort),
+      GATEWAY_OIDC_ISSUER: options.issuer?.issuer ?? idp!.issuer,
+      GATEWAY_OIDC_CLIENT_ID: options.issuer?.clientId ?? idp!.clientId,
+      GATEWAY_OIDC_CLIENT_SECRET: options.issuer?.clientSecret ?? idp!.clientSecret,
+      GATEWAY_OIDC_REDIRECT_URI: `${gatewayUrl}/auth/callback`,
+      GATEWAY_OIDC_ALLOW_INSECURE: 'true',
+      GATEWAY_ACCESS_URL: access.url,
+      GATEWAY_SESSION_SECRET: 'test-session-secret',
+      GATEWAY_SESSION_URL: 'memory://local',
+      GATEWAY_SESSION_TTL_MS: '600000',
+      GATEWAY_SESSION_MAX_AGE_MS: '1200000',
+      GATEWAY_SESSION_TOUCH_INTERVAL_MS: '1000',
+      GATEWAY_COOKIE_SECURE: 'false',
+      GATEWAY_LOG_LEVEL: 'error',
+      GATEWAY_SHUTDOWN_TIMEOUT_MS: '2000',
+      GATEWAY_METRICS_TOKEN: METRICS_TOKEN,
+      GATEWAY_MAX_BODY_BYTES: String(options.maxBodyBytes ?? 1024 * 1024),
+      GATEWAY_RATE_LIMIT_MAX: String(options.rateLimitMax ?? 0),
+      GATEWAY_RATE_LIMIT_WINDOW_MS: '60000',
+      GATEWAY_RATE_LIMIT_GLOBAL_MAX: String(options.rateLimitGlobalMax ?? 0),
+      GATEWAY_RATE_LIMIT_GLOBAL_WINDOW_MS: '60000',
+      GATEWAY_LOGIN_RATE_LIMIT_MAX: String(options.loginRateLimitMax ?? 1000),
+      GATEWAY_LOGIN_RATE_LIMIT_WINDOW_MS: '60000',
+      GATEWAY_ALLOWED_ORIGINS: (options.allowedOrigins ?? []).join(','),
+      GATEWAY_CSRF_STRICT: options.csrfStrict ? 'true' : 'false',
+      GATEWAY_TRUSTED_PROXIES: (options.trustedProxies ?? []).join(','),
+      ...options.env,
+    })
+
+    try {
+      runtime = await createRuntime(settings, { logSink: options.logSink })
+    } catch (error) {
+      // The port was taken between the probe and the server: another
+      // port is drawn and the gateway is started again.
+      if (options.gatewayPort !== undefined) throw error
+      if (!portTaken(error)) throw error
+      await idp?.stop()
+      idp = null
+    }
+  }
+  if (runtime === null) {
+    // The fixtures of the harness are stopped: a harness that never
+    // started leaves a server behind that the next one cannot bind.
+    await Promise.all([
+      idp?.stop(),
+      access.stop(),
+      upstreamA.stop(),
+      upstreamB.stop(),
+      hungServer.stop(true),
+    ])
+    await rm(directory, { recursive: true, force: true })
+    throw new Error('the harness could not bind a port for the gateway')
+  }
+
   const loaded = runtime.config.apply(JSON.parse(await readFile(configPath, 'utf8')))
   if (!loaded.ok && !options.expectInvalidConfig) {
     throw new Error(`the configuration of the test is invalid: ${loaded.error.message}`)
