@@ -1,6 +1,6 @@
 {
   "name": "platform",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "description": "The platform: an application gateway, Access, a Data and the console that is the interface of the three, as workspaces of one repository.",
@@ -53,6 +53,7 @@
     "coverage:check": "bun run scripts/check-coverage.ts",
     "atlas": "bun run scripts/atlas.ts",
     "compatibility": "bun run scripts/compatibility.ts",
+    "release:bump": "bun run scripts/bump.ts",
     "release:tag": "bun run scripts/tag.ts",
     "release:tag:dry-run": "bun run scripts/tag.ts --dry-run"
   },

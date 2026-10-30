@@ -4,7 +4,7 @@ The normative behavior of the console: what it does, what it refuses, and where 
 
 The console is the platform's web application: people read and change workspace data, operators administer access, and anyone reads service status. It is a **client** of the gateway, Access and Data and speaks their contracts. Every answer it shows comes from one of those services and is governed by that service's spec.
 
-Status: 1.0.0. Runtime: Bun ≥ 1.4.3. Listener: HTTP on
+Status: 1.0.1. Runtime: Bun ≥ 1.4.3. Listener: HTTP on
 `CONSOLE_HOST:CONSOLE_PORT` (default `0.0.0.0:8083`).
 
 ---

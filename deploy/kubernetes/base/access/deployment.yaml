@@ -44,7 +44,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: access
-          image: ghcr.io/ggpwnkthx/access:1.0.0
+          image: ghcr.io/ggpwnkthx/access:1.0.1
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

@@ -192,6 +192,26 @@ export const PLATFORM_VERSION_SOURCES: readonly VersionSource[] = [
       /image:\s*ghcr\.io\/ggpwnkthx\/data:(.+)$/m.exec(content)?.[1]?.trim() ?? null,
   },
   {
+    // The composition of the three services: it names the image of
+    // every service of the platform.
+    path: 'deploy/compose/production/platform.compose.yaml',
+    read: (content) =>
+      /image:\s*ghcr\.io\/ggpwnkthx\/gateway:(.+)$/m.exec(content)?.[1]?.trim() ?? null,
+  },
+  {
+    // The job of the migration of the deployment of Data.
+    path: 'deploy/kubernetes/base/data/migrate-job.yaml',
+    read: (content) =>
+      /image:\s*ghcr\.io\/ggpwnkthx\/data:(.+)$/m.exec(content)?.[1]?.trim() ?? null,
+  },
+  {
+    // The control plane of the gateway: it runs the image of the
+    // gateway with another command.
+    path: 'deploy/kubernetes/base/gateway/control.yaml',
+    read: (content) =>
+      /image:\s*ghcr\.io\/ggpwnkthx\/gateway:(.+)$/m.exec(content)?.[1]?.trim() ?? null,
+  },
+  {
     path: 'deploy/kubernetes/base/gateway/deployment.yaml',
     read: (content) =>
       /image:\s*ghcr\.io\/ggpwnkthx\/gateway:(.+)$/m.exec(content)?.[1]?.trim() ?? null,

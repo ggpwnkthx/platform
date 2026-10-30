@@ -10,6 +10,8 @@ in the same commit as the code.
 
 ## Unreleased
 
+## 1.0.1
+
 ### The wizard reads the digests of the images from the release
 
 A deployment pins the digest of the image it runs, and a digest that is
@@ -1274,6 +1276,7 @@ The check of the directory (`bun run deploy:check`) fails the build when
 a deployment file drifts out of `deploy/`, when a service is not
 deployed on its own and in the composition, or when an image of a
 deployment does not carry the version of the platform.
+
 
 ## 1.0.0
 

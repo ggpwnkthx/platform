@@ -4,7 +4,7 @@
 # image: an operator has to know what is running without reading the logs.
 ARG BUN_VERSION=1.4.3
 ARG BUN_DIGEST=sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349437206c6b0b7422373
-ARG VERSION=1.0.0
+ARG VERSION=1.0.1
 ARG REVISION=unknown
 
 # ---------------------------------------------------------------- dependencies

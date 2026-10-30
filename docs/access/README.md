@@ -65,4 +65,4 @@ Without `ACCESS_DATABASE_URL` the process runs embedded PostgreSQL (`pglite`) in
 
 ## Release state
 
-Version `1.0.0` of the platform. Milestones M0 to M9 are closed: the process starts, validates its environment, answers probes, drains, brokers logins, issues tokens, answers gateway decisions, and passes the unchanged reference gateway's suite. This release adds per-tenant administration credentials, denial reason codes, groups, administration batches and audit export. [Known limits](internals.md#known-limits) lists what it does not do.
+Version `1.0.1` of the platform. Milestones M0 to M9 are closed: the process starts, validates its environment, answers probes, drains, brokers logins, issues tokens, answers gateway decisions, and passes the unchanged reference gateway's suite. This release adds per-tenant administration credentials, denial reason codes, groups, administration batches and audit export. [Known limits](internals.md#known-limits) lists what it does not do.
