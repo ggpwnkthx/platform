@@ -1,6 +1,6 @@
 {
   "name": "@platform/client",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "type": "module",
   "description": "The clients of the platform: the console and the CLI speak to the gateway, Access and Data through it.",

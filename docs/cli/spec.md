@@ -2,7 +2,7 @@
 
 The normative behavior of the CLI (`platformctl`): its commands, its output, its exit statuses, and what it refuses to do. This page is the program's contract, for implementers, reviewers and script authors; the [usage guide](usage.md) is advice, never a promise.
 
-Status: 1.0.3. Runtime: Bun ≥ 1.4.3. Program name:
+Status: 1.0.4. Runtime: Bun ≥ 1.4.3. Program name:
 `platformctl`.
 
 ---

@@ -182,7 +182,7 @@ were removed with the format.
 ## Compatibility
 
 An upstream that implements [spec §7.4](spec.md#74-identity-signature) works with every gateway revision
-that keeps that section. Pin a revision and test against it: links on the release tag (`v1.0.3`) are
+that keeps that section. Pin a revision and test against it: links on the release tag (`v1.0.4`) are
 stable, links on `main` describe the next release, and evidence uses the full commit sha:
 
 ```

@@ -292,18 +292,18 @@ Tagging, dispatch and artifacts are platform-wide ([platform internals](../platf
 
 The version appears in five files, and `bun run versions` names any that disagree: `packages/access/package.json`, `packages/access/Dockerfile` (`ARG VERSION`), `packages/access/src/runtime/version.ts`, `docs/access/spec.md` (status) and `docs/access/README.md`. Bump them in one commit.
 
-`tag.yml` tags the commit CI proved with `v<version>` when the version went up, then dispatches the release workflows (a workflow-token push starts none). It refuses disagreeing versions, a pre-release version, and a version that went down; an unchanged version does nothing. Dispatch by hand with `gh workflow run release.yml --ref v1.0.3 -f tag=v1.0.3` (and `release-binaries.yml`), or push a hand-made annotated tag, which starts the release directly.
+`tag.yml` tags the commit CI proved with `v<version>` when the version went up, then dispatches the release workflows (a workflow-token push starts none). It refuses disagreeing versions, a pre-release version, and a version that went down; an unchanged version does nothing. Dispatch by hand with `gh workflow run release.yml --ref v1.0.4 -f tag=v1.0.4` (and `release-binaries.yml`), or push a hand-made annotated tag, which starts the release directly.
 
 | Workflow | Does |
 | --- | --- |
-| `release.yml` | Builds the image once and publishes it (tags `v1.0.3` and `1.0.3`, provenance, SBOM) **before** the gates, so they test the shipped bytes: start with a deployment configuration, answer decisions, refuse a missing secret or a bypassing role, drain, scan, reference gateway's suite. A failed gate withdraws the image. |
+| `release.yml` | Builds the image once and publishes it (tags `v1.0.4` and `1.0.4`, provenance, SBOM) **before** the gates, so they test the shipped bytes: start with a deployment configuration, answer decisions, refuse a missing secret or a bypassing role, drain, scan, reference gateway's suite. A failed gate withdraws the image. |
 | `release-binaries.yml` | Compiles every supported platform, proves the runner's binary starts, applies the schema and serves, and attaches archives to the release. |
 
 Each archive holds the binary and `migrations/` beside it (§3.8); embedded PostgreSQL ships in neither binaries nor image.
 
 ```bash
-tar -xzf access-1.0.3-linux-x64.tar.gz -C /opt/access
-/opt/access/access-1.0.3-linux-x64
+tar -xzf access-1.0.4-linux-x64.tar.gz -C /opt/access
+/opt/access/access-1.0.4-linux-x64
 trivy image --severity HIGH,CRITICAL --exit-code 1 access:ci
 syft access:ci -o spdx-json > access.spdx.json
 ```

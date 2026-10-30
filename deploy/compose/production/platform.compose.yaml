@@ -86,7 +86,7 @@ services:
   # Access: the OpenID Connect broker and the access
   # decision service.
   access:
-    image: ghcr.io/ggpwnkthx/access:1.0.3
+    image: ghcr.io/ggpwnkthx/access:1.0.4
     restart: unless-stopped
     depends_on:
       postgres:
@@ -131,7 +131,7 @@ services:
   # service waits for them: it refuses to start against a database that
   # is not migrated.
   data-migrate:
-    image: ghcr.io/ggpwnkthx/data:1.0.3
+    image: ghcr.io/ggpwnkthx/data:1.0.4
     restart: on-failure
     depends_on:
       postgres:
@@ -152,7 +152,7 @@ services:
 
   # Data: the headless, permission aware data api.
   data:
-    image: ghcr.io/ggpwnkthx/data:1.0.3
+    image: ghcr.io/ggpwnkthx/data:1.0.4
     restart: unless-stopped
     depends_on:
       data-migrate:
@@ -198,7 +198,7 @@ services:
 
   # The gateway: the only service the callers reach.
   gateway:
-    image: ghcr.io/ggpwnkthx/gateway:1.0.3
+    image: ghcr.io/ggpwnkthx/gateway:1.0.4
     restart: unless-stopped
     depends_on:
       access:
@@ -257,7 +257,7 @@ services:
   # internal: the port is not published, and the service is reached over the
   # network of the deployment.
   control:
-    image: ghcr.io/ggpwnkthx/gateway:1.0.3
+    image: ghcr.io/ggpwnkthx/gateway:1.0.4
     restart: unless-stopped
     command: ['bun', 'run', 'src/control-main.ts']
     environment:

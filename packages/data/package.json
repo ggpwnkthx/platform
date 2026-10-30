@@ -1,6 +1,6 @@
 {
   "name": "@platform/data",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "type": "module",
   "description": "Data of the platform: a headless, permission aware data API behind the gateway, authorized by Access.",

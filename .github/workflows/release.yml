@@ -365,6 +365,20 @@ jobs:
           # the identity of the requests.
           openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 \
             -out "$RUNNER_TEMP/identity-key.pem"
+          cat > "$RUNNER_TEMP/routes.json" <<'JSON'
+          {
+            "version": 1,
+            "defaults": { "auth": { "mode": "none" } },
+            "routes": [
+              {
+                "id": "smoke",
+                "match": { "host": "smoke.platform.test", "path": "/" },
+                "upstream": "http://127.0.0.1:1",
+                "auth": { "mode": "none" }
+              }
+            ]
+          }
+          JSON
           docker run -d --name gateway -p 8080:8080 \
             --add-host host.docker.internal:host-gateway \
             -e GATEWAY_SESSION_SECRET=release-session-secret-of-the-release \
@@ -379,7 +393,7 @@ jobs:
             -e GATEWAY_RATE_LIMIT_TOTAL_MAX=1000 \
             -e GATEWAY_SESSION_URL=redis://host.docker.internal:6379/0 \
             -e GATEWAY_SHARED_STATE_URL=redis://host.docker.internal:6379/1 \
-            -v "$PWD/deploy/config/routes.json:/etc/platform/routes.json:ro" \
+            -v "$RUNNER_TEMP/routes.json:/etc/platform/routes.json:ro" \
             "$IMAGE"
           for _ in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8080/healthz > /dev/null; then
