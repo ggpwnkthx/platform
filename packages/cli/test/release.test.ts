@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { digestOf, tagOf } from '../src/platform/registry'
-import { releaseOf } from '../src/platform/release'
+import { latestTagOf, releaseOf } from '../src/platform/release'
 
 /**
  * The release of the platform.
@@ -63,6 +63,65 @@ describe('the release of the platform', () => {
       expect(release.images.console_image).toBe(
         `ghcr.io/ggpwnkthx/console@sha256:${'4'.repeat(64)}`
       )
+    } finally {
+      globalThis.fetch = real
+    }
+  })
+
+  test('the latest release is read from the repository', async () => {
+    globalThis.fetch = answering({
+      'https://api.github.com/repos/ggpwnkthx/platform/releases/latest': {
+        status: 200,
+        body: { tag_name: 'v1.2.3' },
+      },
+    })
+    try {
+      expect(await latestTagOf()).toBe('v1.2.3')
+    } finally {
+      globalThis.fetch = real
+    }
+  })
+
+  test('the latest release names the digests of its images', async () => {
+    const digest = `sha256:${'7'.repeat(64)}`
+    globalThis.fetch = answering({
+      'https://api.github.com/repos/ggpwnkthx/platform/releases/latest': {
+        status: 200,
+        body: { tag_name: 'v1.2.3' },
+      },
+      'https://github.com/ggpwnkthx/platform/releases/download/v1.2.3/digests.json': {
+        status: 200,
+        body: {
+          version: '1.2.3',
+          tag: 'v1.2.3',
+          images: { gateway: `ghcr.io/ggpwnkthx/gateway@${digest}` },
+        },
+      },
+    })
+    try {
+      const release = await releaseOf('latest')
+      expect(release.tag).toBe('v1.2.3')
+      expect(release.images.gateway_image).toBe(`ghcr.io/ggpwnkthx/gateway@${digest}`)
+    } finally {
+      globalThis.fetch = real
+    }
+  })
+
+  test('the version of a release is read with or without its tag', async () => {
+    const digest = `sha256:${'8'.repeat(64)}`
+    globalThis.fetch = answering({
+      'https://github.com/ggpwnkthx/platform/releases/download/v1.2.3/digests.json': {
+        status: 200,
+        body: {
+          version: '1.2.3',
+          tag: 'v1.2.3',
+          images: { gateway: `ghcr.io/ggpwnkthx/gateway@${digest}` },
+        },
+      },
+    })
+    try {
+      expect((await releaseOf('1.2.3')).tag).toBe('v1.2.3')
+      expect((await releaseOf('v1.2.3')).tag).toBe('v1.2.3')
     } finally {
       globalThis.fetch = real
     }

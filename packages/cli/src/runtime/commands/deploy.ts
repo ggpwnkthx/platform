@@ -165,10 +165,15 @@ function stepsOf(directory: string, runtime: string, values: Values): string[] {
  * @param input what the command received.
  */
 async function readRelease(input: CommandInput): Promise<Release | undefined> {
-  const version = stringOf(input.options, 'release') ?? VERSION
+  const named = stringOf(input.options, 'release')
+  const version = named ?? VERSION
   try {
     return await releaseOf(version)
-  } catch {
+  } catch (error) {
+    // A release the reader named is not there: that is a failure, and
+    // the message says why. The release of the CLI is the default, and
+    // a build that was never released asks for the digests.
+    if (named !== undefined) throw error
     return undefined
   }
 }
@@ -233,7 +238,8 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
       {
         name: 'release',
         kind: 'string',
-        summary: 'the release of the platform the deployment runs',
+        summary:
+          'the release of the platform the deployment runs: a version, or "latest". The default is the version of the CLI',
       },
     ],
     examples: [`platformctl deploy ${provider.name}`],
@@ -254,15 +260,22 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
 
       // The sign in comes first: the facts the provider reads answer
       // some of the questions, and the operator does not type them.
-      const signIn = await provider.signIn(ask)
       const answers = await answersOf(input)
       const notes: string[] = []
 
       // The digests of the images come from the release of the
       // platform: a deployment pins the digest of the image it runs,
-      // and the digest of a release does not move.
-      const known: Values = { ...signIn.facts }
+      // and the digest of a release does not move. The release is read
+      // before the provider is asked for a session: a release that is
+      // not there is a failure that no browser has to be open for.
       const release = await readRelease(input)
+      const known: Values = {}
+
+      // The provider is asked for a session after the release: the
+      // facts of the provider answer the questions that the release
+      // does not.
+      const signIn = await provider.signIn(ask)
+      Object.assign(known, signIn.facts)
       if (release === undefined) {
         notes.push(
           'the release of the platform could not be read: the digests of the images are asked'
@@ -270,6 +283,14 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
       } else {
         Object.assign(known, release.images)
         notes.push(`the digests of the images come from the release ${release.tag}`)
+        // The CLI, the templates of the deployment and the images are
+        // one version line: a deployment that runs the images of
+        // another release runs a deployment that nobody proved.
+        if (release.version !== VERSION) {
+          notes.push(
+            `the release ${release.tag} is not the release of the CLI (${VERSION}): the templates of the deployment are the ones of ${VERSION}`
+          )
+        }
       }
 
       // The image of the client of PostgreSQL is the one image of a

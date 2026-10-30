@@ -25,20 +25,71 @@ export interface Release {
 const SERVICES = ['gateway', 'access', 'data', 'console'] as const
 
 /**
+ * The tag of the latest release of the platform.
+ *
+ * The latest release is the one the platform published last, and it is
+ * not a prerelease: a deployment that runs a prerelease runs code that
+ * nobody proved.
+ *
+ * @param repository the repository the releases live in.
+ */
+export async function latestTagOf(repository: string = REPOSITORY): Promise<string> {
+  const url = `https://api.github.com/repos/${repository}/releases/latest`
+  let response: Response
+  try {
+    response = await fetch(url, { headers: { accept: 'application/vnd.github+json' } })
+  } catch (error) {
+    throw new CliFailure(
+      `the latest release of the platform cannot be read: ${(error as Error).message}`,
+      7,
+      'unreachable'
+    )
+  }
+  if (!response.ok) {
+    throw new CliFailure(
+      `the latest release of the platform is not there: the repository answered ${response.status}`,
+      4,
+      'not_found'
+    )
+  }
+  let document: unknown
+  try {
+    document = await response.json()
+  } catch {
+    throw new CliFailure(
+      'the latest release of the platform is not the answer the repository gives',
+      8,
+      'invalid_release'
+    )
+  }
+  const tag = (document as { tag_name?: unknown }).tag_name
+  if (typeof tag !== 'string' || tag === '') {
+    throw new CliFailure('the latest release of the platform names no tag', 8, 'invalid_release')
+  }
+  return tag
+}
+
+/**
  * Reads the release of the platform.
  *
  * The file of the digests is the asset of the release: it names the
  * digest of every image, and it is the digest the gates of the release
  * proved.
  *
- * @param version the version of the platform.
+ * The version is the version of the platform, the tag of the release, or
+ * `latest`: the latest release is a moving target, and the digests it
+ * names are written into the values of the deployment, so the
+ * deployment is pinned even when the release it names moves.
+ *
+ * @param version the version of the platform, or `latest`.
  * @param repository the repository the releases live in.
  */
 export async function releaseOf(
   version: string,
   repository: string = REPOSITORY
 ): Promise<Release> {
-  const url = `https://github.com/${repository}/releases/download/v${version}/digests.json`
+  const tag = version === 'latest' ? await latestTagOf(repository) : `v${version.replace(/^v/, '')}`
+  const url = `https://github.com/${repository}/releases/download/${tag}/digests.json`
   let response: Response
   try {
     response = await fetch(url, { headers: { accept: 'application/json' } })
