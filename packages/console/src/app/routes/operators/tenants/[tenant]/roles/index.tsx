@@ -1,185 +1,170 @@
 /**
  * The roles of a tenant: the named sets of permissions, and the roles
- * they name.
+ * they include.
  *
- * A role is granted to a user or to a group on the page of the rights:
- * a grant of a role holds the permissions of the role.
+ * A role is created here and changed on its own page. The creation
+ * refuses a key that is already a role: Access upserts by key, and the
+ * form would otherwise replace the role it names without a word.
  */
 
 import { createRoute } from 'honox/factory'
 import { AccessError } from '../../../../../../domains/access'
+import { knownPermissionsOf, permissionsOfRole } from '../../../../../../domains/operators'
 import {
   adminFor,
+  HowRightsWork,
   TenantHead,
   TenantTabs,
   tenantCrumbs,
   tenantPath,
 } from '../../../../../components/operators'
-import { Empty, Moment, OffsetPager, Refusal, refusalOf } from '../../../../../components/page'
+import { Empty, Moment, Refusal, refusalOf } from '../../../../../components/page'
+import { ROLE_FORM, RoleForm, roleDraftOf, roleInputOf } from '../../../../../components/role-form'
 import { formOf } from '../../../../../middleware/forms'
-import { flash } from '../../../../../middleware/session'
-
-/** The list of the permissions and of the roles, separated by a comma. */
-function listOf(value: string): string[] {
-  return value
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter((entry) => entry !== '')
-}
+import { flash, keepDraft, takeDraft } from '../../../../../middleware/session'
 
 export const POST = createRoute(async (c) => {
   const slug = c.req.param('tenant') ?? ''
   const access = await adminFor(c, slug)
   if ('refusal' in access) return access.refusal
+  const { admin } = access
   const form = await formOf(c)
-  const key = form.get('key').trim()
-  const back = `${tenantPath(slug)}/roles`
+  const base = `${tenantPath(slug)}/roles`
+  const input = roleInputOf(form, slug)
+  const existing = await admin.roles({ tenant: slug, key: input.key, limit: 1 })
+  if (existing.rows.some((role) => role.key === input.key)) {
+    keepDraft(
+      c,
+      roleDraftOf(form, [
+        { field: 'key', message: `A role ${input.key} exists already: change it on its page.` },
+      ])
+    )
+    flash(c, { kind: 'error', text: `The role ${input.key} was not created.` })
+    return c.redirect(base)
+  }
   try {
-    const role = await access.admin.saveRole({
-      tenant: slug,
-      key,
-      ...(form.get('displayName').trim() ? { displayName: form.get('displayName').trim() } : {}),
-      ...(form.get('description').trim() ? { description: form.get('description').trim() } : {}),
-      permissions: listOf(form.get('permissions').trim()),
-      roles: listOf(form.get('roles').trim()),
-    })
-    flash(c, { kind: 'ok', text: `The role ${role.key} was saved.` })
+    const role = await admin.saveRole(input)
+    flash(c, { kind: 'ok', text: `The role ${role.key} was created. Grant it on the Rights tab.` })
+    return c.redirect(`${base}/${encodeURIComponent(role.key)}`)
   } catch (error) {
     if (!(error instanceof AccessError) || error.status >= 500) throw error
+    keepDraft(c, roleDraftOf(form, []))
     flash(c, { kind: 'error', text: error.message, detail: `${error.status} ${error.code}` })
+    return c.redirect(base)
   }
-  return c.redirect(back)
 })
 
 export default createRoute(async (c) => {
   const slug = c.req.param('tenant') ?? ''
   const access = await adminFor(c, slug)
   if ('refusal' in access) return access.refusal
-  const offset = Math.max(0, Number(c.req.query('offset') ?? 0) || 0)
-  const limit = 50
+  const { admin } = access
   const base = `${tenantPath(slug)}/roles`
-  let page = null
+  let roles = null
   let refusal = null
   try {
-    page = await access.admin.roles({ tenant: slug, limit, offset })
+    roles = await admin.all((offsets) => admin.roles({ tenant: slug, ...offsets }))
   } catch (error) {
     if (!(error instanceof AccessError) || error.status >= 500) throw error
     refusal = refusalOf(error)
   }
-  const known = new Set((page?.rows ?? []).map((role) => role.key))
+  const grants = await admin
+    .all((offsets) => admin.grants({ tenant: slug, live: true, ...offsets }))
+    .catch(() => null)
+  const all = roles?.rows ?? []
+  const sorted = [...all].sort((left, right) => left.key.localeCompare(right.key))
+  const draft = takeDraft(c, ROLE_FORM)
+  const grantsOf = (key: string) =>
+    grants ? grants.rows.filter((grant) => grant.role === key).length : null
   return c.render(
     <>
       <TenantHead
         slug={slug}
         title="Roles"
-        lede="A role is a named set of permissions, and can include other roles. Grant roles on the Rights page."
+        lede="A role is a named set of permissions, and can include other roles. Grant a role to a user or a group on the Rights tab."
       />
       <TenantTabs slug={slug} current="roles" />
+      <HowRightsWork />
       {refusal ? <Refusal refusal={refusal} /> : null}
-      {page && page.rows.length === 0 ? <Empty>The tenant has no role.</Empty> : null}
-      {page && page.rows.length > 0 ? (
-        <>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Role</th>
-                  <th>Permissions</th>
-                  <th>Names</th>
-                  <th>Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {page.rows.map((role) => (
+      {roles && all.length === 0 ? (
+        <Empty>No role yet. Create one below to grant many permissions at once.</Empty>
+      ) : null}
+      {sorted.length > 0 ? (
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Role</th>
+                <th>Holds</th>
+                <th>Includes</th>
+                <th class="num">Live grants</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((role) => {
+                const holds = permissionsOfRole(role.key, all)
+                return (
                   <tr>
                     <td>
-                      <strong>{role.displayName ?? role.key}</strong>
+                      <a href={`${base}/${encodeURIComponent(role.key)}`}>
+                        <strong>{role.displayName ?? role.key}</strong>
+                      </a>
                       <div class="small muted mono">{role.key}</div>
+                      {role.description ? <div class="small">{role.description}</div> : null}
                     </td>
                     <td class="small">
-                      {role.permissions.length > 0 ? (
-                        <div class="chips">
-                          {role.permissions.map((permission) => (
+                      {holds.length === 0 ? (
+                        <span class="muted">no permission</span>
+                      ) : (
+                        <div class="chips" title={holds.join(', ')}>
+                          {holds.slice(0, 4).map((permission) => (
                             <span class="chip">
                               <code>{permission}</code>
                             </span>
                           ))}
+                          {holds.length > 4 ? (
+                            <span class="muted">+{holds.length - 4} more</span>
+                          ) : null}
                         </div>
-                      ) : (
-                        <span class="muted">none</span>
                       )}
                     </td>
                     <td class="small">
                       {role.roles.length > 0 ? (
                         <div class="chips">
                           {role.roles.map((named) => (
-                            <span class="chip">
+                            <a class="chip" href={`${base}/${encodeURIComponent(named)}`}>
                               <code>{named}</code>
-                            </span>
+                            </a>
                           ))}
                         </div>
                       ) : (
-                        <span class="muted">none</span>
+                        <span class="muted">—</span>
                       )}
                     </td>
+                    <td class="num">{grantsOf(role.key) ?? '—'}</td>
                     <td class="small">
                       <Moment at={role.createdAt} />
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <OffsetPager
-            total={page.total}
-            limit={limit}
-            offset={offset}
-            href={(next) => (next > 0 ? `${base}?offset=${next}` : base)}
-          />
-        </>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       ) : null}
-      <section class="card">
-        <h2>Save a role</h2>
-        <form method="post" action={base} class="form">
-          <div class="form-grid">
-            <label class="field">
-              <span>Key</span>
-              <input name="key" required placeholder="role-editor" class="mono" />
-            </label>
-            <label class="field">
-              <span>Name</span>
-              <input name="displayName" placeholder="The editors" />
-            </label>
-            <label class="field">
-              <span>Permissions</span>
-              <input
-                name="permissions"
-                placeholder="workspace.read, workspace.write"
-                list="known-permissions"
-                class="mono"
-              />
-              <datalist id="known-permissions">
-                {[...known].map((role) => (
-                  <option value={role} />
-                ))}
-              </datalist>
-            </label>
-            <label class="field">
-              <span>Names</span>
-              <input name="roles" placeholder="role-reader" class="mono" />
-            </label>
-          </div>
-          <p class="small muted">
-            The permissions and the roles are separated by a comma. The call replaces them: what is
-            not in the list is not held by the role any more.
-          </p>
-          <div class="row">
-            <button type="submit" class="button">
-              Save the role
-            </button>
-          </div>
-        </form>
-      </section>
+      <details
+        class="card disclosure"
+        open={draft !== null || (roles !== null && all.length === 0)}
+      >
+        <summary>Create a role</summary>
+        <RoleForm
+          action={base}
+          roles={all}
+          permissions={knownPermissionsOf(grants?.rows ?? [], all)}
+          draft={draft}
+        />
+      </details>
     </>,
     {
       title: `Roles of ${slug}`,

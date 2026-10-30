@@ -7,9 +7,11 @@
 
 import type { Context } from 'hono'
 import type { AdminClient, Grant, Group, Principal, Role } from '../../domains/access'
-import { isLive } from '../../domains/operators'
+import { isLive, knownPermissionsOf, permissionsOfRole } from '../../domains/operators'
+import type { Draft } from '../../domains/session'
 import type { Crumb } from '../context'
 import ConfirmButton from '../islands/confirm-button'
+import GrantFields from '../islands/grant-fields'
 import { tenantCredential } from '../middleware/guards'
 import { Badge, Moment, PageHead, Tabs } from './page'
 
@@ -95,41 +97,137 @@ export function UserStatus(props: { user: Principal }) {
   )
 }
 
+/** The name of the grant form: the draft of a refused grant comes back to it. */
+export const GRANT_FORM = 'grant'
+
+/** How rights work, in four lines, on the pages that grant them. */
+export function HowRightsWork() {
+  return (
+    <details class="disclosure how">
+      <summary>How rights work</summary>
+      <dl class="kv small">
+        <dt>Permission</dt>
+        <dd>
+          A single capability, such as <code>content.read</code>. Data decides what each one allows.
+        </dd>
+        <dt>Role</dt>
+        <dd>A named set of permissions. It can include other roles.</dd>
+        <dt>Right</dt>
+        <dd>
+          A role or a permission, held by a user or a group, on a workspace and route, until it is
+          revoked or ends.
+        </dd>
+        <dt>Group</dt>
+        <dd>A set of users. A right granted to a group is held by every member.</dd>
+      </dl>
+    </details>
+  )
+}
+
+/** The holder of a right, as a page names it and links it. */
+export interface Holder {
+  readonly label: string
+  readonly href?: string
+  readonly kind: 'user' | 'group'
+}
+
+/** The holder of a grant, from the users and the groups the page read. */
+export function holderOf(
+  tenant: string,
+  grant: Grant,
+  users: ReadonlyMap<string, Principal>
+): Holder {
+  const base = tenantPath(tenant)
+  if (grant.group) {
+    return {
+      label: grant.group,
+      href: `${base}/groups/${encodeURIComponent(grant.group)}`,
+      kind: 'group',
+    }
+  }
+  const user = grant.userId ? users.get(grant.userId) : undefined
+  return {
+    label: user ? userLabel(user) : (grant.userId ?? '—'),
+    ...(grant.userId ? { href: `${base}/users/${encodeURIComponent(grant.userId)}` } : {}),
+    kind: 'user',
+  }
+}
+
 /** The state of a right. */
 export function RightState(props: { grant: Grant }) {
   const { grant } = props
   if (grant.revokedAt) return <Badge tone="error">revoked</Badge>
-  if (!isLive(grant)) return <Badge tone="warn">expired</Badge>
+  if (!isLive(grant)) return <Badge tone="warn">ended</Badge>
   if (grant.expiresAt) return <Badge tone="accent">until {grant.expiresAt.slice(0, 10)}</Badge>
   return <Badge tone="ok">live</Badge>
 }
 
+/** The workspace and the route a right holds on, in words. */
+export function scopeWords(grant: Grant): string {
+  const workspace = grant.workspaceId ? `workspace ${grant.workspaceId}` : 'all workspaces'
+  const route = grant.routeId ? `route ${grant.routeId}` : 'all routes'
+  return `${workspace}, ${route}`
+}
+
 /** The scope of a right: the workspace and the route it holds on. */
 export function RightScope(props: { grant: Grant }) {
+  const { workspaceId, routeId } = props.grant
   return (
-    <span class="small">
-      {props.grant.workspaceId ? (
-        <code title={props.grant.workspaceId}>
-          {props.grant.workspaceId.length > 13
-            ? `${props.grant.workspaceId.slice(0, 8)}…`
-            : props.grant.workspaceId}
+    <span class="small scope">
+      {workspaceId ? (
+        <code title={workspaceId}>
+          {workspaceId.length > 13 ? `${workspaceId.slice(0, 8)}…` : workspaceId}
         </code>
       ) : (
-        <span class="muted">every workspace</span>
-      )}{' '}
-      on{' '}
-      {props.grant.routeId ? (
-        <code>{props.grant.routeId}</code>
-      ) : (
-        <span class="muted">every route</span>
+        <span>All workspaces</span>
       )}
+      <span class="muted"> · </span>
+      {routeId ? <code>{routeId}</code> : <span>all routes</span>}
+    </span>
+  )
+}
+
+/** What a right gives: a permission, or a role and the permissions it holds. */
+export function RightName(props: { grant: Grant; roles?: readonly Role[] }) {
+  const { grant } = props
+  if (grant.permission) {
+    return (
+      <span class="right-name">
+        <code>{grant.permission}</code>
+        <span class="small muted">permission</span>
+      </span>
+    )
+  }
+  const key = grant.role ?? '—'
+  const permissions = props.roles ? permissionsOfRole(key, props.roles) : []
+  return (
+    <span class="right-name">
+      <span>
+        <Badge tone="accent" plain>
+          role
+        </Badge>{' '}
+        <a href={`${tenantPath(grant.tenant)}/roles/${encodeURIComponent(key)}`}>
+          <code>{key}</code>
+        </a>
+      </span>
+      {permissions.length > 0 ? (
+        <span class="small muted" title={permissions.join(', ')}>
+          {permissions.length <= 3
+            ? permissions.join(', ')
+            : `${permissions.slice(0, 3).join(', ')} +${permissions.length - 3} more`}
+        </span>
+      ) : null}
     </span>
   )
 }
 
 /** The button that revokes a right. */
-export function RevokeButton(props: { grant: Grant; back: string }) {
+export function RevokeButton(props: { grant: Grant; back: string; holder?: string }) {
   if (props.grant.revokedAt) return null
+  const what = props.grant.permission
+    ? `the permission ${props.grant.permission}`
+    : `the role ${props.grant.role}`
+  const from = props.holder ? ` from ${props.holder}` : ''
   return (
     <form
       method="post"
@@ -141,17 +239,28 @@ export function RevokeButton(props: { grant: Grant; back: string }) {
       <ConfirmButton
         small
         label="Revoke"
-        message={`Revoke the right ${props.grant.permission}? Access refuses it from the next decision on.`}
+        message={`Revoke ${what}${from} on ${scopeWords(props.grant)}? Access refuses it from the next decision on.`}
       />
     </form>
   )
 }
 
+/** A row of the table of rights. */
+export interface RightsRow {
+  readonly grant: Grant
+  readonly holder?: Holder
+  /** The key of the group the right is held through, on the page of one of its members. */
+  readonly through?: string | null
+}
+
 /** The table of rights. */
 export function RightsTable(props: {
-  rows: readonly { grant: Grant; holder?: string; through?: string | null }[]
+  rows: readonly RightsRow[]
   back: string
+  roles?: readonly Role[]
   showHolder?: boolean
+  /** The name of the holder of every row, on the page of a user or of a group. */
+  holderName?: string
 }) {
   return (
     <div class="table-wrap">
@@ -160,25 +269,49 @@ export function RightsTable(props: {
           <tr>
             <th>Right</th>
             {props.showHolder ? <th>Held by</th> : null}
+            {props.rows.some((row) => row.through) ? <th>Through</th> : null}
             <th>Where</th>
             <th>State</th>
             <th>Granted</th>
-            <th />
+            <th>
+              <span class="sr-only">Actions</span>
+            </th>
           </tr>
         </thead>
         <tbody>
           {props.rows.map((row) => (
             <tr>
               <td>
-                <code>{row.grant.permission ?? row.grant.role}</code>
-                {row.grant.role ? (
-                  <div class="small muted">through the role {row.grant.role}</div>
-                ) : null}
-                {row.through ? (
-                  <div class="small muted">through the group {row.through}</div>
-                ) : null}
+                <RightName grant={row.grant} roles={props.roles} />
               </td>
-              {props.showHolder ? <td>{row.holder ?? '—'}</td> : null}
+              {props.showHolder ? (
+                <td>
+                  {row.holder ? (
+                    <span>
+                      {row.holder.kind === 'group' ? <span class="small muted">group </span> : null}
+                      {row.holder.href ? (
+                        <a href={row.holder.href}>{row.holder.label}</a>
+                      ) : (
+                        row.holder.label
+                      )}
+                    </span>
+                  ) : (
+                    '—'
+                  )}
+                </td>
+              ) : null}
+              {props.rows.some((r) => r.through) ? (
+                <td>
+                  {row.through ? (
+                    <a
+                      class="small through"
+                      href={`${tenantPath(row.grant.tenant)}/groups/${encodeURIComponent(row.through)}`}
+                    >
+                      group {row.through}
+                    </a>
+                  ) : null}
+                </td>
+              ) : null}
               <td>
                 <RightScope grant={row.grant} />
               </td>
@@ -189,8 +322,22 @@ export function RightsTable(props: {
                 <Moment at={row.grant.createdAt} />
                 {row.grant.grantedBy ? <div class="muted">by {row.grant.grantedBy}</div> : null}
               </td>
-              <td class="num">
-                {row.through ? null : <RevokeButton grant={row.grant} back={props.back} />}
+              <td class="num actions">
+                {row.through ? (
+                  <a
+                    class="small"
+                    href={`${tenantPath(row.grant.tenant)}/groups/${encodeURIComponent(row.through)}`}
+                    title="A right of a group is revoked on the page of the group"
+                  >
+                    Manage on group
+                  </a>
+                ) : (
+                  <RevokeButton
+                    grant={row.grant}
+                    back={props.back}
+                    holder={props.holderName ?? row.holder?.label}
+                  />
+                )}
               </td>
             </tr>
           ))}
@@ -200,111 +347,8 @@ export function RightsTable(props: {
   )
 }
 
-/** The form that grants a right, to a user or to a group. */
-export function GrantForm(props: {
-  tenant: string
-  back: string
-  users?: readonly Principal[]
-  groups?: readonly Group[]
-  roles?: readonly Role[]
-  fixedUser?: Principal
-  fixedGroup?: string
-  known: {
-    permissions: readonly string[]
-    workspaces: readonly string[]
-    routes: readonly string[]
-  }
-}) {
-  return (
-    <form method="post" action={`${tenantPath(props.tenant)}/rights`} class="form">
-      <input type="hidden" name="_action" value="grant" />
-      <input type="hidden" name="back" value={props.back} />
-      <div class="form-grid">
-        {props.fixedUser ? (
-          <input type="hidden" name="holder" value={`user:${props.fixedUser.id}`} />
-        ) : props.fixedGroup ? (
-          <input type="hidden" name="holder" value={`group:${props.fixedGroup}`} />
-        ) : (
-          <label class="field">
-            <span>To</span>
-            <select name="holder" required>
-              {(props.users ?? []).length > 0 ? (
-                <optgroup label="Users">
-                  {(props.users ?? []).map((user) => (
-                    <option value={`user:${user.id}`}>{userLabel(user)}</option>
-                  ))}
-                </optgroup>
-              ) : null}
-              {(props.groups ?? []).length > 0 ? (
-                <optgroup label="Groups">
-                  {(props.groups ?? []).map((group) => (
-                    <option value={`group:${group.key}`}>{group.displayName ?? group.key}</option>
-                  ))}
-                </optgroup>
-              ) : null}
-            </select>
-          </label>
-        )}
-        <label class="field narrow">
-          <span>Kind</span>
-          <select name="kind">
-            <option value="permission">a permission</option>
-            <option value="role">a role</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>Right</span>
-          <input name="value" required list="known-permissions" placeholder="content.reader" />
-          <datalist id="known-permissions">
-            {props.known.permissions.map((permission) => (
-              <option value={permission} />
-            ))}
-            {(props.roles ?? []).map((role) => (
-              <option value={role.key} />
-            ))}
-          </datalist>
-        </label>
-        <label class="field">
-          <span>Workspace</span>
-          <input
-            name="workspaceId"
-            list="known-workspaces"
-            placeholder="every workspace"
-            class="mono"
-          />
-          <datalist id="known-workspaces">
-            {props.known.workspaces.map((workspace) => (
-              <option value={workspace} />
-            ))}
-          </datalist>
-        </label>
-        <label class="field">
-          <span>Route</span>
-          <input name="routeId" list="known-routes" placeholder="every route" />
-          <datalist id="known-routes">
-            {props.known.routes.map((route) => (
-              <option value={route} />
-            ))}
-          </datalist>
-        </label>
-        <label class="field">
-          <span>Until</span>
-          <input name="expiresAt" type="datetime-local" />
-          <span class="hint">UTC · empty: it does not expire</span>
-        </label>
-      </div>
-      <div class="row">
-        <button type="submit" class="button">
-          Grant
-        </button>
-      </div>
-    </form>
-  )
-}
-
-/** The permissions, the workspaces and the routes the rights of a tenant name. */
+/** The workspaces and the routes the rights of a tenant name. */
 export function knownOf(grants: readonly Grant[]): {
-  permissions: string[]
   workspaces: string[]
   routes: string[]
 } {
@@ -315,8 +359,78 @@ export function knownOf(grants: readonly Grant[]): {
       ),
     ].sort()
   return {
-    permissions: unique(grants.map((grant) => grant.permission)),
     workspaces: unique(grants.map((grant) => grant.workspaceId)),
     routes: unique(grants.map((grant) => grant.routeId)),
   }
+}
+
+/** The form that grants a right, to a user or to a group. */
+export function GrantForm(props: {
+  tenant: string
+  back: string
+  /** The rights of the tenant: the permissions, the workspaces and the routes they name. */
+  grants: readonly Grant[]
+  roles: readonly Role[]
+  consoleRoute: string
+  users?: readonly Principal[]
+  groups?: readonly Group[]
+  fixedUser?: Principal
+  fixedGroup?: Group
+  /** The form that was refused, to show again. */
+  draft?: Draft | null
+  /** Distinguishes the fields of two forms of one page. */
+  prefix?: string
+}) {
+  const known = knownOf(props.grants)
+  const fixedHolder = props.fixedUser
+    ? { value: `user:${props.fixedUser.id}`, label: userLabel(props.fixedUser) }
+    : props.fixedGroup
+      ? {
+          value: `group:${props.fixedGroup.key}`,
+          label: `the group ${props.fixedGroup.displayName ?? props.fixedGroup.key}`,
+        }
+      : undefined
+  const holders = fixedHolder
+    ? undefined
+    : [
+        ...(props.groups ?? []).map((group) => ({
+          value: `group:${group.key}`,
+          label: `${group.displayName ?? group.key} (group)`,
+          hint: `${group.members.length} ${group.members.length === 1 ? 'member' : 'members'}`,
+        })),
+        ...(props.users ?? []).map((user) => ({
+          value: `user:${user.id}`,
+          label: userLabel(user),
+          ...(user.email && user.email !== userLabel(user) ? { hint: user.email } : {}),
+        })),
+      ]
+  return (
+    <form method="post" action={`${tenantPath(props.tenant)}/rights`} class="form">
+      <input type="hidden" name="_action" value="grant" />
+      <input type="hidden" name="_form" value={GRANT_FORM} />
+      <input type="hidden" name="back" value={props.back} />
+      <GrantFields
+        prefix={props.prefix ?? 'grant'}
+        {...(holders ? { holders } : {})}
+        {...(fixedHolder ? { fixedHolder } : {})}
+        roles={[...props.roles]
+          .sort((left, right) => left.key.localeCompare(right.key))
+          .map((role) => ({
+            key: role.key,
+            label: role.displayName ?? role.key,
+            permissions: permissionsOfRole(role.key, props.roles),
+          }))}
+        permissions={knownPermissionsOf(props.grants, props.roles)}
+        workspaces={known.workspaces}
+        routes={known.routes}
+        consoleRoute={props.consoleRoute}
+        {...(props.draft ? { values: props.draft.values, problems: props.draft.problems } : {})}
+      />
+      <div class="row">
+        <button type="submit" class="button">
+          Grant
+        </button>
+      </div>
+    </form>
+  )
 }

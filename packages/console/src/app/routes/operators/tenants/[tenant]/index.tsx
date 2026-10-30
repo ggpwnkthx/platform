@@ -61,7 +61,10 @@ export default createRoute(async (c) => {
   if (!tenant) return c.notFound()
   let audit = null
   let refusal = null
-  const groups = await access.admin.groups({ tenant: slug, limit: 1 }).catch(() => null)
+  const [groups, roles] = await Promise.all([
+    access.admin.groups({ tenant: slug, limit: 1 }).catch(() => null),
+    access.admin.roles({ tenant: slug, limit: 1 }).catch(() => null),
+  ])
   try {
     audit = await access.admin.audit({ tenant: slug, limit: 8 })
   } catch (error) {
@@ -81,6 +84,10 @@ export default createRoute(async (c) => {
         <a class="card card-link" href={`${base}/groups`}>
           <span class="muted small">Groups</span>
           <span class="metric">{groups?.total ?? '—'}</span>
+        </a>
+        <a class="card card-link" href={`${base}/roles`}>
+          <span class="muted small">Roles</span>
+          <span class="metric">{roles?.total ?? '—'}</span>
         </a>
         <a class="card card-link" href={`${base}/rights`}>
           <span class="muted small">Rights</span>

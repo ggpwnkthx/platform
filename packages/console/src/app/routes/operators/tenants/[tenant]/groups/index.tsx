@@ -7,6 +7,7 @@ import { createRoute } from 'honox/factory'
 import { AccessError } from '../../../../../../domains/access'
 import {
   adminFor,
+  HowRightsWork,
   TenantHead,
   TenantTabs,
   tenantCrumbs,
@@ -47,6 +48,11 @@ export default createRoute(async (c) => {
   const base = `${tenantPath(slug)}/groups`
   let page = null
   let refusal = null
+  const live = await access.admin
+    .all((offsets) => access.admin.grants({ tenant: slug, live: true, ...offsets }))
+    .catch(() => null)
+  const rightsOf = (key: string) =>
+    live ? live.rows.filter((grant) => grant.group === key).length : null
   try {
     page = await access.admin.groups({ tenant: slug, limit, offset })
   } catch (error) {
@@ -61,8 +67,11 @@ export default createRoute(async (c) => {
         lede="A right granted to a group is held by every member."
       />
       <TenantTabs slug={slug} current="groups" />
+      <HowRightsWork />
       {refusal ? <Refusal refusal={refusal} /> : null}
-      {page && page.rows.length === 0 ? <Empty>The tenant has no group.</Empty> : null}
+      {page && page.rows.length === 0 ? (
+        <Empty>No group yet. Create one below, then add its members.</Empty>
+      ) : null}
       {page && page.rows.length > 0 ? (
         <>
           <div class="table-wrap">
@@ -71,6 +80,7 @@ export default createRoute(async (c) => {
                 <tr>
                   <th>Group</th>
                   <th class="num">Members</th>
+                  <th class="num">Live rights</th>
                   <th>Created</th>
                 </tr>
               </thead>
@@ -84,6 +94,7 @@ export default createRoute(async (c) => {
                       <div class="small muted mono">{group.key}</div>
                     </td>
                     <td class="num">{group.members.length}</td>
+                    <td class="num">{rightsOf(group.key) ?? '—'}</td>
                     <td class="small">
                       <Moment at={group.createdAt} />
                     </td>
@@ -109,6 +120,7 @@ export default createRoute(async (c) => {
               name="key"
               required
               pattern="[a-z0-9][a-z0-9._\-]{0,63}"
+              title="Lower-case letters, digits, dots, dashes and underscores"
               class="mono"
               placeholder="team-platform"
             />
