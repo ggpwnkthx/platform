@@ -484,7 +484,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/secrets" "$RUNNER_TEMP/config"
           openssl rand -hex 24 > "$RUNNER_TEMP/secrets/access-context.token"
           openssl rand -base64 32 > "$RUNNER_TEMP/secrets/cursor.key"
-          cat > "$RUNNER_TEMP/config/bindings.json" <<'JSON'
+          # The bundle of the bindings names the file of the public key
+          # of the identity: the binary runs on the machine of the
+          # runner, and the file is where the runner wrote it.
+          cat > "$RUNNER_TEMP/config/bindings.json" <<JSON
           {
             "version": 2,
             "bindings": [
@@ -496,7 +499,7 @@ jobs:
                 "identity": {
                   "version": "v5",
                   "algorithm": "ES256",
-                  "publicKeyFile": "/run/secrets/identity-signing.public.pem"
+                  "publicKeyFile": "$RUNNER_TEMP/secrets/identity-signing.public.pem"
                 }
               }
             ]
