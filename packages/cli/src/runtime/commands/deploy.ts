@@ -285,7 +285,9 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
       }
 
       // What the operator answered by hand wins over what was read:
-      // the answers of a file are the answers of the operator.
+      // the answers of a file are the answers of the operator, and they
+      // are asked for nothing.
+      Object.assign(known, answers)
       const values: Values = { ...known }
       for (const question of questionsOf(provider, known)) {
         const given = answers[question.name]
