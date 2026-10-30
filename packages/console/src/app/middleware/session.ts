@@ -8,7 +8,7 @@
 
 import type { Context } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
-import { type Flash, type Session, sign, unsign } from '../../domains/session'
+import { type Draft, type Flash, type Session, sign, unsign } from '../../domains/session'
 import '../context'
 
 /** The cookie of the session. */
@@ -62,6 +62,21 @@ export function takeFlash(c: Context): Flash | null {
   const message = session.flash
   session.flash = null
   return message
+}
+
+/** Keeps a refused form for the page it came from. */
+export function keepDraft(c: Context, draft: Draft): void {
+  const session = c.get('session')
+  if (session) session.draft = draft
+}
+
+/** Takes the refused form of that name, once; another form's draft stays. */
+export function takeDraft(c: Context, form: string): Draft | null {
+  const session = c.get('session')
+  if (!session?.draft || session.draft.form !== form) return null
+  const draft = session.draft
+  session.draft = null
+  return draft
 }
 
 /** Reports whether the access token of a session is still accepted by the gateway. */

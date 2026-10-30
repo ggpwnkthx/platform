@@ -33,6 +33,19 @@ export interface Flash {
   readonly detail?: string
 }
 
+/**
+ * A form that was refused: what it held and what was wrong, so that the
+ * page it came from shows it again instead of an empty one.
+ */
+export interface Draft {
+  /** The name of the form. */
+  readonly form: string
+  /** The first value of every field. */
+  readonly values: Readonly<Record<string, string>>
+  /** What was wrong, field by field. */
+  readonly problems: readonly { readonly field: string; readonly message: string }[]
+}
+
 /** A session of the console. */
 export interface Session {
   readonly id: string
@@ -45,6 +58,8 @@ export interface Session {
   /** The workspaces the caller opened, the latest first. */
   workspaces: string[]
   flash: Flash | null
+  /** The last refused form, kept for the next page. */
+  draft?: Draft | null
 }
 
 /** The bounds of the sessions. */
