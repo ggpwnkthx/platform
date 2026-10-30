@@ -10,6 +10,37 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The clients of the platform read their contracts in one place
+
+The console and the CLI are the two clients of the platform, and each of
+them spoke to the services with its own copy of the contracts: the paths
+of the data API, of the administration of Access and of the probes were
+written twice, and a contract that is written twice is a contract that
+drifts. The clients now live in a workspace of their own,
+`packages/client`, and the console and the CLI read them there. What
+stays theirs is what is theirs: the way the console shows a refusal and
+the way the CLI turns one into the status the process ends with.
+
+### The published client and the clients of the platform speak the same paths
+
+The client that Data publishes is installed by the consumers of the
+platform outside of this repository, and it cannot read the clients of
+the console and of the CLI: the paths of the contract were written
+twice, and a path that only one of them writes is a path that answers
+differently depending on who asks. A check now reads the two sources
+and refuses the published client when it names a path that the console
+and the CLI do not know.
+
+### The logs of the platform hold the same names back
+
+Every process wrote the names that its logger holds back in a list of
+its own, and the lists drifted: a name that the gateway held back and
+Access did not was a credential that reached a log. The list is written
+once now, in `tooling/redaction.ts`, and a check refuses the logger that
+does not hold it back. The console, whose documentation promised that a
+credential never reaches a line and did not keep the promise, holds the
+names back now.
+
 ### The refusals of the console carry their reason
 
 The console hid the actions it did not allow and showed nothing where a

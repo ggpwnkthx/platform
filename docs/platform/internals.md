@@ -23,7 +23,8 @@ platform/
 │   ├── access/           Access
 │   ├── data/             Data
 │   ├── console/          console, the platform's interface (HonoX)
-│   └── cli/              the CLI (platformctl)
+│   ├── cli/              the CLI (platformctl)
+│   └── client/           the clients of the platform, shared by the console and the CLI
 ```
 
 A workspace is a directory with its own `package.json`. One root `bun install` installs every workspace against `bun.lock`. `tooling/` is a library only (version checks, import-boundary checks, the compatibility baseline, the development PostgreSQL); the commands that use it live in `scripts/` directories.
@@ -46,6 +47,8 @@ They are separate deployments with separate secrets, databases and contracts. Sh
 
 - each workspace's architecture check rejects imports from another workspace;
 - the compatibility suite runs the acceptance scenario through all three services.
+
+The console and the CLI are the two clients of the platform, and they are not deployments of a service: they hold no database and no secret of their own. They share their clients — the paths of the contracts, the queries they take and the refusals they answer — in `packages/client`, a workspace of its own. The services share nothing with them and nothing with each other.
 
 ## Service workspace layout
 
@@ -89,6 +92,22 @@ The CLI (`platformctl`) is a client of the three services with no policy of its 
 | `src/main.ts` | The process: parses the arguments and exits with the command's status |
 
 Its core imports neither the interface nor the adapters, and it has no import cycles. `packages/cli/scripts/architecture.ts` checks this with the console's engine.
+
+## The client workspace
+
+`packages/client` holds the clients of the platform: the console and the CLI are the two clients of the services, and they read the same contracts.
+
+| Path | Contents |
+| --- | --- |
+| `src/transport.ts` | The port of the calls, the refusals of the services and the queries of the calls |
+| `src/data.ts` | The client of the data of a workspace, through the gateway |
+| `src/access.ts` | The client of the administration of Access, of the access context and of the decision contract |
+| `src/probes.ts` | The probes of the services |
+| `src/types.ts` | The shapes of the contracts, as the clients read them |
+
+The package has no dependency, imports nothing of another workspace, and has no cycle and no catch-all directory. `packages/client/scripts/architecture.ts` checks this with `tooling/client-architecture.ts` — the same engine that holds the published client of Data (`packages/data/packages/client`).
+
+The client is not a service and it is not a deployment: it holds no state and it speaks to the services over HTTP. The console and the CLI keep what is theirs — the way they show a refusal, the way they print an answer, the transport they speak with — and they read the contracts here.
 
 ## Working rules
 

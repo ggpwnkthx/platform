@@ -4,7 +4,7 @@
 
 ## What it does
 
-The CLI is a client of the gateway, Access and Data. It sends a service a request and shows the service's answer. It holds no policy of its own, never reaches a database, and has no dependency beyond the Bun runtime.
+The CLI is a client of the gateway, Access and Data. It sends a service a request and shows the service's answer. It holds no policy of its own, never reaches a database, and has no dependency beyond the Bun runtime and the client workspace it shares with the console.
 
 It has two kinds of commands, told apart by what they touch:
 

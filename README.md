@@ -39,6 +39,7 @@ Start at [`docs/`](docs/README.md), or jump in by role, task or service.
 | [`packages/data/`](packages/data/) | Data | `ghcr.io/ggpwnkthx/data` |
 | [`packages/console/`](packages/console/) | Console (HonoX) | built from `packages/console/Dockerfile` |
 | [`packages/cli/`](packages/cli/) | CLI (`platformctl`) | |
+| [`packages/client/`](packages/client/) | The clients of the platform, shared by the console and the CLI | |
 | [`deploy/`](deploy/README.md) | Compose stacks, Kubernetes manifests, config and dev fixtures | |
 | `docs/`, `scripts/`, `tooling/`, `test/` | Docs, root commands, shared tooling, platform tests | |
 

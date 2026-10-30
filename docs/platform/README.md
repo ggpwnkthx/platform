@@ -13,7 +13,7 @@ The platform is three HTTP services and a web console, kept as workspaces of one
 | [Data](../data/README.md) | A headless, permission-aware data API. It owns workspaces, collections, data policies, records, audit and version history, and committed events. |
 | [Console](../console/README.md) | The web interface. It is a client of the three services and decides nothing itself. |
 
-The [CLI](../cli/README.md) is a client of the same contracts, run from an operator's or developer's machine.
+The [CLI](../cli/README.md) is a client of the same contracts, run from an operator's or developer's machine. The two of them read those contracts in one place, the client workspace (`packages/client`), and each of them keeps the way it shows an answer and the way it speaks to a service.
 
 ## How the processes talk
 

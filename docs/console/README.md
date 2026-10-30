@@ -4,7 +4,7 @@ The console is the platform's web interface: people read and change workspace da
 
 ## What it does
 
-The console is a client of the gateway, Access and Data. It signs people in at Access, reads and writes workspace records through the gateway, and administers tenants through Access's administration API. It reaches no database, decides nothing on its own, and offers no API for other programs: every answer it shows comes from a service, under that service's spec.
+The console is a client of the gateway, Access and Data. It signs people in at Access, reads and writes workspace records through the gateway, and administers tenants through Access's administration API. It reaches no database, decides nothing on its own, and offers no API for other programs: every answer it shows comes from a service, under that service's spec. The contracts it reads are in the client workspace it shares with the command line.
 
 It does not decide access, sign identities, hold the gateway's identity-signing key or cache decisions. The full list is in [spec §9](spec.md#9-out-of-scope).
 
