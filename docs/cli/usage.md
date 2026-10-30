@@ -159,6 +159,12 @@ platformctl deploy azure
 
 It signs you in with the Azure CLI, so it opens a browser the first time and it lets you pick the subscription when you hold more than one. It asks only what it cannot answer itself: the names the deployment answers under and the identifiers of the tenant and of the workspace.
 
+The digests of the images are not asked: they are read from the release of the platform, and the release carries the digest of every image it published. To run another release:
+
+```bash
+platformctl deploy azure --release 1.1.0
+```
+
 The wizard writes one file, `deploy/tofu/runtime/production/terraform.tfvars`, and prints the rest of the procedure — the state of the deployment, the configuration of the backend, the plan and the apply.
 
 To answer without a terminal, put the answers in a file:

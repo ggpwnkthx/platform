@@ -10,6 +10,19 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The wizard reads the digests of the images from the release
+
+A deployment pins the digest of the image it runs, and a digest that is
+copied by hand is a digest that is wrong the day the tag moves. The
+release now publishes the digest of every image it published, in the
+file `digests.json` of the release, and the wizard of a deployment
+reads that file: it resolves the digests of the four images of the
+platform from the release, and the digest of the image of the client of
+PostgreSQL — the one image of a deployment that the platform does not
+publish — from the registry that holds it.
+
+What the wizard cannot read, it asks, and it says why it asks.
+
 ### The release publishes the image of the console and the digests of every image
 
 The console had no published image: a deployment built it from the

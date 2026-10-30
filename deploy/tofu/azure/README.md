@@ -11,6 +11,7 @@ deployment are in [`../runtime/`](../README.md#the-templates-and-the-files-of-a-
 | --- | --- |
 | The gateway, Access, Data, the console and the control plane | Five container apps in one environment |
 | The images of the release | A container registry, and the images are pulled **by digest** |
+| The digests of the images | The file `digests.json` of the release, read by the wizard |
 | PostgreSQL | Azure Database for PostgreSQL Flexible Server, injected into the network |
 | Redis | Azure Cache for Redis Premium, behind a private endpoint |
 | The secrets | A Key Vault, with the access of Entra ID |
@@ -90,6 +91,11 @@ Fill it in. The two identifiers of the tenant and of the workspace come
 from the platform: the tenant is a record of Access, and the workspace
 is a record of Data. The images are digests, never tags.
 
+The digests of the four images of the platform are in the file
+`digests.json` of the release, and the wizard of the deployment reads
+that file: `platformctl deploy azure`. The digest of the image of the
+client of PostgreSQL — the one image of a deployment that the platform
+does not publish — is read from the registry that holds it.
 
 ### 3. The deployment
 

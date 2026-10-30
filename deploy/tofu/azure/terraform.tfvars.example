@@ -63,7 +63,7 @@ console_image = "platformproductionregistry.azurecr.io/console@sha256:0000000000
 
 # The client of PostgreSQL. It carries the psql that creates the role
 # of Access, and it is the image of the PostgreSQL of the repository.
-postgres_client_image = "postgres@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+postgres_client_image = "postgres:18-alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
 # --------------------------------------------------------------------------
 # The public names

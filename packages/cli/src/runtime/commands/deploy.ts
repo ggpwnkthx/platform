@@ -30,6 +30,9 @@ import {
   type Values,
 } from '../../domains/deployment'
 import { azureProvider } from '../../platform/azure'
+import { digestOf, tagOf } from '../../platform/registry'
+import { type Release, releaseOf } from '../../platform/release'
+import { VERSION } from '../../runtime/version'
 
 /** The directory of the templates, when the reader names none. */
 const DEFAULT_DIRECTORY = join('deploy', 'tofu', 'azure')
@@ -153,6 +156,49 @@ function stepsOf(directory: string, runtime: string, values: Values): string[] {
 }
 
 /**
+ * The release of the platform the deployment runs.
+ *
+ * The release carries the digest of every image it published. A release
+ * that cannot be read is not a failure: the wizard asks the operator
+ * for the digests, and says why it asks.
+ *
+ * @param input what the command received.
+ */
+async function readRelease(input: CommandInput): Promise<Release | undefined> {
+  const version = stringOf(input.options, 'release') ?? VERSION
+  try {
+    return await releaseOf(version)
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The image of the client of PostgreSQL, by digest.
+ *
+ * The image is the one image of a deployment that the platform does not
+ * publish, and its digest is read from the registry that holds it. A
+ * registry that cannot be reached is not a failure: the wizard asks the
+ * operator for the digest.
+ *
+ * @param defaults the values of the example of the templates.
+ */
+async function readClientImage(defaults: Readonly<Values>): Promise<string | undefined> {
+  const reference = defaults.postgres_client_image
+  if (!reference) return undefined
+  const tag = tagOf(reference)
+  if (!tag) return undefined
+  const name = reference.split('@')[0]!.split(':')[0]!
+  const repository = name.includes('/') ? name : `library/${name}`
+  try {
+    const digest = await digestOf(repository, tag)
+    return `${name}:${tag}@${digest}`
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * The command of a provider of the infrastructure of a deployment.
  *
  * @param provider the provider of the deployment.
@@ -184,6 +230,11 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
         kind: 'boolean',
         summary: 'write the values over the values that are there',
       },
+      {
+        name: 'release',
+        kind: 'string',
+        summary: 'the release of the platform the deployment runs',
+      },
     ],
     examples: [`platformctl deploy ${provider.name}`],
     async run(input: CommandInput): Promise<CommandResult> {
@@ -204,11 +255,39 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
       // The sign in comes first: the facts the provider reads answer
       // some of the questions, and the operator does not type them.
       const signIn = await provider.signIn(ask)
-      const values: Values = { ...signIn.facts }
       const answers = await answersOf(input)
+      const notes: string[] = []
+
+      // The digests of the images come from the release of the
+      // platform: a deployment pins the digest of the image it runs,
+      // and the digest of a release does not move.
+      const known: Values = { ...signIn.facts }
+      const release = await readRelease(input)
+      if (release === undefined) {
+        notes.push(
+          'the release of the platform could not be read: the digests of the images are asked'
+        )
+      } else {
+        Object.assign(known, release.images)
+        notes.push(`the digests of the images come from the release ${release.tag}`)
+      }
+
+      // The image of the client of PostgreSQL is the one image of a
+      // deployment that the platform does not publish: its digest is
+      // read from the registry that holds it.
+      const client = await readClientImage(defaults)
+      if (client === undefined) {
+        notes.push(
+          'the digest of the image of the client of PostgreSQL could not be read: it is asked'
+        )
+      } else {
+        known.postgres_client_image = client
+      }
+
       // What the operator answered by hand wins over what was read:
       // the answers of a file are the answers of the operator.
-      for (const question of questionsOf(provider, signIn.facts)) {
+      const values: Values = { ...known }
+      for (const question of questionsOf(provider, known)) {
         const given = answers[question.name]
         if (given !== undefined) {
           values[question.name] = given
@@ -220,7 +299,7 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
             ? `${question.summary} [${fallback}]`
             : question.summary
         const answer = await ask(prompt)
-        values[question.name] = answerOf(question, signIn.facts, defaults, answer)
+        values[question.name] = answerOf(question, known, defaults, answer)
       }
 
       const problems = problemsOf(provider.questions, values)
@@ -259,7 +338,7 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
           values,
           account: signIn.account ?? '',
         },
-        lines: [signIn.message, '', ...stepsOf(directory, runtime, values)],
+        lines: [signIn.message, ...notes, '', ...stepsOf(directory, runtime, values)],
         message: `the values of the deployment are written in ${relative}/${VALUES}`,
       }
     },

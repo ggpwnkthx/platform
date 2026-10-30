@@ -240,6 +240,8 @@ The wizard of a deployment collects the values of a deployment and signs the ope
 
 The wizard asks a question when it cannot answer it itself. A question that has a value in the example of the templates shows the value the operator may take, and a question that names the deployment has no default: the operator types it. The facts the provider reads from its own system are never asked again.
 
+The digests of the images of the platform are read from the release of the platform: the release carries the digest of every image it published, and a digest that is copied by hand is a digest that is wrong the day the tag moves. The digest of the image of the client of PostgreSQL is read from the registry that holds it: it is the one image of a deployment that the platform does not publish. What cannot be read is asked, and the wizard says why.
+
 The wizard writes one file: the file of the values of the deployment, in the runtime directory of the deployment. It refuses to write it over the values that are there, unless `--force` is given. The state, the plan and the configuration of the backend belong to the tool, and the wizard writes none of them.
 
 The wizard takes the options of the group:
@@ -250,6 +252,7 @@ The wizard takes the options of the group:
 | `--runtime <path>` | The directory of the files of the deployment. The default is `deploy/tofu/runtime/<environment>`, and the environment is one of the values of the deployment. |
 | `--answers <file>` | The file of the answers of the operator. The wizard asks nothing when the file holds every answer. |
 | `--force` | Write the values over the values that are there. |
+| `--release <version>` | The release of the platform the deployment runs. The default is the version of the CLI, and the CLI shares the version line of the platform. |
 
 ---
 

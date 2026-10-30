@@ -12,3 +12,13 @@ export const VERSION = '1.0.0'
 
 /** The name of the program. */
 export const NAME = 'platformctl'
+
+/**
+ * The repository the releases of the platform live in.
+ *
+ * A release carries the digest of every image it published, and the
+ * wizard of a deployment reads that release: a deployment pins the
+ * digest of the image it runs, and the digest of a release does not
+ * move.
+ */
+export const REPOSITORY = 'ggpwnkthx/platform'
