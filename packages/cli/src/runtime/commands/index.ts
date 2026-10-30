@@ -11,6 +11,7 @@ import type { CommandSpec, GroupSpec } from '../../app/commands'
 import { accessGroup } from './access'
 import { contextGroup } from './context'
 import { dataGroup } from './data'
+import { deployGroup } from './deploy'
 import { doctor, login, logout, status, version, whoami } from './identity'
 import { infrastructureGroup } from './infrastructure'
 import { routesGroup, sessionsGroup } from './routes'
@@ -25,5 +26,6 @@ export const groups: readonly GroupSpec[] = [
   sessionsGroup,
   accessGroup,
   dataGroup,
+  deployGroup,
   infrastructureGroup,
 ]

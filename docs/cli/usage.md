@@ -149,6 +149,26 @@ export TOFU_BINARY=/usr/local/bin/tofu
 
 The values of the deployment, the plan and the state of the deployment belong to the deployment: they live in the runtime directory, and the CLI writes none of them itself.
 
+## Prepare a deployment
+
+The wizard of a deployment signs you in to the provider, asks what the deployment needs, writes the file of the values, and tells you what to do next:
+
+```bash
+platformctl deploy azure
+```
+
+It signs you in with the Azure CLI, so it opens a browser the first time and it lets you pick the subscription when you hold more than one. It asks only what it cannot answer itself: the names the deployment answers under and the identifiers of the tenant and of the workspace.
+
+The wizard writes one file, `deploy/tofu/runtime/production/terraform.tfvars`, and prints the rest of the procedure — the state of the deployment, the configuration of the backend, the plan and the apply.
+
+To answer without a terminal, put the answers in a file:
+
+```bash
+platformctl deploy azure --answers ./answers.tfvars
+```
+
+The file holds the values in the shape of the example of the templates. The wizard refuses to write the values over the values that are there unless you pass `--force`.
+
 ## When something refuses
 
 | The message starts with | Meaning | Fix |
@@ -167,3 +187,8 @@ The values of the deployment, the plan and the state of the deployment belong to
 | `the directory of the deployment is not there` | The runtime directory of the profile does not exist | Pass `--runtime`, or create it |
 | `the values of the deployment are not there` | The file of the values is missing | Copy `terraform.tfvars.example` into the runtime directory |
 | `the deployment is not initialized` | The tool has no working directory for the templates | Run the `tofu init` the message names |
+| `the client of Azure is not on the path` | The Azure CLI is not installed, or not on the path | Install it, or set `AZURE_CLI` |
+| `the sign in to Azure did not leave a session` | The sign in was interrupted | Run `az login` and try again |
+| `the operator holds no subscription of Azure` | The account holds no subscription | A deployment needs one |
+| `the deployment is not ready` | An answer is not the shape the deployment needs | Read the message: it names the value |
+| `the values of the deployment are already there` | The runtime directory holds a deployment | Pass `--force`, or name another `--runtime` |
