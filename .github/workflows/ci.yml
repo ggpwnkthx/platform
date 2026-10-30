@@ -135,6 +135,13 @@ jobs:
         # identifier that nothing reads.
         run: bun run vocabulary:check
 
+      - name: the logs of the platform hold the credentials back
+        # A credential never reaches a log line, and the four processes
+        # of the platform hold the same names back: a name that one of
+        # them redacts and the next one does not is a credential that
+        # reaches a log of a deployment that reads it.
+        run: bun run redaction:check
+
       - name: the links of the documentation resolve
         # The documentation is one tree, and a link that points at
         # nothing is a dead end for the reader.

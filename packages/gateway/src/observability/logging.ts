@@ -16,25 +16,58 @@ const REDACTED = '[redacted]'
 /** The placeholder origin used to parse a path with a query string. */
 const REDACTION_BASE = 'http://redaction.invalid'
 
-/** Headers whose values must never be logged verbatim. */
-const SENSITIVE_HEADERS = new Set([
+/**
+ * The names whose values must never be logged verbatim.
+ *
+ * The set holds the headers that carry a credential and the fields that
+ * hold one: a token, a secret, a cookie or an `Authorization` header
+ * never reach a log line, whatever the layer that logs them.
+ *
+ * The list is the one of the platform (`tooling/redaction.ts`): the
+ * loggers of the four processes hold the same names back, and the check
+ * of the redaction refuses the one that does not.
+ */
+const SENSITIVE_NAMES = new Set([
+  'accessToken',
+  'access_token',
   'authorization',
-  'proxy-authorization',
+  'body',
+  'client_secret',
+  'code_verifier',
+  'connectionString',
   'cookie',
+  'credential',
+  'databaseUrl',
+  'email',
+  'filter',
+  'id_token',
+  'password',
+  'proxy-authorization',
+  'query',
+  'refresh_token',
+  'secret',
+  'session',
   'set-cookie',
+  'token',
+  'x-access-session',
+  'x-access-token',
+  'x-amz-security-token',
   'x-api-key',
   'x-gateway-session',
+  'x-gateway-signature',
   'x-gateway-token',
-  'x-amz-security-token',
 ])
 
 /** Query parameters whose values must never be logged verbatim. */
 const SENSITIVE_QUERY_KEYS = new Set([
   'access_token',
+  'client_secret',
   'code',
   'code_verifier',
   'id_token',
+  'password',
   'refresh_token',
+  'secret',
   'state',
   'token',
 ])
@@ -49,9 +82,9 @@ export interface Logger {
   error(message: string, fields?: LogFields): void
 }
 
-/** Reports whether a header carries a credential. */
-function isSensitiveHeader(name: string): boolean {
-  return SENSITIVE_HEADERS.has(name.toLowerCase())
+/** Reports whether a header or a field carries a credential. */
+function isSensitiveName(name: string): boolean {
+  return SENSITIVE_NAMES.has(name.toLowerCase())
 }
 
 /**
@@ -110,7 +143,7 @@ function serializeValue(value: unknown): unknown {
   if (value && typeof value === 'object') {
     const out: Record<string, unknown> = {}
     for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
-      out[key] = isSensitiveHeader(key) ? REDACTED : serializeValue(nested)
+      out[key] = isSensitiveName(key) ? REDACTED : serializeValue(nested)
     }
     return out
   }
@@ -127,7 +160,7 @@ function serializeValue(value: unknown): unknown {
 export function redactFields(fields: LogFields): LogFields {
   const out: LogFields = {}
   for (const [key, value] of Object.entries(fields)) {
-    out[key] = isSensitiveHeader(key) ? REDACTED : serializeValue(value)
+    out[key] = isSensitiveName(key) ? REDACTED : serializeValue(value)
   }
   return out
 }
