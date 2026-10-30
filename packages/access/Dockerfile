@@ -34,6 +34,7 @@ COPY packages/gateway/package.json ./packages/gateway/
 COPY packages/access/package.json ./packages/access/
 COPY packages/data/package.json ./packages/data/
 COPY packages/data/packages/client/package.json ./packages/data/packages/client/
+COPY packages/client/package.json ./packages/client/
 COPY packages/console/package.json ./packages/console/
 RUN bun install --frozen-lockfile --production --filter '@platform/access' --linker=hoisted && \
     rm -rf /root/.bun/install/cache
