@@ -135,6 +135,13 @@ jobs:
         # identifier that nothing reads.
         run: bun run vocabulary:check
 
+      - name: the clients of the platform speak the same paths
+        # The published client of Data and the client of the console and
+        # of the CLI are two copies of the same paths. A path that only
+        # one of them writes is a path that answers differently
+        # depending on who asks.
+        run: bun run client-paths:check
+
       - name: the logs of the platform hold the credentials back
         # A credential never reaches a log line, and the four processes
         # of the platform hold the same names back: a name that one of

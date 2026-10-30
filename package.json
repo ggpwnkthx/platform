@@ -45,6 +45,7 @@
     "repositories:check": "bun run scripts/check-repositories.ts",
     "vocabulary:check": "bun run scripts/check-vocabulary.ts",
     "redaction:check": "bun run scripts/check-redaction.ts",
+    "client-paths:check": "bun run scripts/check-client-paths.ts",
     "docs:check": "bun run scripts/check-docs.ts",
     "api:check": "bun run scripts/check-api.ts",
     "deploy:check": "bun run scripts/check-deploy.ts",
