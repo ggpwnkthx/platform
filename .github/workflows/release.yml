@@ -280,14 +280,14 @@ jobs:
           } >> "$GITHUB_ENV"
           docker run -d --name gateway -p 8080:8080 \
             --add-host host.docker.internal:host-gateway \
-            -e GATEWAY_SESSION_SECRET=release-secret \
+            -e GATEWAY_SESSION_SECRET=release-session-secret-of-the-release \
             -e GATEWAY_IDENTITY_SIGNING_KEY \
             -e GATEWAY_OIDC_ISSUER=https://dex.example.com/dex \
             -e GATEWAY_OIDC_CLIENT_ID=platform \
-            -e GATEWAY_OIDC_CLIENT_SECRET=release-client-secret \
+            -e GATEWAY_OIDC_CLIENT_SECRET=release-client-secret-of-the-release \
             -e GATEWAY_OIDC_REDIRECT_URI=https://platform.example.com/auth/callback \
             -e GATEWAY_ACCESS_URL=https://access.example.com \
-            -e GATEWAY_ACCESS_TOKEN=release-access-token \
+            -e GATEWAY_ACCESS_TOKEN=release-access-token-of-the-release \
             -e GATEWAY_METRICS_TOKEN=release-metrics-token \
             -e GATEWAY_RATE_LIMIT_TOTAL_MAX=1000 \
             -e GATEWAY_SESSION_URL=redis://host.docker.internal:6379/0 \
@@ -320,10 +320,10 @@ jobs:
           if docker run --rm \
             -e GATEWAY_OIDC_ISSUER=https://dex.example.com/dex \
             -e GATEWAY_OIDC_CLIENT_ID=platform \
-            -e GATEWAY_OIDC_CLIENT_SECRET=release-client-secret \
+            -e GATEWAY_OIDC_CLIENT_SECRET=release-client-secret-of-the-release \
             -e GATEWAY_OIDC_REDIRECT_URI=https://platform.example.com/auth/callback \
             -e GATEWAY_ACCESS_URL=https://access.example.com \
-            -e GATEWAY_ACCESS_TOKEN=release-access-token \
+            -e GATEWAY_ACCESS_TOKEN=release-access-token-of-the-release \
             "$IMAGE"; then
             echo "the gateway started without the secret of the sessions"
             exit 1

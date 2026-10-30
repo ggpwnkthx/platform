@@ -455,14 +455,14 @@ jobs:
           # Redis of the job through the host of the runner.
           docker run -d --name gateway -p 8080:8080 \
             --add-host host.docker.internal:host-gateway \
-            -e GATEWAY_SESSION_SECRET=ci-secret \
+            -e GATEWAY_SESSION_SECRET=ci-session-secret-of-the-build-of-the-ci \
             -e GATEWAY_IDENTITY_SIGNING_KEY="$(cat "$RUNNER_TEMP/identity-key.pem")" \
             -e GATEWAY_OIDC_ISSUER=https://dex.example.com/dex \
             -e GATEWAY_OIDC_CLIENT_ID=platform \
-            -e GATEWAY_OIDC_CLIENT_SECRET=ci-client-secret \
+            -e GATEWAY_OIDC_CLIENT_SECRET=ci-client-secret-of-the-build-of-the-ci \
             -e GATEWAY_OIDC_REDIRECT_URI=https://platform.example.com/auth/callback \
             -e GATEWAY_ACCESS_URL=https://access.example.com \
-            -e GATEWAY_ACCESS_TOKEN=ci-access-token \
+            -e GATEWAY_ACCESS_TOKEN=ci-access-token-of-the-build-of-the-ci \
             -e GATEWAY_RATE_LIMIT_TOTAL_MAX=1000 \
             -e GATEWAY_SESSION_URL=redis://host.docker.internal:6379/0 \
             -e GATEWAY_SHARED_STATE_URL=redis://host.docker.internal:6379/1 \
