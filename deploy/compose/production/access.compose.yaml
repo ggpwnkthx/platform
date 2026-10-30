@@ -11,7 +11,7 @@ name: platform-access
 
 services:
   access:
-    image: ghcr.io/ggpwnkthx/access:1.0.1
+    image: ghcr.io/ggpwnkthx/access:1.0.2
     restart: unless-stopped
     ports:
       - '8081:8081'

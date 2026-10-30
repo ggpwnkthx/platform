@@ -10,6 +10,9 @@ in the same commit as the code.
 
 ## Unreleased
 
+## 1.0.2
+
+
 ## 1.0.1
 
 ### The wizard reads the digests of the images from the release

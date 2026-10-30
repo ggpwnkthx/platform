@@ -24,6 +24,6 @@ resources:
   # or the equivalent of the platform).
 images:
   - name: ghcr.io/ggpwnkthx/data
-    newTag: 1.0.1
+    newTag: 1.0.2
 commonLabels:
   app.kubernetes.io/part-of: platform

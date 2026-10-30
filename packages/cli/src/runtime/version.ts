@@ -8,7 +8,7 @@
  */
 
 /** The version of the CLI. */
-export const VERSION = '1.0.1'
+export const VERSION = '1.0.2'
 
 /** The name of the program. */
 export const NAME = 'platformctl'

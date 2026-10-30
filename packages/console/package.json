@@ -1,6 +1,6 @@
 {
   "name": "@platform/console",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "type": "module",
   "description": "The console of the platform: the web application that is the interface of the gateway, Access and Data. It is a client of the three, and it decides nothing.",

@@ -1,6 +1,6 @@
 {
   "name": "@platform/access",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "type": "module",
   "description": "Access of the platform: an OpenID Connect broker that answers the decisions of the gateway.",

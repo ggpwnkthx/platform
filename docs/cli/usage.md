@@ -7,9 +7,9 @@ How to use `platformctl` against a deployment: install it, write your first prof
 Each platform release publishes the CLI as its own archive for every supported platform. The archive carries the runtime, so it needs nothing else.
 
 ```bash
-curl -sSLO https://github.com/ggpwnkthx/platform/releases/download/v1.0.1/platformctl-1.0.1-linux-x64.tar.gz
-tar -xzf platformctl-1.0.1-linux-x64.tar.gz
-install platformctl-1.0.1-linux-x64/platformctl /usr/local/bin/platformctl
+curl -sSLO https://github.com/ggpwnkthx/platform/releases/download/v1.0.2/platformctl-1.0.2-linux-x64.tar.gz
+tar -xzf platformctl-1.0.2-linux-x64.tar.gz
+install platformctl-1.0.2-linux-x64/platformctl /usr/local/bin/platformctl
 platformctl --help
 ```
 

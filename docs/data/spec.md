@@ -2,7 +2,7 @@
 
 The normative contract of Data: what the service owns, how it trusts the gateway and Access, and the rules for workspaces, schema, authorization, the HTTP API, mutations, events and operations. It is written for implementers and reviewers.
 
-Status: 1.0.1. Runtime: TypeScript on Bun, Hono at the HTTP boundary, PostgreSQL in production. Delivery: a standalone backend repository and deployable; Studio is a separate project.
+Status: 1.0.2. Runtime: TypeScript on Bun, Hono at the HTTP boundary, PostgreSQL in production. Delivery: a standalone backend repository and deployable; Studio is a separate project.
 
 The keywords MUST, MUST NOT, SHOULD, SHOULD NOT and MAY have their RFC 2119 meaning. A capability marked deferred is outside the release, and the service MUST NOT advertise it as available. The JSON examples are illustrative configuration and protocol fixtures; they do not describe features of the gateway or Access that do not exist.
 
