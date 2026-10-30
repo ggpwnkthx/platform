@@ -236,21 +236,9 @@ jobs:
           --health-timeout 3s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v7
-        with:
-          # The release is the tag, and the tag is the commit the CI
-          # proved: the roles of the deployment are created by the
-          # operator commands of that commit.
-          ref: ${{ needs.version.outputs.tag }}
-
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
-
-      - name: install
-        # The operator commands of the deployment run on the runner, and
-        # they need the tree of the dependencies of the repository.
-        run: bun install --frozen-lockfile
 
       - name: the digest of the image is read
         uses: actions/download-artifact@v8
@@ -281,6 +269,49 @@ jobs:
             exit 1
           fi
 
+      - name: the deployment answers the discovery of the contract
+        # The console and Data are clients of Access, and they are ready
+        # when Access answers: the console asks for the discovery
+        # document of the provider, and Data asks for the discovery of
+        # the contract of the access context. The release proves them
+        # against a deployment that answers, and the deployment that
+        # answers is the one the stub holds.
+        run: |
+          cat > "$RUNNER_TEMP/discovery.ts" <<'TS'
+          const oidc = {
+            issuer: 'https://access.example.com',
+            authorization_endpoint: 'https://access.example.com/auth',
+          }
+          const accessContext = {
+            versions: [1],
+            maxPermissionKeys: 64,
+            maxLifetimeMs: 5000,
+          }
+          Bun.serve({
+            port: 5557,
+            fetch(request) {
+              const path = new URL(request.url).pathname
+              if (path === '/.well-known/openid-configuration') {
+                return new Response(JSON.stringify(oidc), { headers: { 'content-type': 'application/json' } })
+              }
+              if (path === '/v1/access-context') {
+                return new Response(JSON.stringify(accessContext), { headers: { 'content-type': 'application/json' } })
+              }
+              return new Response('not found', { status: 404 })
+            },
+          })
+          TS
+          bun run "$RUNNER_TEMP/discovery.ts" &
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:5557/v1/access-context > /dev/null; then
+              echo 'the deployment answers the discovery of the contract'
+              exit 0
+            fi
+            sleep 1
+          done
+          echo 'the deployment does not answer the discovery of the contract'
+          exit 1
+
       - name: the role of Access is not a superuser
         if: matrix.service == 'access'
         # A production deployment of Access refuses to start with a role
@@ -304,14 +335,16 @@ jobs:
         # api: a role that bypasses the isolation of the rows makes the
         # service refuse to be ready.
         run: |
-          DATA_ADMIN_DATABASE_URL=postgres://platform:platform@127.0.0.1:5432/platform \
-          DATA_OWNER_PASSWORD=release-data-owner-password-0001 \
-          DATA_RUNTIME_PASSWORD=release-data-runtime-password-01 \
-          DATA_REGISTRY_PASSWORD=release-data-registry-password-1 \
-          DATA_DELIVERY_PASSWORD=release-data-delivery-password-1 \
-          DATA_MAINTENANCE_PASSWORD=release-data-maintenance-password \
-          DATA_DATABASE_NAME=data \
-            bun run --cwd packages/data provision
+          docker run --rm --add-host host.docker.internal:host-gateway \
+            -e DATA_ENVIRONMENT=production \
+            -e DATA_ADMIN_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
+            -e DATA_OWNER_PASSWORD=release-data-owner-password-0001 \
+            -e DATA_RUNTIME_PASSWORD=release-data-runtime-password-01 \
+            -e DATA_REGISTRY_PASSWORD=release-data-registry-password-1 \
+            -e DATA_DELIVERY_PASSWORD=release-data-delivery-password-1 \
+            -e DATA_MAINTENANCE_PASSWORD=release-data-maintenance-password \
+            -e DATA_DATABASE_NAME=data \
+            "$IMAGE" scripts/cli/provision.ts
 
       - name: the schema of Data is migrated
         # The migrations of the deployment are applied by the owner of
@@ -319,8 +352,10 @@ jobs:
         # alters the schema.
         if: matrix.service == 'data'
         run: |
-          DATA_DATABASE_URL=postgres://data_owner:release-data-owner-password-0001@127.0.0.1:5432/data \
-            bun run --cwd packages/data migrate
+          docker run --rm --add-host host.docker.internal:host-gateway \
+            -e DATA_ENVIRONMENT=production \
+            -e DATA_DATABASE_URL=postgres://data_owner:release-data-owner-password-0001@host.docker.internal:5432/data \
+            "$IMAGE" scripts/cli/migrate.ts
 
       - name: the image of the gateway starts with the configuration of a deployment
         if: matrix.service == 'gateway'
@@ -330,15 +365,10 @@ jobs:
           # the identity of the requests.
           openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 \
             -out "$RUNNER_TEMP/identity-key.pem"
-          {
-            echo "GATEWAY_IDENTITY_SIGNING_KEY<<EOF"
-            cat "$RUNNER_TEMP/identity-key.pem"
-            echo "EOF"
-          } >> "$GITHUB_ENV"
           docker run -d --name gateway -p 8080:8080 \
             --add-host host.docker.internal:host-gateway \
             -e GATEWAY_SESSION_SECRET=release-session-secret-of-the-release \
-            -e GATEWAY_IDENTITY_SIGNING_KEY \
+            -e GATEWAY_IDENTITY_SIGNING_KEY="$(cat "$RUNNER_TEMP/identity-key.pem")" \
             -e GATEWAY_OIDC_ISSUER=https://dex.example.com/dex \
             -e GATEWAY_OIDC_CLIENT_ID=platform \
             -e GATEWAY_OIDC_CLIENT_SECRET=release-client-secret-of-the-release \
@@ -395,11 +425,6 @@ jobs:
           # image.
           openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
             -out "$RUNNER_TEMP/access-key.pem" 2>/dev/null
-          {
-            echo "ACCESS_SIGNING_KEY<<EOF"
-            cat "$RUNNER_TEMP/access-key.pem"
-            echo "EOF"
-          } >> "$GITHUB_ENV"
           docker run -d --name access -p 8081:8081 \
             --add-host host.docker.internal:host-gateway \
             -e ACCESS_DATABASE_URL=postgres://access_release:release-access-app-password@host.docker.internal:5432/platform \
@@ -409,7 +434,7 @@ jobs:
             -e ACCESS_DECISION_TOKEN=release-access-token-of-the-release \
             -e ACCESS_STATE_SECRET="$(printf '4f9a2c8e%.0s' {1..8})" \
             -e ACCESS_SECRET_ENCRYPTION_KEY="$(printf 'b31e7d09%.0s' {1..8})" \
-            -e ACCESS_SIGNING_KEY \
+            -e ACCESS_SIGNING_KEY="$(cat "$RUNNER_TEMP/access-key.pem")" \
             -e ACCESS_SIGNING_KID=access-release \
             "$IMAGE"
           for _ in $(seq 1 30); do
@@ -467,7 +492,7 @@ jobs:
             -e DATA_SCHEMA_BUNDLE_FILE=/app/packages/data/manifests/schema.json \
             -e DATA_POLICY_BUNDLE_FILE=/app/packages/data/manifests/policies.json \
             -e DATA_GATEWAY_BINDINGS_FILE=/etc/data/bindings.json \
-            -e DATA_ACCESS_URL=http://host.docker.internal:9 \
+            -e DATA_ACCESS_URL=http://host.docker.internal:5557 \
             -e DATA_ACCESS_CONTEXT_TOKEN_FILE=/run/secrets/access-context.token \
             -e DATA_CURSOR_KEY_FILE=/run/secrets/cursor.key \
             -v "$PWD/deploy/fixtures/bindings.json:/etc/data/bindings.json:ro" \
@@ -507,7 +532,7 @@ jobs:
             -e DATA_SCHEMA_BUNDLE_FILE=/app/packages/data/manifests/schema.json \
             -e DATA_POLICY_BUNDLE_FILE=/app/packages/data/manifests/policies.json \
             -e DATA_GATEWAY_BINDINGS_FILE=/etc/data/bindings.json \
-            -e DATA_ACCESS_URL=http://host.docker.internal:9 \
+            -e DATA_ACCESS_URL=http://host.docker.internal:5557 \
             -e DATA_ACCESS_CONTEXT_TOKEN_FILE=/run/secrets/access-context.token \
             -v "$PWD/deploy/fixtures/bindings.json:/etc/data/bindings.json:ro" \
             -v "$PWD/deploy/fixtures/secrets:/run/secrets:ro" \
@@ -536,10 +561,11 @@ jobs:
           # that does not exist: the console refuses a credential that is
           # too short, and it refuses the ones the repository publishes.
           docker run -d --name console -p 8083:8083 \
+            --add-host host.docker.internal:host-gateway \
             -e CONSOLE_ENVIRONMENT=production \
             -e CONSOLE_HOST=0.0.0.0 -e CONSOLE_PORT=8083 \
             -e CONSOLE_PUBLIC_URL=https://console.example.com \
-            -e CONSOLE_ACCESS_URL=http://127.0.0.1:5557 \
+            -e CONSOLE_ACCESS_URL=http://host.docker.internal:5557 \
             -e CONSOLE_GATEWAY_URL=https://api.example.com \
             -e CONSOLE_CLIENT_ID=console \
             -e CONSOLE_CLIENT_SECRET=the-client-secret-of-the-release \
@@ -632,6 +658,17 @@ jobs:
             echo "the build of the release did not publish anything: there is nothing to withdraw"
             exit 0
           fi
+          # The tags of the release are removed first: a digest that
+          # two tags name cannot be removed while the tags are there,
+          # and the image of a failed release must not stay reachable
+          # under the name of the release.
+          for tag in "${{ needs.version.outputs.tag }}" "${{ needs.version.outputs.version }}"; do
+            if docker buildx imagetools rm "${{ env.REGISTRY }}/${{ matrix.service }}:${tag}"; then
+              echo "the tag ${tag} is withdrawn from the registry"
+            else
+              echo "the tag ${tag} could not be withdrawn: it must be removed by hand"
+            fi
+          done
           if docker buildx imagetools rm "${{ env.REGISTRY }}/${{ matrix.service }}@${digest}"; then
             echo "the image $digest is withdrawn from the registry"
           else
