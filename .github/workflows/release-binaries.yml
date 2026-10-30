@@ -319,7 +319,6 @@ jobs:
         run: |
           set -euo pipefail
           version="${{ needs.version.outputs.version }}"
-          tar -xzf "dist/platformctl-${version}-linux-x64.tar.gz" -C dist
           cd "dist/platformctl-${version}-linux-x64"
           ./platformctl --help | head -5
           ./platformctl version
@@ -482,6 +481,31 @@ jobs:
           version="${{ needs.version.outputs.version }}"
           tar -xzf "dist/data-${version}-linux-x64.tar.gz" -C dist
           cd "dist/data-${version}-linux-x64"
+          mkdir -p "$RUNNER_TEMP/secrets" "$RUNNER_TEMP/config"
+          openssl rand -hex 24 > "$RUNNER_TEMP/secrets/access-context.token"
+          openssl rand -base64 32 > "$RUNNER_TEMP/secrets/cursor.key"
+          cat > "$RUNNER_TEMP/config/bindings.json" <<'JSON'
+          {
+            "version": 2,
+            "bindings": [
+              {
+                "id": "data-api",
+                "host": "api.platform.test",
+                "upstreamPathPattern": "/ws/{workspaceId}/v1/*",
+                "routeId": "data-api",
+                "identity": {
+                  "version": "v5",
+                  "algorithm": "ES256",
+                  "publicKeyFile": "/run/secrets/identity-signing.public.pem"
+                }
+              }
+            ]
+          }
+          JSON
+          openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 \
+            -out "$RUNNER_TEMP/identity-key.pem" 2>/dev/null
+          openssl pkey -in "$RUNNER_TEMP/identity-key.pem" -pubout \
+            -out "$RUNNER_TEMP/secrets/identity-signing.public.pem"
           DATA_ENVIRONMENT=development \
           DATA_HOST=127.0.0.1 \
           DATA_PORT=18099 \
@@ -491,6 +515,9 @@ jobs:
           DATA_SCHEMA_BUNDLE_FILE="$PWD/manifests/schema.json" \
           DATA_POLICY_BUNDLE_FILE="$PWD/manifests/policies.json" \
           DATA_ACCESS_URL=http://127.0.0.1:9 \
+          DATA_GATEWAY_BINDINGS_FILE="$RUNNER_TEMP/config/bindings.json" \
+          DATA_ACCESS_CONTEXT_TOKEN_FILE="$RUNNER_TEMP/secrets/access-context.token" \
+          DATA_CURSOR_KEY_FILE="$RUNNER_TEMP/secrets/cursor.key" \
           DATA_LOG_LEVEL=error \
           ./data > data.log 2>&1 &
           pid=$!

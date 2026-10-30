@@ -697,19 +697,29 @@ jobs:
             echo "the build of the release did not publish anything: there is nothing to withdraw"
             exit 0
           fi
-          # The version of the package is removed: it holds the tags of
-          # the release, and an image of a failed release must not stay
-          # reachable under the name of the release. The command of the
-          # builder that removes an image does not exist, and the
-          # packages API is the way a package of a registry is removed.
+          # The versions of the package that carry the tags of the
+          # release are removed: an image of a failed release must not
+          # stay reachable under the name of the release. The command
+          # of the builder that removes an image does not exist, and
+          # the packages API is the way a package of a registry is
+          # removed.
           owner="ggpwnkthx"
           package="${owner}%2F${{ matrix.service }}"
-          if gh api --method DELETE \
-            "/users/${owner}/packages/container/${package}/versions/${digest}" 2>/dev/null; then
-            echo "the image $digest is withdrawn from the registry"
-          else
-            echo "the image $digest could not be withdrawn: it must be removed by hand"
+          tag="${{ needs.version.outputs.tag }}"
+          version="${{ needs.version.outputs.version }}"
+          ids="$(gh api "/users/${owner}/packages/container/${package}/versions" \
+            --jq ".[] | select(.name == \"${tag}\" or .name == \"${version}\") | .id" 2>/dev/null || true)"
+          if [ -z "${ids}" ]; then
+            echo "the package of the ${tag} holds no version of the release"
           fi
+          for id in ${ids}; do
+            if gh api --method DELETE \
+              "/users/${owner}/packages/container/${package}/versions/${id}" 2>/dev/null; then
+              echo "the version ${id} of the package is withdrawn from the registry"
+            else
+              echo "the version ${id} of the package could not be withdrawn: it must be removed by hand"
+            fi
+          done
 
   release:
     name: the release of the tag
