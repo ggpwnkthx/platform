@@ -236,6 +236,22 @@ jobs:
           --health-timeout 3s
           --health-retries 10
     steps:
+      - uses: actions/checkout@v7
+        with:
+          # The release is the tag, and the tag is the commit the CI
+          # proved: the roles of the deployment are created by the
+          # operator commands of that commit.
+          ref: ${{ needs.version.outputs.tag }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: install
+        # The operator commands of the deployment run on the runner, and
+        # they need the tree of the dependencies of the repository.
+        run: bun install --frozen-lockfile
+
       - name: the digest of the image is read
         uses: actions/download-artifact@v8
         with:
@@ -264,6 +280,47 @@ jobs:
             echo "the image that was pulled is $actual and the release is $image"
             exit 1
           fi
+
+      - name: the role of Access is not a superuser
+        if: matrix.service == 'access'
+        # A production deployment of Access refuses to start with a role
+        # that bypasses the isolation of the tenants (spec §3.10), and
+        # the role of the service of PostgreSQL is a superuser. The role
+        # of the service is created here, the way a deployment creates
+        # the role of its own secret store.
+        run: |
+          psql "postgres://platform:platform@127.0.0.1:5432/platform" -v ON_ERROR_STOP=1 <<'SQL'
+          create role access_release login password 'release-access-app-password';
+          grant usage, create on schema public to access_release;
+          SQL
+
+      - name: the roles of Data are provisioned
+        if: matrix.service == 'data'
+        # The service of Data separates the roles of a deployment: the
+        # owner of the schema, the role of the api, the reader of the
+        # registry, the role of the deliveries and the role of the
+        # retention. The roles are provisioned here, the way a deployment
+        # provisions them, and the api is started with the role of the
+        # api: a role that bypasses the isolation of the rows makes the
+        # service refuse to be ready.
+        run: |
+          DATA_ADMIN_DATABASE_URL=postgres://platform:platform@127.0.0.1:5432/platform \
+          DATA_OWNER_PASSWORD=release-data-owner-password-0001 \
+          DATA_RUNTIME_PASSWORD=release-data-runtime-password-01 \
+          DATA_REGISTRY_PASSWORD=release-data-registry-password-1 \
+          DATA_DELIVERY_PASSWORD=release-data-delivery-password-1 \
+          DATA_MAINTENANCE_PASSWORD=release-data-maintenance-password \
+          DATA_DATABASE_NAME=data \
+            bun run --cwd packages/data provision
+
+      - name: the schema of Data is migrated
+        # The migrations of the deployment are applied by the owner of
+        # the schema, the way a deployment applies them: the api never
+        # alters the schema.
+        if: matrix.service == 'data'
+        run: |
+          DATA_DATABASE_URL=postgres://data_owner:release-data-owner-password-0001@127.0.0.1:5432/data \
+            bun run --cwd packages/data migrate
 
       - name: the image of the gateway starts with the configuration of a deployment
         if: matrix.service == 'gateway'
@@ -345,7 +402,7 @@ jobs:
           } >> "$GITHUB_ENV"
           docker run -d --name access -p 8081:8081 \
             --add-host host.docker.internal:host-gateway \
-            -e ACCESS_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
+            -e ACCESS_DATABASE_URL=postgres://access_release:release-access-app-password@host.docker.internal:5432/platform \
             -e ACCESS_REDIS_URL=redis://host.docker.internal:6379/0 \
             -e ACCESS_ISSUER=https://access.example.com \
             -e ACCESS_ADMIN_TOKEN=release-admin-token-of-the-release \
@@ -389,7 +446,7 @@ jobs:
         run: |
           set -euo pipefail
           if docker run --rm \
-            -e ACCESS_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
+            -e ACCESS_DATABASE_URL=postgres://access_release:release-access-app-password@host.docker.internal:5432/platform \
             -e ACCESS_REDIS_URL=redis://host.docker.internal:6379/0 \
             "$IMAGE"; then
             echo "the service started without a secret"
@@ -405,8 +462,8 @@ jobs:
             -e DATA_ENVIRONMENT=development \
             -e DATA_HOST=0.0.0.0 -e DATA_PORT=8082 \
             -e DATA_PROCESS_ROLE=api \
-            -e DATA_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
-            -e DATA_REGISTRY_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
+            -e DATA_DATABASE_URL=postgres://data_runtime:release-data-runtime-password-01@host.docker.internal:5432/data \
+            -e DATA_REGISTRY_DATABASE_URL=postgres://data_registry:release-data-registry-password-1@host.docker.internal:5432/data \
             -e DATA_SCHEMA_BUNDLE_FILE=/app/packages/data/manifests/schema.json \
             -e DATA_POLICY_BUNDLE_FILE=/app/packages/data/manifests/policies.json \
             -e DATA_GATEWAY_BINDINGS_FILE=/etc/data/bindings.json \
@@ -445,8 +502,8 @@ jobs:
             -e DATA_ENVIRONMENT=development \
             -e DATA_HOST=0.0.0.0 -e DATA_PORT=8082 \
             -e DATA_PROCESS_ROLE=api \
-            -e DATA_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
-            -e DATA_REGISTRY_DATABASE_URL=postgres://platform:platform@host.docker.internal:5432/platform \
+            -e DATA_DATABASE_URL=postgres://data_runtime:release-data-runtime-password-01@host.docker.internal:5432/data \
+            -e DATA_REGISTRY_DATABASE_URL=postgres://data_registry:release-data-registry-password-1@host.docker.internal:5432/data \
             -e DATA_SCHEMA_BUNDLE_FILE=/app/packages/data/manifests/schema.json \
             -e DATA_POLICY_BUNDLE_FILE=/app/packages/data/manifests/policies.json \
             -e DATA_GATEWAY_BINDINGS_FILE=/etc/data/bindings.json \
