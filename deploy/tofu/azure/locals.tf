@@ -248,7 +248,10 @@ locals {
 # one that reaches it.
 locals {
   gateway_route_table = {
-    version = 1
+    version = 2
+    # The names of the gateway: the endpoints the gateway serves itself
+    # answer on those names, and on no other name.
+    hosts = [var.gateway_hostname]
     defaults = {
       auth = { mode = "none" }
       timeouts = {
@@ -260,6 +263,8 @@ locals {
     }
     trustedProxies = var.trusted_proxy_cidrs
     routes = [
+      # The API of the platform: the workspace routes, and the only route
+      # that carries the identity of a caller.
       {
         id = var.route_id
         match = {
@@ -276,6 +281,55 @@ locals {
         }
         websocket        = true
         accessCacheTtlMs = 0
+      },
+      # Access, the issuer of the tokens of the platform. It is reached
+      # under the name of the deployment, and the upstream receives that
+      # name: the issuer of the tokens is the name the callers use.
+      {
+        id = "access-root"
+        match = {
+          host = var.access_hostname
+          path = "/"
+        }
+        upstream     = "http://${local.access_fqdn}:8081"
+        auth         = { mode = "none" }
+        upstreamHost = "original"
+        # The issuer of the tokens needs the credential of its clients:
+        # the console and the gateway authenticate to it.
+        forwardAuthorization = true
+      },
+      {
+        id = "access"
+        match = {
+          host = var.access_hostname
+          path = "/{rest}"
+        }
+        upstream             = "http://${local.access_fqdn}:8081"
+        auth                 = { mode = "none" }
+        upstreamHost         = "original"
+        forwardAuthorization = true
+      },
+      # The console. It is a client of the three services, and it is
+      # reached under the name of the deployment.
+      {
+        id = "console-root"
+        match = {
+          host = var.console_hostname
+          path = "/"
+        }
+        upstream     = "http://${local.console_fqdn}:8083"
+        auth         = { mode = "none" }
+        upstreamHost = "original"
+      },
+      {
+        id = "console"
+        match = {
+          host = var.console_hostname
+          path = "/{rest}"
+        }
+        upstream     = "http://${local.console_fqdn}:8083"
+        auth         = { mode = "none" }
+        upstreamHost = "original"
       }
     ]
   }

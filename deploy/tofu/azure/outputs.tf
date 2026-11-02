@@ -10,21 +10,37 @@ output "resource_group_name" {
   value       = azurerm_resource_group.platform.name
 }
 
-# The addresses of DNS. The public name of the deployment is a record of
-# DNS that points at the default domain of the endpoint of the service.
-output "dns_gateway" {
-  description = "The record of DNS of the public name of the gateway."
-  value       = azurerm_cdn_frontdoor_endpoint.gateway.host_name
+# The addresses of DNS. The public names of the deployment are records of
+# DNS that point at the gateway: the gateway is the only service the
+# callers reach, and it serves the three names of the deployment.
+#
+# The environment of the container apps proves the ownership of a name
+# with a record of DNS: a TXT record named "asuid" and the subdomain of
+# the name, holding the code of the verification.
+output "dns_records" {
+  description = "The records of DNS of the public names of the deployment."
+  value = {
+    api = {
+      cname        = azurerm_container_app.gateway.ingress[0].fqdn
+      verification = "asuid.${split(".", var.gateway_hostname)[0]}"
+    }
+    access = {
+      cname        = azurerm_container_app.gateway.ingress[0].fqdn
+      verification = "asuid.${split(".", var.access_hostname)[0]}"
+    }
+    console = {
+      cname        = azurerm_container_app.gateway.ingress[0].fqdn
+      verification = "asuid.${split(".", var.console_hostname)[0]}"
+    }
+  }
 }
 
-output "dns_access" {
-  description = "The record of DNS of the public name of Access."
-  value       = azurerm_cdn_frontdoor_endpoint.access.host_name
-}
-
-output "dns_console" {
-  description = "The record of DNS of the public name of the console."
-  value       = azurerm_cdn_frontdoor_endpoint.console.host_name
+# The code of the verification of the names of the deployment. It is the
+# value of the TXT records that prove the ownership of the names.
+output "dns_verification_id" {
+  description = "The code of the verification of the public names of the deployment."
+  value       = azurerm_container_app.gateway.custom_domain_verification_id
+  sensitive   = true
 }
 
 # The public names of the deployment.

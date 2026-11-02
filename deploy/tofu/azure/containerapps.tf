@@ -85,6 +85,10 @@ resource "azurerm_container_app" "gateway" {
     target_port      = 8080
     # The gateway speaks the websocket of the upstream it forwards to,
     # and the transport is the one that carries it.
+    #
+    # The environment terminates the TLS of the callers with the
+    # certificate of the custom domain, and it publishes the plain HTTP
+    # and the TLS on the standard ports.
     transport = "auto"
 
     traffic_weight {
@@ -434,7 +438,9 @@ resource "azurerm_container_app" "access" {
   }
 
   ingress {
-    external_enabled = true
+    # Access is behind the gateway: it is reached under the name of the
+    # deployment, and the gateway forwards the request to it.
+    external_enabled = false
     target_port      = 8081
     transport        = "auto"
 
@@ -762,7 +768,9 @@ resource "azurerm_container_app" "console" {
   }
 
   ingress {
-    external_enabled = true
+    # The console is behind the gateway: it is reached under the name of
+    # the deployment, and the gateway forwards the request to it.
+    external_enabled = false
     target_port      = 8083
     transport        = "auto"
 

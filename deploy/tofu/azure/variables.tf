@@ -324,10 +324,17 @@ variable "redis_sku_name" {
 # The edge
 # --------------------------------------------------------------------------
 
-variable "frontdoor_sku_name" {
-  description = "The size of the profile of Front Door."
-  type        = string
-  default     = "Standard_Azure"
+# The public names of the deployment are bound to the gateway as custom
+# domains, and the binding is the second half of the deployment: the
+# environment of the container apps proves the ownership of a name with a
+# record of DNS, and the record needs the application to exist. The first
+# apply creates the environment and the applications, the operator writes
+# the records of DNS and issues the certificate, and the second apply
+# binds the names.
+variable "public_names_enabled" {
+  description = "Whether the public names of the deployment are bound to the gateway."
+  type        = bool
+  default     = false
 }
 
 variable "trusted_proxy_cidrs" {

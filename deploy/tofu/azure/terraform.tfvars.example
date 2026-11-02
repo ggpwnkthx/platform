@@ -144,10 +144,27 @@ postgresql_backup_retention_days = 7
 redis_sku_name = "Balanced_B0"
 
 # --------------------------------------------------------------------------
-# The edge
+# The names of the deployment
+#
+# The gateway is the front door of the platform: it is the only service
+# the callers reach, and it serves the three public names of the
+# deployment. The names are bound to the gateway as custom domains of its
+# application, and the certificate of the names is one of Azure: the
+# environment of the container apps issues it and renews it, and the
+# ingress of the environment terminates the TLS of the callers with it.
 # --------------------------------------------------------------------------
 
-frontdoor_sku_name = "Standard_Azure"
+# The names are the second half of the deployment: the environment of the
+# container apps proves the ownership of a name with a record of DNS, and
+# the record needs the application to exist.
+#
+# The first apply creates the environment and the applications. The
+# operator then writes the records of DNS that the output "dns_records"
+# names, and the second apply binds the names.
+#
+# The names of the deployment do not have to live in a zone of Azure: the
+# records of DNS are the ones of the operator.
+public_names_enabled = false
 
 # The addresses of the proxies the gateway trusts. The ingress of the
 # environment is the peer of the gateway, and it is the address of every

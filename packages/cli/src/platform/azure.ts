@@ -173,8 +173,8 @@ export const AZURE_QUESTIONS: readonly Question[] = [
     kind: 'given',
   },
   {
-    name: 'frontdoor_sku_name',
-    summary: 'The size of the profile of Front Door',
+    name: 'public_names_enabled',
+    summary: 'Whether the public names of the deployment are bound to the gateway',
     kind: 'given',
   },
   {
