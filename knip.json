@@ -9,6 +9,7 @@
       "entry": [
         "src/main.ts",
         "src/control-main.ts",
+        "src/challenge-main.ts",
         "src/**/*.test.ts",
         "test/**/*.ts",
         "scripts/**/*.ts",

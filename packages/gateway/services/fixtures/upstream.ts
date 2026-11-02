@@ -58,6 +58,7 @@ const encoder = new TextEncoder()
 
 /** The headers the upstream echoes, so a test can assert on the header policy. */
 const ECHOED_HEADERS = [
+  'host',
   'x-gateway-user',
   'x-gateway-email',
   'x-gateway-roles',

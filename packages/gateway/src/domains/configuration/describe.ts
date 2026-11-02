@@ -17,7 +17,7 @@
 
 import type { AuthMode } from '../authentication'
 import { detectShadowedRoutes, type CompiledRoute } from '../routing'
-import type { CrossSitePolicy, Timeouts } from './schema'
+import type { CrossSitePolicy, Timeouts, UpstreamHost } from './schema'
 import type { ConfigurationSnapshot } from './store'
 import type { CompiledTable } from './compile'
 import type { EffectiveRoute } from './routes'
@@ -75,6 +75,13 @@ export interface RouteDescription {
   crossSite: CrossSitePolicy
   /** Whether the credential of the caller reaches the upstream. */
   forwardAuthorization: boolean
+  /**
+   * The host the upstream receives.
+   *
+   * `address` is the address of the upstream, `original` is the host the
+   * caller asked for.
+   */
+  upstreamHost: UpstreamHost
   /** Whether the route accepts a websocket. */
   websocket: boolean
   /** The limit of the body of a request, 0 means that there is none. */
@@ -107,6 +114,12 @@ export interface ConfigurationDescription {
    * operator reads it here.
    */
   trustedProxies: string[]
+  /**
+   * The names the gateway serves itself on.
+   *
+   * An empty list means every name.
+   */
+  hosts: string[]
   /** The routes, in the order of the precedence of the matcher. */
   routes: RouteDescription[]
   /** The settings that are permissive. */
@@ -128,6 +141,7 @@ function describeRoute(route: CompiledRoute<EffectiveRoute>): RouteDescription {
     requireUuid: policy.auth.workspace?.requireUuid ?? false,
     crossSite: policy.crossSite,
     forwardAuthorization: policy.forwardAuthorization,
+    upstreamHost: policy.upstreamHost,
     websocket: policy.websocket,
     maxBodyBytes: policy.maxBodyBytes,
     timeouts: { ...policy.timeouts },
@@ -227,6 +241,7 @@ export function describeConfiguration(snapshot: ConfigurationSnapshot): Configur
     source: snapshot.source,
     routeCount: routes.length,
     trustedProxies: [...snapshot.trustedProxies],
+    hosts: [...snapshot.hosts],
     routes,
     warnings,
   }

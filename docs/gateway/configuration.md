@@ -29,6 +29,14 @@ These route-table keys override an environment default for one route
 | `accessStaleGraceMs` | environment | `GATEWAY_ACCESS_STALE_GRACE_MS` | Serve the last allow decision during an Access outage. |
 | `replayMaxBytes` | environment | `GATEWAY_REPLAY_MAX_BYTES` | Cap bodies resent to the next upstream. |
 | `timeouts.upstreamAttemptMs` | environment | `GATEWAY_UPSTREAM_ATTEMPT_TIMEOUT_MS` | Budget one attempt across several upstreams; `0` disables it. |
+| `upstreamHost` | `address` | — | Set `original` when the upstream answers under a public name: an issuer of tokens, a console. |
+
+Two keys of the table are not route-level:
+
+| Key | Meaning |
+| --- | --- |
+| `version` | `1` or `2`. Version 2 adds `hosts` and `upstreamHost`. |
+| `hosts` | The names the gateway serves itself on. Empty means every name: the gateway is the only service of the deployment. A list means the gateway is the front door of a platform, and the endpoints it serves itself belong to those names ([spec §2.2](spec.md#22-gateway-endpoints)). |
 
 ## Required in production
 
@@ -177,6 +185,32 @@ WebSocket upstreams always use plain http ([spec §11.1.2](spec.md#1112-upstream
 
 > [!IMPORTANT]
 > The trust of a range is the trust of every workload of that range: a peer that is inside it chooses the host of the request, the address of the caller and the protocol of the request, and with them the route that handles the request, the budget of the caller and the comparison of the origin. Name the addresses of the proxies of the deployment and nothing else. A production gateway refuses to start with a range that covers more than sixteen addresses, and it publishes the ranges it trusts in `gateway_trusted_proxies` and in the log of the active configuration.
+
+## TLS of the deployment
+
+The gateway terminates the TLS of the callers when it has a certificate of
+the deployment ([spec §11.5](spec.md#115-tls-of-the-deployment)).
+
+| `GATEWAY_TLS_NAMES` | — | The names the certificate covers, comma-separated. An empty list means the gateway does not terminate TLS: the proxy in front of it does. |
+| `GATEWAY_TLS_PORT` | `443` | The port of the listener of TLS. Zero is a port the machine draws. |
+| `GATEWAY_TLS_CERT_FILE` | — | The file of a certificate the deployment manages itself, in PEM. |
+| `GATEWAY_TLS_KEY_FILE` | — | The file of the private key of that certificate, in PEM. |
+| `GATEWAY_ACME_DIRECTORY` | `https://acme-v02.api.letsencrypt.org/directory` | The directory of the authority of the certificates. |
+| `GATEWAY_ACME_EMAIL` | — | The contact of the account of the deployment. |
+| `GATEWAY_ACME_ACCOUNT_KEY` | — | The key of the account of the deployment, in PEM. It is a secret of the deployment: the replicas share the account and the budget of the authority. |
+| `GATEWAY_ACME_CHALLENGE` | `http-01` | The challenge the deployment answers: `http-01` or `dns-01`. |
+| `GATEWAY_ACME_DNS_HOOK_URL` | — | The writer of the records of DNS, for the `dns-01` challenge. |
+| `GATEWAY_TLS_RENEWAL_DAYS` | `30` | The number of days before the expiry that the certificate is renewed. |
+
+The responder of the challenges of the authority is a process of its own
+(`gateway-challenges`, [spec §11.5](spec.md#115-tls-of-the-deployment)). It
+answers the challenges on the plain HTTP of the deployment, and it reads
+them from the shared state.
+
+| `GATEWAY_CHALLENGE_HOST` | `0.0.0.0` | The address the responder binds to. |
+| `GATEWAY_CHALLENGE_PORT` | `80` | The port the responder listens on. |
+| `GATEWAY_CHALLENGE_STATE_URL` | — | The address of the shared state of the deployment. |
+| `GATEWAY_CHALLENGE_STATE_KEY_PREFIX` | `gateway` | The prefix of the keys of the shared state. |
 
 ## Limits
 

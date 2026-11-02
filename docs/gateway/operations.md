@@ -159,7 +159,24 @@ replicas sign with different keys.
 
 ## Ingress
 
-The gateway does not terminate TLS or rewrite paths.
+The gateway does not rewrite paths. It terminates the TLS of the callers
+when it has a certificate of the deployment, and the deployment tells it
+the names of the certificate with `GATEWAY_TLS_NAMES`
+([spec §11.5](spec.md#115-tls-of-the-deployment)). A deployment whose edge
+terminates the TLS gives the gateway no certificate: the ingress of an
+environment of container apps, for instance, issues and renews the
+certificate of its custom domains and terminates the TLS itself.
+
+The gateway may be the only public service of a deployment — the front
+door of a platform — and then it serves several names: the name of the
+API, the name of the issuer of the tokens, the name of the console. The
+ingress still terminates the TLS of every name, and the table of the
+routes names the names of the gateway (`hosts`, [spec §3.1](spec.md#31-fields)):
+the endpoints the gateway serves itself answer on those names, and on
+another name the path belongs to the service that is reached under it. A
+route that forwards to such a service sets `upstreamHost: "original"`, so
+the service sees the name the callers use.
+
 
 | Setting | Value |
 | --- | --- |

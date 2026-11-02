@@ -134,6 +134,29 @@ export function gatewayPaths(): Record<string, unknown> {
         },
       },
     },
+    '/.well-known/acme-challenge/{token}': {
+      get: {
+        summary: 'The answer of a challenge of the authority of the certificates.',
+        description:
+          'The authority of the certificates asks the deployment to prove that it owns a name. The answer is the key authorization of the challenge, and it is published while the challenge lasts.',
+        parameters: [
+          {
+            name: 'token',
+            in: 'path',
+            required: true,
+            description: 'The token of the challenge.',
+            schema: { type: 'string' },
+          },
+        ],
+        responses: {
+          200: {
+            description: 'The key authorization of the challenge.',
+            content: { 'application/octet-stream': { schema: { type: 'string' } } },
+          },
+          404: errorResponse('The challenge is not published.'),
+        },
+      },
+    },
     '/openapi.json': {
       get: {
         summary: 'This document.',

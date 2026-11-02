@@ -10,7 +10,7 @@
  * broken on disk never takes a running deployment out of rotation.
  */
 
-import type { CompiledRoute } from '../routing'
+import { normalizeHost, type CompiledRoute } from '../routing'
 import { GATEWAY_RESERVED_PATHS } from './schema'
 import { compileTable } from './compile'
 import type { EffectiveRoute, EnvironmentDefaults } from './routes'
@@ -32,6 +32,12 @@ export interface ConfigurationSnapshot {
   source: string
   /** The paths the gateway reserves for itself. */
   reservedPaths: readonly string[]
+  /**
+   * The names the gateway serves itself on.
+   *
+   * An empty list means every name.
+   */
+  hosts: readonly string[]
   /** The ranges whose forwarding headers are trusted. */
   trustedProxies: readonly string[]
   /** The routes, sorted by the precedence of the matcher. */
@@ -210,6 +216,7 @@ export class ConfigurationStore {
       loadedAt: Date.now(),
       source: this.#source,
       reservedPaths: Object.freeze([...table.reservedPaths]),
+      hosts: Object.freeze([...table.hosts]),
       trustedProxies: Object.freeze([...table.trustedProxies]),
       routes: Object.freeze(table.routes),
     })
@@ -280,9 +287,31 @@ export class ConfigurationStore {
  * paths of the configuration are reserved on top of them. A reserved path is
  * never routed to an upstream, not even in the spelling with a trailing
  * slash: the gateway owns the name.
+ *
+ * The reservation belongs to the names of the gateway: on another name, the
+ * path belongs to the service that is reached under that name, and the
+ * route table claims it.
  */
-export function isReservedPath(snapshot: ConfigurationSnapshot, path: string): boolean {
+export function isReservedPath(
+  snapshot: ConfigurationSnapshot,
+  path: string,
+  host?: string
+): boolean {
+  if (!servesGatewayHost(snapshot, host)) return false
   const normalized = path.replace(/\/+$/, '') || '/'
   const reserved = [...GATEWAY_RESERVED_PATHS, ...snapshot.reservedPaths]
   return reserved.some((candidate) => (candidate.replace(/\/+$/, '') || '/') === normalized)
+}
+
+/**
+ * Reports whether a name is one of the names the gateway serves itself on.
+ *
+ * A deployment that names no name of its own is the only service of the
+ * deployment: every name is its name.
+ */
+export function servesGatewayHost(snapshot: ConfigurationSnapshot, host?: string): boolean {
+  if (snapshot.hosts.length === 0) return true
+  if (host === undefined || host === '') return true
+  const normalized = normalizeHost(host)
+  return snapshot.hosts.some((own) => normalizeHost(own) === normalized)
 }

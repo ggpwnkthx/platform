@@ -18,6 +18,7 @@ import {
   type Defaults,
   type RouteFile,
   type Timeouts,
+  type UpstreamHost,
 } from './schema'
 
 /** The policy that applies to a route. */
@@ -51,6 +52,13 @@ export interface EffectiveRoute {
    * upstream of the route.
    */
   forwardAuthorization: boolean
+  /**
+   * The host the upstream receives.
+   *
+   * `address` is the address of the upstream, `original` is the host the
+   * caller asked for.
+   */
+  upstreamHost: UpstreamHost
   /**
    * The lifetime of a cached decision of Access for the route,
    * in milliseconds. Undefined means the lifetime of the environment.
@@ -116,6 +124,7 @@ export function compileRoutes(
         websocket: route.websocket,
         crossSite: policy.crossSite,
         forwardAuthorization: policy.forwardAuthorization,
+        upstreamHost: policy.upstreamHost,
         accessCacheTtlMs: policy.accessCacheTtlMs,
         accessStaleGraceMs: policy.accessStaleGraceMs,
         accessCheck: policy.accessCheck,

@@ -146,6 +146,8 @@ export interface Harness {
   upstreamA: StartedUpstream
   upstreamB: StartedUpstream
   gatewayUrl: string
+  /** The url of the listener of TLS, when the deployment has a certificate. */
+  tlsUrl: string
   configPath: string
   /** Rewrites the configuration file on disk. */
   writeConfig: (config: unknown) => Promise<void>
@@ -539,6 +541,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     upstreamA,
     upstreamB,
     gatewayUrl,
+    tlsUrl: `https://127.0.0.1:${runtime.tlsListener()?.port ?? 0}`,
     configPath,
     writeConfig,
     login,

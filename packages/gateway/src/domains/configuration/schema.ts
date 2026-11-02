@@ -105,6 +105,15 @@ const UpstreamsSchema = z.union([UpstreamSchema, z.array(UpstreamSchema).min(1)]
 export const CrossSiteSchema = z.enum(['navigation', 'strict'])
 export type CrossSitePolicy = z.infer<typeof CrossSiteSchema>
 
+/**
+ * The host an upstream receives.
+ *
+ * `address` is the address of the upstream, `original` is the host the
+ * caller asked for.
+ */
+export const UpstreamHostSchema = z.enum(['address', 'original'])
+export type UpstreamHost = z.infer<typeof UpstreamHostSchema>
+
 /** A route of the configuration file. */
 export const RouteSchema = z.strictObject({
   id: RouteIdSchema,
@@ -172,6 +181,17 @@ export const RouteSchema = z.strictObject({
    */
   forwardAuthorization: z.boolean().optional(),
   /**
+   * The host the upstream receives.
+   *
+   * `address` sends the address of the upstream: the upstream is reached
+   * at its own name, and it knows the name it answers under. `original`
+   * sends the host the caller asked for: an application that answers
+   * under a public name — an issuer of tokens, a console — must see the
+   * name it is reached under, and the name it is reached under is the
+   * name of the deployment.
+   */
+  upstreamHost: UpstreamHostSchema.default('address'),
+  /**
    * How long a decision of Access is cached for the route, in
    * milliseconds.
    *
@@ -237,6 +257,13 @@ export const DefaultsSchema = z.strictObject({
    */
   forwardAuthorization: z.boolean().default(false),
   /**
+   * The default host the upstreams of the routes that do not say
+   * otherwise receive.
+   *
+   * The default is **address**: the upstream is reached at its own name.
+   */
+  upstreamHost: UpstreamHostSchema.default('address'),
+  /**
    * The default lifetime of a cached decision of access.
    *
    * When it is not set, the lifetime of the environment
@@ -274,11 +301,39 @@ export const GATEWAY_ENDPOINTS = {
 /** The paths the gateway serves itself. */
 export const GATEWAY_RESERVED_PATHS: readonly string[] = Object.values(GATEWAY_ENDPOINTS)
 
+/**
+ * The name of the gateway itself.
+ *
+ * A deployment where the gateway is the only service of the platform has
+ * no name of its own: every name is its name. A deployment where the
+ * gateway is the front door of a platform names the names it serves, and
+ * the paths the gateway serves itself belong to those names and to no
+ * other name.
+ */
+export const GatewayHostSchema = z
+  .string()
+  .min(1)
+  .max(253)
+  .refine((value) => !value.includes('*') && !value.includes('/') && !value.includes(':'), {
+    message: 'a name of the gateway is a name, not a pattern',
+  })
+
 /** The whole configuration file. */
 export const GatewayConfigSchema = z
   .strictObject({
-    version: z.literal(1),
+    version: z.union([z.literal(1), z.literal(2)]),
     defaults: DefaultsSchema.prefault({}),
+    /**
+     * The names the gateway serves itself on.
+     *
+     * An empty list means every name: the gateway is the only service of
+     * the deployment. A list means the gateway is the front door of a
+     * platform, and the paths it serves itself — the login, the callback,
+     * the logout, the document of the API — belong to those names: on
+     * another name, the path belongs to the service that is reached under
+     * that name.
+     */
+    hosts: z.array(GatewayHostSchema).default([]),
     /**
      * Additional paths the gateway reserves for itself. They are never
      * routed to an upstream. The paths the gateway always serves itself are
@@ -387,6 +442,7 @@ export function effectivePolicy(
   replayMaxBytes: number
   crossSite: CrossSitePolicy
   forwardAuthorization: boolean
+  upstreamHost: UpstreamHost
   accessCacheTtlMs?: number
   accessStaleGraceMs: number
   accessCheck: boolean
@@ -410,6 +466,7 @@ export function effectivePolicy(
     replayMaxBytes: route.replayMaxBytes ?? defaults.replayMaxBytes ?? environment.replayMaxBytes,
     crossSite: route.crossSite ?? defaults.crossSite,
     forwardAuthorization: route.forwardAuthorization ?? defaults.forwardAuthorization,
+    upstreamHost: route.upstreamHost ?? defaults.upstreamHost,
     accessCacheTtlMs: route.accessCacheTtlMs ?? defaults.accessCacheTtlMs,
     accessStaleGraceMs:
       route.accessStaleGraceMs ?? defaults.accessStaleGraceMs ?? environment.accessStaleGraceMs,

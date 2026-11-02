@@ -27,6 +27,14 @@ export interface ListenerOptions {
   host: string
   /** The port the listener binds to. */
   port: number
+  /**
+   * The certificate of the deployment.
+   *
+   * The listener serves TLS when it has a certificate, and the certificate
+   * of a deployment arrives after the listener started: the certificate is
+   * given to the listener again with `setCertificate`.
+   */
+  tls?: { cert: string; key: string }
   /** The websockets of the runtime, when the deployment has them. */
   websocket?: {
     /** The handlers of the connections. */
@@ -47,6 +55,14 @@ export interface StartedListener {
   port: number
   /** The url of the listener. */
   url: string
+  /**
+   * Gives the certificate of the deployment to the listener.
+   *
+   * The certificate is loaded when it is renewed, and the connections that
+   * are open are not closed: the certificate of the next connection is the
+   * new one.
+   */
+  setCertificate: (certificate: { cert: string; key: string } | null) => void
   /**
    * The address of the peer of a request.
    *
@@ -69,13 +85,17 @@ export function startListener(options: ListenerOptions): StartedListener {
   const server = Bun.serve({
     port: options.port,
     hostname: options.host,
+    ...(options.tls ? { tls: options.tls } : {}),
     // The idle timeout of the connections of the runtime. The long lived
     // streams (the events of an upstream) keep the connection busy.
     idleTimeout: 120,
     fetch(request, bunServer) {
       // The upgrade of a websocket connection is a capability of the
       // runtime: the application hands it to the domain of the websockets.
-      const env = { upgrade: new BunClientUpgrade(bunServer as unknown as Bun.Server<unknown>) }
+      const env = {
+        upgrade: new BunClientUpgrade(bunServer as unknown as Bun.Server<unknown>),
+        protocol: options.tls ? ('https' as const) : ('http' as const),
+      }
       return options.app.handle(request, env as never)
     },
     ...(options.websocket
@@ -99,7 +119,13 @@ export function startListener(options: ListenerOptions): StartedListener {
 
   return {
     port: server.port ?? 0,
-    url: `http://${options.host}:${server.port}`,
+    url: `${options.tls ? 'https' : 'http'}://${options.host}:${server.port}`,
+    setCertificate: (certificate: { cert: string; key: string } | null) => {
+      if (certificate === null) return
+      // The reload carries the certificate alone: the rest of the server
+      // is the server that is already running.
+      server.reload({ tls: certificate } as unknown as Parameters<typeof server.reload>[0])
+    },
     peerAddress: (request: Request) => {
       const address = server.requestIP(request)
       return address?.address ?? '0.0.0.0'

@@ -18,6 +18,13 @@ import {
   PostgresSessionStore,
   RedisSessionStore,
 } from '../domains/authentication/adapters'
+import {
+  AcmeCertificates,
+  MemoryCertificateStore,
+  type CertificateStore,
+  type DeploymentCertificate,
+} from '../domains/tls'
+import { AcmeAuthority, RedisCertificateStore } from '../domains/tls/adapters'
 import { OidcClient } from '../domains/authentication'
 import { ConfigurationStore } from '../domains/configuration'
 import type { RouteTableStore } from '../domains/configuration'
@@ -44,6 +51,7 @@ import { createWebSocketHandlers } from '../platform/bun/client-upgrade'
 import { BunHttpTransport } from '../platform/bun/http-transport'
 import { WsUpstreamHandshake } from '../platform/bun/upstream-websocket'
 import { startListener, type StartedListener } from '../platform/bun/listener'
+import { CertificateManager } from './tls'
 import { drain as drainRuntime } from './lifecycle'
 import { VERSION } from './version'
 import { createRedisClient, isRedisUrl, withRetries } from '../platform/redis'
@@ -98,6 +106,13 @@ export interface GatewayRuntime {
   drain: (reason: string) => Promise<void>
   /** The listener of the gateway. */
   listener: StartedListener
+  /**
+   * The listener of TLS, when the deployment has a certificate.
+   *
+   * It is absent until the deployment has a certificate: a listener cannot
+   * become a listener of TLS after it started.
+   */
+  tlsListener: () => StartedListener | null
   /** Closes everything the runtime owns. */
   close: () => Promise<void>
 }
@@ -141,6 +156,21 @@ export interface SharedStateConnectionOptions {
  * returns nothing: the state stays in the memory of the process, which a
  * production deployment refuses.
  */
+/**
+ * Builds the store of the certificate of the deployment.
+ *
+ * The certificate lives in the shared state, so the replicas of a
+ * deployment serve the same certificate and one of them obtains it.
+ */
+export function certificateStoreOf(
+  connection: SharedStateConnection | undefined,
+  keyPrefix: string
+): CertificateStore {
+  return connection?.kind === 'redis'
+    ? new RedisCertificateStore({ client: connection.client, keyPrefix })
+    : new MemoryCertificateStore()
+}
+
 export async function connectSharedState(
   options: SharedStateConnectionOptions
 ): Promise<SharedStateConnection | undefined> {
@@ -392,6 +422,47 @@ export async function createRuntime(
             maxSessions: settings.session.maxSessions,
           })
 
+  // The certificate of the deployment. It lives in the shared state, so
+  // the replicas of the deployment serve the same certificate and one of
+  // them obtains it.
+  const certificateStore = certificateStoreOf(sharedConnection, settings.sharedState.keyPrefix)
+
+  // The authority of the certificates. It is asked for a certificate when
+  // the deployment has none, and the account of the deployment is a
+  // secret: the replicas of the deployment share it.
+  const acme =
+    settings.tls.names.length > 0 && !settings.tls.certificateFile && settings.tls.acmeAccountKey
+      ? new AcmeCertificates({
+          authority: new AcmeAuthority({
+            directoryUrl: settings.tls.acmeDirectoryUrl,
+            accountKey: settings.tls.acmeAccountKey,
+            email: settings.tls.acmeEmail,
+          }),
+          names: settings.tls.names,
+          store: certificateStore,
+          challenge: settings.tls.acmeChallenge,
+          ...(settings.tls.acmeDnsHookUrl
+            ? {
+                dns: {
+                  put: async (name: string, value: string): Promise<void> => {
+                    await fetch(`${settings.tls.acmeDnsHookUrl}/${encodeURIComponent(name)}`, {
+                      method: 'PUT',
+                      headers: { 'content-type': 'text/plain' },
+                      body: value,
+                    })
+                  },
+                  remove: async (name: string): Promise<void> => {
+                    await fetch(`${settings.tls.acmeDnsHookUrl}/${encodeURIComponent(name)}`, {
+                      method: 'DELETE',
+                    })
+                  },
+                },
+              }
+            : {}),
+          log: (message, details) => logger.info(message, details),
+        })
+      : undefined
+
   const oidc = new OidcClient({
     issuer: settings.oidc.issuer,
     clientId: settings.oidc.clientId,
@@ -627,6 +698,9 @@ export async function createRuntime(
   // The address of the peer of a request is known by the listener, which is
   // built after the application: the holder is filled in below.
   const peer = { address: (_request: Request) => '0.0.0.0' }
+  // The certificate the deployment serves. The manager of the certificate
+  // fills it in when the deployment has one.
+  const certificates: { current: DeploymentCertificate | null } = { current: null }
   // The gateway stops accepting new work when it drains.
   const state = { draining: false }
   // The id of the replica. It names the heartbeat of the replica in the
@@ -661,6 +735,14 @@ export async function createRuntime(
     },
     externalProto: settings.network.externalProto,
     trustedProxyHops: settings.network.trustedProxyHops,
+    ...(settings.tls.names.length > 0
+      ? {
+          tls: {
+            current: () => certificates.current,
+            store: certificateStore,
+          },
+        }
+      : {}),
     metricsToken: settings.observability.metricsToken,
     observer,
     logger,
@@ -670,21 +752,59 @@ export async function createRuntime(
   }
 
   const app = createGatewayApp(dependencies)
+  const websocketOptions = {
+    handlers: createWebSocketHandlers(),
+    maxPayloadLength: settings.websockets.maxPayloadBytes,
+    backpressureLimitBytes: settings.websockets.backpressureLimitBytes,
+    idleTimeoutSeconds: settings.websockets.idleTimeoutSeconds,
+  }
   const listener = startListener({
     app: createGatewayHandler(app),
     host: settings.network.host,
     port: settings.network.port,
-    websocket: {
-      handlers: createWebSocketHandlers(),
-      maxPayloadLength: settings.websockets.maxPayloadBytes,
-      backpressureLimitBytes: settings.websockets.backpressureLimitBytes,
-      idleTimeoutSeconds: settings.websockets.idleTimeoutSeconds,
-    },
+    websocket: websocketOptions,
     onError: (error) => logger.error('the listener reported an error', { error }),
   })
   peer.address = listener.peerAddress
 
+  // The listener of TLS. It starts when the deployment has a certificate:
+  // a listener cannot become a listener of TLS after it started.
+  let tlsListener: StartedListener | null = null
+  const serveCertificate = (certificate: DeploymentCertificate): void => {
+    if (tlsListener !== null) {
+      tlsListener.setCertificate({ cert: certificate.cert, key: certificate.key })
+      return
+    }
+    tlsListener = startListener({
+      app: createGatewayHandler(app),
+      host: settings.network.host,
+      port: settings.tls.port,
+      tls: { cert: certificate.cert, key: certificate.key },
+      websocket: websocketOptions,
+      onError: (error) => logger.error('the listener of TLS reported an error', { error }),
+    })
+    logger.info('the gateway serves TLS', { port: settings.tls.port })
+  }
+
+  // The certificate of the deployment. It is read when the runtime starts
+  // and it is renewed before it expires.
+  const certificateManager = new CertificateManager({
+    store: certificateStore,
+    ...(acme ? { acme } : {}),
+    ...(settings.tls.certificateFile
+      ? { certificateFile: settings.tls.certificateFile, names: settings.tls.names }
+      : {}),
+    onCertificate: (certificate) => {
+      certificates.current = certificate
+      serveCertificate(certificate)
+    },
+    logger,
+  })
+  await certificateManager.start()
+
   const closeResources = async (): Promise<void> => {
+    certificateManager.stop()
+    await tlsListener?.stop(false)
     await access.close()
     await sharedConnection?.client.close()
     await sessionConnection?.client.close()
@@ -714,6 +834,7 @@ export async function createRuntime(
     websockets,
     isDraining: () => state.draining,
     listener,
+    tlsListener: () => tlsListener,
     drain: async (reason: string) => {
       await drainRuntime(
         {

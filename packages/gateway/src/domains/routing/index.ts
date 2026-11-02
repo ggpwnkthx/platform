@@ -18,6 +18,7 @@ export {
   RewriteTemplateSchema,
   RouteIdSchema,
   normalizeHost,
+  parseHostPattern,
 } from './schema'
 
 export {
@@ -25,6 +26,7 @@ export {
   compileRoute,
   detectConflicts,
   detectShadowedRoutes,
+  hostMatches,
   matchRoute,
   placeholderNames,
   sortRoutes,

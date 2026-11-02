@@ -5,8 +5,8 @@
  * the dispatcher runs the pipeline of the specification:
  *
  * 1. the configuration is captured
- * 2. a path that is reserved is refused
- * 3. the forwarding context is computed
+ * 2. the forwarding context is computed
+ * 3. a path that is reserved is refused
  * 4. the route is matched, **before** the limiters
  * 5. the global limit and the limit of the route are applied
  * 6. a request that matched no route is refused
@@ -142,14 +142,7 @@ async function dispatchRequest(
   const path = url.pathname
   const method = context.req.method
 
-  // 2. The paths the gateway serves itself are reserved, whatever the
-  // configuration says: a route must not be able to shadow them.
-  if (isReservedPath(snapshot, path)) {
-    recordOutcome(dependencies, UNMATCHED_ROUTE, method, 404, started)
-    return jsonError(404, 'not_found', 'unknown reserved path')
-  }
-
-  // 3. The peer address is the basis of the trusted proxy evaluation, and
+  // 2. The peer address is the basis of the trusted proxy evaluation, and
   // the client address is the key of the limiters.
   const forwarding = resolveForwardingContext({
     peerAddress: dependencies.peerAddress(context.req.raw),
@@ -159,6 +152,15 @@ async function dispatchRequest(
     externalProto: dependencies.externalProto,
   })
   context.set('forwarding', forwarding)
+
+  // 3. The paths the gateway serves itself are reserved, whatever the
+  // configuration says: a route must not be able to shadow them. The
+  // reservation belongs to the names of the gateway: on another name, the
+  // path belongs to the service that is reached under that name.
+  if (isReservedPath(snapshot, path, forwarding.host)) {
+    recordOutcome(dependencies, UNMATCHED_ROUTE, method, 404, started)
+    return jsonError(404, 'not_found', 'unknown reserved path')
+  }
 
   // The trace of the request: the context of the caller when it is well
   // formed, and a new one otherwise. The gateway writes its own span, so
@@ -466,6 +468,7 @@ async function dispatchRequest(
         : undefined,
       gatewayCookies: dependencies.gatewayCookies,
       forwardAuthorization: route.forwardAuthorization,
+      upstreamHost: route.upstreamHost,
     })
     const outcome = await dependencies.websockets.handle(
       context.req.raw,
@@ -544,6 +547,7 @@ async function dispatchRequest(
       : undefined,
     gatewayCookies: dependencies.gatewayCookies,
     forwardAuthorization: route.forwardAuthorization,
+    upstreamHost: route.upstreamHost,
   })
 
   const result = await dependencies.exchanges.execute({

@@ -339,6 +339,15 @@ export const EnvSchema = z.object({
 
   GATEWAY_TRUSTED_PROXIES: listEnv(),
   /**
+   * The names the gateway answers its own endpoints on.
+   *
+   * An empty list means every name: the gateway is the only service of the
+   * deployment. A deployment where the gateway is the front door of the
+   * platform names its own names, and its endpoints — the login, the
+   * callback, the document of the API — answer on those names and on no
+   * other: the console has an endpoint of its own at the same place.
+   */
+  /**
    * The number of trusted proxies that are in front of the gateway.
    *
    * Every one of them appends the address it observed to the chain of
@@ -352,6 +361,36 @@ export const EnvSchema = z.object({
    */
   GATEWAY_TRUSTED_PROXY_HOPS: intEnv(1, { min: 1, max: 16 }),
   GATEWAY_EXTERNAL_PROTO: z.enum(['http', 'https']).default('http'),
+  /**
+   * The names the certificate of the deployment covers.
+   *
+   * An empty list means the gateway does not terminate TLS: the ingress of
+   * the deployment does.
+   */
+  GATEWAY_TLS_NAMES: listEnv(),
+  /**
+   * The port of the listener of TLS.
+   *
+   * Zero is a port the machine draws: a deployment that does not care
+   * about the port — a test — lets the machine choose one.
+   */
+  GATEWAY_TLS_PORT: intEnv(443, { min: 0, max: 65_535 }),
+  /** The directory of the authority of the certificates. */
+  GATEWAY_ACME_DIRECTORY: z.string().default('https://acme-v02.api.letsencrypt.org/directory'),
+  /** The contact of the account of the deployment. */
+  GATEWAY_ACME_EMAIL: z.string().optional(),
+  /** The key of the account of the deployment, in PEM. */
+  GATEWAY_ACME_ACCOUNT_KEY: z.string().optional(),
+  /** The challenge the deployment answers. */
+  GATEWAY_ACME_CHALLENGE: z.enum(['http-01', 'dns-01']).default('http-01'),
+  /** The writer of the records of DNS, for the `dns-01` challenge. */
+  GATEWAY_ACME_DNS_HOOK_URL: z.string().optional(),
+  /** The number of days before the expiry that the certificate is renewed. */
+  GATEWAY_TLS_RENEWAL_DAYS: intEnv(30, { min: 1, max: 365 }),
+  /** The file of the certificate of the deployment, in PEM. */
+  GATEWAY_TLS_CERT_FILE: z.string().optional(),
+  /** The file of the private key of the certificate of the deployment. */
+  GATEWAY_TLS_KEY_FILE: z.string().optional(),
   GATEWAY_ALLOWED_ORIGINS: listEnv(),
   GATEWAY_CSRF_STRICT: boolEnv(),
 
@@ -418,6 +457,26 @@ export const EnvSchema = z.object({
  * names of its variables live here as well, so that the check of the
  * documentation of the environment sees them.
  */
+/**
+ * The environment of the responder of the challenges.
+ *
+ * The responder is a process of its own: it answers the challenges of the
+ * authority of the certificates on the plain HTTP of the deployment, and it
+ * reads them from the shared state. It needs the address of the state and
+ * nothing else.
+ */
+export const ChallengeEnvSchema = z.object({
+  NODE_ENV: z.enum(['development', 'production']).default('development'),
+  /** The address the responder binds to. */
+  GATEWAY_CHALLENGE_HOST: z.string().default('0.0.0.0'),
+  /** The port the responder listens on. */
+  GATEWAY_CHALLENGE_PORT: intEnv(80, { min: 1, max: 65_535 }),
+  /** The address of the shared state of the deployment. */
+  GATEWAY_CHALLENGE_STATE_URL: z.string(),
+  /** The prefix of the keys of the shared state. */
+  GATEWAY_CHALLENGE_STATE_KEY_PREFIX: z.string().default('gateway'),
+})
+
 export const ControlEnvSchema = z.object({
   NODE_ENV: z.string().optional(),
 

@@ -64,13 +64,14 @@ export const DOMAIN_DEPENDENCIES: Record<string, readonly string[]> = {
   'rate-limiting': [],
   proxying: ['forwarding'],
   websockets: ['forwarding'],
+  tls: [],
   control: ['configuration', 'authentication', 'workspace-access'],
 }
 
 /** The rules of the boundaries of the gateway. */
 export const RULES: ArchitectureRules = {
   domainDependencies: DOMAIN_DEPENDENCIES,
-  entryPoints: ['src/main.ts', 'src/control-main.ts'],
+  entryPoints: ['src/main.ts', 'src/control-main.ts', 'src/challenge-main.ts'],
   forbiddenDomainPackages: [
     'hono',
     'bun',

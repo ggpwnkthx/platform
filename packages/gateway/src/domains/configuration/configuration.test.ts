@@ -385,7 +385,7 @@ describe('the publication of a configuration', () => {
   test('an invalid configuration keeps the last good one', () => {
     const configuration = store()
     configuration.apply(baseConfig())
-    const result = configuration.apply(baseConfig({ version: 2 }))
+    const result = configuration.apply(baseConfig({ version: 3 }))
     expect(result.ok).toBe(false)
     expect(configuration.snapshot?.revision).toBe(1)
     expect(configuration.lastError?.message).toContain('invalid configuration')
@@ -502,6 +502,70 @@ describe('the publication of a configuration', () => {
     expect(isReservedPath(snapshot, '/healthz')).toBe(true)
     expect(isReservedPath(snapshot, '/metrics/')).toBe(true)
     expect(isReservedPath(snapshot, '/')).toBe(false)
+  })
+
+  test('the paths of the gateway are reserved on the names of the gateway', () => {
+    const configuration = store()
+    configuration.apply(baseConfig({ version: 2, hosts: ['api.example.com'] }))
+    const snapshot = configuration.snapshot!
+    expect(isReservedPath(snapshot, '/auth/callback', 'api.example.com')).toBe(true)
+    expect(isReservedPath(snapshot, '/auth/callback', 'console.example.com')).toBe(false)
+  })
+
+  test('a route that claims a path of the gateway on another name is accepted', () => {
+    const configuration = store()
+    const result = configuration.apply(
+      baseConfig({
+        version: 2,
+        hosts: ['api.example.com'],
+        routes: [
+          {
+            id: 'console',
+            match: { host: 'console.example.com', path: '/auth/callback' },
+            upstream: 'http://upstream-b:3000',
+          },
+        ],
+      })
+    )
+    expect(result.ok).toBe(true)
+  })
+
+  test('a route that claims a path of the gateway on the name of the gateway is refused', () => {
+    const configuration = store()
+    const result = configuration.apply(
+      baseConfig({
+        version: 2,
+        hosts: ['api.example.com'],
+        routes: [
+          {
+            id: 'console',
+            match: { host: 'api.example.com', path: '/auth/callback' },
+            upstream: 'http://upstream-b:3000',
+          },
+        ],
+      })
+    )
+    expect(result.ok).toBe(false)
+    const details = result.ok ? [] : result.error.details
+    expect(details.join('\n')).toContain('claims the reserved path')
+  })
+
+  test('a route that claims a path of the gateway on a name of the gateway is refused', () => {
+    const configuration = store()
+    const result = configuration.apply(
+      baseConfig({
+        version: 2,
+        hosts: ['api.example.com'],
+        routes: [
+          {
+            id: 'console',
+            match: { host: '*.example.com', path: '/auth/callback' },
+            upstream: 'http://upstream-b:3000',
+          },
+        ],
+      })
+    )
+    expect(result.ok).toBe(false)
   })
 })
 

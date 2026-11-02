@@ -13,6 +13,8 @@ import { serializeCookie } from '../domains/authentication'
 import { GATEWAY_ENDPOINTS } from '../domains/configuration'
 import { gatewayDocument } from './openapi'
 import { resolveForwardingContext } from '../domains/forwarding'
+import { normalizeHost } from '../domains/routing'
+import { coversName } from '../domains/tls'
 import { UNMATCHED_ROUTE } from '../observability'
 import type { GatewayDependencies } from './dependencies'
 import { dispatch } from './dispatcher'
@@ -79,6 +81,25 @@ function forwardingOf(
 }
 
 /**
+ * The names of the gateway itself.
+ *
+ * A deployment where the gateway is the only service of the platform has
+ * no name of its own to answer on: every name is its name. A deployment
+ * where the gateway is the front door of a platform names its names, and
+ * the endpoints of the gateway answer on those names and on no other: the
+ * console has an endpoint of its own at the same place, and a route of the
+ * table claims the paths of the gateway on the names it owns.
+ *
+ * The names are read from the configuration: the table of the routes is
+ * the one place that knows the names of the deployment.
+ */
+function isOwnHost(host: string, ownHosts: readonly string[]): boolean {
+  if (ownHosts.length === 0) return true
+  const normalized = normalizeHost(host)
+  return ownHosts.some((own) => normalizeHost(own) === normalized)
+}
+
+/**
  * The application, as the listener of the platform sees it.
  *
  * The platform does not know the framework of the application: the
@@ -134,28 +155,85 @@ export function createGatewayApp(dependencies: GatewayDependencies): Hono<Gatewa
     }
   })
 
+  // The challenges of the authority of the certificates. The authority
+  // asks the deployment to prove that it owns a name, and the answer is
+  // the key authorization of the challenge: the deployment publishes it
+  // when the authority asks for a certificate.
+  app.get('/.well-known/acme-challenge/:token', async (context) => {
+    const store = dependencies.tls?.store
+    if (!store) return new Response('not found', { status: 404 })
+    const authorization = await store.challenge(context.req.param('token'))
+    if (authorization === null) return new Response('not found', { status: 404 })
+    return new Response(authorization, {
+      headers: { 'content-type': 'application/octet-stream' },
+    })
+  })
+
+  // The redirect of the plain listener. A caller that asks for a name of
+  // the certificate of the deployment over plain HTTP is sent to the same
+  // name over TLS: the certificate is the reason the deployment has a
+  // name, and the name is served over TLS.
+  app.use('*', async (context, next) => {
+    const certificate = dependencies.tls?.current()
+    if (certificate === null || certificate === undefined) {
+      await next()
+      return
+    }
+    if (context.env.protocol === 'https') {
+      await next()
+      return
+    }
+    const host = context.req.header('host') ?? ''
+    if (!coversName(certificate, host)) {
+      await next()
+      return
+    }
+    const url = new URL(context.req.url)
+    return new Response(null, {
+      status: 301,
+      headers: { location: `https://${host}${url.pathname}${url.search}` },
+    })
+  })
+
   // The endpoints of the gateway. They are matched before the route table
   // is consulted.
+  //
+  // The endpoints that the callers reach — the login, the callback, the
+  // logout, the document of the API — answer on the names of the gateway
+  // and on no other name. On another name, the path belongs to the
+  // service that is reached under that name: the request goes to the route
+  // table, and the route of the console claims the path of the console.
+  const ownName = (context: Context<GatewayEnv>): boolean => {
+    const snapshot = dependencies.config.snapshot
+    if (!snapshot || snapshot.hosts.length === 0) return true
+    const forwarding = forwardingOf(context, dependencies)
+    return isOwnHost(forwarding.host, snapshot.hosts)
+  }
+
   app.get(GATEWAY_ENDPOINTS.health, (context) => healthHandler(context, dependencies))
   app.get(GATEWAY_ENDPOINTS.ready, (context) => readyHandler(context, dependencies))
   app.get(GATEWAY_ENDPOINTS.metrics, (context) => metricsHandler(context, dependencies))
-  app.get(GATEWAY_ENDPOINTS.login, async (context) => {
+  app.get(GATEWAY_ENDPOINTS.login, async (context, next) => {
+    if (!ownName(context)) return await next()
     context.set('forwarding', forwardingOf(context, dependencies))
     return await loginHandler(context, dependencies)
   })
-  app.get(GATEWAY_ENDPOINTS.callback, (context) => {
+  app.get(GATEWAY_ENDPOINTS.callback, async (context, next) => {
+    if (!ownName(context)) return await next()
     context.set('forwarding', forwardingOf(context, dependencies))
     return callbackHandler(context, dependencies)
   })
-  app.get(GATEWAY_ENDPOINTS.logout, (context) => {
+  app.get(GATEWAY_ENDPOINTS.logout, async (context, next) => {
+    if (!ownName(context)) return await next()
     context.set('forwarding', forwardingOf(context, dependencies))
     return logoutHandler(context, dependencies)
   })
-  app.get(GATEWAY_ENDPOINTS.openapi, (context) =>
-    context.json(gatewayDocument(dependencies.version), 200, {
+  app.get(GATEWAY_ENDPOINTS.openapi, async (context, next) => {
+    if (!ownName(context)) return await next()
+    return context.json(gatewayDocument(dependencies.version), 200, {
       'cache-control': 'public, max-age=300',
     })
-  )
+  })
 
   // Everything else is dispatched.
   app.all('*', async (context) => {

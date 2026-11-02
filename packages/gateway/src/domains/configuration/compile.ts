@@ -13,7 +13,13 @@
  * get the same answer, because they call the same function.
  */
 
-import { claimsReservedPath, detectConflicts, type CompiledRoute } from '../routing'
+import {
+  claimsReservedPath,
+  detectConflicts,
+  hostMatches,
+  parseHostPattern,
+  type CompiledRoute,
+} from '../routing'
 import {
   ConfigValidationError,
   GATEWAY_RESERVED_PATHS,
@@ -28,6 +34,8 @@ export interface CompiledTable {
   routes: CompiledRoute<EffectiveRoute>[]
   /** The paths the gateway reserves for itself. */
   reservedPaths: string[]
+  /** The names the gateway serves itself on. */
+  hosts: string[]
   /** The ranges whose forwarding headers are trusted. */
   trustedProxies: string[]
 }
@@ -103,11 +111,15 @@ export function compileTable(
   const routes = compileRoutes(config.routes, config.defaults, defaults)
   const conflicts = detectConflicts(routes)
   for (const route of routes) {
-    if (claimsReservedPath(route, [...GATEWAY_RESERVED_PATHS, ...config.reservedPaths])) {
-      conflicts.push(
-        `the route "${route.id}" claims the reserved path "${route.definition.path}", which the gateway serves itself`
-      )
-    }
+    if (!claimsReservedPath(route, [...GATEWAY_RESERVED_PATHS, ...config.reservedPaths])) continue
+    // The paths the gateway serves itself belong to the names of the
+    // gateway: on another name, the path belongs to the service that is
+    // reached under that name. A deployment that names no name of its own
+    // is the only service of the deployment, and every name is its name.
+    if (!servesGatewayName(route.definition.host, config.hosts)) continue
+    conflicts.push(
+      `the route "${route.id}" claims the reserved path "${route.definition.path}", which the gateway serves itself`
+    )
   }
   if (conflicts.length > 0) {
     return { ok: false, errors: [], conflicts }
@@ -118,9 +130,24 @@ export function compileTable(
     table: {
       routes,
       reservedPaths: [...config.reservedPaths],
+      hosts: [...config.hosts],
       trustedProxies: effectiveProxies,
     },
   }
+}
+
+/**
+ * Reports whether a route of a host can claim a path of the gateway.
+ *
+ * A route of an exact host claims a path of the gateway when the name of
+ * the gateway is that host. A route of a wildcard covers the names that
+ * end with the suffix of the wildcard, and a route of the catch-all covers
+ * every name.
+ */
+function servesGatewayName(host: string, gatewayHosts: readonly string[]): boolean {
+  if (gatewayHosts.length === 0) return true
+  const pattern = parseHostPattern(host)
+  return gatewayHosts.some((name) => hostMatches(pattern, name))
 }
 
 /** The difference between two route tables. */

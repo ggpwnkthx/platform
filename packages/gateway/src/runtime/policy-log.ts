@@ -51,6 +51,7 @@ export function logActiveConfiguration(logger: Logger, snapshot: ConfigurationSn
       requireUuid: route.workspace ? route.requireUuid : null,
       crossSite: route.crossSite,
       forwardAuthorization: route.forwardAuthorization,
+      upstreamHost: route.upstreamHost,
       websocket: route.websocket,
       maxBodyBytes: route.maxBodyBytes,
       responseMs: route.timeouts.responseMs,

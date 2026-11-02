@@ -181,6 +181,15 @@ export interface UpstreamHeadersOptions {
    */
   forwardAuthorization?: boolean
   /**
+   * The host the upstream receives.
+   *
+   * `address` (the default) sends no host: the address of the upstream is
+   * the host of the request. `original` sends the host the caller asked
+   * for: an application that answers under a public name must see the name
+   * it is reached under.
+   */
+  upstreamHost?: 'address' | 'original'
+  /**
    * The trace context of the request, written as a `traceparent` header.
    *
    * The gateway writes its own span: the header of the caller is never
@@ -223,6 +232,7 @@ export function buildUpstreamHeaders(options: UpstreamHeadersOptions): Headers {
     signature,
     gatewayCookies,
     forwardAuthorization = true,
+    upstreamHost = 'address',
     traceparent,
   } = options
   const headers = new Headers()
@@ -251,6 +261,10 @@ export function buildUpstreamHeaders(options: UpstreamHeadersOptions): Headers {
   headers.set('x-forwarded-proto', forwarding.proto)
   headers.set('x-forwarded-host', forwarding.host)
   headers.set('x-real-ip', forwarding.clientIp)
+
+  // The host of the upstream: the address of the upstream by default, the
+  // name the caller asked for when the route says so.
+  if (upstreamHost === 'original') headers.set('host', forwarding.host)
 
   // The trace of the request: the span of the gateway is the parent of the
   // span of the upstream.

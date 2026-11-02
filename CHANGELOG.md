@@ -236,3 +236,35 @@ names a release names the same one:
 | `packages/gateway/` | `1.0.0` |
 | `packages/access/` | `1.0.0` |
 | `packages/data/` | `1.0.0` |
+### The gateway is the front door of the platform
+
+The gateway was the only service an API caller reached, and the console
+and Access were published beside it. The gateway is the only public
+service of a deployment now: it serves the names of the deployment, and
+it forwards the request to the service that answers under the name the
+caller asked for.
+
+Two things make it possible. The table of the routes names the names of
+the gateway (`hosts`), and the endpoints the gateway serves itself — the
+login, the callback, the logout, the document of the API — answer on
+those names and on no other name: on another name, the path belongs to
+the service that is reached under that name, and the route of the
+console claims the path of the console. A route that forwards to a
+service of the platform sends the name the caller asked for
+(`upstreamHost`), so an issuer of tokens and a console answer under the
+name of the deployment.
+
+### The gateway terminates the TLS of the callers
+
+The gateway did not terminate TLS: a proxy in front of it did. It
+terminates the TLS of the callers when it has a certificate of the
+deployment, and it obtains that certificate itself: it asks an authority
+of certificates for a certificate of the names of the deployment, it
+answers the challenge of the authority, it publishes the certificate in
+the shared state — the replicas of a deployment serve the same
+certificate — and it renews it before it expires, without closing the
+connections that are open.
+
+A deployment that has an edge of its own does not give the gateway a
+certificate, and the gateway serves plain HTTP behind it.
+

@@ -50,6 +50,14 @@ export interface GatewayEnv {
   Bindings: {
     /** The upgrade of a websocket connection, when the deployment has one. */
     upgrade?: ClientUpgradePort
+    /**
+     * The protocol of the connection the request arrived on.
+     *
+     * The gateway serves plain HTTP and TLS at the same time, and the
+     * redirect of the plain listener applies to the requests that arrived
+     * over plain HTTP.
+     */
+    protocol?: 'http' | 'https'
   }
   Variables: GatewayState
 }

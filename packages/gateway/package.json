@@ -30,6 +30,7 @@
     "sessions": "bun run scripts/cli/sessions.ts"
   },
   "dependencies": {
+    "acme-client": "5.4.0",
     "chokidar": "4.0.3",
     "cookie": "2.0.1",
     "hono": "4.13.13",

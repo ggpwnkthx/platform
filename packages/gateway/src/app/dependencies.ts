@@ -10,6 +10,7 @@ import type { AuthenticationService } from '../domains/authentication'
 import type { ConfigurationStore } from '../domains/configuration'
 import type { IdentitySigningKey } from '../domains/forwarding'
 import type { HttpExchangeService } from '../domains/proxying'
+import type { CertificateStore, DeploymentCertificate } from '../domains/tls'
 import type { RequestLimiter } from '../domains/rate-limiting'
 import type { AccessClient } from '../domains/workspace-access'
 import type { WebSocketServicePort } from '../domains/websockets'
@@ -65,6 +66,19 @@ export interface GatewayDependencies {
   browser: BrowserSettings
   /** The protocol the callers use towards the gateway. */
   externalProto: 'http' | 'https'
+  /**
+   * The TLS of the deployment, when the gateway terminates it.
+   *
+   * The certificate of the deployment is the certificate the gateway
+   * serves, and the store holds the answers of the challenges of the
+   * authority of the certificates.
+   */
+  tls?: {
+    /** The certificate the gateway serves, when it has one. */
+    current: () => DeploymentCertificate | null
+    /** The store of the answers of the challenges of the authority. */
+    store: CertificateStore
+  }
   /**
    * The number of trusted proxies that are in front of the gateway.
    *

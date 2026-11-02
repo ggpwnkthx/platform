@@ -9,8 +9,14 @@ import { randomBytes } from 'node:crypto'
 import { invalidRanges, MAX_TRUSTED_PROXY_ADDRESSES, wideRanges } from '../../domains/forwarding'
 import type { RateLimitFallbackMode } from '../../domains/rate-limiting'
 import { isSharedStateUrl } from '../shared-state'
-import { ControlEnvSchema, EnvSchema, pemOf } from './schema'
-import type { ControlSettings, LogLevel, PostgresSettings, RuntimeSettings } from './settings'
+import { ChallengeEnvSchema, ControlEnvSchema, EnvSchema, pemOf } from './schema'
+import type {
+  ChallengeSettings,
+  ControlSettings,
+  LogLevel,
+  PostgresSettings,
+  RuntimeSettings,
+} from './settings'
 import { DEVELOPMENT_ACCESS_URL, DEVELOPMENT_OIDC_ISSUER } from './settings'
 
 /** The environment of the process. */
@@ -376,6 +382,24 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
       trustedProxiesConfigured: env.GATEWAY_TRUSTED_PROXIES !== undefined,
       trustedProxyHops: parsed.GATEWAY_TRUSTED_PROXY_HOPS,
     },
+    tls: {
+      names: parsed.GATEWAY_TLS_NAMES,
+      port: parsed.GATEWAY_TLS_PORT,
+      acmeDirectoryUrl: parsed.GATEWAY_ACME_DIRECTORY,
+      acmeEmail: parsed.GATEWAY_ACME_EMAIL,
+      acmeAccountKey: parsed.GATEWAY_ACME_ACCOUNT_KEY,
+      acmeChallenge: parsed.GATEWAY_ACME_CHALLENGE,
+      acmeDnsHookUrl: parsed.GATEWAY_ACME_DNS_HOOK_URL,
+      renewalDays: parsed.GATEWAY_TLS_RENEWAL_DAYS,
+      ...(parsed.GATEWAY_TLS_CERT_FILE && parsed.GATEWAY_TLS_KEY_FILE
+        ? {
+            certificateFile: {
+              certPath: parsed.GATEWAY_TLS_CERT_FILE,
+              keyPath: parsed.GATEWAY_TLS_KEY_FILE,
+            },
+          }
+        : {}),
+    },
     oidc: {
       issuer: parsed.GATEWAY_OIDC_ISSUER ?? DEVELOPMENT_OIDC_ISSUER,
       clientId: parsed.GATEWAY_OIDC_CLIENT_ID ?? 'gateway',
@@ -512,6 +536,30 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
  * state that is not a server, and it stops: a control plane that nobody
  * controls is worse than no control plane at all.
  */
+/**
+ * Reads the environment of the responder of the challenges.
+ *
+ * The responder needs the address of the shared state and the prefix of
+ * its keys: the challenges of the authority of the certificates are
+ * published there, and the responder answers them.
+ */
+export function readChallengeEnv(env: Env = process.env): ChallengeSettings {
+  const result = ChallengeEnvSchema.safeParse(env)
+  if (!result.success) {
+    const problems = result.error.issues
+      .map((issue) => `${issue.path.join('.') || 'the environment'}: ${issue.message}`)
+      .join('; ')
+    throw new Error(`the environment of the responder is invalid: ${problems}`)
+  }
+  const parsed = result.data
+  return {
+    host: parsed.GATEWAY_CHALLENGE_HOST,
+    port: parsed.GATEWAY_CHALLENGE_PORT,
+    stateUrl: parsed.GATEWAY_CHALLENGE_STATE_URL,
+    keyPrefix: parsed.GATEWAY_CHALLENGE_STATE_KEY_PREFIX,
+  }
+}
+
 export function readControlEnv(env: Env = process.env): ControlSettings {
   const result = ControlEnvSchema.safeParse(env)
   if (!result.success) {

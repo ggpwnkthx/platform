@@ -154,6 +154,22 @@ export interface PostgresSettings {
   autoMigrate: boolean
 }
 
+/**
+ * The settings of the responder of the challenges.
+ *
+ * The responder reads the challenges of the authority of the certificates
+ * from the shared state of the deployment, and it answers them on the
+ * plain HTTP of the deployment.
+ */
+export interface ChallengeSettings {
+  host: string
+  port: number
+  /** The address of the shared state of the deployment. */
+  stateUrl: string
+  /** The prefix of the keys of the shared state. */
+  keyPrefix: string
+}
+
 /** The settings of the state the replicas share. */
 export interface SharedStateSettings {
   url?: string
@@ -191,6 +207,43 @@ export interface NetworkSettings {
    * injected, and the address of the caller is never one of the latter.
    */
   trustedProxyHops: number
+}
+
+/**
+ * The settings of the TLS of the deployment.
+ *
+ * The gateway terminates the TLS of the callers when it has a certificate,
+ * and the certificate comes from an authority of certificates: the names
+ * are the names of the certificate, the key of the account is a secret of
+ * the deployment, and the challenge is the one the deployment answers.
+ */
+export interface TlsSettings {
+  /** The names the certificate covers. An empty list means no TLS. */
+  names: string[]
+  /** The port of the listener of TLS. */
+  port: number
+  /** The directory of the authority of the certificates. */
+  acmeDirectoryUrl: string
+  /** The contact of the account of the deployment. */
+  acmeEmail?: string
+  /** The key of the account of the deployment, in PEM. */
+  acmeAccountKey?: string
+  /** The challenge the deployment answers. */
+  acmeChallenge: 'http-01' | 'dns-01'
+  /** The writer of the records of DNS, for the `dns-01` challenge. */
+  acmeDnsHookUrl?: string
+  /** The number of days before the expiry that the certificate is renewed. */
+  renewalDays: number
+  /**
+   * The files of the certificate of the deployment.
+   *
+   * A deployment that manages its certificate outside the gateway — a
+   * certificate of a secret, a certificate of a renewal outside — gives the
+   * gateway the files of the certificate, and the gateway reads them again
+   * when they change. When the files are there, the gateway does not ask
+   * an authority of certificates for one.
+   */
+  certificateFile?: { certPath: string; keyPath: string }
 }
 
 /** The settings of the browser. */
@@ -355,6 +408,8 @@ export interface RuntimeSettings {
    */
   configSource: ConfigSource
   network: NetworkSettings
+  /** The TLS of the deployment. */
+  tls: TlsSettings
   oidc: OidcSettings
   access: AccessSettings
   session: SessionSettings

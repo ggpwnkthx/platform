@@ -57,7 +57,18 @@ carries a request ID:
 ### 2.2 Gateway endpoints
 
 These paths have their own handlers, matched before the route table. They are
-never forwarded to an upstream, whatever the configuration says.
+never forwarded to an upstream, whatever the configuration says — on a name of
+the gateway. The table names the names of the gateway (`hosts`, §3.1); when it
+names none, every name is the name of the gateway.
+
+On another name, the path belongs to the service that is reached under that
+name: the handler steps aside, the dispatcher runs, and the route of the
+table claims the path. The console of a platform has a callback of its own at
+`/auth/callback`, and the route of the console claims it.
+
+`/healthz`, `/readyz` and `/metrics` answer on every name: the probes of the
+deployment reach the gateway under the name of its application, and the
+metrics endpoint is guarded by its token (§12.4).
 
 | Endpoint | Behavior |
 | --- | --- |
@@ -80,10 +91,10 @@ through to the dispatcher and gets `404 not_found`: the path is reserved.
 Every other request runs these steps, in this order:
 
 1. **Configuration.** No configuration ever loaded → `503 not_ready`.
-2. **Reserved path.** A §2.2 endpoint or a configured `reservedPaths` entry →
-   `404 not_found`.
-3. **Forwarding context.** Compute the peer address, the trusted-proxy
+2. **Forwarding context.** Compute the peer address, the trusted-proxy
    evaluation and the client address (§7.3).
+3. **Reserved path.** A §2.2 endpoint or a configured `reservedPaths` entry
+   on a name of the gateway → `404 not_found`.
 4. **Route match.** Match host and path **before** the limiters, so a route's
    budget is keyed by the route that would handle the request.
 5. **Admission.** `GATEWAY_MAX_PENDING_REQUESTS` bounds the requests inside the
@@ -170,7 +181,8 @@ whole when invalid; it is never half-applied.
 
 ```jsonc
 {
-  "version": 1,
+  "version": 2,
+  "hosts": ["api.example.com"],
   "defaults": {
     "auth": { "mode": "none" },
     "timeouts": { "responseMs": 5000, "firstByteMs": 30000, "bodyMs": 300000 },
@@ -190,13 +202,19 @@ whole when invalid; it is never half-applied.
 }
 ```
 
+Version 1 is a table without `hosts` and without `upstreamHost`: every name
+is the name of the gateway, and every upstream is reached at its own
+address. Version 2 adds the two fields that a deployment where the gateway
+is the front door of a platform needs.
+
 ### 3.1 Fields
 
 Top level (each `defaults.*` value applies to routes that declare none):
 
 | Field | Rule |
 | --- | --- |
-| `version` | Exactly `1`. |
+| `version` | `1` or `2`. |
+| `hosts` | The names the gateway serves itself on (§2.2). An empty list means every name: the gateway is the only service of the deployment. A list means the gateway is the front door of a platform, and the endpoints it serves itself belong to those names. |
 | `defaults.auth` | Authentication policy (§5). |
 | `defaults.timeouts` | Phase budgets (§11.2). |
 | `defaults.maxBodyBytes` | Body limit. |
@@ -229,6 +247,7 @@ Route:
 | `accessStaleGraceMs` | How long, in ms, a decision may be served after Access became unreachable (§6.2). Precedence: route, then `defaults.accessStaleGraceMs`, then `GATEWAY_ACCESS_STALE_GRACE_MS`. `0` disables the grace. |
 | `accessCheck` | Ask Access about a route that names no workspace (§6.3). Default `false` (not checked). Requires an authentication mode other than `none`. |
 | `websocket` | Accept WebSocket upgrades. Default `false`. |
+| `upstreamHost` | The host the upstream receives: `address` (default) sends the address of the upstream, `original` sends the host the caller asked for. An application that answers under a public name — an issuer of tokens, a console — is reached under that name, and it sees it (§7.1). |
 
 An unknown key is a configuration error, never silently ignored.
 
@@ -237,7 +256,9 @@ An unknown key is a configuration error, never silently ignored.
 Loading refuses two routes that could match exactly the same request (same
 host kind and value, same path skeleton); otherwise the response would depend
 on file order. A route that claims a reserved path is refused for the same
-reason.
+reason — on a name of the gateway. The reservation belongs to the names of
+the gateway: on another name, the path belongs to the service that is
+reached under that name, and the route claims it.
 
 ### 3.3 Route precedence
 
@@ -769,6 +790,7 @@ Written by the gateway:
 | `x-forwarded-for` | The chain, client first, the gateway's peer last. |
 | `x-forwarded-proto` | `http` or `https` (the effective protocol). |
 | `x-forwarded-host` | The host the caller used. |
+| `host` | Only when the route sets `upstreamHost: "original"`: the host the caller used. The default is the address of the upstream, and the `Host` header of the caller is always removed. |
 | `x-real-ip` | The caller's address. |
 | `x-gateway-user` | The caller's subject. |
 | `x-gateway-email` | The caller's email, when known. |
@@ -1405,6 +1427,64 @@ is not sent twice.
 
 ---
 
+## 11.5 TLS of the deployment
+
+The gateway terminates the TLS of the callers when it has a certificate of
+the deployment. A deployment whose edge terminates the TLS — the ingress
+of an environment of container apps, which issues and renews the
+certificate of its custom domains — does not give the gateway a
+certificate, and the gateway serves plain HTTP behind it. The certificate is a secret: the private key of the
+deployment is in it, and it lives in the shared state, so the replicas of
+a deployment serve the same certificate.
+
+| Setting | Meaning |
+| --- | --- |
+| `GATEWAY_TLS_NAMES` | The names the certificate covers. An empty list means the gateway does not terminate TLS: the proxy in front of it does. |
+| `GATEWAY_TLS_PORT` | The port of the listener of TLS. Zero is a port the machine draws. |
+| `GATEWAY_ACME_DIRECTORY` | The directory of the authority of the certificates. |
+| `GATEWAY_ACME_EMAIL` | The contact of the account of the deployment. |
+| `GATEWAY_ACME_ACCOUNT_KEY` | The key of the account of the deployment, in PEM. It is a secret: the replicas of a deployment share the account and the budget of the authority. |
+| `GATEWAY_ACME_CHALLENGE` | The challenge the deployment answers: `http-01` or `dns-01`. |
+| `GATEWAY_ACME_DNS_HOOK_URL` | The writer of the records of DNS, for the `dns-01` challenge. |
+| `GATEWAY_TLS_CERT_FILE`, `GATEWAY_TLS_KEY_FILE` | The files of a certificate the deployment manages itself. When they are there, the gateway does not ask an authority for one. |
+
+### 11.5.1 The certificate
+
+The certificate of the deployment comes from the files of the deployment
+when it has them, and from an authority of certificates otherwise. It is
+renewed before it expires, and the listener is given the new certificate
+without closing the connections that are open.
+
+One replica of a deployment obtains the certificate: the authority counts
+the certificates it issues for the same names, and the replicas of a
+deployment take a lease in the shared state before they order one.
+
+### 11.5.2 The challenges
+
+The authority asks the deployment to prove that it owns a name. The
+`http-01` challenge is answered by the deployment on the plain HTTP of the
+name, at `/.well-known/acme-challenge/<token>`: the key authorization of
+the challenge is published in the shared state, and the answer is removed
+when the challenge is over.
+
+The gateway answers the challenge on its own plain listener. A deployment
+whose ingress publishes the plain HTTP of the deployment on a port of its
+own runs the responder (`gateway-challenges`), a small process that reads
+the challenges from the shared state and answers them.
+
+The `dns-01` challenge is answered by the writer of the deployment: the
+gateway asks it to publish the record `_acme-challenge.<name>` and to
+withdraw it. A deployment that answers it does not need the names to live
+in a zone of Azure: the writer is the one that knows the zone.
+
+### 11.5.3 The redirect
+
+The plain listener sends the callers of a name of the certificate to the
+same name over TLS, with a `301`. The callers of another name — the
+services of the deployment, the probes — are answered as they are.
+
+---
+
 ## 12. Operations
 
 ### 12.1 Health, readiness and metrics
@@ -1706,7 +1786,8 @@ gateway role cannot write the route table.
 
 The gateway does not:
 
-- terminate TLS (a proxy in front of it does);
+- terminate TLS when it has no certificate of the deployment: a proxy in
+  front of it does (§11.5);
 - decide access on its own, or check roles;
 - rewrite the request path except as in §11.1.1, or rewrite the body, query
   string or headers;
