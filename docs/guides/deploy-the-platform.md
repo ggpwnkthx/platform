@@ -259,6 +259,8 @@ GATEWAY_TRUSTED_PROXY_HOPS=2   # a load balancer plus an ingress
 
 Name the addresses of the proxies of the deployment, and nothing else. The trust of a range is the trust of every workload of that range: a peer that is inside it chooses the host of the request, the address of the caller and the protocol of the request, so a range that covers a network lets every workload of that network impersonate a caller. A production gateway refuses to start with a range that covers more than sixteen addresses, and it publishes the ranges it trusts in the metrics (`gateway_trusted_proxies`).
 
+On Azure the edge is the ingress of the environment of the container apps, and the gateway is the only service it reaches: the deployment binds the public names of the deployment to the gateway, and the gateway forwards the request to the service that answers under the name the caller asked for. The address of the caller is the address of the ingress until the trust of the edge is decided, and the decision is open.
+
 `ACCESS_ISSUER` must be the address that both browsers and the gateway use, so publish Access under exactly that URL.
 
 ### 11. Start the console

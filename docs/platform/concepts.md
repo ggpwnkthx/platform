@@ -28,6 +28,8 @@ Each row gives a short definition, the service that owns the concept, and the sp
 | Shared state | The Redis or PostgreSQL store where gateway replicas keep sessions, rate-limit windows and cached decisions. | Gateway | [Gateway spec: shared state](../gateway/spec.md#125-shared-state) |
 | Control plane | `gateway-control`: a separate internal process, never routed through the gateway, that manages sessions and route-table revisions in the shared state. | Gateway | [Gateway spec: control plane](../gateway/spec.md#127-control-plane) |
 | Gateway bindings | Data's file that names which gateway routes it trusts and the public key that verifies their identity signatures. | Data | [Data spec: trusted route bindings](../data/spec.md#41-trusted-route-bindings) |
+| Edge | The network front of a deployment: the thing that terminates the TLS of the callers and forwards every request to the gateway, which is the only service they reach. On Azure it is the ingress of the environment of the container apps, with the public names of the deployment bound to it. It is not the gateway. | Deployment | [Azure templates: the names](../../deploy/tofu/azure/edge.tf) |
+| Front door | The name of the application front of the platform: the gateway. The gateway authenticates the caller, asks Access, and forwards the request to the upstream of the route. The edge is in front of it, the gateway is the front door of the platform. | Gateway | [Gateway spec: terms](../gateway/spec.md#1-terms) |
 
 ## Access control
 

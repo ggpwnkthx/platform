@@ -30,6 +30,7 @@ The four processes are separate deployments that talk only over HTTP. No workspa
 - The gateway fails closed: when Access gives no answer, the request is refused.
 - Data verifies the gateway's signature, then asks Access for the caller's access context.
 - The browser reaches the console on its own address. The console signs the caller in against Access directly and reads workspace data through the gateway.
+- The gateway may be the only public service of a deployment: it serves the names of the deployment, and the request of a browser to the console or to the issuer of the tokens is a request to the gateway ([front door](concepts.md#routing)).
 
 ## A request, end to end
 
