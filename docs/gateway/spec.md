@@ -78,6 +78,7 @@ metrics endpoint is guarded by its token (§12.4).
 | `GET /auth/login` | Login limiter, then an OIDC redirect (§5.2). |
 | `GET /auth/callback` | Completes the login (§5.2). |
 | `GET /auth/logout` | Cross-site navigation guard, then destroys the session and answers `302 /`. |
+| `GET /.well-known/acme-challenge/{token}` | The key authorization of a challenge of the authority of the certificates (§11.5.2). `404` when the challenge is not there. |
 | `GET /openapi.json` | The gateway's API description: the paths it serves itself and their response shapes. The API check compares it with the gateway's routes. |
 
 `/auth/login` computes the forwarding context itself (§7.3), like the
