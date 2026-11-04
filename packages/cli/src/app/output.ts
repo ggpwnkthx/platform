@@ -10,6 +10,7 @@
  * when the CLI draws a table differently.
  */
 
+import { cellOf, lineOf, paint } from './color'
 import type { GlobalOptions } from './commands'
 
 /**
@@ -27,7 +28,13 @@ export function render(value: unknown, globals: GlobalOptions, lines?: readonly 
     case 'yaml':
       return yamlOf(value)
     default:
-      return lines && lines.length > 0 ? lines.join('\n') : tableOf(value)
+      // A command that has its own rendering says so, even when it
+      // renders nothing: the answer of a command that draws its own
+      // lines is never the table of its value.
+      if (lines !== undefined) {
+        return lines.map((line) => lineOf(line, globals.color)).join('\n')
+      }
+      return tableOf(value, globals.color)
   }
 }
 
@@ -49,7 +56,7 @@ function quietOf(value: unknown): string {
       .map((entry) => {
         if (entry && typeof entry === 'object') {
           const record = entry as Record<string, unknown>
-          const id = record.id ?? record.key ?? record.slug
+          const id = record.id ?? record.key ?? record.slug ?? record.subject ?? record.name
           return typeof id === 'string' ? id : JSON.stringify(entry)
         }
         return String(entry)
@@ -58,7 +65,7 @@ function quietOf(value: unknown): string {
   }
   if (value && typeof value === 'object') {
     const record = value as Record<string, unknown>
-    const id = record.id ?? record.key ?? record.slug
+    const id = record.id ?? record.key ?? record.slug ?? record.subject ?? record.name
     if (typeof id === 'string') return id
   }
   if (value === null || value === undefined) return ''
@@ -66,11 +73,102 @@ function quietOf(value: unknown): string {
 }
 
 /**
+ * The lines of a table.
+ *
+ * The width of a column is the width of its plain text: the colour of
+ * a cell is painted around the text and adds no width of its own.
+ *
+ * @param columns the names of the columns.
+ * @param rows the cells of the rows.
+ * @param color true when the answer is painted.
+ */
+export function tableLines(
+  columns: readonly string[],
+  rows: readonly (readonly string[])[],
+  color: boolean
+): string[] {
+  if (columns.length === 0) return []
+  const widths = columns.map((column, index) =>
+    Math.max(column.length, ...rows.map((row) => (row[index] ?? '').length))
+  )
+  return [
+    columns
+      .map((column, index) => paint(column.padEnd(widths[index]!), 'bold', color))
+      .join('  ')
+      .trimEnd(),
+    ...rows.map((row) =>
+      row
+        .map((cell, index) => {
+          const painted = cellOf(cell, color)
+          return `${painted}${' '.repeat(widths[index]! - cell.length)}`
+        })
+        .join('  ')
+        .trimEnd()
+    ),
+  ]
+}
+
+/**
+ * The lines of a table of records.
+ *
+ * The columns are the ones the caller names, or every field of the
+ * records when it names none. Every table of the CLI is drawn by this
+ * function, so every table of the CLI lines up the same way.
+ *
+ * @param records the records of the table.
+ * @param columns the columns of the table, when the caller names them.
+ * @param color true when the answer is painted.
+ */
+export function tableOfRecords(
+  records: readonly Record<string, unknown>[],
+  columns: readonly string[] | undefined,
+  color: boolean
+): string[] {
+  if (records.length === 0) return ['there is nothing']
+  const used = columns ?? columnsOf(records)
+  const rows = records.map((record) => used.map((column) => textOf(record[column])))
+  return tableLines(used, rows, color)
+}
+
+/**
+ * The lines of the facts of one thing.
+ *
+ * @param value the thing.
+ * @param color true when the answer is painted.
+ */
+export function factsLines(value: unknown, color: boolean): string[] {
+  if (value === null || value === undefined) return []
+  if (typeof value !== 'object') return [String(value)]
+  return Object.entries(value as Record<string, unknown>).map(
+    ([key, entry]) => `${key}: ${cellOf(textOf(entry), color)}`
+  )
+}
+
+/**
+ * The fields of the records, in the order they appear.
+ *
+ * @param records the records of the table.
+ */
+function columnsOf(records: readonly Record<string, unknown>[]): string[] {
+  const columns: string[] = []
+  for (const record of records) {
+    for (const key of Object.keys(record)) {
+      if (!columns.includes(key)) columns.push(key)
+    }
+  }
+  return columns
+}
+
+/**
  * The answer of a command, as a table.
  *
+ * The width of a column is the width of its plain text: the colour of
+ * a cell is painted around the text and adds no width of its own.
+ *
  * @param value the answer of the command.
+ * @param color true when the answer is painted.
  */
-function tableOf(value: unknown): string {
+function tableOf(value: unknown, color: boolean): string {
   if (value === null || value === undefined) return ''
   if (Array.isArray(value)) {
     if (value.length === 0) return ''
@@ -78,33 +176,12 @@ function tableOf(value: unknown): string {
       return value.map((entry) => String(entry)).join('\n')
     }
     const rows = value as Record<string, unknown>[]
-    const columns: string[] = []
-    for (const row of rows) {
-      for (const key of Object.keys(row)) {
-        if (!columns.includes(key)) columns.push(key)
-      }
-    }
-    const widths = columns.map((column) =>
-      Math.max(column.length, ...rows.map((row) => cellOf(row[column]).length))
-    )
-    const lines = [
-      columns
-        .map((column, index) => column.padEnd(widths[index]!))
-        .join('  ')
-        .trimEnd(),
-      ...rows.map((row) =>
-        columns
-          .map((column, index) => cellOf(row[column]).padEnd(widths[index]!))
-          .join('  ')
-          .trimEnd()
-      ),
-    ]
-    return lines.join('\n')
+    const columns = columnsOf(rows)
+    const cells = rows.map((row) => columns.map((column) => textOf(row[column])))
+    return tableLines(columns, cells, color).join('\n')
   }
   if (typeof value === 'object') {
-    return Object.entries(value as Record<string, unknown>)
-      .map(([key, entry]) => `${key}: ${cellOf(entry)}`)
-      .join('\n')
+    return factsLines(value, color).join('\n')
   }
   return String(value)
 }
@@ -114,7 +191,7 @@ function tableOf(value: unknown): string {
  *
  * @param value the value of the cell.
  */
-function cellOf(value: unknown): string {
+function textOf(value: unknown): string {
   if (value === null || value === undefined) return ''
   if (typeof value === 'string') return value
   if (typeof value === 'number' || typeof value === 'boolean') return String(value)

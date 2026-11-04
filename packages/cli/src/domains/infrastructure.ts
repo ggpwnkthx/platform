@@ -248,20 +248,32 @@ export function destroys(plan: InfrastructurePlan): boolean {
 }
 
 /**
+ * What a plan does, counted.
+ *
+ * The summary is the same everywhere the plan is told about: the line
+ * above the plan, the question of the operator and the answer of the
+ * command.
+ *
+ * @param plan the plan of the deployment.
+ */
+export function countedOf(plan: InfrastructurePlan): string {
+  const destroys = plan.summary.delete + plan.summary.replace
+  return `the plan creates ${plan.summary.create}, changes ${plan.summary.update} and destroys ${destroys}`
+}
+
+/**
  * The question of an apply, as the operator reads it.
  *
  * The question names what the plan does, counted: the operator answers
  * about resources it can count, and the destruction of a resource is
- * named first.
+ * named in it.
  *
  * @param plan the plan of the deployment.
  */
 export function questionOf(plan: InfrastructurePlan): string {
   const destroys = plan.summary.delete + plan.summary.replace
-  const parts: string[] = []
-  if (destroys > 0) parts.push(`destroys ${destroys} resources`)
-  if (plan.summary.create > 0) parts.push(`creates ${plan.summary.create} resources`)
-  if (plan.summary.update > 0) parts.push(`changes ${plan.summary.update} resources`)
-  if (parts.length === 0) return 'the deployment is applied?'
-  return `the plan ${parts.join(', ')}: the deployment is applied?`
+  if (plan.summary.create === 0 && plan.summary.update === 0 && destroys === 0) {
+    return 'the deployment is applied?'
+  }
+  return `${countedOf(plan)}: the deployment is applied?`
 }

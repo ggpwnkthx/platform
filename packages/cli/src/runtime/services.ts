@@ -30,7 +30,22 @@ export function servicesOf(globals: GlobalOptions): Services {
     browser: browserOf(),
     callback: loopbackCallback,
     crypto: machineCrypto,
-    infrastructure: new TofuInfrastructure(environment),
+    infrastructure: new TofuInfrastructure(environment, { progress }),
     files: { profiles: profilesPath, credentials: credentialsPath },
+    progress,
   }
+}
+
+/**
+ * The progress of a command goes on the standard error.
+ *
+ * The answer of a command goes on the standard output, and the
+ * progress of a command goes beside it: a command that takes minutes
+ * tells the operator what it is doing, and a script that reads the
+ * answer reads the answer and nothing else.
+ *
+ * @param text the line of the progress.
+ */
+function progress(text: string): void {
+  process.stderr.write(`${text}\n`)
 }

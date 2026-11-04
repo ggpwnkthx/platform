@@ -43,6 +43,9 @@ platformctl [options] <group> <command> [arguments] [options]
 - The global options have short forms: `-o`, `-q`, `-p`, `-y` and `-h`.
 - Every word after `--` is an argument, whatever it looks like.
 - An option the command does not declare is refused, and so is an option that needs a value and has none. Both refusals end the process with the usage-error status (§6.2).
+- The help of the CLI, of a group and of a command is written on the standard output, and it ends the process with the status of a command that did what it was asked: `--help` and `help` are not refusals.
+- A refusal of a command that does not exist names the command that is the closest to what the reader typed, and a refusal of an option that does not exist names the option that is the closest to it.
+- A refusal may carry a hint: the next thing the reader can try. The hint is written on the standard error, after the refusal, as a line that begins with `hint:`.
 
 ### 2.1 Global options
 
@@ -56,9 +59,12 @@ platformctl [options] <group> <command> [arguments] [options]
 | `--dry-run` | | Print the request the command would send, and send nothing. |
 | `--yes` | `-y` | Do not ask for confirmation. |
 | `--request-id <id>` | | The request ID, sent in the `x-request-id` header. |
+| `--version` | | Print the version of the CLI and end the process. |
 | `--help` | `-h` | Show help for the command. |
 
 `NO_COLOR` in the environment turns colour off, whatever the option says.
+
+The colour of the answer is a reading aid and never a meaning: the answer says the same thing in colour and without it. The colour of a state is the colour of the state — a thing that is fine is green, a thing that is refused or unreachable is red, and a thing that is pending is yellow — and the head of a table is bold. The json and the yaml of the CLI hold no colour at all.
 
 ---
 
@@ -120,6 +126,8 @@ The credential is kept in the machine's credential file, which only its owner ca
 | `doctor` | Checks the profile, the credential and the services' state. |
 
 `status` and `doctor` end with the unreachable-service status when a service does not answer.
+
+`status --watch` shows the state again and again, in the format the reader named, and the screen is cleared on a terminal: a reader who watches the state reads the last state. The reader stops the command with a signal, and the command ends without a refusal.
 
 ### 5.2 Context
 
@@ -229,6 +237,8 @@ The commands of the group take the same options:
 
 The tool is found on the path, or in the variable `TOFU_BINARY`. A machine that holds no tool takes the one of the release of the tool: the CLI reads the archive of the system it runs on, proves it against the digest the release published, and writes the tool in the directory `.platform/tofu/<version>` of the working directory. The variable `TOFU_DOWNLOAD` set to `off` refuses that download, and the variable `TOFU_DIRECTORY` names the directory the tool is written in. The CLI refuses a tool that is older than the version the templates ask for, and it refuses a tool that is not there. The plan is read from the json the tool writes, and the text the tool writes is never parsed: a plan that the CLI reads another way is a plan nobody proved.
 
+The words of the tool are shown on the standard error as they come when the tool takes a while: an operator who sees nothing for minutes does not know whether the CLI is working. The answer of the command stays on the standard output, and the words of the tool are never part of it.
+
 `infra apply` shows the plan and asks before it applies: the plan is what the reader answers about, and the question names what the plan does, counted. `--dry-run` writes the plan and applies nothing.
 
 A resource that a failed apply left in the cloud is not in the state, and the next apply refuses to create it again. `infra import` writes it into the state, and the deployment goes on. The identifier of the resource is the one the cloud names it by.
@@ -285,13 +295,17 @@ The wizard takes the options of the group:
 | `json` | For scripts. Its shape does not change within a major version. |
 | `yaml` | The same facts, for a person to keep. |
 
-`--quiet` prints only the names of the things, which is what a script wants when it pipes the CLI into another command.
+`--quiet` prints only the names of the things, which is what a script wants when it pipes the CLI into another command. The name of a thing is its id, its key, its slug, its subject or its name, in that order, and a thing that holds none of them is printed as it is.
+
+Every table of the CLI is drawn the same way: the columns line up, the head of the table is bold, and a cell that is a state is painted with the colour of the state.
+
+The plan of the deployment says what it does, counted, before it says what it does: the reader sees how many resources the plan touches before the plan itself.
 
 ### 6.2 Exit status
 
 | Status | Meaning |
 | --- | --- |
-| `0` | The command did what it was asked. |
+| `0` | The command did what it was asked. The help of the CLI is such a command. |
 | `1` | The command failed for a reason not listed below. |
 | `2` | Usage error: the command was asked something it cannot answer. |
 | `3` | The caller is not authenticated, or its credential is no longer valid. |
@@ -301,7 +315,7 @@ The wizard takes the options of the group:
 | `7` | A service of the deployment could not be reached. |
 | `8` | The request was refused as invalid. |
 
-The service's error code decides the status; when the code is unknown, the HTTP status of the answer decides it. A failure is a message on standard error, never a stack trace.
+The service's error code decides the status; when the code is unknown, the HTTP status of the answer decides it. A failure is a message on standard error, never a stack trace. A refusal that carries a hint writes the hint on the standard error too, after the refusal.
 
 ---
 

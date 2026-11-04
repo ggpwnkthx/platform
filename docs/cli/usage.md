@@ -21,6 +21,33 @@ bun run cli --help
 
 To build the binary yourself, run `bun run --cwd packages/cli build`; it lands in `dist/platformctl`.
 
+## Find your way
+
+The help of the CLI names every command, and the help of a group names every command of the group:
+
+```bash
+platformctl --help            # the commands of the root and the groups
+platformctl access --help     # the commands of the group
+platformctl access grants list --help
+platformctl help access grants list
+```
+
+`--help` and `help` are not refusals: they print what you asked for and end with the status of a command that did what it was asked. A word that names no command is a refusal, and it names the command that is the closest to what you typed:
+
+```console
+$ platformctl stat
+error: the command "stat" is not one of the CLI
+hint: did you mean "status"?
+```
+
+The version of the CLI is one flag away:
+
+```bash
+platformctl --version
+```
+
+The answer is painted when the terminal paints it: a thing that is fine is green, a thing that is refused or unreachable is red, and the head of a table is bold. Turn the colour off with `--no-color`, or with `NO_COLOR` in the environment. The json and the yaml hold no colour, so a script reads the same bytes either way.
+
 ## Write your first profile
 
 A profile records a deployment's addresses once; the shell environment can override any of them later ([spec §3](spec.md#3-profiles)).

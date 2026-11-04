@@ -19,11 +19,14 @@ import type {
 } from './commands'
 import { GLOBAL_OPTIONS, helpOf, helpOfCommand, helpOfGroup, helpOfRootCommand } from './help'
 import { render } from './output'
+import { beginningOf, closestOf } from './suggest'
 
 /** What the CLI needs to answer. */
 export interface CliRuntime {
   /** The name of the program. */
   readonly name: string
+  /** The version of the program, when it is known. */
+  readonly version?: string
   /** The commands of the root of the CLI. */
   readonly commands: readonly CommandSpec[]
   /** The groups of the commands. */
@@ -41,7 +44,7 @@ export interface CliRuntime {
 }
 
 /** The options of the CLI that take no value. */
-const BOOLEAN_OPTIONS = new Set(['quiet', 'verbose', 'color', 'dry-run', 'yes', 'help'])
+const BOOLEAN_OPTIONS = new Set(['quiet', 'verbose', 'color', 'dry-run', 'yes', 'help', 'version'])
 
 /** The options of the CLI that take a value. */
 const VALUE_OPTIONS = new Set(['output', 'profile', 'request-id'])
@@ -97,8 +100,13 @@ export async function run(runtime: CliRuntime, argv: readonly string[]): Promise
   const words = scanWords(argv)
   const first = words[0]
 
+  if (wantsVersion(argv)) {
+    runtime.out(runtime.version ? `${runtime.name} ${runtime.version}` : runtime.name)
+    return 0
+  }
+
   if (first === undefined) {
-    runtime.out(helpOf(runtime.groups))
+    runtime.out(helpOf(runtime.groups, runtime.commands, runtime.name))
     return 0
   }
 
@@ -114,25 +122,111 @@ export async function run(runtime: CliRuntime, argv: readonly string[]): Promise
 
   const group = runtime.groups.find((candidate) => candidate.name === first)
   if (!group) {
-    throw new CliFailure(
-      `the command "${first}" is not one of the CLI: run ${runtime.name} help for the list`,
-      2,
-      'unknown_command'
-    )
+    throw unknownCommand(runtime, first)
   }
-  if (words.length === 1) {
-    runtime.out(helpOfGroup(group))
-    return 2
+  const rest = words.slice(1)
+  if (rest.length === 0) {
+    runtime.out(helpOfGroup(group, runtime.name))
+    return wantsHelp(argv) ? 0 : 2
   }
-  const found = findOf(group, words.slice(1))
+  if (rest[0] === 'help') {
+    runtime.out(helpOfGroup(group, runtime.name))
+    return 0
+  }
+  const found = findOf(group, rest)
   if (!found) {
-    throw new CliFailure(
-      `the command "${group.name} ${words[1] ?? ''}" is not one of the group: run ${runtime.name} ${group.name} --help`,
-      2,
-      'unknown_command'
-    )
+    throw unknownCommandOfGroup(runtime, group, rest)
   }
   return execute(runtime, found.command, argv, found.skip + 1)
+}
+
+/**
+ * The refusal of a word that names no command of the CLI.
+ *
+ * The refusal names the command that is the closest to the word the
+ * reader typed: a reader who typed a word that is near a command knows
+ * what they meant.
+ *
+ * @param runtime what the CLI needs to answer.
+ * @param word the word of the reader.
+ */
+function unknownCommand(runtime: CliRuntime, word: string): CliFailure {
+  const candidates = [
+    ...runtime.commands.map((command) => command.name),
+    ...runtime.groups.map((group) => group.name),
+  ]
+  const closest = closestOf(word, candidates)
+  const hint = closest
+    ? `did you mean "${closest}"?`
+    : `run ${runtime.name} help for the list of the commands`
+  return new CliFailure(
+    `the command "${word}" is not one of the CLI`,
+    2,
+    'unknown_command',
+    undefined,
+    hint
+  )
+}
+
+/**
+ * The refusal of a word that names no command of a group.
+ *
+ * The refusal names the commands that begin with what the reader typed
+ * when there are some: the reader was reaching for one of them.
+ *
+ * @param runtime what the CLI needs to answer.
+ * @param group the group the reader was in.
+ * @param words the words of the reader.
+ */
+function unknownCommandOfGroup(
+  runtime: CliRuntime,
+  group: GroupSpec,
+  words: readonly string[]
+): CliFailure {
+  const candidates = group.commands.map((command) => command.name)
+  const typed = words.join(' ')
+  const beginnings = beginningOf(words, candidates)
+  const closest = beginnings.length === 0 ? closestOf(typed, candidates) : undefined
+  const outside =
+    closest === undefined
+      ? closestOf(typed, [
+          ...runtime.commands.map((command) => command.name),
+          ...runtime.groups.map((candidate) => candidate.name),
+        ])
+      : undefined
+  const hint =
+    beginnings.length > 0
+      ? `did you mean one of ${beginnings.map((name) => `"${group.name} ${name}"`).join(', ')}?`
+      : closest
+        ? `did you mean "${group.name} ${closest}"?`
+        : outside
+          ? `did you mean "${outside}"?`
+          : `run ${runtime.name} ${group.name} --help for the list of the commands`
+  return new CliFailure(
+    `the command "${group.name} ${typed}" is not one of the group`,
+    2,
+    'unknown_command',
+    undefined,
+    hint
+  )
+}
+
+/**
+ * True when the reader asks for the version of the program.
+ *
+ * @param argv the words of the reader.
+ */
+function wantsVersion(argv: readonly string[]): boolean {
+  return argv.includes('--version')
+}
+
+/**
+ * True when the reader asks for the help.
+ *
+ * @param argv the words of the reader.
+ */
+function wantsHelp(argv: readonly string[]): boolean {
+  return argv.includes('--help') || argv.includes('-h')
 }
 
 /**
@@ -164,7 +258,7 @@ function findOf(
  */
 function helpFor(runtime: CliRuntime, words: readonly string[]): string {
   const groupName = words[0]
-  if (groupName === undefined) return helpOf(runtime.groups)
+  if (groupName === undefined) return helpOf(runtime.groups, runtime.commands, runtime.name)
   const group = runtime.groups.find((candidate) => candidate.name === groupName)
   if (!group) {
     const command = runtime.commands.find((candidate) => candidate.name === groupName)
@@ -172,13 +266,13 @@ function helpFor(runtime: CliRuntime, words: readonly string[]): string {
       const owner = runtime.groups.find((candidate) =>
         candidate.commands.some((entry) => entry.name === command.name)
       )
-      if (owner) return helpOfCommand(owner, command)
+      if (owner) return helpOfCommand(owner, command, runtime.name)
     }
-    return helpOf(runtime.groups)
+    return helpOf(runtime.groups, runtime.commands, runtime.name)
   }
   const found = findOf(group, words.slice(1))
-  if (!found) return helpOfGroup(group)
-  return helpOfCommand(group, found.command)
+  if (!found) return helpOfGroup(group, runtime.name)
+  return helpOfCommand(group, found.command, runtime.name)
 }
 
 /**
@@ -198,12 +292,15 @@ async function execute(
   const specs = [...GLOBAL_OPTIONS, ...(command.options ?? [])]
   const parsed = parseArguments(argv, specs)
   const globals = globalsOf(parsed.options, runtime.environment)
+  const owner = runtime.groups.find((group) =>
+    group.commands.some((entry) => entry.name === command.name)
+  )
+  const path = owner ? `${owner.name} ${command.name}` : command.name
 
   if (globals.help) {
-    const owner = runtime.groups.find((group) =>
-      group.commands.some((entry) => entry.name === command.name)
+    runtime.out(
+      owner ? helpOfCommand(owner, command, runtime.name) : helpOfRootCommand(command, runtime.name)
     )
-    runtime.out(owner ? helpOfCommand(owner, command) : helpOfRootCommand(command))
     return 0
   }
 
@@ -213,9 +310,11 @@ async function execute(
   )
   if (missing.length > 0) {
     throw new CliFailure(
-      `the argument ${missing[0]!.name} is needed: run ${runtime.name} ${command.name} --help`,
+      `the argument <${missing[0]!.name}> is needed`,
       2,
-      'missing_argument'
+      'missing_argument',
+      undefined,
+      `run ${runtime.name} ${path} --help`
     )
   }
 
@@ -255,11 +354,12 @@ export function globalsOf(
     )
   }
   const color = options.color === undefined ? Boolean(process.stdout.isTTY) : options.color === true
+  const noColor = environment.NO_COLOR ?? process.env.NO_COLOR
   return {
     output: format,
     quiet: options.quiet === true,
     verbose: options.verbose === true,
-    color: color && process.env.NO_COLOR === undefined,
+    color: color && noColor === undefined,
     dryRun: options['dry-run'] === true,
     yes: options.yes === true,
     requestId: stringOption(options, 'request-id') ?? environment.PLATFORMCTL_REQUEST_ID,

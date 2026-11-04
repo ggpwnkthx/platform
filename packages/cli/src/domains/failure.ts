@@ -41,6 +41,8 @@ export class CliFailure extends Error {
   readonly code: string
   /** The details of the refusal, when the service sent some. */
   readonly details: unknown
+  /** What the reader can do about the refusal, when there is something. */
+  readonly hint?: string
 
   /**
    * The failure of a command.
@@ -49,13 +51,41 @@ export class CliFailure extends Error {
    * @param exit the status the process ends with.
    * @param code the code of the refusal.
    * @param details the details of the refusal.
+   * @param hint what the reader can do about the refusal.
    */
-  constructor(message: string, exit: ExitCode = 1, code = 'failed', details?: unknown) {
+  constructor(
+    message: string,
+    exit: ExitCode = 1,
+    code = 'failed',
+    details?: unknown,
+    hint?: string
+  ) {
     super(message)
     this.name = 'CliFailure'
     this.exit = exit
     this.code = code
     this.details = details
+    this.hint = hint ?? hintOf(code)
+  }
+}
+
+/**
+ * The hint of a refusal, when the code of the refusal knows one.
+ *
+ * A refusal that tells the reader what went wrong and nothing else
+ * leaves the reader to guess what to do next. The hint is the next
+ * thing to try, and it is short.
+ *
+ * @param code the code of the refusal.
+ */
+export function hintOf(code: string): string | undefined {
+  switch (code) {
+    case 'not_configured':
+      return 'run platformctl doctor to see what the CLI is missing'
+    case 'unreachable':
+      return 'run platformctl status to see what answers'
+    default:
+      return undefined
   }
 }
 

@@ -10,6 +10,7 @@
 
 import { readFile } from 'node:fs/promises'
 import type { GroupSpec } from '../../app/commands'
+import { tableOfRecords } from '../../app/output'
 import { numberOf, stringOf } from '../../app/commands'
 import { CliFailure } from '../../domains/failure'
 import {
@@ -51,27 +52,14 @@ async function readTable(path: string): Promise<unknown> {
  * @param body the answer of the control plane.
  * @param key the name of the list in the answer.
  * @param columns the columns of the table.
+ * @param color true when the answer is painted.
  */
-function linesOf(body: unknown, key: string, columns: readonly string[]): string[] {
+function linesOf(body: unknown, key: string, columns: readonly string[], color: boolean): string[] {
   if (typeof body !== 'object' || body === null) return []
   const list = (body as Record<string, unknown>)[key]
   if (!Array.isArray(list) || list.length === 0) return ['there is nothing']
   const rows = list as Record<string, unknown>[]
-  const widths = columns.map((column) =>
-    Math.max(column.length, ...rows.map((row) => String(row[column] ?? '').length))
-  )
-  return [
-    columns
-      .map((column, index) => column.padEnd(widths[index]!))
-      .join('  ')
-      .trimEnd(),
-    ...rows.map((row) =>
-      columns
-        .map((column, index) => String(row[column] ?? '').padEnd(widths[index]!))
-        .join('  ')
-        .trimEnd()
-    ),
-  ]
+  return tableOfRecords(rows, columns, color)
 }
 
 /** The group of the route table. */
@@ -116,7 +104,7 @@ export const routesGroup: GroupSpec = {
         )
         return {
           value: body,
-          lines: linesOf(body, 'entries', ['revision', 'author', 'createdAt']),
+          lines: linesOf(body, 'entries', ['revision', 'author', 'createdAt'], input.globals.color),
         }
       },
     },
@@ -216,7 +204,12 @@ export const routesGroup: GroupSpec = {
         const body = await replicas(controlCall(input))
         return {
           value: body,
-          lines: linesOf(body, 'replicas', ['replicaId', 'revision', 'lastError', 'at']),
+          lines: linesOf(
+            body,
+            'replicas',
+            ['replicaId', 'revision', 'lastError', 'at'],
+            input.globals.color
+          ),
         }
       },
     },
@@ -235,7 +228,12 @@ export const routesGroup: GroupSpec = {
         )
         return {
           value: body,
-          lines: linesOf(body, 'entries', ['action', 'target', 'operator', 'scope', 'at']),
+          lines: linesOf(
+            body,
+            'entries',
+            ['action', 'target', 'operator', 'scope', 'at'],
+            input.globals.color
+          ),
         }
       },
     },

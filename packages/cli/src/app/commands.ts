@@ -48,6 +48,8 @@ export interface Services {
     /** The file of the credential of the caller. */
     readonly credentials: string
   }
+  /** The stream the progress of a command is written on. */
+  readonly progress: (text: string) => void
 }
 
 /** The formats of an answer. */

@@ -13,7 +13,7 @@ import { FileProfileStore } from './platform/files'
 import { commands, groups } from './runtime/commands'
 import { environment, profilesPath } from './runtime/env'
 import { servicesOf } from './runtime/services'
-import { NAME } from './runtime/version'
+import { NAME, VERSION } from './runtime/version'
 
 /**
  * The main of the CLI.
@@ -21,6 +21,7 @@ import { NAME } from './runtime/version'
 async function main(): Promise<ExitCode> {
   const runtime: CliRuntime = {
     name: NAME,
+    version: VERSION,
     commands,
     groups,
     environment,
@@ -41,6 +42,7 @@ async function main(): Promise<ExitCode> {
   } catch (error) {
     if (error instanceof CliFailure) {
       runtime.err(`error: ${error.message}`)
+      if (error.hint) runtime.err(`hint: ${error.hint}`)
       return error.exit
     }
     runtime.err(`error: ${error instanceof Error ? error.message : String(error)}`)

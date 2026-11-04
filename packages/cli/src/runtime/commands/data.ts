@@ -8,6 +8,7 @@
  */
 
 import type { GroupSpec } from '../../app/commands'
+import { factsLines, tableOfRecords } from '../../app/output'
 import { bodyOf, listOf, numberOf, stringOf } from '../../app/commands'
 import { CliFailure } from '../../domains/failure'
 import {
@@ -66,46 +67,25 @@ function recordsOf(body: unknown): readonly Record<string, unknown>[] {
  * and a reader wants the thing and not the wrapper.
  *
  * @param body the answer of the data API.
+ * @param color true when the answer is painted.
  */
-function linesOfOne(body: unknown): string[] {
+function linesOfOne(body: unknown, color: boolean): string[] {
   const record =
     typeof body === 'object' && body !== null && 'data' in body
       ? (body as Record<string, unknown>).data
       : body
   if (typeof record !== 'object' || record === null) return [String(record)]
-  return Object.entries(record as Record<string, unknown>).map(
-    ([key, value]) => `${key}: ${typeof value === 'object' ? JSON.stringify(value) : String(value)}`
-  )
+  return factsLines(record, color)
 }
 
 /**
  * The lines of a list of records.
  *
  * @param records the records of the answer.
+ * @param color true when the answer is painted.
  */
-function linesOf(records: readonly Record<string, unknown>[]): string[] {
-  if (records.length === 0) return ['there is nothing']
-  const columns: string[] = []
-  for (const record of records) {
-    for (const key of Object.keys(record)) {
-      if (!columns.includes(key)) columns.push(key)
-    }
-  }
-  const widths = columns.map((column) =>
-    Math.max(column.length, ...records.map((record) => String(record[column] ?? '').length))
-  )
-  return [
-    columns
-      .map((column, index) => column.padEnd(widths[index]!))
-      .join('  ')
-      .trimEnd(),
-    ...records.map((record) =>
-      columns
-        .map((column, index) => String(record[column] ?? '').padEnd(widths[index]!))
-        .join('  ')
-        .trimEnd()
-    ),
-  ]
+function linesOf(records: readonly Record<string, unknown>[], color: boolean): string[] {
+  return tableOfRecords(records, undefined, color)
 }
 
 /** The group of the data. */
@@ -120,7 +100,7 @@ export const dataGroup: GroupSpec = {
       summary: 'show the identity of the caller in the workspace',
       async run(input) {
         const body = await me(await dataCall(input))
-        return { value: body, lines: linesOfOne(body) }
+        return { value: body, lines: linesOfOne(body, input.globals.color) }
       },
     },
     {
@@ -132,10 +112,10 @@ export const dataGroup: GroupSpec = {
         const key = input.args[0]
         if (key) {
           const body = await collection(call, key)
-          return { value: body, lines: linesOfOne(body) }
+          return { value: body, lines: linesOfOne(body, input.globals.color) }
         }
         const body = await schema(call)
-        return { value: body, lines: linesOfOne(body) }
+        return { value: body, lines: linesOfOne(body, input.globals.color) }
       },
     },
     {
@@ -176,7 +156,7 @@ export const dataGroup: GroupSpec = {
           include: listOf(input.options, 'include').join(',') || undefined,
           include_count: input.options['include-count'] === true ? 'true' : undefined,
         })
-        return { value: body, lines: linesOf(recordsOf(body)) }
+        return { value: body, lines: linesOf(recordsOf(body), input.globals.color) }
       },
     },
     {
@@ -367,7 +347,7 @@ export const dataGroup: GroupSpec = {
           filter: stringOf(input.options, 'filter'),
           limit: numberOf(input.options, 'limit'),
         })
-        return { value: body, lines: linesOf(recordsOf(body)) }
+        return { value: body, lines: linesOf(recordsOf(body), input.globals.color) }
       },
     },
     {
@@ -391,7 +371,7 @@ export const dataGroup: GroupSpec = {
       summary: 'show the model of the workspace',
       async run(input) {
         const body = await model(await dataCall(input))
-        return { value: body, lines: linesOfOne(body) }
+        return { value: body, lines: linesOfOne(body, input.globals.color) }
       },
     },
     {

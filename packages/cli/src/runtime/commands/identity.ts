@@ -7,8 +7,9 @@
  * they are the ones that tell whether the rest of the CLI can work.
  */
 
-import type { CommandSpec } from '../../app/commands'
+import type { CommandSpec, GlobalOptions } from '../../app/commands'
 import { stringOf } from '../../app/commands'
+import { render } from '../../app/output'
 import { CliFailure } from '../../domains/failure'
 import { claimsOf, signIn } from '../../domains/identity'
 import { callerToken } from './calls'
@@ -198,18 +199,10 @@ export const status: CommandSpec = {
         'not_configured'
       )
     }
-    const lines = found.map((entry) => {
-      const state = entry.ok ? 'ok' : entry.error ? 'unreachable' : `refused ${entry.status}`
-      return `${entry.name.padEnd(18)} ${state}`
-    })
-    const value = found.map((entry) => ({
-      name: entry.name,
-      url: entry.url,
-      status: entry.status,
-      ok: entry.ok,
-    }))
+    const lines = linesOfProbes(found)
+    const value = valueOfProbes(found)
     if (input.options.watch === true) {
-      await watch(read)
+      await watch(read, input.globals)
       return { value, lines }
     }
     return {
@@ -221,15 +214,41 @@ export const status: CommandSpec = {
 }
 
 /**
+ * The lines of the state of the services.
+ *
+ * @param found the probes that were read.
+ */
+function linesOfProbes(found: readonly Probe[]): string[] {
+  return found.map((entry) => {
+    const state = entry.ok ? 'ok' : entry.error ? 'unreachable' : `refused ${entry.status}`
+    return `${entry.name.padEnd(18)} ${state}`
+  })
+}
+
+/**
+ * The value of the state of the services.
+ *
+ * @param found the probes that were read.
+ */
+function valueOfProbes(found: readonly Probe[]): unknown {
+  return found.map((entry) => ({
+    name: entry.name,
+    url: entry.url,
+    status: entry.status,
+    ok: entry.ok,
+  }))
+}
+
+/**
  * Shows the state of the deployment again and again.
  *
  * The reader stops the command with a signal, and the command ends
  * without a refusal: the state was shown, and the reader asked for it.
  *
- * @param input what the command received.
  * @param read the reading of the probes.
+ * @param globals the options of the CLI.
  */
-async function watch(read: () => Promise<readonly Probe[]>): Promise<void> {
+async function watch(read: () => Promise<readonly Probe[]>, globals: GlobalOptions): Promise<void> {
   let stopped = false
   const stop = (): void => {
     stopped = true
@@ -238,11 +257,13 @@ async function watch(read: () => Promise<readonly Probe[]>): Promise<void> {
   process.once('SIGTERM', stop)
   while (!stopped) {
     const found = await read()
-    const lines = found.map((entry) => {
-      const state = entry.ok ? 'ok' : entry.error ? 'unreachable' : `refused ${entry.status}`
-      return `${entry.name.padEnd(18)} ${state}`
-    })
-    process.stdout.write(`${lines.join('\n')}\n`)
+    const lines = linesOfProbes(found)
+    const text = render(valueOfProbes(found), globals, lines)
+    // The screen is cleared on a terminal, and the answer is written
+    // again: a reader who watches the state reads the last state, not
+    // a list of the states that were.
+    if (process.stdout.isTTY) process.stdout.write('\u001b[2J\u001b[3J\u001b[H')
+    process.stdout.write(`${text}\n`)
     await new Promise<void>((resolve) => setTimeout(resolve, 5000))
   }
 }

@@ -52,6 +52,7 @@ function servicesOf(): Services {
     },
     infrastructure: new FakeInfrastructure(),
     files: { profiles: '/tmp/profiles.json', credentials: '/tmp/credentials.json' },
+    progress: () => undefined,
   }
 }
 

@@ -61,6 +61,7 @@ function servicesOf(tool: FakeInfrastructure): Services {
     },
     infrastructure: tool,
     files: { profiles: '/tmp/profiles.json', credentials: '/tmp/credentials.json' },
+    progress: () => undefined,
   }
 }
 

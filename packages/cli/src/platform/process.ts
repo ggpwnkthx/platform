@@ -28,6 +28,8 @@ export interface RunOptions {
   readonly env?: Readonly<Record<string, string | undefined>>
   /** True when the program writes to the terminal of the reader. */
   readonly inherit?: boolean
+  /** True when the words of the program are shown as they come. */
+  readonly stream?: boolean
 }
 
 /**
@@ -60,10 +62,14 @@ export async function run(
     let stdout = ''
     let stderr = ''
     child.stdout?.on('data', (chunk: Buffer | string) => {
-      stdout += String(chunk)
+      const text = String(chunk)
+      stdout += text
+      if (options.stream) process.stderr.write(text)
     })
     child.stderr?.on('data', (chunk: Buffer | string) => {
-      stderr += String(chunk)
+      const text = String(chunk)
+      stderr += text
+      if (options.stream) process.stderr.write(text)
     })
     child.on('error', (error: Error) => reject(error))
     child.on('close', (status: number | null) => {

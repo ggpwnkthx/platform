@@ -12,6 +12,7 @@ import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import type { CommandInput, CommandResult, GroupSpec } from '../../app/commands'
 import { stringOf } from '../../app/commands'
+import { tableLines } from '../../app/output'
 import { confirm } from '../../app/prompt'
 import { CliFailure } from '../../domains/failure'
 import {
@@ -20,6 +21,7 @@ import {
   type InfrastructurePort,
   isTooOld,
   questionOf,
+  countedOf,
 } from '../../domains/infrastructure'
 import { MINIMUM_TOFU, redact } from '../../platform/tofu'
 
@@ -136,27 +138,29 @@ export async function toolOf(input: CommandInput): Promise<InfrastructurePort> {
 /**
  * The lines of a plan, as a human reads them.
  *
+ * The plan says what it does, counted, before it says what it does:
+ * the reader sees how many resources the plan touches before the plan
+ * itself.
+ *
  * @param plan the plan of the deployment.
  */
 export function linesOfPlan(plan: InfrastructurePlan): string[] {
   if (changesNothing(plan)) return ['the deployment is already what it should be']
+  return [countedOf(plan), '', ...tableOfPlan(plan)]
+}
+
+/**
+ * The lines of the table of a plan, as a human reads them.
+ *
+ * The question of the operator names what the plan does, counted: the
+ * table of the plan does not say it again.
+ *
+ * @param plan the plan of the deployment.
+ */
+export function tableOfPlan(plan: InfrastructurePlan): string[] {
   const rows = plan.changes.map((change) => [change.action, change.kind, change.address])
   const header = ['action', 'kind', 'address']
-  const widths = header.map((column, index) =>
-    Math.max(column.length, ...rows.map((row) => row[index]!.length))
-  )
-  return [
-    header
-      .map((column, index) => column.padEnd(widths[index]!))
-      .join('  ')
-      .trimEnd(),
-    ...rows.map((row) =>
-      row
-        .map((cell, index) => cell.padEnd(widths[index]!))
-        .join('  ')
-        .trimEnd()
-    ),
-  ]
+  return tableLines(header, rows, false)
 }
 
 /**
@@ -257,7 +261,7 @@ export const infrastructureGroup: GroupSpec = {
           return { value, lines, message: 'the plan is written and nothing is applied' }
         }
         if (changesNothing(plan)) {
-          return { value, lines, message: 'the deployment is already what it should be' }
+          return { value, lines: [], message: 'the deployment is already what it should be' }
         }
         // The plan is what the reader answers about: it is shown
         // before the question, and the question names what the plan
@@ -267,7 +271,7 @@ export const infrastructureGroup: GroupSpec = {
           input.globals.yes,
           process.stdin,
           process.stdout,
-          input.globals.output === 'table' && !input.globals.quiet ? lines : []
+          input.globals.output === 'table' && !input.globals.quiet ? tableOfPlan(plan) : []
         )
         const applied = await port.apply(directory, plan)
         return {

@@ -12,6 +12,7 @@
 
 import { writeFile } from 'node:fs/promises'
 import type { GroupSpec } from '../../app/commands'
+import { tableOfRecords } from '../../app/output'
 import { listOf, numberOf, stringOf } from '../../app/commands'
 import { CliFailure } from '../../domains/failure'
 import {
@@ -53,8 +54,9 @@ function rowsOf(body: unknown, key: string): readonly Record<string, unknown>[] 
  * The lines of a list of the administration.
  *
  * @param rows the rows of the list.
+ * @param color true when the answer is painted.
  */
-function linesOf(rows: readonly Record<string, unknown>[]): string[] {
+function linesOf(rows: readonly Record<string, unknown>[], color: boolean): string[] {
   if (rows.length === 0) return ['there is nothing']
   const columns = [
     'id',
@@ -68,21 +70,7 @@ function linesOf(rows: readonly Record<string, unknown>[]): string[] {
     'status',
   ]
   const used = columns.filter((column) => rows.some((row) => row[column] !== undefined))
-  const widths = used.map((column) =>
-    Math.max(column.length, ...rows.map((row) => String(row[column] ?? '').length))
-  )
-  return [
-    used
-      .map((column, index) => column.padEnd(widths[index]!))
-      .join('  ')
-      .trimEnd(),
-    ...rows.map((row) =>
-      used
-        .map((column, index) => String(row[column] ?? '').padEnd(widths[index]!))
-        .join('  ')
-        .trimEnd()
-    ),
-  ]
+  return tableOfRecords(rows, used, color)
 }
 
 /** The group of the administration of Access. */
@@ -98,7 +86,7 @@ export const accessGroup: GroupSpec = {
       async run(input) {
         const body = await listTenants(accessCall(input))
         const rows = rowsOf(body, 'tenants')
-        return { value: body, lines: linesOf(rows) }
+        return { value: body, lines: linesOf(rows, input.globals.color) }
       },
     },
     {
@@ -186,7 +174,7 @@ export const accessGroup: GroupSpec = {
           offset: numberOf(input.options, 'offset'),
         })
         const rows = rowsOf(body, 'principals')
-        return { value: body, lines: linesOf(rows) }
+        return { value: body, lines: linesOf(rows, input.globals.color) }
       },
     },
     {
@@ -271,7 +259,7 @@ export const accessGroup: GroupSpec = {
           offset: numberOf(input.options, 'offset'),
         })
         const rows = rowsOf(body, 'grants')
-        return { value: body, lines: linesOf(rows) }
+        return { value: body, lines: linesOf(rows, input.globals.color) }
       },
     },
     {
@@ -361,7 +349,7 @@ export const accessGroup: GroupSpec = {
           key: stringOf(input.options, 'key'),
         })
         const rows = rowsOf(body, 'groups')
-        return { value: body, lines: linesOf(rows) }
+        return { value: body, lines: linesOf(rows, input.globals.color) }
       },
     },
     {
@@ -405,7 +393,7 @@ export const accessGroup: GroupSpec = {
           key: stringOf(input.options, 'key'),
         })
         const rows = rowsOf(body, 'roles')
-        return { value: body, lines: linesOf(rows) }
+        return { value: body, lines: linesOf(rows, input.globals.color) }
       },
     },
     {
@@ -478,7 +466,7 @@ export const accessGroup: GroupSpec = {
           offset: numberOf(input.options, 'offset'),
         })
         const rows = rowsOf(body, 'records')
-        return { value: body, lines: linesOf(rows) }
+        return { value: body, lines: linesOf(rows, input.globals.color) }
       },
     },
     {

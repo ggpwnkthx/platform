@@ -10,6 +10,37 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The CLI says where you are and what you can do
+
+The CLI told a reader who typed a word that names nothing that the
+word names nothing, and left the reader to guess what to type next.
+The refusal now names the command that is the closest to the word, and
+the option that is the closest to the option. The help of the CLI
+names the commands of the root as well as the groups, its columns line
+up, and the usage of a command is the way the command is really
+written. The help of a group is not a refusal any more: it ends with
+the status of a command that did what it was asked, and `help` is a
+command of a group as well as of the root. The version of the CLI is
+one flag away, with `--version`.
+
+The answer is painted when the terminal paints it: the thing that is
+fine is green, the thing that is refused or unreachable is red, and
+the head of a table is bold. The colour was a promise the CLI did not
+keep before: the option was there and nothing was painted. The json and
+the yaml hold no colour, so a script reads the same bytes either way.
+
+Every table of the CLI is drawn by the same drawing now, so every table
+of the CLI lines up the same way, and the plan of the deployment says
+what it does, counted, before it says what it does. A refusal that
+knows what the reader can do about it carries a hint, and the hint is
+written under the refusal.
+
+The words of the tool that writes the infrastructure are shown as they
+come when the tool takes a while, and the progress of a command goes on
+the standard error: the answer of a command stays on the standard
+output, and a script that reads the answer reads the answer and
+nothing else.
+
 ### The wizard of a deployment goes on with the deployment
 
 The wizard of a deployment wrote the file of the values and told the

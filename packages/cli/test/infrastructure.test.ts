@@ -58,6 +58,7 @@ function servicesOf(tool: FakeInfrastructure): Services {
     },
     infrastructure: tool,
     files: { profiles: '/tmp/profiles.json', credentials: '/tmp/credentials.json' },
+    progress: () => undefined,
   }
 }
 
@@ -250,7 +251,7 @@ describe('the commands of the infrastructure', () => {
         summary: { create: 97, update: 0, delete: 0, replace: 0 },
         errored: false,
       })
-    ).toBe('the plan creates 97 resources: the deployment is applied?')
+    ).toBe('the plan creates 97, changes 0 and destroys 0: the deployment is applied?')
     expect(
       questionOf({
         directory: '/templates',
@@ -259,9 +260,7 @@ describe('the commands of the infrastructure', () => {
         summary: { create: 3, update: 1, delete: 0, replace: 2 },
         errored: false,
       })
-    ).toBe(
-      'the plan destroys 2 resources, creates 3 resources, changes 1 resources: the deployment is applied?'
-    )
+    ).toBe('the plan creates 3, changes 1 and destroys 2: the deployment is applied?')
   })
 
   test('a tool that is too old for the templates is refused', async () => {
@@ -422,7 +421,7 @@ describe('the commands of the infrastructure', () => {
     try {
       await expect(
         run(runtime, ['infra', 'import', '--directory', join(directory, 'templates')])
-      ).rejects.toThrow('the argument address is needed')
+      ).rejects.toThrow('the argument <address> is needed')
     } finally {
       await rm(directory, { recursive: true, force: true })
     }

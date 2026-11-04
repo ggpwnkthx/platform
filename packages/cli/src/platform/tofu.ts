@@ -257,6 +257,9 @@ export class TofuInfrastructure implements InfrastructurePort {
   /** The wait between two attempts, in milliseconds. */
   readonly #waitMs: number
 
+  /** The telling of the progress of the tool to the operator. */
+  readonly #progress: (text: string) => void
+
   /**
    * The tool that writes the infrastructure of the deployment.
    *
@@ -270,6 +273,7 @@ export class TofuInfrastructure implements InfrastructurePort {
       readonly download?: Download
       readonly retries?: number
       readonly waitMs?: number
+      readonly progress?: (text: string) => void
     } = {}
   ) {
     this.#environment = environment
@@ -277,6 +281,7 @@ export class TofuInfrastructure implements InfrastructurePort {
     this.#download = options.download
     this.#retries = options.retries ?? RETRIES
     this.#waitMs = options.waitMs ?? WAIT_MS
+    this.#progress = options.progress ?? (() => undefined)
   }
 
   /**
@@ -369,13 +374,15 @@ export class TofuInfrastructure implements InfrastructurePort {
    *
    * @param args the words of the tool.
    * @param directory the directory the tool runs in.
+   * @param stream true when the reader is shown what the tool writes.
    */
-  async #run(args: readonly string[], directory: string): Promise<Answer> {
+  async #run(args: readonly string[], directory: string, stream = false): Promise<Answer> {
     const binary = await this.#binary()
     try {
       return await run(binary, args, {
         cwd: directory,
         env: this.#environmentOf(),
+        stream,
       })
     } catch (error) {
       throw new CliFailure(
@@ -429,7 +436,8 @@ export class TofuInfrastructure implements InfrastructurePort {
   ): Promise<InfrastructureBootstrap> {
     const initialized = await this.#run(
       [`-chdir=${directory}`, 'init', '-input=false', '-no-color'],
-      process.cwd()
+      process.cwd(),
+      true
     )
     if (initialized.status !== 0) {
       throw new CliFailure(
@@ -442,7 +450,7 @@ export class TofuInfrastructure implements InfrastructurePort {
     for (const [name, value] of Object.entries(variables)) {
       args.push(`-var=${name}=${value}`)
     }
-    const applied = await this.#run(args, process.cwd())
+    const applied = await this.#run(args, process.cwd(), true)
     if (applied.status !== 0) {
       throw new CliFailure(
         `the place where the state of the deployment lives was not created: ${applied.stderr.trim() || applied.stdout.trim()}`,
@@ -496,15 +504,15 @@ export class TofuInfrastructure implements InfrastructurePort {
   async initialize(directory: string, run: InfrastructureRun): Promise<void> {
     const args = [`-chdir=${directory}`, 'init', '-input=false', '-no-color']
     if (run.backendConfig) args.push(`-backend-config=${run.backendConfig}`)
-    let answer = await this.#run(args, process.cwd())
+    let answer = await this.#run(args, process.cwd(), true)
 
     // The configuration of the backend changed: the state of the
     // deployment may have to move with it, and the tool never moves it
     // on its own.
     if (answer.status !== 0 && changedBackend(answer.stderr)) {
-      const migrated = await this.#run([...args, '-migrate-state'], process.cwd())
+      const migrated = await this.#run([...args, '-migrate-state'], process.cwd(), true)
       if (migrated.status === 0) return
-      const reconfigured = await this.#run([...args, '-reconfigure'], process.cwd())
+      const reconfigured = await this.#run([...args, '-reconfigure'], process.cwd(), true)
       if (reconfigured.status === 0) {
         process.stderr.write(
           'the state of the deployment was not migrated: the plan that follows is the plan of a deployment whose state is empty\n'
@@ -519,7 +527,7 @@ export class TofuInfrastructure implements InfrastructurePort {
         `the state of the deployment is not reachable yet: the templates are initialized again in ${this.#waitMs / 1000} seconds\n`
       )
       await sleep(this.#waitMs)
-      answer = await this.#run(args, process.cwd())
+      answer = await this.#run(args, process.cwd(), true)
     }
     if (answer.status !== 0) {
       throw new CliFailure(
@@ -567,6 +575,9 @@ export class TofuInfrastructure implements InfrastructurePort {
     const args = ['plan', '-input=false', '-no-color', '-detailed-exitcode']
     if (run.varFile) args.push(`-var-file=${run.varFile}`)
     if (run.planFile) args.push(`-out=${run.planFile}`)
+    // A plan of a deployment takes a while, and an operator who sees
+    // nothing for a while does not know whether the CLI is working.
+    this.#progress('the plan of the deployment is written, this may take a moment')
     const answer = await this.#run([`-chdir=${directory}`, ...args], process.cwd())
     // The tool answers with the status 2 when the plan holds a change,
     // and with the status 1 when it holds an error.
@@ -631,7 +642,8 @@ export class TofuInfrastructure implements InfrastructurePort {
     }
     const answer = await this.#run(
       [`-chdir=${directory}`, 'apply', '-input=false', '-no-color', plan.planFile],
-      process.cwd()
+      process.cwd(),
+      true
     )
     if (answer.status !== 0) {
       const reason = answer.stderr.trim() || answer.stdout.trim()
