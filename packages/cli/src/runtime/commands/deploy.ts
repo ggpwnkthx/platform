@@ -17,7 +17,7 @@
 
 import { existsSync } from 'node:fs'
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, join, relative, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import type { CommandInput, CommandResult, CommandSpec, GroupSpec } from '../../app/commands'
 import { stringOf } from '../../app/commands'
 import { ask, confirm } from '../../app/prompt'
@@ -37,7 +37,7 @@ import { isAddress, publicAddressOf, rangeOf, servicesOf } from '../../platform/
 import { digestOf, tagOf } from '../../platform/registry'
 import { type Release, releaseOf } from '../../platform/release'
 import { VERSION } from '../../runtime/version'
-import { linesOfPlan, toolOf } from './infrastructure'
+import { linesOfPlan, tableOfPlan, toolOf } from './infrastructure'
 
 /** The directory of the templates, when the reader names none. */
 const DEFAULT_DIRECTORY = join('deploy', 'tofu', 'azure')
@@ -56,6 +56,46 @@ const PLAN = 'plan.bin'
 
 /** The name of the value that holds the addresses that reach the state. */
 const ADDRESSES = 'operator_addresses'
+
+/**
+ * The notes of the wizard.
+ *
+ * A note is a thing the operator is told about the deployment that is
+ * under way. The note is told as it is made, and the answer of the
+ * command keeps the outcome of the deployment and nothing else.
+ */
+class Notes extends Array<string> {
+  /** The telling of a note to the operator. */
+  readonly tell: (text: string) => void
+
+  /**
+   * The notes of the wizard.
+   *
+   * @param tell the telling of a note to the operator.
+   */
+  constructor(tell: (text: string) => void) {
+    super()
+    this.tell = tell
+  }
+
+  /**
+   * The array of the notes is an array of notes, and not an array of
+   * a length: the methods that build a new array build a plain one.
+   */
+  static override get [Symbol.species](): ArrayConstructor {
+    return Array
+  }
+
+  /**
+   * Makes a note and tells the operator about it.
+   *
+   * @param items the notes.
+   */
+  override push(...items: string[]): number {
+    for (const item of items) this.tell(item)
+    return super.push(...items)
+  }
+}
 
 /**
  * The directory of the templates of the deployment.
@@ -226,31 +266,18 @@ function shownOf(path: string): string {
 /**
  * The steps of a deployment, as a dry run tells them.
  *
- * The wizard writes the values; the state of the deployment, the
- * configuration of the backend and the plan belong to the tool, and the
- * steps say which command writes which one.
- *
- * @param directory the directory of the templates.
- * @param runtime the directory of the files of the deployment.
- * @param values the values the wizard collected.
+ * The wizard writes the values; the place where the state lives, the
+ * configuration of the backend and the plan belong to the tool. The
+ * steps say what the deployment does, in the words of the deployment:
+ * the commands of the tool are the business of the tool.
  */
-function stepsOf(directory: string, runtime: string, values: Values): string[] {
-  const prefix = values.name_prefix ?? 'platform'
-  const environment = values.environment ?? 'production'
-  const shown = shownOf(runtime)
-  const templates = shownOf(directory)
+function stepsOf(): string[] {
   return [
-    '1. create the place where the state of the deployment lives:',
-    `     tofu -chdir=${templates}/bootstrap init`,
-    `     tofu -chdir=${templates}/bootstrap apply -var name_prefix=${prefix} -var environment=${environment}`,
-    '2. write the configuration of the backend of the state:',
-    `     tofu -chdir=${templates}/bootstrap output -raw backend_config_hcl > ${shown}/backend.hcl`,
-    '3. initialize the templates of the deployment:',
-    `     tofu -chdir=${templates} init -backend-config=${relative(directory, join(runtime, 'backend.hcl'))}`,
-    '4. read the plan of the deployment:',
-    `     platformctl infra plan --directory ${templates} --runtime ${shown}`,
-    '5. apply the deployment:',
-    `     platformctl infra apply --directory ${templates} --runtime ${shown}`,
+    'create the place where the state of the deployment lives',
+    'write the configuration of the backend of the state',
+    'initialize the templates of the deployment',
+    'write the plan of the deployment and show it',
+    'apply the plan once the operator confirms it',
   ]
 }
 
@@ -748,7 +775,7 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
       // The sign in comes first: the facts the provider reads answer
       // some of the questions, and the operator does not type them.
       const answers = await answersOf(input)
-      const notes: string[] = []
+      const notes = new Notes((text) => input.services.progress(text))
       // The names the recovery freed: the cloud frees a name a little
       // after the resource that held it is purged.
       const purged: string[] = []
@@ -765,6 +792,7 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
       // facts of the provider answer the questions that the release
       // does not.
       const signIn = await provider.signIn(ask)
+      input.services.progress(signIn.message)
       Object.assign(known, signIn.facts)
       if (release === undefined) {
         notes.push(
@@ -877,12 +905,9 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
             account: signIn.account ?? '',
           },
           lines: [
-            signIn.message,
-            ...notes,
             '',
-            written,
-            '',
-            ...stepsOf(directory, runtime, values),
+            'the deployment goes on:',
+            ...stepsOf().map((step, index) => `  ${index + 1}. ${step}`),
           ],
           message: written,
         }
@@ -891,6 +916,7 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
       // The deployment goes on: the wizard wrote the values, and the
       // tool writes the place where the state lives, the plan and the
       // deployment.
+      input.services.progress(written)
       const port = await toolOf(input)
       const bootstrap = bootstrapOf(directory)
       if (!existsSync(bootstrap)) {
@@ -922,13 +948,18 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
         bootstrap,
         bootstrapVariables(values, defaults, addresses, declared)
       )
+      input.services.progress('the place where the state of the deployment lives is created')
       if (!place.created) {
         notes.push('the place where the state of the deployment lives was already there')
       }
       const backend = join(runtime, BACKEND)
       await writeFile(backend, `${place.backendConfig}\n`)
+      input.services.progress(
+        `the configuration of the backend of the state is written in ${shownOf(backend)}`
+      )
 
       await port.initialize(directory, { backendConfig: backend })
+      input.services.progress('the templates of the deployment are initialized')
 
       // The plan is written, the operator answers about it, and the
       // plan is applied. A resource that a failed apply left in the
@@ -941,17 +972,11 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
       let attempts = 2
       for (let attempt = 0; attempt < attempts; attempt += 1) {
         const plan = await port.plan(directory, { varFile: file, planFile: join(runtime, PLAN) })
-        const lines = [
-          signIn.message,
-          ...notes,
-          '',
-          written,
-          'the place where the state of the deployment lives is created',
-          `the configuration of the backend of the state is written in ${shownOf(backend)}`,
-          'the templates of the deployment are initialized',
-          '',
-          ...linesOfPlan(plan),
-        ]
+        // The plan is what the operator answers about: it is shown
+        // before the question, and the question names what the plan
+        // does, counted.
+        const planLines = ['', ...linesOfPlan(plan)]
+        const planTable = tableOfPlan(plan)
         const value = {
           provider: provider.name,
           directory,
@@ -964,18 +989,19 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
         }
 
         if (changesNothing(plan)) {
-          return { value, lines, message: 'the deployment is already what it should be' }
+          return {
+            value,
+            lines: [],
+            message: 'the deployment is already what it should be',
+          }
         }
 
-        // The plan is what the operator answers about: it is shown
-        // before the question, and the question names what the plan
-        // does, counted.
         await confirm(
           questionOf(plan),
           input.globals.yes,
           process.stdin,
           process.stdout,
-          input.globals.output === 'table' && !input.globals.quiet ? lines : []
+          input.globals.output === 'table' && !input.globals.quiet ? planTable : []
         )
         try {
           const applied = await port.apply(directory, plan)
@@ -985,7 +1011,7 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
               summary: applied.summary,
               applied: applied.applied,
             },
-            lines,
+            lines: planLines,
             message: 'the deployment is applied',
           }
         } catch (error) {

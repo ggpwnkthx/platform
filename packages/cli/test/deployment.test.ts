@@ -35,7 +35,7 @@ import { FakeInfrastructure } from './support'
  */
 
 /** The services of the tests. */
-function servicesOf(tool: FakeInfrastructure): Services {
+function servicesOf(tool: FakeInfrastructure, progress: string[] = []): Services {
   return {
     http: {
       send: async () => {
@@ -61,7 +61,7 @@ function servicesOf(tool: FakeInfrastructure): Services {
     },
     infrastructure: tool,
     files: { profiles: '/tmp/profiles.json', credentials: '/tmp/credentials.json' },
-    progress: () => undefined,
+    progress: (text) => progress.push(text),
   }
 }
 
@@ -74,12 +74,15 @@ function runtimeOf(
   runtime: CliRuntime
   out: string[]
   err: string[]
+  progress: string[]
 } {
   const out: string[] = []
   const err: string[] = []
+  const progress: string[] = []
   return {
     out,
     err,
+    progress,
     runtime: {
       name: 'platformctl',
       commands: [],
@@ -91,7 +94,7 @@ function runtimeOf(
         },
       ],
       environment: { PLATFORMCTL_ADDRESS_LOOKUP: 'off', ...environment },
-      services: () => servicesOf(tool),
+      services: () => servicesOf(tool, progress),
       contextOf: async () => ({ name: 'default' }),
       out: (text) => out.push(text),
       err: (text) => err.push(text),
@@ -218,7 +221,7 @@ describe('the answers of the wizard', () => {
       access_tenant_id: '11111111-1111-4111-8111-111111111111',
     })
     expect(problems).toEqual([
-      'gateway_image is not a digest: the deployment runs the bytes that the release proved',
+      'the image of the gateway is not a digest: the deployment runs the bytes that the release proved',
     ])
   })
 
@@ -228,13 +231,15 @@ describe('the answers of the wizard', () => {
         gateway_image: `ghcr.io/ggpwnkthx/gateway@sha256:${'1'.repeat(64)}`,
         access_tenant_id: 'acme',
       })
-    ).toEqual(['access_tenant_id is not an identifier'])
+    ).toEqual([
+      'the tenant of Access is not an identifier like 11111111-1111-4111-8111-111111111111',
+    ])
   })
 
   test('a question that is needed and unanswered is refused', () => {
     expect(problemsOf(questions, {})).toEqual([
-      'gateway_image is needed',
-      'access_tenant_id is needed',
+      'the image of the gateway is needed',
+      'the tenant of Access is needed',
     ])
   })
 })
@@ -415,7 +420,7 @@ describe('the wizard of a deployment', () => {
         errored: false,
         planFile: join(runtime, 'plan.bin'),
       }
-      const { runtime: cli, out } = runtimeOf([provider], tool)
+      const { runtime: cli, out, progress } = runtimeOf([provider], tool)
       const status = await run(cli, [
         'deploy',
         'azure',
@@ -431,7 +436,7 @@ describe('the wizard of a deployment', () => {
         ),
       ])
       expect(status).toBe(0)
-      expect(out.join('\n')).toContain('signed in to Azure as the-subscription')
+      expect(progress.join('\n')).toContain('signed in to Azure as the-subscription')
 
       const file = await readFile(join(runtime, 'terraform.tfvars'), 'utf8')
       expect(file).toContain('name_prefix = "platform"')
@@ -440,11 +445,12 @@ describe('the wizard of a deployment', () => {
 
       // The deployment goes on: the place where the state lives, the
       // configuration of the backend, the templates, the plan and the
-      // apply.
-      expect(out.join('\n')).toContain(
+      // apply. The progress of the wizard is told as it happens, and
+      // the answer of the command keeps the plan it applied.
+      expect(progress.join('\n')).toContain(
         'the place where the state of the deployment lives is created'
       )
-      expect(out.join('\n')).toContain('the templates of the deployment are initialized')
+      expect(progress.join('\n')).toContain('the templates of the deployment are initialized')
       expect(out.join('\n')).toContain('azurerm_resource_group.platform')
       expect(out.join('\n')).toContain('the deployment is applied')
 

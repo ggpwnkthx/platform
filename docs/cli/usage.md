@@ -221,6 +221,8 @@ The service that holds the state refuses a range of one address, so the range of
 
 The OpenTofu binary is found on the path, or downloaded by the CLI when the machine holds none, so the steps above need no tool installed by hand.
 
+The wizard tells every step as it happens, on the standard error, because the wizard takes minutes and a wizard that says nothing looks like a wizard that is stuck. Its answer ends on the standard output: a script that reads the answer reads the answer and nothing else.
+
 To answer without a terminal, put the answers in a file:
 
 ```bash

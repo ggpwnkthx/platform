@@ -255,6 +255,12 @@ A resource that the deployment cannot take over, and whose name the deployment c
 
 The wizard of a deployment collects the values of a deployment and signs the operator in to the system of the provider. The provider is the command: `deploy azure` prepares a deployment on Microsoft Azure.
 
+The wizard tells its steps as they happen, on the standard error: the wizard takes minutes, and an operator who sees nothing for minutes does not know whether the CLI is working. The answer of the wizard keeps the summary of what happened on the standard output.
+
+A question of the wizard is asked in the words of the CLI, in lower case, and the default of the question is written in brackets after it: the operator answers nothing and takes the default. The question is written on one line and the answer is written on the next, after a marker.
+
+A dry run writes the file of the values, tells the steps the deployment takes in the words of the deployment, and applies nothing. The steps name what the deployment does and not the commands of the tool: the commands of the tool are the business of the tool.
+
 | Command | Effect |
 | --- | --- |
 | `deploy azure` | Signs the operator in to Azure, asks the questions the deployment needs, writes the file of the values, creates the place where the state of the deployment lives, initializes the templates, shows the plan, and applies the plan once the operator confirms it. |

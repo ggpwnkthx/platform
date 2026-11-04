@@ -55,7 +55,7 @@ export async function ask(
       throw new CliFailure(`the answer "${trimmed}" is not one of the choices`, 2, 'not_answered')
     }
     const answer = await new Promise<string>((resolve) => {
-      reader.question(`${question} `, resolve)
+      reader.question(`${question}\n> `, resolve)
     })
     return answer.trim()
   } finally {

@@ -256,12 +256,12 @@ export function problemsOf(questions: readonly Question[], values: Readonly<Valu
   for (const question of questions) {
     const value = values[question.name]
     if (value === undefined || value === '') {
-      if (question.kind === 'required') problems.push(`${question.name} is needed`)
+      if (question.kind === 'required') problems.push(`${question.summary} is needed`)
       continue
     }
     if (question.shape === 'digest' && !/@sha256:[0-9a-f]{64}$/.test(value)) {
       problems.push(
-        `${question.name} is not a digest: the deployment runs the bytes that the release proved`
+        `${question.summary} is not a digest: the deployment runs the bytes that the release proved`
       )
       continue
     }
@@ -269,7 +269,9 @@ export function problemsOf(questions: readonly Question[], values: Readonly<Valu
       question.shape === 'uuid' &&
       !/^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$/.test(value)
     ) {
-      problems.push(`${question.name} is not an identifier`)
+      problems.push(
+        `${question.summary} is not an identifier like 11111111-1111-4111-8111-111111111111`
+      )
     }
   }
   return problems

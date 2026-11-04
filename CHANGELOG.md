@@ -10,6 +10,30 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The wizard of a deployment says what it is doing
+
+The wizard of a deployment said everything at the end: the operator
+watched a terminal that said nothing for the minutes the deployment
+takes, and then read the same facts twice. The wizard now tells every
+step as it happens, on the standard error, and its answer holds only
+what the deployment did, on the standard output.
+
+A dry run of the wizard printed the commands of the tool, with paths
+that no operator would write: the steps of the deployment are now told
+in the words of the deployment, and the commands of the tool stay the
+business of the tool.
+
+The questions of the wizard were sentences of documentation, written in
+a capital, and they had no marker of the prompt. They are asked in the
+words of the CLI, in lower case, with the default in brackets and the
+answer on the next line. A refusal that names a value the deployment
+cannot use names the question and not the variable of the template, and
+it shows the shape the answer needs.
+
+The plan of a deployment says what it does, counted, in the same words
+everywhere it is told: the line above the plan, the question of the
+operator and the answer of the command.
+
 ### The CLI says where you are and what you can do
 
 The CLI told a reader who typed a word that names nothing that the
@@ -34,12 +58,6 @@ of the CLI lines up the same way, and the plan of the deployment says
 what it does, counted, before it says what it does. A refusal that
 knows what the reader can do about it carries a hint, and the hint is
 written under the refusal.
-
-The words of the tool that writes the infrastructure are shown as they
-come when the tool takes a while, and the progress of a command goes on
-the standard error: the answer of a command stays on the standard
-output, and a script that reads the answer reads the answer and
-nothing else.
 
 ### The wizard of a deployment goes on with the deployment
 
