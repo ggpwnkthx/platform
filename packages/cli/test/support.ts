@@ -104,6 +104,8 @@ export class FakeInfrastructure implements InfrastructurePort {
   failure?: Error
   /** The failure the tool refuses the plan with, when the test sets one. */
   planFailure?: Error
+  /** The failure the tool refuses the creation of the place with, when the test sets one. */
+  bootstrapFailure?: Error
   /** True when the tool refuses every apply, and not only the first one. */
   alwaysFails = false
 
@@ -118,6 +120,13 @@ export class FakeInfrastructure implements InfrastructurePort {
     variables: Readonly<Record<string, string>>
   ): Promise<InfrastructureBootstrap> {
     this.bootstraps.push({ directory, variables })
+    if (this.bootstrapFailure !== undefined) {
+      // The place is refused once, and the recovery writes the
+      // resources that are already there in the state of the place.
+      const failure = this.bootstrapFailure
+      this.bootstrapFailure = undefined
+      throw failure
+    }
     return { backendConfig: this.backendConfig, created: true }
   }
 
@@ -132,15 +141,18 @@ export class FakeInfrastructure implements InfrastructurePort {
 
   /** The resources that were written in the state. */
   readonly imported: { address: string; id: string }[] = []
+  /** The runs the resources were written with. */
+  readonly importedRuns: { directory: string; run: InfrastructureRun }[] = []
 
   /** Writes a resource of the cloud into the state of the deployment. */
   async import(
-    _directory: string,
+    directory: string,
     address: string,
     id: string,
-    _run: InfrastructureRun
+    run: InfrastructureRun
   ): Promise<void> {
     this.imported.push({ address, id })
+    this.importedRuns.push({ directory, run })
   }
 
   /** The locks of the state of the deployment that were freed. */

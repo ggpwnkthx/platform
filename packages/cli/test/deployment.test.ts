@@ -943,6 +943,69 @@ describe('the wizard of a deployment', () => {
     }
   })
 
+  test('the place where the state of the deployment lives is taken over when it is there', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-wizard-'))
+    try {
+      const templates = join(directory, 'templates')
+      await bootstrapOf(templates)
+      await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+
+      const tool = new FakeInfrastructure()
+      tool.plan_ = {
+        directory: '/templates',
+        changes: [],
+        drift: [],
+        summary: { create: 0, update: 0, delete: 0, replace: 0 },
+        errored: false,
+      }
+      // The state of the place is a file of the machine of the
+      // operator, and the file is lost: the resources of the place are
+      // there and the state does not know them.
+      tool.bootstrapFailure = new CliFailure(
+        'the place where the state of the deployment lives was not created: Error: a resource with the ID "/subscriptions/the-subscription/resourceGroups/platform-production-state" already exists - to be managed via Terraform this resource needs to be imported into the State.\n\n  with azurerm_resource_group.state,\n  on main.tf line 95'
+      )
+      const provider = {
+        ...providerOf([
+          { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+        ]),
+        importablesOf: (reason: string) => importablesOf(reason),
+      }
+      const { runtime: cli } = runtimeOf([provider], tool)
+      const status = await run(cli, [
+        'deploy',
+        'azure',
+        '--yes',
+        '--directory',
+        templates,
+        '--answers',
+        await answersFileOf(
+          directory,
+          'name_prefix = "platform"\noperator_addresses = "203.0.113.4/32"\n'
+        ),
+      ])
+      expect(status).toBe(0)
+      // The resource of the place is written in the state of the place,
+      // and the place is created again.
+      expect(tool.imported).toEqual([
+        {
+          address: 'azurerm_resource_group.state',
+          id: '/subscriptions/the-subscription/resourceGroups/platform-production-state',
+        },
+      ])
+      // The resource is written in the state of the place, and the tool
+      // is told the values of the place: a resource that is written
+      // with other values than the ones of the apply is a resource the
+      // next apply wants to change.
+      expect(tool.importedRuns[0]?.directory).toBe(join(templates, 'bootstrap'))
+      expect(tool.importedRuns[0]?.run.variables?.resource_group_name).toBe(
+        'platform-production-state'
+      )
+      expect(tool.bootstraps).toHaveLength(2)
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
   test('the resources a failed apply left behind are written in the state', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'platformctl-wizard-'))
     try {
@@ -2112,6 +2175,22 @@ esac
 `
 
 /**
+ * The client of Azure, when the provider refuses a role assignment that
+ * is already there.
+ *
+ * The provider names the identifier of the assignment, and the client
+ * of Azure answers with the identifier of the assignment in the cloud.
+ */
+const CLIENT_WITH_ASSIGNMENT = `#!/bin/sh
+case "$1 $2" in
+  "account show") echo '{"id":"sub-1","name":"the-subscription","tenantId":"11111111-1111-4111-8111-111111111111"}' ;;
+  "account list") echo '[{"id":"sub-1","name":"the-subscription","tenantId":"11111111-1111-4111-8111-111111111111"}]' ;;
+  "role assignment") echo '"/subscriptions/sub-1/resourceGroups/the-group/providers/Microsoft.Authorization/roleAssignments/a674fb9fae2f8e4474d87fe96527edf6"' ;;
+  *) exit 0 ;;
+esac
+`
+
+/**
  * The client of Azure, when the resource was deleted and not purged.
  *
  * The client does not list the resources that were deleted, and the
@@ -2235,6 +2314,33 @@ describe('the leftover of a failed apply', () => {
       expect(leftover?.name).toBe('the-vault')
       expect(leftover?.ids).toEqual([
         '/subscriptions/sub-1/resourceGroups/the-group/providers/Microsoft.KeyVault/vaults/the-vault',
+      ])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('a role assignment that is already there is taken over', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-azure-'))
+    try {
+      const binary = join(directory, 'az')
+      await writeFile(binary, CLIENT_WITH_ASSIGNMENT)
+      await chmod(binary, 0o755)
+      const provider = azureProvider(
+        [{ name: 'tenant_id', summary: 'the tenant', kind: 'given' }],
+        { PATH: process.env.PATH ?? '', AZURE_CLI: binary }
+      )
+      // The provider refuses to create a role assignment that is
+      // already there, and it names the identifier of the assignment:
+      // the assignment is found in the directory of the assignments of
+      // the subscription, and the state of the deployment takes it
+      // over.
+      const leftover = await provider.leftoverOf?.(
+        'Error: unexpected status 409 (409 Conflict) with error: RoleAssignmentExists: The role assignment already exists. The ID of the existing role assignment is a674fb9fae2f8e4474d87fe96527edf6.\n\n  with azurerm_role_assignment.state_data_owner[0],\n  on main.tf line 160'
+      )
+      expect(leftover?.name).toBe('azurerm_role_assignment.state_data_owner[0]')
+      expect(leftover?.ids).toEqual([
+        '/subscriptions/sub-1/resourceGroups/the-group/providers/Microsoft.Authorization/roleAssignments/a674fb9fae2f8e4474d87fe96527edf6',
       ])
     } finally {
       await rm(directory, { recursive: true, force: true })

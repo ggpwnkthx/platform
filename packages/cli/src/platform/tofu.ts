@@ -55,18 +55,6 @@ export const MINIMUM_TOFU = '1.9.0'
 /** The number of times the templates are initialized again. */
 const RETRIES = 3
 
-/**
- * The number of times the place where the state of the deployment lives
- * is created again.
- *
- * The place holds four resources of Azure and two waits, and the
- * resources that are already there are written in the state one by one:
- * the tool refuses to create a resource that is there, and it names the
- * one it refuses. The resource is written in the state, and the next
- * apply refuses the next one.
- */
-const BOOTSTRAP_ATTEMPTS = 8
-
 /** The wait between two attempts, in milliseconds. */
 const WAIT_MS = 20_000
 
@@ -114,50 +102,6 @@ export function errorsOf(document: string): { summary: string; detail: string }[
     })
   }
   return errors
-}
-
-/**
- * The resource that a refused apply names.
- *
- * The tool refuses to create a resource that is already there, and it
- * names the resource and its identifier: the address of the resource is
- * the name of the resource in the state, and the identifier is the name
- * of the resource in the cloud.
- *
- * @param reason what the tool said.
- */
-export function leftoverOf(reason: string): { address: string; id: string } | undefined {
-  const found =
-    /a resource with the ID "([^"]+)" already exists[\s\S]*?with ([A-Za-z0-9_.[\]"-]+),/.exec(
-      reason
-    )
-  if (!found) return undefined
-  return { address: found[2]!, id: found[1]! }
-}
-
-/**
- * Reports whether a resource is in the group of the deployment.
- *
- * The place where the state of the deployment lives is taken over only
- * when the resources that are already there are in the group of the
- * place: a name that is held by a resource of another group is not
- * ours, and taking it over would put the state of the deployment in a
- * group that is not the group of the deployment.
- *
- * @param id the identifier of the resource.
- * @param variables the values of the place.
- */
-function isOfTheGroup(id: string, variables: Readonly<Record<string, string>>): boolean {
-  const group = variables.resource_group_name
-  if (group === undefined || group === '') return false
-  const marker = `/resourceGroups/${group}`
-  const at = id.indexOf(marker)
-  if (at < 0) return false
-  // The identifier of the group ends with the name of the group, and
-  // the identifier of a resource of the group carries the name of the
-  // group and a slash.
-  const after = id.slice(at + marker.length)
-  return after === '' || after.startsWith('/')
 }
 
 /**
@@ -582,25 +526,10 @@ export class TofuInfrastructure implements InfrastructurePort {
     for (const [name, value] of Object.entries(variables)) {
       args.push(`-var=${name}=${value}`)
     }
-    let reason = ''
-    for (let attempt = 0; attempt < BOOTSTRAP_ATTEMPTS; attempt += 1) {
-      const applied = await this.#run(args, process.cwd(), true)
-      if (applied.status === 0) {
-        reason = ''
-        break
-      }
-      reason = applied.stderr.trim() || applied.stdout.trim()
-      const leftover = leftoverOf(reason)
-      // The resource is already there and the state of the place does
-      // not know it: the resource is written in the state of the place,
-      // and the place is created again.
-      if (leftover === undefined) break
-      if (!isOfTheGroup(leftover.id, variables)) break
-      await this.import(directory, leftover.address, leftover.id, { variables })
-    }
-    if (reason !== '') {
+    const applied = await this.#run(args, process.cwd(), true)
+    if (applied.status !== 0) {
       throw new CliFailure(
-        `the place where the state of the deployment lives was not created: ${reason}`,
+        `the place where the state of the deployment lives was not created: ${applied.stderr.trim() || applied.stdout.trim()}`,
         1,
         'tool_failed'
       )

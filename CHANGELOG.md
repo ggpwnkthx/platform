@@ -31,6 +31,50 @@ Access: the gateway presents its token on `POST /v1/decisions`, and
 Access accepts it as the token of the deployment. The templates write
 it once, and the two services hold the same value.
 
+### A crash of the tool that writes the deployment is told with the reason of the crash
+
+The tool that writes the deployment crashes when it cannot read the
+directory of the templates, and the crash is a stack trace of the tool:
+the operator reads the trace and not the name of the file that is in
+the way. The tool answers with the reason when it is asked what it
+cannot read, and the CLI asks it.
+
+A crash is not a state that becomes reachable: the templates are not
+initialized again, and the operator is told at once.
+
+The check of the deployment holds the directory of the templates to the
+files of the templates: a file that is not a file of the templates is a
+file that nobody owns, and the tool reads the whole directory.
+
+### The place where the state of the deployment lives is taken over when it is there
+
+The state of the place where the state of the deployment lives is a file
+of the machine of the operator, and the file is lost when the
+directory of the templates is cleaned: the resources of the place are
+there, and the state of the place does not know them, and the apply
+refuses to create them again.
+
+The resources that are already there are written in the state of the
+place and the place is created again, the way the resources of a
+deployment that a failed apply left behind are taken over. The tool is
+told the values of the place when it writes a resource in its state: a
+resource that is written with other values than the ones of the apply
+is a resource the next apply wants to change.
+
+A resource of another group is not taken over: the name is not ours,
+and the state of the deployment does not belong to a group that is not
+its group.
+
+### A role assignment that is already there is taken over
+
+The provider refuses to create a role assignment that is already there,
+and it names the identifier of the assignment instead of the identifier
+of the resource: the state of the deployment cannot take it over, and
+the place where the state of the deployment lives is never created.
+
+The assignment is found in the directory of the assignments of the
+subscription, and the state of the deployment takes it over.
+
 ### The wizard of a deployment says what it is doing
 
 The wizard of a deployment said everything at the end: the operator

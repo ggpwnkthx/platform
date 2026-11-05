@@ -578,21 +578,6 @@ if [ -n "$CRASHES" ]; then
       ;;
   esac
 fi
-if [ -n "$ALREADY_THERE" ]; then
-  case "$*" in
-    *apply*)
-      count=0
-      if [ -f "$COUNT_FILE" ]; then count=$(cat "$COUNT_FILE"); fi
-      count=$((count + 1))
-      printf '%s' "$count" > "$COUNT_FILE"
-      if [ "$count" -le "$ALREADY_THERE" ]; then
-        echo "Error: a resource with the ID \\"/subscriptions/the-subscription/resourceGroups/platform-production-state\\" already exists - to be managed via Terraform this resource needs to be imported into the State." >&2
-        echo "  with azurerm_resource_group.state," >&2
-        exit 1
-      fi
-      ;;
-  esac
-fi
 if [ -n "$BACKEND_CHANGED" ]; then
   case "$*" in
     *init*)
@@ -772,49 +757,6 @@ describe('the tool that writes the infrastructure', () => {
       words = await Bun.file(argumentsFile).text()
       expect(words).toContain(`-chdir=${templates} init`)
       expect(words).toContain(`-backend-config=${backend}`)
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-
-  test('the place where the state of the deployment lives is taken over when it is there', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platformctl-tool-'))
-    try {
-      const binary = join(directory, 'tofu')
-      const argumentsFile = join(directory, 'arguments.txt')
-      const countFile = join(directory, 'count.txt')
-      const bootstrap = join(directory, 'templates', 'bootstrap')
-      await mkdir(bootstrap, { recursive: true })
-      await writeFile(binary, TOOL)
-      await chmod(binary, 0o755)
-
-      const tool = new TofuInfrastructure({
-        PATH: process.env.PATH ?? '',
-        TOFU_BINARY: binary,
-        ARGS_FILE: argumentsFile,
-        COUNT_FILE: countFile,
-        ALREADY_THERE: '1',
-      })
-
-      // The state of the place is a file of the machine of the
-      // operator, and the file is lost: the resource of the place is
-      // there and the state does not know it. The resource is written
-      // in the state of the place, and the place is created again.
-      const configuration = await tool.bootstrap(bootstrap, {
-        name_prefix: 'platform',
-        environment: 'production',
-        location: 'centralus',
-        resource_group_name: 'platform-production-state',
-      })
-      expect(configuration.backendConfig).toContain('resource_group_name')
-
-      const words = await Bun.file(argumentsFile).text()
-      expect(words).toContain(
-        'import -input=false -no-color -var=name_prefix=platform -var=environment=production -var=location=centralus -var=resource_group_name=platform-production-state azurerm_resource_group.state /subscriptions/the-subscription/resourceGroups/platform-production-state'
-      )
-      // The place is created again after the resource is written in the
-      // state of the place.
-      expect(words.split('\n').filter((line) => line.includes('apply')).length).toBe(2)
     } finally {
       await rm(directory, { recursive: true, force: true })
     }

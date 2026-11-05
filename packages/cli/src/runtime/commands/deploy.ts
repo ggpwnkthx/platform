@@ -25,6 +25,7 @@ import { CliFailure } from '../../domains/failure'
 import {
   appliedOf,
   changesNothing,
+  type InfrastructureBootstrap,
   type InfrastructurePlan,
   type InfrastructurePort,
   questionOf,
@@ -850,6 +851,15 @@ export interface Recovery {
   readonly directory: string
   /** The file of the values of the deployment. */
   readonly file: string
+  /**
+   * The values of the deployment, as the tool is told them.
+   *
+   * A stack that has no file of values is told its values one by one,
+   * and the tool is told them the same way when it writes a resource
+   * in the state: a resource that is written with other values than
+   * the ones of the apply is a resource the next apply wants to change.
+   */
+  readonly variables?: Readonly<Record<string, string>>
   /** The region the deployment runs in. */
   readonly region?: string
   /** True when the operator has already said yes to everything. */
@@ -893,7 +903,10 @@ async function takeOver(
     let written = false
     for (const id of one.ids) {
       try {
-        await port.import(directory, one.address, id, { varFile: file })
+        await port.import(directory, one.address, id, {
+          varFile: file,
+          variables: recovery.variables,
+        })
         written = true
         break
       } catch (error) {
@@ -915,6 +928,59 @@ async function takeOver(
   return {
     note: `${importables.length} resources that a failed apply left in the cloud are written in the state`,
   }
+}
+
+/**
+ * The number of times the place where the state of the deployment lives
+ * is created again.
+ *
+ * The place holds four resources of Azure and two waits, and the
+ * resources that are already there are written in the state one by one:
+ * the tool refuses to create a resource that is there, and it names the
+ * one it refuses. The resource is written in the state, and the next
+ * apply refuses the next one.
+ */
+const BOOTSTRAP_ATTEMPTS = 8
+
+/**
+ * Creates the place where the state of the deployment lives.
+ *
+ * The place is created once per deployment, and the state of the
+ * bootstrap is a file of the machine of the operator: a file that is
+ * lost leaves the resources of the place in the cloud and the state of
+ * the bootstrap empty. The next apply refuses to create the resources
+ * that are there, and the recovery writes them in the state: the
+ * resources are taken over, and nothing of the state of the deployment
+ * is lost.
+ *
+ * @param recovery what the recovery needs to know.
+ * @param variables the values of the place.
+ */
+async function bootstrapPlace(
+  recovery: Recovery,
+  variables: Readonly<Record<string, string>>
+): Promise<InfrastructureBootstrap> {
+  let last: unknown
+  for (let attempt = 0; attempt < BOOTSTRAP_ATTEMPTS; attempt += 1) {
+    try {
+      return await recovery.port.bootstrap(recovery.directory, variables)
+    } catch (error) {
+      last = error
+      const recovered = await recoverLeftover(recovery, error)
+      if (recovered === undefined) throw error
+      // The place where the state of the deployment lives is not a
+      // resource that is freed or renamed: the state of the deployment
+      // is in it.
+      if (recovered.purged !== undefined || recovered.values !== undefined) throw error
+    }
+  }
+  throw last instanceof CliFailure
+    ? last
+    : new CliFailure(
+        'the place where the state of the deployment lives was not created',
+        1,
+        'tool_failed'
+      )
 }
 
 /**
@@ -1043,7 +1109,10 @@ export async function recoverLeftover(
   let refusal: string | undefined
   for (const id of leftover.ids) {
     try {
-      await port.import(directory, address, id, { varFile: file })
+      await port.import(directory, address, id, {
+        varFile: file,
+        variables: recovery.variables,
+      })
       return { note: `${address} was already there: it is written in the state of the deployment` }
     } catch (error) {
       refusal = error instanceof CliFailure ? error.message : String(error)
@@ -1339,9 +1408,22 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
             input.services.progress(text)
           )
         : []
-      const place = await tool.bootstrap(
-        bootstrap,
-        bootstrapVariables(values, defaults, addresses, declared)
+      const bootstrapValues = bootstrapVariables(values, defaults, addresses, declared)
+      const place = await bootstrapPlace(
+        {
+          provider,
+          port: tool,
+          directory: bootstrap,
+          // The place has no file of values: the tool is told the
+          // values of the place one by one.
+          file: '',
+          variables: bootstrapValues,
+          region: values.location,
+          yes: input.globals.yes,
+          purged,
+          tell: (text) => input.services.progress(text),
+        },
+        bootstrapValues
       )
       input.services.progress('the place where the state of the deployment lives is created')
       if (!place.created) {

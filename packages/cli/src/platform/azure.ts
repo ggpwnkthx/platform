@@ -531,6 +531,49 @@ function idsOf(id: string): readonly string[] {
 }
 
 /**
+ * The role assignment that a refusal names.
+ *
+ * The provider refuses to create a role assignment that is already
+ * there, and it names the identifier of the assignment: the identifier
+ * is the name of the assignment in the cloud, and the name of the
+ * assignment in the state is the address the refusal carries. The
+ * identifier of the assignment in the cloud is found in the directory
+ * of the assignments of the subscription.
+ *
+ * @param binary the path of the client of Azure.
+ * @param reason what the tool said about the failure.
+ */
+async function assignmentOf(
+  binary: string,
+  reason: string
+): Promise<{ address: string; id: string } | undefined> {
+  const named = /The ID of the existing role assignment is ([0-9a-fA-F-]{32,36})\./.exec(reason)
+  if (named === null) return undefined
+  const address = reason.match(/with ([A-Za-z0-9_.[\]"-]+),/)?.[1]
+  if (address === undefined) return undefined
+  const listed = await run(binary, [
+    'role',
+    'assignment',
+    'list',
+    '--all',
+    '--query',
+    `[?ends_with(id, '${named[1]}')].id | [0]`,
+    '--output',
+    'json',
+  ])
+  if (listed.status !== 0) return undefined
+  let id = ''
+  try {
+    const parsed = JSON.parse(listed.stdout) as unknown
+    if (typeof parsed === 'string') id = parsed
+  } catch {
+    return undefined
+  }
+  if (id === '') return undefined
+  return { address, id }
+}
+
+/**
  * The resource of Azure that a failed apply left behind.
  *
  * The client of Azure knows every resource of every subscription the
@@ -553,7 +596,15 @@ async function leftoverOf(
   region?: string
 ): Promise<Leftover | undefined> {
   const refused = refusedOf(reason)
-  if (refused === undefined) return undefined
+  if (refused === undefined) {
+    // The provider refuses to create a role assignment that is already
+    // there, and it names the identifier of the assignment instead of
+    // the identifier of the resource: the assignment is found in the
+    // directory of the assignments of the subscription.
+    const assignment = await assignmentOf(binary, reason)
+    if (assignment === undefined) return undefined
+    return { name: assignment.address, ids: [assignment.id] }
+  }
 
   // The resource of the group of the deployment and of its
   // subscription: the state of the deployment can take it over.
