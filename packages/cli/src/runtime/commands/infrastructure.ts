@@ -9,7 +9,7 @@
  */
 
 import { existsSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import type { CommandInput, CommandResult, GroupSpec } from '../../app/commands'
 import { stringOf } from '../../app/commands'
 import { tableLines } from '../../app/output'
@@ -19,11 +19,14 @@ import {
   changesNothing,
   type InfrastructurePlan,
   type InfrastructurePort,
+  type InfrastructureRun,
   isTooOld,
   questionOf,
   countedOf,
+  type PlannedResource,
 } from '../../domains/infrastructure'
-import { MINIMUM_TOFU, redact } from '../../platform/tofu'
+import { lockOf, MINIMUM_TOFU, redact } from '../../platform/tofu'
+import { pathOf, placeOf } from '../../platform/checkout'
 
 /** The directory of the templates, when the reader names none. */
 const DEFAULT_DIRECTORY = join('deploy', 'tofu', 'azure')
@@ -40,10 +43,15 @@ const PLAN = 'plan.bin'
 /**
  * The directory of the templates of the deployment.
  *
+ * The templates live in a checkout of the repository, and the command
+ * may run in a directory of the checkout: the path of the templates is
+ * read from the checkout.
+ *
  * @param input what the command received.
  */
 function directoryOf(input: CommandInput): string {
-  return resolve(stringOf(input.options, 'directory') ?? DEFAULT_DIRECTORY)
+  const named = stringOf(input.options, 'directory')
+  return named === undefined ? placeOf(DEFAULT_DIRECTORY) : pathOf(named)
 }
 
 /**
@@ -58,8 +66,8 @@ function directoryOf(input: CommandInput): string {
  */
 function runtimeOf(input: CommandInput): string {
   const named = stringOf(input.options, 'runtime')
-  if (named) return resolve(named)
-  return resolve(join(DEFAULT_RUNTIME, input.context.name))
+  if (named) return pathOf(named)
+  return placeOf(join(DEFAULT_RUNTIME, input.context.name))
 }
 
 /**
@@ -70,7 +78,7 @@ function runtimeOf(input: CommandInput): string {
  */
 function valuesOf(input: CommandInput, runtime: string): string {
   const named = stringOf(input.options, 'var-file')
-  if (named) return resolve(named)
+  if (named) return pathOf(named)
   return join(runtime, VALUES)
 }
 
@@ -108,9 +116,94 @@ function requireRuntime(runtime: string): string {
  */
 function valuesWhenThere(input: CommandInput, runtime: string): string | undefined {
   const named = stringOf(input.options, 'var-file')
-  if (named) return resolve(named)
+  if (named) return pathOf(named)
   const file = join(runtime, 'terraform.tfvars')
   return existsSync(file) ? file : undefined
+}
+
+/**
+ * The plan of the deployment, and the lock of the state when the state
+ * is locked.
+ *
+ * The state of the deployment is locked when another run holds its
+ * lock, and the tool refuses to write the plan at all. The operator
+ * says whether that run is still there: the lock is freed when it is
+ * not, and the plan is written again.
+ *
+ * @param port the tool that writes the infrastructure.
+ * @param directory the directory of the templates.
+ * @param runtime the directory of the files of the deployment.
+ * @param varFile the file of the values of the deployment.
+ * @param input what the command received.
+ */
+export async function planOf(
+  port: InfrastructurePort,
+  directory: string,
+  runtime: string,
+  varFile: string,
+  input: CommandInput
+): Promise<InfrastructurePlan> {
+  const run = { varFile, planFile: join(runtime, PLAN) }
+  try {
+    return await port.plan(directory, run)
+  } catch (error) {
+    const unlocked = await unlockState(port, directory, run, error, input.globals.yes, (text) =>
+      input.services.progress(text)
+    )
+    if (!unlocked) throw error
+    return await port.plan(directory, run)
+  }
+}
+
+/**
+ * Frees the lock of the state of the deployment, when the tool refuses
+ * to write the plan because the state is locked.
+ *
+ * A run that was killed leaves the lock of the state behind it, and the
+ * next run cannot write the state at all. The operator says whether the
+ * run that holds the lock is still there: the lock is freed when it is
+ * not, and the refusal names the command that frees it when the
+ * operator says no.
+ *
+ * @param port the tool that writes the infrastructure.
+ * @param directory the directory of the templates.
+ * @param run what the run needs to know.
+ * @param error what the tool refused with.
+ * @param yes true when the operator has already said yes to everything.
+ * @param tell what the operator is told about the lock.
+ */
+export async function unlockState(
+  port: InfrastructurePort,
+  directory: string,
+  run: InfrastructureRun,
+  error: unknown,
+  yes: boolean,
+  tell: (text: string) => void
+): Promise<boolean> {
+  if (!(error instanceof CliFailure)) return false
+  const lock = lockOf(error.message)
+  if (lock === undefined) return false
+  const where = `the state of the deployment is locked by ${lock.who} since ${lock.created} (lock ${lock.id})`
+  try {
+    await confirm(
+      `${where}: the run that holds the lock is not there anymore, and the lock is freed?`,
+      yes,
+      process.stdin,
+      process.stderr
+    )
+  } catch (refusal) {
+    if (refusal instanceof CliFailure && refusal.code === 'not_confirmed') {
+      throw new CliFailure(
+        `the deployment is not applied: ${where}: the lock is freed with: tofu -chdir=${directory} force-unlock -force ${lock.id}`,
+        5,
+        'locked'
+      )
+    }
+    throw refusal
+  }
+  await port.unlock(directory, lock.id, run)
+  tell(`the lock of the state of the deployment is freed: ${lock.id}`)
+  return true
 }
 
 /**
@@ -158,9 +251,55 @@ export function linesOfPlan(plan: InfrastructurePlan): string[] {
  * @param plan the plan of the deployment.
  */
 export function tableOfPlan(plan: InfrastructurePlan): string[] {
-  const rows = plan.changes.map((change) => [change.action, change.kind, change.address])
+  return tableOfChanges(plan.changes)
+}
+
+/**
+ * The lines of the table of the resources a run changed, as a human
+ * reads them.
+ *
+ * The table of a plan and the table of an apply are the same table: the
+ * resources are named the same way, and the action of a resource is the
+ * action the tool did to it.
+ *
+ * @param changes the resources the run changed.
+ */
+export function tableOfChanges(changes: readonly PlannedResource[]): string[] {
+  const rows = changes.map((change) => [change.action, change.kind, change.address])
   const header = ['action', 'kind', 'address']
   return tableLines(header, rows, false)
+}
+
+/**
+ * The lines the operator reads before it answers about a plan.
+ *
+ * The lines name what the plan destroys and, when the answer of the
+ * command is a table, the plan itself. The lines are shown whatever
+ * the format of the answer is: the plan that is applied is the plan
+ * that was shown, and a reader who answers in json has read the plan
+ * as well as a reader who answers in a table.
+ *
+ * The question of the operator names what the plan does, counted. The
+ * count is named here as well only when the question is not asked:
+ * `--yes` answers the question, and it does not hide the plan the
+ * answer is about.
+ *
+ * @param plan the plan of the deployment.
+ * @param table true when the answer of the command is a table.
+ * @param counted true when the question does not name what the plan does.
+ */
+export function planContext(plan: InfrastructurePlan, table: boolean, counted: boolean): string[] {
+  const lines: string[] = []
+  if (counted) lines.push(countedOf(plan))
+  const destroyed = plan.changes.filter(
+    (change) => change.action === 'delete' || change.action === 'replace'
+  )
+  if (destroyed.length > 0) {
+    lines.push('the plan destroys:')
+    for (const change of destroyed) lines.push(`  ${change.address}`)
+  }
+  if (table) lines.push('', ...tableOfPlan(plan))
+  return lines
 }
 
 /**
@@ -209,7 +348,7 @@ export const infrastructureGroup: GroupSpec = {
         const directory = directoryOf(input)
         const runtime = requireRuntime(runtimeOf(input))
         const varFile = valuesOf(input, runtime)
-        const plan = await port.plan(directory, { varFile, planFile: join(runtime, PLAN) })
+        const plan = await planOf(port, directory, runtime, varFile, input)
         return {
           value: {
             directory: plan.directory,
@@ -249,7 +388,7 @@ export const infrastructureGroup: GroupSpec = {
         const directory = directoryOf(input)
         const runtime = requireRuntime(runtimeOf(input))
         const varFile = valuesOf(input, runtime)
-        const plan = await port.plan(directory, { varFile, planFile: join(runtime, PLAN) })
+        const plan = await planOf(port, directory, runtime, varFile, input)
         const lines = linesOfPlan(plan)
         const value = {
           directory: plan.directory,
@@ -264,14 +403,19 @@ export const infrastructureGroup: GroupSpec = {
           return { value, lines: [], message: 'the deployment is already what it should be' }
         }
         // The plan is what the reader answers about: it is shown
-        // before the question, and the question names what the plan
-        // does, counted.
+        // before the question, whatever the format of the answer is,
+        // and the question names what the plan does, counted.
         await confirm(
           questionOf(plan),
           input.globals.yes,
           process.stdin,
-          process.stdout,
-          input.globals.output === 'table' && !input.globals.quiet ? tableOfPlan(plan) : []
+          process.stderr,
+          planContext(
+            plan,
+            input.globals.output === 'table' && !input.globals.quiet,
+            input.globals.yes
+          ),
+          (text) => input.services.progress(text)
         )
         const applied = await port.apply(directory, plan)
         return {

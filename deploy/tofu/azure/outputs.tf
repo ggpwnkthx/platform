@@ -17,22 +17,49 @@ output "resource_group_name" {
 # The environment of the container apps proves the ownership of a name
 # with a record of DNS: a TXT record named "asuid" and the subdomain of
 # the name, holding the code of the verification.
+#
+# The records of this output are the records of a zone the operator
+# writes: a deployment that writes its records in a zone of Azure writes
+# them itself, and the operator only delegates the zone.
 output "dns_records" {
   description = "The records of DNS of the public names of the deployment."
   value = {
     api = {
       cname        = azurerm_container_app.gateway.ingress[0].fqdn
-      verification = "asuid.${split(".", var.gateway_hostname)[0]}"
+      verification = local.dns_verification_names["api"]
     }
     access = {
       cname        = azurerm_container_app.gateway.ingress[0].fqdn
-      verification = "asuid.${split(".", var.access_hostname)[0]}"
+      verification = local.dns_verification_names["access"]
     }
     console = {
       cname        = azurerm_container_app.gateway.ingress[0].fqdn
-      verification = "asuid.${split(".", var.console_hostname)[0]}"
+      verification = local.dns_verification_names["console"]
     }
   }
+}
+
+# The name servers of the zone of the names of the deployment.
+#
+# The operator delegates the zone to Azure with these records at the
+# registrar, and the delegation is the only record the operator writes:
+# the names of the deployment are the records of the zone, and the
+# deployment writes them.
+output "dns_name_servers" {
+  description = "The name servers of the zone of the public names of the deployment."
+  value = local.dns_zone_enabled ? tolist(one(concat(
+    azurerm_dns_zone.platform[*].name_servers,
+    data.azurerm_dns_zone.platform[*].name_servers,
+  ))) : []
+}
+
+# The zone of the names of the deployment.
+#
+# The zone is named by the operator, and it holds every name of the
+# deployment: the names are the subdomains of the zone.
+output "dns_zone_name" {
+  description = "The zone of DNS that holds the public names of the deployment."
+  value       = var.dns_zone_name
 }
 
 # The code of the verification of the names of the deployment. It is the

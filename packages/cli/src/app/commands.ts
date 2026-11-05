@@ -48,7 +48,7 @@ export interface Services {
     /** The file of the credential of the caller. */
     readonly credentials: string
   }
-  /** The stream the progress of a command is written on. */
+  /** The stream the progress and the dialog of a command are written on. */
   readonly progress: (text: string) => void
 }
 

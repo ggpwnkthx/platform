@@ -44,6 +44,7 @@ platformctl [options] <group> <command> [arguments] [options]
 - Every word after `--` is an argument, whatever it looks like.
 - An option the command does not declare is refused, and so is an option that needs a value and has none. Both refusals end the process with the usage-error status (§6.2).
 - The help of the CLI, of a group and of a command is written on the standard output, and it ends the process with the status of a command that did what it was asked: `--help` and `help` are not refusals.
+- The dialog of a command — the questions, the choices and the plan that is shown before a confirmation — is written on the standard error. The standard output holds the answer of the command and nothing else, whatever the format of the answer is.
 - A refusal of a command that does not exist names the command that is the closest to what the reader typed, and a refusal of an option that does not exist names the option that is the closest to it.
 - A refusal may carry a hint: the next thing the reader can try. The hint is written on the standard error, after the refusal, as a line that begins with `hint:`.
 
@@ -235,11 +236,18 @@ The commands of the group take the same options:
 | `--var-file <path>` | The file of the values of the deployment. The default is the values of the runtime directory. |
 | `--name <name>` | One output of the deployment. |
 
+A path of the deployment is a path of the checkout: the command may run
+in a directory of the checkout — the CLI is run through the workspace of
+a package — and the path the reader named is read from the checkout
+when it is not in the directory the command runs in. A path that is
+absolute is the path it is, and a command that runs outside of a
+checkout reads its paths from the directory it runs in.
+
 The tool is found on the path, or in the variable `TOFU_BINARY`. A machine that holds no tool takes the one of the release of the tool: the CLI reads the archive of the system it runs on, proves it against the digest the release published, and writes the tool in the directory `.platform/tofu/<version>` of the working directory. The variable `TOFU_DOWNLOAD` set to `off` refuses that download, and the variable `TOFU_DIRECTORY` names the directory the tool is written in. The CLI refuses a tool that is older than the version the templates ask for, and it refuses a tool that is not there. The plan is read from the json the tool writes, and the text the tool writes is never parsed: a plan that the CLI reads another way is a plan nobody proved.
 
 The words of the tool are shown on the standard error as they come when the tool takes a while: an operator who sees nothing for minutes does not know whether the CLI is working. The answer of the command stays on the standard output, and the words of the tool are never part of it.
 
-`infra apply` shows the plan and asks before it applies: the plan is what the reader answers about, and the question names what the plan does, counted. `--dry-run` writes the plan and applies nothing.
+`infra apply` shows the plan and asks before it applies: the plan is what the reader answers about, and the question names what the plan does, counted. The plan is shown before the question whatever the format of the answer is, and `--yes` does not hide it: the plan that is applied is the plan that was shown. `--dry-run` writes the plan and applies nothing.
 
 A resource that a failed apply left in the cloud is not in the state, and the next apply refuses to create it again. `infra import` writes it into the state, and the deployment goes on. The identifier of the resource is the one the cloud names it by.
 
@@ -257,9 +265,11 @@ The wizard of a deployment collects the values of a deployment and signs the ope
 
 The wizard tells its steps as they happen, on the standard error: the wizard takes minutes, and an operator who sees nothing for minutes does not know whether the CLI is working. The answer of the wizard keeps the summary of what happened on the standard output.
 
+The answer of the wizard is what the apply did: the plan is shown before the question, and a plan that is told again after the apply reads as a plan that is still to come. The resources the apply changed are named in the answer, and they are counted in the past, because an apply is an answer and not a question.
+
 A question of the wizard is asked in the words of the CLI, in lower case, and the default of the question is written in brackets after it: the operator answers nothing and takes the default. The question is written on one line and the answer is written on the next, after a marker.
 
-A dry run writes the file of the values, tells the steps the deployment takes in the words of the deployment, and applies nothing. The steps name what the deployment does and not the commands of the tool: the commands of the tool are the business of the tool.
+A dry run writes nothing, tells the steps the deployment takes in the words of the deployment, and applies nothing. It signs nobody in either: it reads the facts the machine of the operator already holds, and it asks what it cannot read. The steps name what the deployment does and not the commands of the tool: the commands of the tool are the business of the tool.
 
 | Command | Effect |
 | --- | --- |
@@ -267,15 +277,29 @@ A dry run writes the file of the values, tells the steps the deployment takes in
 
 The wizard asks a question when it cannot answer it itself. A question that has a value in the example of the templates shows the value the operator may take, and a question that names the deployment has no default: the operator types it. The facts the provider reads from its own system are never asked again.
 
+A question whose value is a selection is asked with the choices: the operator picks one of them, by its number or by its name, and an answer that is not one of them is asked again. A selection is never typed: the environment of the deployment is development, staging or production, and the wizard offers the three and takes the one that is picked. The default of a selection is the answer the operator confirms by answering nothing.
+
+A question the deployment can do without is asked, and the operator may answer nothing: the zone of DNS that holds the names of the deployment is a zone the operator may write the records of by hand, and an empty answer leaves the records to the operator.
+
+An answer that the deployment cannot use is refused at the question, and the question is asked again: an identifier that is not an identifier and a digest that is not a digest are refused there, and not at the end of the interview, where the operator has already answered everything. A question with choices is asked again when the answer is not one of the choices.
+
+The wizard refuses what is missing before it asks anything. The templates of the deployment and their bootstrap, the tool that writes the infrastructure and the identity of the operator are checked before the first question: a wizard that answers twenty questions and refuses afterwards has taken the time of the operator for nothing. A dry run runs no tool, and it applies nothing.
+
 The values of a deployment that is already there are the defaults of the questions: the wizard reads the file of the values of the deployment of the environment and offers every answer of it, so a second run is a matter of confirming them. The example of the templates is the default of everything the deployment does not hold, and the environment of the deployment that is already there is the default of the environment when it is the only one that is there.
 
 The digests of the images of the platform are read from the release of the platform: the release carries the digest of every image it published, and a digest that is copied by hand is a digest that is wrong the day the tag moves. The release is read before the provider is asked for a session, and a release the reader named and that is not there is a failure that names the release. The digest of the image of the client of PostgreSQL is read from the registry that holds it: it is the one image of a deployment that the platform does not publish. What cannot be read is asked, and the wizard says why.
 
-The wizard writes the file of the values of the deployment, in the runtime directory of the deployment. It refuses to write it over the values that are there, unless `--force` is given.
+The wizard writes the file of the values of the deployment, in the runtime directory of the deployment. The values that are there are the answers of an earlier run, and the wizard does not throw them away: when the operator chooses the same values, the file is left alone, and when the operator chooses other ones, the operator is asked whether the file is written again. `--yes` answers that question with yes, and `--force` writes the file without asking it. A reader who answers no keeps the values that are there, and the refusal ends with the usage-error-free status of a thing that changed underneath the command.
+
+The answers of the operator are told before the deployment goes on, on the standard error: the deployment takes minutes, and an answer that is wrong is caught before the minutes and not after them.
+
+A deployment that was not applied is refused with what the tool said, and not with the summary of the recovery: the reason of the failure of a deployment is the reason the tool gave.
+
+The state of the deployment is locked when another run holds its lock, and the tool refuses to write the plan at all. A run that was killed leaves the lock behind it: the wizard names the lock, the one who holds it and the moment it was taken, and the operator says whether that run is still there. The lock is freed when it is not, and the refusal names the command that frees it when the operator says no.
 
 The wizard goes on with the deployment. The place where the state of the deployment lives is the bootstrap of the templates, and the account of that state is closed to every address but the ones of the operator: the wizard reads the public address of the machine of the operator and offers it as the default of the question, and the operator confirms it by answering nothing or changes it by typing another address. The service that holds the state refuses a range of one address, so the range of an address is the range of four addresses that holds it, and a range that is narrower than the service takes is widened to the range that holds it. The variable `PLATFORMCTL_ADDRESS_SERVICE` names the service the address is read from, and `PLATFORMCTL_ADDRESS_LOOKUP` set to `off` refuses the reading. The group of the state is named after the deployment and the word `state`, and it is not the group of the deployment: the templates create that one. The configuration of the backend of the state is what the bootstrap answers, and the wizard writes it in the runtime directory as `backend.hcl`. The templates are then initialized against that backend, the plan is written and shown, and the plan that was shown is the plan that is applied, once the operator confirms it.
 
-The shared key of the account of the state is off, and the access to the state is a role of Entra ID: the bootstrap grants the operator the role that reads and writes the state, and the identity of the operator is the one of the session of the client of Azure. The place where the state lives was created a moment ago, and the data plane of the account sees the container of the state a little after the management plane created it: the templates are initialized again while the init fails. The configuration of the backend may have changed, and the state of the deployment may have to move with it: the tool migrates the state when it can, and keeps it where it is when it cannot, and the operator is told when the state did not move. The wizard writes the configuration of the backend only when the tool answered with one: a tool that answers with a diagnostic instead of a configuration is a failure of the bootstrap, and the failure names what the tool said. A bootstrap that fails is a failure of the tool, and the wizard never hides it behind a configuration it read before.
+The shared key of the account of the state is off, and the access to the state is a role of Entra ID: the bootstrap grants the operator the role that reads and writes the state, and the identity of the operator is the one of the session of the client of Azure. The place where the state lives was created a moment ago, and the data plane of the account sees the container of the state a little after the management plane created it: the templates are initialized again while the init fails. The configuration of the backend may have changed, and the state of the deployment may have to move with it: the tool migrates the state when it can, and keeps it where it is when it cannot, and the operator is told when the state did not move. A state that could not be read is a state that is empty, and the plan of an empty state is the plan of a deployment whose resources are not in the state: the wizard names it in the question the operator answers, and the resources that the tool names are written in the state before the plan is run again. The wizard writes the configuration of the backend only when the tool answered with one: a tool that answers with a diagnostic instead of a configuration is a failure of the bootstrap, and the failure names what the tool said. A bootstrap that fails is a failure of the tool, and the wizard never hides it behind a configuration it read before.
 
 The state of the deployment belongs to the tool: the wizard writes the values and the configuration of the backend, and the tool writes the state and the plan.
 
@@ -305,7 +329,7 @@ The wizard takes the options of the group:
 
 Every table of the CLI is drawn the same way: the columns line up, the head of the table is bold, and a cell that is a state is painted with the colour of the state.
 
-The plan of the deployment says what it does, counted, before it says what it does: the reader sees how many resources the plan touches before the plan itself.
+The plan of the deployment says what it does, counted, before it says what it does: the reader sees how many resources the plan touches before the plan itself. The plan that is shown before a confirmation is shown on the standard error, whatever the format of the answer is: the answer of a command holds the answer and nothing else.
 
 ### 6.2 Exit status
 
@@ -332,6 +356,7 @@ The service's error code decides the status; when the code is unknown, the HTTP 
 - A route table write names the revision it replaces.
 - A record change carries the validator of the record it expects to change, and a failed precondition has its own status.
 - An apply of the deployment applies the plan that was shown, and the question names what the plan destroys.
+- The plan is shown before the question of an apply whatever the format of the answer is, and `--yes` does not hide it: `--yes` answers the question with yes, and it does not hide the plan the answer is about.
 
 ---
 

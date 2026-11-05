@@ -155,6 +155,7 @@ export const TEMPLATE_FILES: readonly string[] = [
   'identity.tf',
   'containerapps.tf',
   'edge.tf',
+  'dns.tf',
   'outputs.tf',
   'terraform.tfvars.example',
   '.terraform.lock.hcl',

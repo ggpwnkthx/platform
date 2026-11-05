@@ -24,7 +24,7 @@
   "scripts": {
     "dev": "bun run scripts/dev.ts",
     "dev:gateway": "bun run --cwd packages/gateway dev",
-    "cli": "bun run --cwd packages/cli start",
+    "cli": "bun packages/cli/src/main.ts",
     "test": "bun run test:platform && bun run --workspaces test",
     "test:fast": "bun run test:platform && bun run test:gateway && bun run test:access && bun run test:console && bun run test:data:fast && bun run test:cli",
     "test:platform": "bun test test/*.test.ts",

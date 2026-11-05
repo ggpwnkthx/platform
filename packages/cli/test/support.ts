@@ -14,6 +14,7 @@ import type {
   InfrastructurePlan,
   InfrastructurePort,
   InfrastructureRun,
+  InfrastructureState,
   InfrastructureValidation,
 } from '../src/domains/infrastructure'
 
@@ -101,6 +102,10 @@ export class FakeInfrastructure implements InfrastructurePort {
   backendConfig = 'resource_group_name = "platform-production-state"'
   /** The failure the tool refuses the apply with, when the test sets one. */
   failure?: Error
+  /** The failure the tool refuses the plan with, when the test sets one. */
+  planFailure?: Error
+  /** True when the tool refuses every apply, and not only the first one. */
+  alwaysFails = false
 
   /** The version of the tool, as the tool names itself. */
   async version(): Promise<string> {
@@ -117,9 +122,13 @@ export class FakeInfrastructure implements InfrastructurePort {
   }
 
   /** Initializes the templates of the deployment. */
-  async initialize(directory: string, run: InfrastructureRun): Promise<void> {
+  async initialize(directory: string, run: InfrastructureRun): Promise<InfrastructureState> {
     this.initialized.push({ directory, run })
+    return this.state
   }
+
+  /** The state of the deployment, as the initialization of the templates found it. */
+  state: InfrastructureState = { read: true }
 
   /** The resources that were written in the state. */
   readonly imported: { address: string; id: string }[] = []
@@ -134,14 +143,34 @@ export class FakeInfrastructure implements InfrastructurePort {
     this.imported.push({ address, id })
   }
 
+  /** The locks of the state of the deployment that were freed. */
+  readonly unlocked: string[] = []
+
+  /** Frees the lock of the state of the deployment. */
+  async unlock(_directory: string, id: string, _run: InfrastructureRun): Promise<void> {
+    this.unlocked.push(id)
+  }
+
   /** The plan of the deployment. */
   async plan(directory: string, run: InfrastructureRun): Promise<InfrastructurePlan> {
     this.runs.push({ directory, run })
+    if (this.planFailure !== undefined) {
+      // The tool refuses once, and the test writes what is missing
+      // before the plan is written again.
+      const failure = this.planFailure
+      this.planFailure = undefined
+      throw failure
+    }
     return { ...this.plan_, directory }
   }
 
   /** Applies a plan that the tool has written. */
   async apply(directory: string, plan: InfrastructurePlan): Promise<AppliedInfrastructure> {
+    if (this.alwaysFails) {
+      // The tool refuses every apply: the recovery runs the plan
+      // again, and the tool refuses it again.
+      throw this.failure ?? new Error('the deployment was not applied')
+    }
     if (this.failure !== undefined) {
       // The tool refuses once, and the test writes the resource that
       // is already there in the state before the apply runs again.

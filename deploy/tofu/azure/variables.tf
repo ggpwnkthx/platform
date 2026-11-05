@@ -158,21 +158,45 @@ variable "postgres_client_image" {
 #
 # The three public hosts of the deployment: the one the callers reach,
 # the issuer of Access and the one the browser reaches.
+#
+# The names of the deployment are the names of the three services in the
+# zone of the deployment: the zone is the domain of the names, and the
+# name of a service is the label of the service in the zone. The public
+# name of a service is the label and the zone, and the templates write
+# it once here.
 # --------------------------------------------------------------------------
 
-variable "gateway_hostname" {
-  description = "The public name of the gateway, for example api.example.com."
+variable "gateway_name" {
+  description = "The name of the gateway in the zone of the deployment, for example api."
   type        = string
+  default     = "api"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$", var.gateway_name))
+    error_message = "The name of the gateway is the label of the gateway in the zone."
+  }
 }
 
-variable "access_hostname" {
-  description = "The public name of the issuer of Access, for example access.example.com."
+variable "access_name" {
+  description = "The name of the issuer of Access in the zone of the deployment, for example access."
   type        = string
+  default     = "access"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$", var.access_name))
+    error_message = "The name of the issuer of Access is the label of the issuer in the zone."
+  }
 }
 
-variable "console_hostname" {
-  description = "The public name of the console, for example console.example.com."
+variable "console_name" {
+  description = "The name of the console in the zone of the deployment, for example console."
   type        = string
+  default     = "console"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$", var.console_name))
+    error_message = "The name of the console is the label of the console in the zone."
+  }
 }
 
 # --------------------------------------------------------------------------
@@ -335,6 +359,54 @@ variable "public_names_enabled" {
   description = "Whether the public names of the deployment are bound to the gateway."
   type        = bool
   default     = false
+}
+
+# The zone of DNS that holds the public names of the deployment.
+#
+# The names of the deployment are the subdomains of a domain, and the
+# domain is a zone of DNS. When the deployment writes the records of the
+# names, the zone is a zone of Azure: the operator delegates the zone to
+# Azure with the records of the registrar, and the delegation is the
+# only record the operator writes.
+#
+# The zone of a deployment is a zone of the group of the deployment, and
+# it dies with the deployment. A zone that is named in the group the
+# operator names outlives the deployment: the deployment writes the
+# records of the names in it and creates nothing.
+variable "dns_zone_name" {
+  description = "The zone of DNS that holds the public names of the deployment."
+  type        = string
+
+  validation {
+    condition = can(regex(
+      "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)+$",
+      var.dns_zone_name
+    ))
+    error_message = "The zone of the names of the deployment is the name of a domain."
+  }
+}
+
+# Whether the deployment writes the records of the public names.
+#
+# A deployment that writes the records owns the zone of the names, and
+# the operator delegates the zone to Azure. A deployment that does not
+# write them leaves the records to the operator: the output
+# "dns_records" names the records the operator writes.
+variable "dns_records_managed" {
+  description = "Whether the deployment writes the records of the public names of the deployment."
+  type        = bool
+  default     = true
+}
+
+# The resource group that holds the zone of the public names.
+#
+# The zone of the deployment is a zone of the group of the deployment
+# when the operator names no group. A zone that is named in the group
+# of the operator outlives the deployment, and the operator owns it.
+variable "dns_zone_resource_group_name" {
+  description = "The resource group that holds the zone of the public names of the deployment."
+  type        = string
+  default     = ""
 }
 
 variable "trusted_proxy_cidrs" {

@@ -28,13 +28,23 @@ locals {
     platform    = var.name_prefix
   }
 
+  # The public names of the deployment.
+  #
+  # The names are the labels of the services in the zone of the
+  # deployment: the zone is the domain of the names, and the label of a
+  # service is the name of the service in the zone. The public name of a
+  # service is written here and nowhere else.
+  gateway_hostname = "${var.gateway_name}.${var.dns_zone_name}"
+  access_hostname  = "${var.access_name}.${var.dns_zone_name}"
+  console_hostname = "${var.console_name}.${var.dns_zone_name}"
+
   # The hosts of the deployment. The issuer of Access is the address
   # that both the browsers and the gateway use: the two have to be the
   # same, character for character, or the gateway refuses the tokens it
   # is given.
-  access_issuer = "https://${var.access_hostname}"
-  gateway_url   = "https://${var.gateway_hostname}"
-  console_url   = "https://${var.console_hostname}"
+  access_issuer = "https://${local.access_hostname}"
+  gateway_url   = "https://${local.gateway_hostname}"
+  console_url   = "https://${local.console_hostname}"
 
   # The redirect of the gateway: the provider sends the browser back to
   # the address the caller reached the gateway under.
@@ -43,6 +53,42 @@ locals {
   # The redirect of the console: the console is a client of Access, and
   # it registers the callback with the tenant.
   console_redirect_uri = "${local.console_url}/auth/callback"
+
+  # The zone of the names of the deployment.
+  #
+  # The records of the names are the records of the zone, and the
+  # deployment writes them when it owns the zone.
+  dns_zone_enabled = var.dns_records_managed
+
+  # The group that holds the zone of the names of the deployment. A
+  # zone that the deployment creates lives in the group of the
+  # deployment, and a zone that is named by the operator lives in the
+  # group the operator names: a zone of Azure outlives a deployment.
+  dns_resource_group = var.dns_zone_resource_group_name != "" ? var.dns_zone_resource_group_name : azurerm_resource_group.platform.name
+
+  # The names of the deployment, as the records of the zone name them.
+  public_names = {
+    api     = local.gateway_hostname
+    access  = local.access_hostname
+    console = local.console_hostname
+  }
+
+  # The name of a record of the zone: the labels of the name of the
+  # deployment that the zone does not hold. The name of the gateway is
+  # the name of the deployment, and its labels are the ones of the
+  # zone.
+  dns_record_names = {
+    for name, host in local.public_names :
+    name => trimsuffix(host, ".${var.dns_zone_name}")
+  }
+
+  # The name of the record that proves the ownership of a name: the
+  # label of the name in the zone, and the first label of the name when
+  # the zone is not named and the operator writes the record.
+  dns_verification_names = {
+    for name, host in local.public_names :
+    name => "asuid.${local.dns_zone_enabled ? local.dns_record_names[name] : split(".", host)[0]}"
+  }
 
   # The identifier of the key that signs the identity of a request.
   access_signing_kid = "${var.name_prefix}-access-1"
@@ -248,7 +294,7 @@ locals {
     version = 2
     # The names of the gateway: the endpoints the gateway serves itself
     # answer on those names, and on no other name.
-    hosts = [var.gateway_hostname]
+    hosts = [local.gateway_hostname]
     defaults = {
       auth = { mode = "none" }
       timeouts = {
@@ -265,7 +311,7 @@ locals {
       {
         id = var.route_id
         match = {
-          host = var.gateway_hostname
+          host = local.gateway_hostname
           path = var.workspace_path_prefix
         }
         upstream = "http://${local.data_fqdn}:8082"
@@ -285,7 +331,7 @@ locals {
       {
         id = "access-root"
         match = {
-          host = var.access_hostname
+          host = local.access_hostname
           path = "/"
         }
         upstream     = "http://${local.access_fqdn}:8081"
@@ -298,7 +344,7 @@ locals {
       {
         id = "access"
         match = {
-          host = var.access_hostname
+          host = local.access_hostname
           path = "/{rest}"
         }
         upstream             = "http://${local.access_fqdn}:8081"
@@ -311,7 +357,7 @@ locals {
       {
         id = "console-root"
         match = {
-          host = var.console_hostname
+          host = local.console_hostname
           path = "/"
         }
         upstream     = "http://${local.console_fqdn}:8083"
@@ -321,7 +367,7 @@ locals {
       {
         id = "console"
         match = {
-          host = var.console_hostname
+          host = local.console_hostname
           path = "/{rest}"
         }
         upstream     = "http://${local.console_fqdn}:8083"
@@ -344,7 +390,7 @@ locals {
     bindings = [
       {
         id                  = var.route_id
-        host                = var.gateway_hostname
+        host                = local.gateway_hostname
         upstreamPathPattern = "${var.workspace_path_prefix}v1/*"
         routeId             = var.route_id
         identity = {

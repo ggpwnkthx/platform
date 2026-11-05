@@ -14,7 +14,15 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { CliFailure } from '../domains/failure'
-import type { Asker, DeploymentProvider, Leftover, Question, SignIn } from '../domains/deployment'
+import {
+  ENVIRONMENTS,
+  type Asker,
+  type DeploymentProvider,
+  type Importable,
+  type Leftover,
+  type Question,
+  type SignIn,
+} from '../domains/deployment'
 import { run } from './process'
 
 /** The questions of a deployment on Azure. */
@@ -26,8 +34,9 @@ export const AZURE_QUESTIONS: readonly Question[] = [
   },
   {
     name: 'environment',
-    summary: 'the environment of the deployment: development, staging or production',
+    summary: 'the environment of the deployment',
     kind: 'chosen',
+    choices: ENVIRONMENTS,
   },
   {
     name: 'location',
@@ -61,19 +70,35 @@ export const AZURE_QUESTIONS: readonly Question[] = [
     kind: 'given',
   },
   {
-    name: 'gateway_hostname',
-    summary: 'the public name of the gateway, for example api.example.com',
+    name: 'dns_zone_name',
+    summary:
+      'the zone of DNS that holds the public names of the deployment, for example example.com',
     kind: 'required',
   },
   {
-    name: 'access_hostname',
-    summary: 'the public name of the issuer of Access, for example access.example.com',
+    name: 'gateway_name',
+    summary: 'the name of the gateway in the zone of the deployment, for example api',
     kind: 'required',
   },
   {
-    name: 'console_hostname',
-    summary: 'the public name of the console, for example console.example.com',
+    name: 'access_name',
+    summary: 'the name of the issuer of Access in the zone of the deployment, for example access',
     kind: 'required',
+  },
+  {
+    name: 'console_name',
+    summary: 'the name of the console in the zone of the deployment, for example console',
+    kind: 'required',
+  },
+  {
+    name: 'dns_records_managed',
+    summary: 'whether the deployment writes the records of the public names in the zone of Azure',
+    kind: 'given',
+  },
+  {
+    name: 'dns_zone_resource_group_name',
+    summary: 'the resource group that holds the zone of the public names of the deployment',
+    kind: 'given',
   },
   {
     name: 'gateway_client_id',
@@ -454,6 +479,55 @@ async function identifiersOf(
   // the resource of another kind is refused by the provider, and the
   // CLI tries the identifiers in the order it has them.
   return [...ofKind, ...ofOther]
+}
+
+/**
+ * The resources of the cloud that a failed apply left behind, and that
+ * the state of the deployment can take over.
+ *
+ * The tool refuses to create a resource that is already there, and it
+ * names the resource and its identifier:
+ *
+ *   Error: a resource with the ID "https://…/secrets/…/…" already exists
+ *   - to be managed via Terraform this resource needs to be imported into the State.
+ *
+ *   with azurerm_key_vault_secret.platform["…"],
+ *
+ * The address is the address the state of the deployment knows the
+ * resource by, and the identifier is the identifier the cloud knows it
+ * by. The identifier of a secret of a vault holds the version of the
+ * secret, and the import of a secret of a vault takes the identifier
+ * without the version: both are tried, the one without the version
+ * first.
+ *
+ * @param reason what the tool said about the failure.
+ */
+export function importablesOf(reason: string): readonly Importable[] {
+  const found = new Map<string, Importable>()
+  const pattern =
+    /a resource with the ID "([^"]+)" already exists[\s\S]*?with ([A-Za-z0-9_.[\]"-]+),/g
+  for (const match of reason.matchAll(pattern)) {
+    const id = match[1]!
+    const address = match[2]!
+    if (found.has(address)) continue
+    found.set(address, { address, ids: idsOf(id) })
+  }
+  return [...found.values()]
+}
+
+/**
+ * The identifiers of a resource, in the order they are to be tried.
+ *
+ * The identifier of a secret of a vault holds the version of the
+ * secret, and the import of a secret of a vault takes the identifier
+ * without the version: the identifier without the version is tried
+ * first, and the one with it is the second.
+ *
+ * @param id the identifier the tool named.
+ */
+function idsOf(id: string): readonly string[] {
+  const without = id.replace(/\/[0-9a-fA-F]{32}$/, '')
+  return without === id ? [id] : [without, id]
 }
 
 /**
@@ -938,6 +1012,42 @@ async function signInOf(
 }
 
 /**
+ * The facts of the deployment, as the machine of the operator holds them.
+ *
+ * A dry run signs nobody in: it reads the facts the session of the
+ * client of Azure already holds, and a machine that holds no session
+ * holds no facts. The client of Azure is not asked to sign in, and no
+ * browser opens.
+ *
+ * @param binary the path of the client of Azure.
+ */
+async function factsOf(binary: string): Promise<Record<string, string>> {
+  const current = await run(binary, ['account', 'show', '--output', 'json'])
+  if (current.status !== 0) return {}
+  const facts: Record<string, string> = {}
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(current.stdout)
+  } catch {
+    return facts
+  }
+  if (!parsed || typeof parsed !== 'object') return facts
+  const record = parsed as Record<string, unknown>
+  if (typeof record.id === 'string' && record.id !== '') facts.subscription_id = record.id
+  if (typeof record.tenantId === 'string' && record.tenantId !== '') {
+    facts.tenant_id = record.tenantId
+  }
+  const user = record.user
+  if (user && typeof user === 'object') {
+    const account = user as Record<string, unknown>
+    if (typeof account.id === 'string' && account.id !== '') {
+      facts.operator_principal_id = account.id
+    }
+  }
+  return facts
+}
+
+/**
  * The provider of a deployment on Microsoft Azure.
  *
  * @param questions the questions of the deployment.
@@ -951,8 +1061,10 @@ export function azureProvider(
     summary: 'Microsoft Azure',
     questions,
     signIn: (ask: Asker) => signInOf(ask, environment),
+    facts: async () => factsOf(azureCli(environment)),
     leftoverOf: async (reason: string, region?: string) =>
       leftoverOf(azureCli(environment), reason, region),
+    importablesOf: (reason: string) => importablesOf(reason),
     release: async (leftover: Leftover) => releaseOf(azureCli(environment), leftover),
   }
 }

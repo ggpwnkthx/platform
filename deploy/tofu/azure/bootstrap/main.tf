@@ -176,9 +176,13 @@ resource "time_sleep" "state_permission" {
 }
 
 # The container of the state.
+#
+# The container is named by the identifier of the account that holds
+# it: the name of the account is the name of a resource, and the name
+# of a resource is not the identifier of a resource.
 resource "azurerm_storage_container" "state" {
   name                  = "tfstate"
-  storage_account_name  = azurerm_storage_account.state.name
+  storage_account_id    = azurerm_storage_account.state.id
   container_access_type = "private"
 
   depends_on = [time_sleep.state_permission]

@@ -164,7 +164,11 @@ platformctl infra import azurerm_key_vault.platform \
 platformctl infra apply
 ```
 
-`deploy azure` recovers on its own from the failures a leftover of an earlier run causes. A resource that is already in the cloud and not in the state is imported into the state, and the plan is run again. A resource that was deleted and not purged still holds its name, and the name cannot be used again: the wizard asks before it purges the resource, and purging it loses what is left of it. A resource that cannot be taken over at all, and whose name the deployment can change, is named differently: the wizard asks before it changes the name. Pass `--yes` to answer yes to the questions.
+The plan is shown before the question, on the standard error, whatever the format of the answer is: `--output json` changes the answer of the command, and it does not change what you are shown before you confirm. `--yes` answers the question with yes; it does not hide the plan.
+
+`deploy azure` recovers on its own from the failures a leftover of an earlier run causes. A resource that is already in the cloud and not in the state is imported into the state, and the plan is run again: every resource the tool names is imported, not one of them, because a plan that holds one resource of a hundred refuses the hundredth one. A resource that was deleted and not purged still holds its name, and the name cannot be used again: the wizard asks before it purges the resource, and purging it loses what is left of it. A resource that cannot be taken over at all, and whose name the deployment can change, is named differently: the wizard asks before it changes the name. Pass `--yes` to answer yes to the questions.
+
+When the state of the deployment cannot be read — the backend changed and the state could not be moved with it — the plan that follows is the plan of a deployment whose state is empty, and the resources of the deployment that are already there are not in it. The wizard says so before the plan is written, and the question of the plan names it again: `the state of the deployment is empty: the plan creates 87, changes 0 and destroys 0: the deployment is applied?`.
 
 The commands work on the deployment of the profile, and the directories are named when they are not the ones the profile says:
 
@@ -173,6 +177,8 @@ platformctl infra plan \
   --directory deploy/tofu/azure \
   --runtime deploy/tofu/runtime/production
 ```
+
+A path of the deployment is a path of the checkout, and the command may run in a directory of the checkout — the CLI is run through the workspace of a package. The path you name is read from the checkout when it is not in the directory the command runs in, so the command above works from the root of the checkout and from the workspace of a package alike.
 
 The tool is found on the path, or in `TOFU_BINARY`:
 
@@ -198,6 +204,14 @@ platformctl deploy azure
 
 It signs you in with the Azure CLI, so it opens a browser the first time and it lets you pick the subscription when you hold more than one. It asks only what it cannot answer itself: the names the deployment answers under and the identifiers of the tenant and of the workspace.
 
+The wizard checks what it needs before it asks anything: the templates of the deployment, the OpenTofu binary and your identity in Azure. If one of them is missing, the wizard says so in a second instead of after twenty questions.
+
+A value that is a selection is never typed. The environment of the deployment is a selection: the wizard shows the three environments the templates take — development, staging and production — and you pick one of them, by its number or by its name. An answer that is not one of the choices is asked again, and answering nothing takes the default of the question.
+
+One question may be left unanswered: the zone of DNS that holds the names of the deployment. Name the zone and the deployment writes the records of the names in a zone of Azure, and you delegate the zone at your registrar with the `NS` records the deployment answers with. Answer nothing and you write the records of the names yourself, and the deployment tells you which ones.
+
+An answer the deployment cannot use — an identifier that is not an identifier, a digest that is not a digest — is refused at the question, and the question is asked again. The wizard does not wait until the end of the interview to tell you that the first answer was wrong.
+
 The values of a deployment that is already there are the defaults of the questions: the wizard reads the file of the values of the deployment of the environment and offers every answer of it, so a second run is a matter of pressing enter. The example of the templates is the default of everything the deployment does not hold.
 
 The digests of the images are not asked: they are read from the release of the platform, and the release carries the digest of every image it published. The release is the version of the CLI by default, because the CLI, the templates of the deployment and the images are one version line. To run another release:
@@ -217,11 +231,35 @@ The service that holds the state refuses a range of one address, so the range of
 2. It runs the bootstrap of the templates, which creates the resource group and the storage account of the state.
 3. It writes the configuration of the backend of the state, `deploy/tofu/runtime/production/backend.hcl`.
 4. It initializes the templates against that backend.
-5. It writes the plan, shows it, and applies it once you confirm it. The plan that is applied is the plan you read.
+5. It writes the plan, shows it, and applies it once you confirm it. The plan that is applied is the plan you read. The plan is shown before the question whatever the format of the answer is, and `--yes` does not hide it.
 
 The OpenTofu binary is found on the path, or downloaded by the CLI when the machine holds none, so the steps above need no tool installed by hand.
 
-The wizard tells every step as it happens, on the standard error, because the wizard takes minutes and a wizard that says nothing looks like a wizard that is stuck. Its answer ends on the standard output: a script that reads the answer reads the answer and nothing else.
+The wizard tells every step as it happens, on the standard error, because the wizard takes minutes and a wizard that says nothing looks like a wizard that is stuck. Its questions and its confirmations are on the standard error too. Its answer ends on the standard output: a script that reads the answer reads the answer and nothing else.
+
+The answer is what the deployment did, and not the plan that was shown before the question:
+
+```text
+the deployment is applied
+
+the deployment created 5, changed 27 and destroyed 0
+
+action  kind                       address
+create  azurerm_container_app      azurerm_container_app.access
+update  azurerm_container_app      azurerm_container_app.console
+```
+
+The plan is counted in the future, because it is a question, and the apply is counted in the past, because it is an answer.
+
+Before the deployment takes its minutes, the wizard tells you the answers it collected, so a typo is caught in a second and not after the minutes:
+
+```text
+the deployment goes on with these answers:
+  name_prefix       platform
+  environment       production
+  dns_zone_name     example.com
+  gateway_name      api
+```
 
 To answer without a terminal, put the answers in a file:
 
@@ -243,7 +281,7 @@ export PLATFORMCTL_ADDRESS_SERVICE=https://my-service.example/ip
 export PLATFORMCTL_ADDRESS_LOOKUP=off
 ```
 
-The wizard refuses to write the values over the values that are there unless you pass `--force`. A dry run writes the values, tells you the steps, and applies nothing:
+The values of a deployment that is already there are the answers of an earlier run, and the wizard does not throw them away. When you choose the same values, the file is left alone. When you choose other ones, the wizard asks whether the file is written again: `--yes` answers yes, and `--force` writes it without asking. A dry run writes nothing, tells you the steps, and applies nothing:
 
 ```bash
 platformctl deploy azure --dry-run
@@ -271,10 +309,11 @@ platformctl deploy azure --dry-run
 | `the sign in to Azure did not leave a session` | The sign in was interrupted | Run `az login` and try again |
 | `the operator holds no subscription of Azure` | The account holds no subscription | A deployment needs one |
 | `the deployment is not ready` | An answer is not the shape the deployment needs | Read the message: it names the value |
-| `the values of the deployment are already there` | The runtime directory holds a deployment | Pass `--force`, or name another `--runtime` |
+| `the values of the deployment are already there` | The runtime directory holds a deployment, and the values you chose are not the ones it holds | Answer yes when the wizard asks, pass `--force`, or name another `--runtime` |
 | `the templates of the deployment hold no bootstrap` | The templates hold no stack that creates the place where the state lives | Check out the templates of the release |
 | `the addresses that reach the account of the state … are needed` | The account of the state is closed to every address | Name the addresses of the operator in the file of the answers |
 | `the address … is not a range` | The address is not in the notation of a network | Write the address with its mask, for example `203.0.113.4/32` |
 | `the place where the state of the deployment lives cannot be created` | The bootstrap of the templates failed | Read the message of the tool, and run `tofu -chdir=deploy/tofu/azure/bootstrap apply` yourself |
 | `the place where the state of the deployment lives was not created` | The bootstrap of the templates failed | Read the message of the tool: it names the resource that could not be created |
 | `the configuration of the backend of the state cannot be read` | The tool answered with something that is not a configuration | Run `tofu -chdir=deploy/tofu/azure/bootstrap apply` and read what it says |
+| `the state of the deployment is locked …` | Another run holds the lock of the state | The wizard asks before it frees the lock: answer yes when that run is not there anymore, or free the lock with the command the message names |

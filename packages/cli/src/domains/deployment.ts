@@ -24,6 +24,17 @@ export type QuestionKind =
   /** The wizard does not ask: the value of the example is the value. */
   | 'given'
 
+/**
+ * The environments of the platform.
+ *
+ * The templates of the deployment name one of them, and the name of
+ * the environment is in the name of every resource of the deployment:
+ * an environment that is not one of them is a deployment the templates
+ * refuse, and the refusal comes after the minutes of the deployment,
+ * when the state of the deployment is already written.
+ */
+export const ENVIRONMENTS: readonly string[] = ['development', 'staging', 'production']
+
 /** A question of the wizard. */
 export interface Question {
   /** The name of the value. */
@@ -34,6 +45,17 @@ export interface Question {
   readonly kind: QuestionKind
   /** The shape the answer has to have, when it is not free text. */
   readonly shape?: 'uuid' | 'digest'
+  /**
+   * The values the answer is one of, when the answer is a selection.
+   *
+   * A question that has a choice is asked with the choices: the
+   * operator picks one of them, and an answer that is not one of them
+   * is not an answer at all. The deployment refuses a value that is
+   * not one of them, and the refusal comes after the minutes of the
+   * deployment: the wizard asks the question with the choices, and
+   * the answer is one of them before the deployment starts.
+   */
+  readonly choices?: readonly string[]
 }
 
 /**
@@ -55,6 +77,27 @@ export interface SignIn {
   readonly account?: string
 }
 
+/**
+ * A resource of the cloud that the state of the deployment does not
+ * hold, and that the state can take over.
+ *
+ * The tool refuses to create a resource that is already there, and it
+ * names the resource and its identifier: the state of the deployment
+ * has to learn about it, or the next apply refuses to create it again.
+ */
+export interface Importable {
+  /** The address of the resource in the state of the deployment. */
+  readonly address: string
+  /**
+   * The identifiers of the resource in the cloud, in the order they are
+   * to be tried.
+   *
+   * The tool refuses an import that names the resource in a way it
+   * does not know, and the next identifier is tried.
+   */
+  readonly ids: readonly string[]
+}
+
 /** A provider of the infrastructure of a deployment. */
 export interface DeploymentProvider {
   /** The name of the provider. */
@@ -69,6 +112,27 @@ export interface DeploymentProvider {
    * @param ask asks the operator a question and waits for the answer.
    */
   signIn(ask: Asker): Promise<SignIn>
+  /**
+   * The facts of the deployment, as the machine of the operator holds
+   * them.
+   *
+   * A dry run signs nobody in: it reads the facts the machine already
+   * holds, and it asks what it cannot read. A provider that holds no
+   * facts without a session holds none.
+   */
+  facts?(): Promise<Readonly<Record<string, string>>>
+  /**
+   * The resources of the cloud that a failed apply left behind, and
+   * that the state of the deployment can take over.
+   *
+   * A resource that is already in the cloud and not in the state is
+   * refused by the next apply, and the state has to learn about it:
+   * the tool names the resource and its identifier, and the CLI writes
+   * them in the state.
+   *
+   * @param reason what the tool said about the failure.
+   */
+  importablesOf?(reason: string): readonly Importable[]
   /**
    * The resource of the system that a failed apply left behind, when
    * the reason of the failure names it.
@@ -242,11 +306,41 @@ export function valuesFile(provider: DeploymentProvider, values: Readonly<Values
 }
 
 /**
- * The answers that are not the shape the deployment needs.
+ * The problem of one answer, when the deployment cannot use it.
  *
  * An identifier that is not an identifier and a digest that is not a
  * digest are answers the deployment cannot use, and a deployment that
- * starts with one of them fails later and further away.
+ * starts with one of them fails later and further away. The wizard asks
+ * the question again when the answer is not one the deployment can use.
+ *
+ * @param question the question the answer answers.
+ * @param value the answer of the operator.
+ */
+export function problemOf(question: Question, value: string): string | undefined {
+  if (value === undefined || value === '') {
+    if (question.kind === 'required') return `${question.summary} is needed`
+    if (question.choices !== undefined) {
+      return `${question.summary} is not one of ${question.choices.join(', ')}`
+    }
+    return undefined
+  }
+  if (question.shape === 'digest' && !/@sha256:[0-9a-f]{64}$/.test(value)) {
+    return `${question.summary} is not a digest: the deployment runs the bytes that the release proved`
+  }
+  if (
+    question.shape === 'uuid' &&
+    !/^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$/.test(value)
+  ) {
+    return `${question.summary} is not an identifier like 11111111-1111-4111-8111-111111111111`
+  }
+  if (question.choices !== undefined && !question.choices.includes(value)) {
+    return `${question.summary} is not one of ${question.choices.join(', ')}`
+  }
+  return undefined
+}
+
+/**
+ * The answers that are not the shape the deployment needs.
  *
  * @param questions the questions of the deployment.
  * @param values the values the wizard collected.
@@ -254,25 +348,8 @@ export function valuesFile(provider: DeploymentProvider, values: Readonly<Values
 export function problemsOf(questions: readonly Question[], values: Readonly<Values>): string[] {
   const problems: string[] = []
   for (const question of questions) {
-    const value = values[question.name]
-    if (value === undefined || value === '') {
-      if (question.kind === 'required') problems.push(`${question.summary} is needed`)
-      continue
-    }
-    if (question.shape === 'digest' && !/@sha256:[0-9a-f]{64}$/.test(value)) {
-      problems.push(
-        `${question.summary} is not a digest: the deployment runs the bytes that the release proved`
-      )
-      continue
-    }
-    if (
-      question.shape === 'uuid' &&
-      !/^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$/.test(value)
-    ) {
-      problems.push(
-        `${question.summary} is not an identifier like 11111111-1111-4111-8111-111111111111`
-      )
-    }
+    const problem = problemOf(question, values[question.name] ?? '')
+    if (problem !== undefined) problems.push(problem)
   }
   return problems
 }

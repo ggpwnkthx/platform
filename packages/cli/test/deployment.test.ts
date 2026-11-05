@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { existsSync } from 'node:fs'
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -10,17 +11,20 @@ import {
   answerOf,
   defaultsOf,
   type DeploymentProvider,
+  ENVIRONMENTS,
   missingOf,
+  problemOf,
   problemsOf,
   questionsOf,
   valuesFile,
 } from '../src/domains/deployment'
-import { azureProvider } from '../src/platform/azure'
+import { azureProvider, importablesOf } from '../src/platform/azure'
 import {
   deployCommand,
   addressesOf,
   existingOf,
   fallbackOf,
+  offeredOf,
   recoverLeftover,
 } from '../src/runtime/commands/deploy'
 import { FakeInfrastructure } from './support'
@@ -133,13 +137,83 @@ function terminalOf(answers: readonly string[]): NodeJS.ReadStream {
   return stream
 }
 
+/**
+ * The dialog of a command: the questions on the input, and the words
+ * of the CLI on the output.
+ */
+interface Dialogue {
+  /** The stream the answers of the operator come on. */
+  readonly input: NodeJS.ReadStream
+  /** The stream the dialog is written on. */
+  readonly output: NodeJS.WriteStream
+  /** The words the CLI wrote in the dialog. */
+  readonly words: string[]
+}
+
+/**
+ * A terminal that answers the questions of the operator, one by one.
+ *
+ * The reader of a terminal answers the question that is asked: the
+ * test answers a question when the CLI asks it, and never before.
+ *
+ * @param answers the answers of the operator.
+ */
+function dialogueOf(answers: readonly string[]): Dialogue {
+  const input = new PassThrough() as unknown as NodeJS.ReadStream
+  Object.assign(input, { isTTY: true })
+  const output = new PassThrough() as unknown as NodeJS.WriteStream
+  const words: string[] = []
+  let index = 0
+  output.write = ((chunk: string) => {
+    words.push(chunk)
+    // The question of the CLI ends with the marker of the answer: the
+    // question of a value, or the question of a confirmation.
+    if (chunk.endsWith('> ') || chunk.endsWith('[y/N] ')) {
+      const answer = answers[index++]
+      if (answer === undefined) {
+        input.end()
+        return true
+      }
+      setTimeout(() => input.write(`${answer}\n`), 5)
+    }
+    return true
+  }) as unknown as NodeJS.WriteStream['write']
+  return { input, output, words }
+}
+
+/**
+ * Runs a command with a terminal that answers the questions.
+ *
+ * The dialog of a command is written on the standard error and read on
+ * the standard input: the test holds both while the command runs.
+ *
+ * @param answers the answers of the operator.
+ * @param body the command that runs.
+ */
+async function withDialogue<T>(
+  answers: readonly string[],
+  body: (dialogue: Dialogue) => Promise<T>
+): Promise<T> {
+  const dialogue = dialogueOf(answers)
+  const before = { stdin: process.stdin, stderr: process.stderr }
+  Object.defineProperty(process, 'stdin', { value: dialogue.input, configurable: true })
+  Object.defineProperty(process, 'stderr', { value: dialogue.output, configurable: true })
+  try {
+    return await body(dialogue)
+  } finally {
+    Object.defineProperty(process, 'stdin', { value: before.stdin, configurable: true })
+    Object.defineProperty(process, 'stderr', { value: before.stderr, configurable: true })
+  }
+}
+
 /** The example of the values of the templates. */
 const EXAMPLE = [
   '# The values of a deployment.',
   'name_prefix = "platform"',
   'environment = "production"',
   'location = "westeurope"',
-  'gateway_hostname = "api.example.com"',
+  'dns_zone_name = "example.com"',
+  'gateway_name = "api"',
   'gateway_image = "ghcr.io/ggpwnkthx/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000000"',
   'services = {',
   '  gateway = { min_replicas = 2 }',
@@ -152,7 +226,8 @@ describe('the values of the example of the templates', () => {
     const values = defaultsOf(EXAMPLE)
     expect(values.name_prefix).toBe('platform')
     expect(values.environment).toBe('production')
-    expect(values.gateway_hostname).toBe('api.example.com')
+    expect(values.dns_zone_name).toBe('example.com')
+    expect(values.gateway_name).toBe('api')
   })
 
   test('a value that spans several lines is not read', () => {
@@ -241,6 +316,45 @@ describe('the answers of the wizard', () => {
       'the image of the gateway is needed',
       'the tenant of Access is needed',
     ])
+  })
+})
+
+describe('the environment of a deployment', () => {
+  const question = {
+    name: 'environment',
+    summary: 'the environment of the deployment',
+    kind: 'chosen' as const,
+    choices: ENVIRONMENTS,
+  }
+
+  test('an environment the deployment cannot use is refused', () => {
+    // The name of the environment is in the name of every resource of
+    // the deployment, and the templates take three names and no
+    // other: an environment that is not one of them is refused at the
+    // question, and not by the tool after the minutes of the plan.
+    expect(problemOf(question, 'dev')).toBe(
+      'the environment of the deployment is not one of development, staging, production'
+    )
+  })
+
+  test('the environments of the platform are accepted', () => {
+    for (const environment of ENVIRONMENTS) {
+      expect(problemOf(question, environment)).toBeUndefined()
+    }
+  })
+
+  test('the provider of Azure asks for the environment of the platform', () => {
+    const asked = azureProvider().questions.find((one) => one.name === 'environment')
+    expect(asked?.choices).toEqual(['development', 'staging', 'production'])
+  })
+
+  test('a default the deployment cannot use is not offered', () => {
+    // A deployment that is already there holds the answers of an
+    // earlier run, and an answer of an earlier run that the templates
+    // refuse is not an offer: it is a trap.
+    expect(offeredOf(question, 'dev', { environment: 'production' })).toBe('production')
+    expect(offeredOf(question, 'dev', { environment: 'dev' })).toBeUndefined()
+    expect(offeredOf(question, 'development', { environment: 'production' })).toBe('development')
   })
 })
 
@@ -446,7 +560,7 @@ describe('the wizard of a deployment', () => {
       // The deployment goes on: the place where the state lives, the
       // configuration of the backend, the templates, the plan and the
       // apply. The progress of the wizard is told as it happens, and
-      // the answer of the command keeps the plan it applied.
+      // the answer of the command keeps what the apply did.
       expect(progress.join('\n')).toContain(
         'the place where the state of the deployment lives is created'
       )
@@ -477,6 +591,58 @@ describe('the wizard of a deployment', () => {
 
       // The plan that was shown is the plan that was applied.
       expect(tool.applied).toHaveLength(1)
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the wizard asks the zone of the names and writes it in the values of the deployment', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-wizard-'))
+    try {
+      const templates = join(directory, 'templates')
+      const runtime = join(directory, 'runtime')
+      await bootstrapOf(templates)
+      await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+
+      const provider = providerOf([
+        { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+        {
+          name: 'dns_zone_name',
+          summary: 'the zone of DNS that holds the public names of the deployment',
+          kind: 'required',
+        },
+        {
+          name: 'gateway_name',
+          summary: 'the name of the gateway in the zone of the deployment',
+          kind: 'required',
+        },
+      ])
+      const { runtime: cli } = runtimeOf([provider])
+      const status = await withDialogue(
+        [],
+        async () =>
+          await run(cli, [
+            'deploy',
+            'azure',
+            '--yes',
+            '--directory',
+            templates,
+            '--runtime',
+            runtime,
+            '--answers',
+            await answersFileOf(
+              directory,
+              'name_prefix = "platform"\ndns_zone_name = "platform.example.com"\ngateway_name = "api"\noperator_addresses = "203.0.113.4/32"\n'
+            ),
+          ])
+      )
+      expect(status).toBe(0)
+      // The zone of the names of the deployment is in the values of the
+      // deployment: the deployment writes the records of the names in
+      // the zone, and the operator delegates the zone.
+      const file = await readFile(join(runtime, 'terraform.tfvars'), 'utf8')
+      expect(file).toContain('dns_zone_name = "platform.example.com"')
+      expect(file).toContain('gateway_name = "api"')
     } finally {
       await rm(directory, { recursive: true, force: true })
     }
@@ -777,6 +943,211 @@ describe('the wizard of a deployment', () => {
     }
   })
 
+  test('the resources a failed apply left behind are written in the state', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-wizard-'))
+    try {
+      const templates = join(directory, 'templates')
+      await bootstrapOf(templates)
+      await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+
+      const tool = new FakeInfrastructure()
+      tool.plan_ = {
+        directory: '/templates',
+        changes: [
+          {
+            address: 'azurerm_key_vault_secret.platform["the-secret"]',
+            action: 'create',
+            kind: 'azurerm_key_vault_secret',
+            name: 'the-secret',
+            provider: 'hashicorp/azurerm',
+          },
+        ],
+        drift: [],
+        summary: { create: 1, update: 0, delete: 0, replace: 0 },
+        errored: false,
+      }
+      // The tool refuses to create a secret of a vault that is already
+      // there, and it names the secret and its identifier.
+      tool.failure = new CliFailure(
+        'the deployment was not applied: Error: a resource with the ID "https://the-vault.vault.azure.net/secrets/the-secret/a398d93c5bfe4a0dbf76361f05caf4e6" already exists - to be managed via Terraform this resource needs to be imported into the State.\n\n  with azurerm_key_vault_secret.platform["the-secret"],\n  on keyvault.tf line 76'
+      )
+      const provider = {
+        ...providerOf([
+          { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+        ]),
+        importablesOf: (reason: string) => importablesOf(reason),
+      }
+      const { runtime: cli, progress } = runtimeOf([provider], tool)
+      const status = await run(cli, [
+        'deploy',
+        'azure',
+        '--yes',
+        '--directory',
+        templates,
+        '--answers',
+        await answersFileOf(
+          directory,
+          'name_prefix = "platform"\noperator_addresses = "203.0.113.4/32"\n'
+        ),
+      ])
+      expect(status).toBe(0)
+      // The secret is written in the state, and the plan is run again:
+      // the plan that holds one secret of a hundred refuses the
+      // hundredth one.
+      expect(tool.imported).toEqual([
+        {
+          address: 'azurerm_key_vault_secret.platform["the-secret"]',
+          id: 'https://the-vault.vault.azure.net/secrets/the-secret',
+        },
+      ])
+      expect(tool.applied).toHaveLength(1)
+      // The recovery writes one resource at a time, and there may be a
+      // hundred of them: the operator is told about each one.
+      expect(progress.join('\n')).toContain(
+        '1 resources that a failed apply left in the cloud are written in the state of the deployment, this takes a moment'
+      )
+      expect(progress.join('\n')).toContain(
+        'azurerm_key_vault_secret.platform["the-secret"] is written in the state of the deployment'
+      )
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('a state that could not be read is named in the question of the plan', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-wizard-'))
+    try {
+      const templates = join(directory, 'templates')
+      await bootstrapOf(templates)
+      await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+
+      const tool = new FakeInfrastructure()
+      tool.state = { read: false, reason: 'error listing blobs: tls: failed to verify certificate' }
+      tool.plan_ = {
+        directory: '/templates',
+        changes: [
+          {
+            address: 'azurerm_resource_group.platform',
+            action: 'create',
+            kind: 'azurerm_resource_group',
+            name: 'platform',
+            provider: 'hashicorp/azurerm',
+          },
+        ],
+        drift: [],
+        summary: { create: 1, update: 0, delete: 0, replace: 0 },
+        errored: false,
+      }
+      const provider = providerOf([
+        { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+      ])
+      const { runtime: cli, progress } = runtimeOf([provider], tool)
+      const words = await withDialogue(['y'], async (dialogue) => {
+        const status = await run(cli, [
+          'deploy',
+          'azure',
+          '--directory',
+          templates,
+          '--answers',
+          await answersFileOf(
+            directory,
+            'name_prefix = "platform"\noperator_addresses = "203.0.113.4/32"\n'
+          ),
+        ])
+        expect(status).toBe(0)
+        return dialogue.words.join('')
+      })
+      // The state of the deployment could not be read: the plan that
+      // follows is the plan of a deployment whose state is empty, and
+      // the operator is told before the plan is written and again in
+      // the question the operator answers.
+      expect(progress.join('\n')).toContain('the state of the deployment could not be read')
+      expect(words).toContain('the state of the deployment is empty:')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('a state that is locked is unlocked when the operator says so', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-wizard-'))
+    try {
+      const templates = join(directory, 'templates')
+      await bootstrapOf(templates)
+      await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+
+      const tool = new FakeInfrastructure()
+      // A run that was killed leaves the lock of the state behind it,
+      // and the tool refuses to write the plan at all.
+      tool.planFailure = new CliFailure(
+        'the plan of the deployment was not written: Error: Error acquiring the state lock\n\nError message: state blob is already locked\nLock Info:\n  ID:        74e078e2-ccfa-a2ef-6a45-0ac061764254\n  Path:      https://the-account.blob.core.windows.net/tfstate/the.tfstate\n  Operation: OperationTypeInvalid\n  Who:       isaac@isaac-gaming\n  Version:   1.13.1\n  Created:   2026-11-04 21:55:29.404365078 +0000 UTC'
+      )
+      const provider = providerOf([
+        { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+      ])
+      const { runtime: cli, progress } = runtimeOf([provider], tool)
+      const status = await run(cli, [
+        'deploy',
+        'azure',
+        '--yes',
+        '--directory',
+        templates,
+        '--answers',
+        await answersFileOf(
+          directory,
+          'name_prefix = "platform"\noperator_addresses = "203.0.113.4/32"\n'
+        ),
+      ])
+      expect(status).toBe(0)
+      // The lock is freed, and the plan is written again.
+      expect(tool.unlocked).toEqual(['74e078e2-ccfa-a2ef-6a45-0ac061764254'])
+      expect(progress.join('\n')).toContain(
+        'the lock of the state of the deployment is freed: 74e078e2-ccfa-a2ef-6a45-0ac061764254'
+      )
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('a state that is locked is not unlocked when the operator says no', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-wizard-'))
+    try {
+      const templates = join(directory, 'templates')
+      await bootstrapOf(templates)
+      await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+
+      const tool = new FakeInfrastructure()
+      tool.planFailure = new CliFailure(
+        'the plan of the deployment was not written: Error: Error acquiring the state lock\n\nError message: state blob is already locked\nLock Info:\n  ID:        74e078e2-ccfa-a2ef-6a45-0ac061764254\n  Who:       isaac@isaac-gaming\n  Created:   2026-11-04 21:55:29.404365078 +0000 UTC'
+      )
+      const provider = providerOf([
+        { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+      ])
+      const { runtime: cli } = runtimeOf([provider], tool)
+      // The operator says no: the lock stays, and the refusal names
+      // the command that frees it.
+      await expect(
+        withDialogue(
+          ['n'],
+          async () =>
+            await run(cli, [
+              'deploy',
+              'azure',
+              '--directory',
+              templates,
+              '--answers',
+              await answersFileOf(
+                directory,
+                'name_prefix = "platform"\noperator_addresses = "203.0.113.4/32"\n'
+              ),
+            ])
+        )
+      ).rejects.toThrow('force-unlock -force 74e078e2-ccfa-a2ef-6a45-0ac061764254')
+      expect(tool.unlocked).toEqual([])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
   test('a resource that was deleted and not purged is not purged when the operator says no', async () => {
     const tool = new FakeInfrastructure()
     const released: string[] = []
@@ -812,6 +1183,7 @@ describe('the wizard of a deployment', () => {
             region: 'the-region',
             yes: false,
             purged: [],
+            tell: () => undefined,
           },
           refusal
         )
@@ -851,6 +1223,7 @@ describe('the wizard of a deployment', () => {
           region: 'the-region',
           yes: true,
           purged: ['the-vault'],
+          tell: () => undefined,
         },
         refusal
       )
@@ -1105,6 +1478,556 @@ describe('the wizard of a deployment', () => {
       await rm(directory, { recursive: true, force: true })
     }
   })
+
+  test('the wizard refuses a tool that is too old before it asks anything', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-wizard-'))
+    try {
+      const templates = join(directory, 'templates')
+      await bootstrapOf(templates)
+      await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+
+      const tool = new FakeInfrastructure()
+      tool.toolVersion = '1.8.0'
+      let signedIn = false
+      const provider: DeploymentProvider = {
+        ...providerOf([
+          { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+        ]),
+        signIn: async () => {
+          signedIn = true
+          return { facts: {}, message: 'signed in to Azure', account: 'the-subscription' }
+        },
+      }
+      const { runtime: cli } = runtimeOf([provider], tool)
+      await expect(
+        run(cli, [
+          'deploy',
+          'azure',
+          '--directory',
+          templates,
+          '--runtime',
+          join(directory, 'runtime'),
+        ])
+      ).rejects.toThrow('the tool that writes the infrastructure is too old')
+      // The wizard refused before it signed the operator in, and
+      // before it asked a single question: the answers of the reader
+      // would have been answers for nothing.
+      expect(signedIn).toBe(false)
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the wizard refuses an identity it cannot read before it asks anything', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-wizard-'))
+    try {
+      const templates = join(directory, 'templates')
+      await bootstrapOf(templates)
+      await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+      // The templates of the deployment write the secrets of the
+      // deployment with the identity of the operator.
+      await writeFile(
+        join(templates, 'main.tf'),
+        'variable "operator_principal_id" {}\nvariable "name_prefix" {}\n'
+      )
+
+      const provider = providerOf([
+        { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+      ])
+      const { runtime: cli } = runtimeOf([provider])
+      // The wizard refuses before it asks anything: the refusal names
+      // the identity, and not the question of a wizard that waits for
+      // an answer nobody can give.
+      await expect(
+        run(cli, [
+          'deploy',
+          'azure',
+          '--directory',
+          templates,
+          '--runtime',
+          join(directory, 'runtime'),
+        ])
+      ).rejects.toThrow('the identity of the operator could not be read')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('an answer the deployment cannot use is asked again', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-wizard-'))
+    try {
+      const templates = join(directory, 'templates')
+      const runtime = join(directory, 'runtime')
+      await bootstrapOf(templates)
+      await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+
+      const provider = providerOf([
+        {
+          name: 'access_tenant_id',
+          summary: 'the tenant of Access',
+          kind: 'required',
+          shape: 'uuid',
+        },
+      ])
+      const { runtime: cli, progress } = runtimeOf([provider])
+      const status = await withDialogue(
+        ['not-an-identifier', '11111111-1111-4111-8111-111111111111'],
+        async () =>
+          await run(cli, [
+            'deploy',
+            'azure',
+            '--yes',
+            '--directory',
+            templates,
+            '--runtime',
+            runtime,
+            '--answers',
+            await answersFileOf(directory, 'operator_addresses = "203.0.113.4/32"\n'),
+          ])
+      )
+      expect(status).toBe(0)
+      // The answer that the deployment cannot use is refused at the
+      // question, and the question is asked again: the interview is
+      // not thrown away over one mistyped character.
+      expect(progress.join('\n')).toContain('that answer cannot be used')
+      const file = await readFile(join(runtime, 'terraform.tfvars'), 'utf8')
+      expect(file).toContain('access_tenant_id = "11111111-1111-4111-8111-111111111111"')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('an environment the deployment cannot use is asked again', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-wizard-'))
+    try {
+      const templates = join(directory, 'templates')
+      const runtime = join(directory, 'runtime')
+      await bootstrapOf(templates)
+      await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+
+      const provider = providerOf([
+        {
+          name: 'environment',
+          summary: 'the environment of the deployment',
+          kind: 'chosen',
+          choices: ENVIRONMENTS,
+        },
+      ])
+      const { runtime: cli } = runtimeOf([provider])
+      const words = await withDialogue(['dev', '1'], async (dialogue) => {
+        const status = await run(cli, [
+          'deploy',
+          'azure',
+          '--yes',
+          '--directory',
+          templates,
+          '--runtime',
+          runtime,
+          '--answers',
+          await answersFileOf(directory, 'operator_addresses = "203.0.113.4/32"\n'),
+        ])
+        expect(status).toBe(0)
+        return dialogue.words.join('')
+      })
+      // The environment is a selection: the operator picks one of the
+      // three names the templates take, and an answer that is not one
+      // of them is not an answer at all.
+      expect(words).toContain('"dev" is not one of the choices')
+      expect(words).toContain('[1] development')
+      const file = await readFile(join(runtime, 'terraform.tfvars'), 'utf8')
+      expect(file).toContain('environment = "development"')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('an address that is not a range is asked again', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-wizard-'))
+    try {
+      const templates = join(directory, 'templates')
+      const runtime = join(directory, 'runtime')
+      await bootstrapOf(templates)
+      await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+
+      const provider = providerOf([
+        { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+      ])
+      const { runtime: cli, progress } = runtimeOf([provider])
+      const status = await withDialogue(
+        ['here', '203.0.113.4/32'],
+        async () =>
+          await run(cli, [
+            'deploy',
+            'azure',
+            '--yes',
+            '--directory',
+            templates,
+            '--runtime',
+            runtime,
+            '--answers',
+            await answersFileOf(directory, 'name_prefix = "platform"\n'),
+          ])
+      )
+      expect(status).toBe(0)
+      // The address that is not a range is refused at the question,
+      // and the question is asked again.
+      expect(progress.join('\n')).toContain('that answer cannot be used')
+      const values = await readFile(join(runtime, 'terraform.tfvars'), 'utf8')
+      expect(values).toContain('name_prefix = "platform"')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('a dry run writes nothing and signs nobody in', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-wizard-'))
+    try {
+      const templates = join(directory, 'templates')
+      const runtime = join(directory, 'runtime')
+      await bootstrapOf(templates)
+      await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+
+      let signedIn = false
+      const provider: DeploymentProvider = {
+        ...providerOf([
+          { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+        ]),
+        signIn: async () => {
+          signedIn = true
+          return { facts: {}, message: 'signed in to Azure', account: 'the-subscription' }
+        },
+      }
+      const { runtime: cli, out } = runtimeOf([provider])
+      const status = await run(cli, [
+        'deploy',
+        'azure',
+        '--dry-run',
+        '--yes',
+        '--directory',
+        templates,
+        '--runtime',
+        runtime,
+        '--answers',
+        await answersFileOf(directory, 'name_prefix = "platform"\n'),
+      ])
+      expect(status).toBe(0)
+      // The dry run signs nobody in: a dry run that opens a browser is
+      // not a dry run.
+      expect(signedIn).toBe(false)
+      // The dry run writes nothing: not the directory of the
+      // deployment, and not the file of its values.
+      expect(existsSync(runtime)).toBe(false)
+      expect(existsSync(join(runtime, 'terraform.tfvars'))).toBe(false)
+      // The dry run tells what the deployment would do.
+      expect(out.join('\n')).toContain('create the place where the state of the deployment lives')
+      expect(out.join('\n')).toContain('the values of the deployment would be written in')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('a deployment whose values are already there and are the same goes on', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-wizard-'))
+    try {
+      const templates = join(directory, 'templates')
+      const runtime = join(directory, 'runtime')
+      await bootstrapOf(templates)
+      await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+      await mkdir(runtime, { recursive: true })
+      const values = 'name_prefix = "platform"\n'
+      await writeFile(join(runtime, 'terraform.tfvars'), values)
+
+      const provider = providerOf([
+        { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+      ])
+      const { runtime: cli, progress } = runtimeOf([provider])
+      const status = await run(cli, [
+        'deploy',
+        'azure',
+        '--yes',
+        '--directory',
+        templates,
+        '--runtime',
+        runtime,
+        '--answers',
+        await answersFileOf(
+          directory,
+          'name_prefix = "platform"\noperator_addresses = "203.0.113.4/32"\n'
+        ),
+      ])
+      expect(status).toBe(0)
+      // The values are the ones that are there: the file is left
+      // alone, and the deployment goes on.
+      expect(await readFile(join(runtime, 'terraform.tfvars'), 'utf8')).toBe(values)
+      expect(progress.join('\n')).toContain('the values of the deployment are already there')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('a deployment whose values differ asks before it writes them again', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-wizard-'))
+    try {
+      const templates = join(directory, 'templates')
+      const runtime = join(directory, 'runtime')
+      await bootstrapOf(templates)
+      await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+      await mkdir(runtime, { recursive: true })
+      await writeFile(join(runtime, 'terraform.tfvars'), 'name_prefix = "other"\n')
+
+      const provider = providerOf([
+        { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+      ])
+      const { runtime: cli } = runtimeOf([provider])
+      // The operator says no: the values that are there are kept, and
+      // the refusal says what to do.
+      const refusal = await withDialogue(
+        ['n'],
+        async () =>
+          await run(cli, [
+            'deploy',
+            'azure',
+            '--directory',
+            templates,
+            '--runtime',
+            runtime,
+            '--answers',
+            await answersFileOf(directory, 'name_prefix = "platform"\n'),
+          ])
+      ).catch((error: unknown) => error)
+      expect(refusal).toBeInstanceOf(CliFailure)
+      expect((refusal as CliFailure).message).toContain(
+        'the values of the deployment are already there'
+      )
+      expect((refusal as CliFailure).exit).toBe(5)
+      // The values that are there are the ones that are still there.
+      expect(await readFile(join(runtime, 'terraform.tfvars'), 'utf8')).toBe(
+        'name_prefix = "other"\n'
+      )
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the answers of the operator are told before the deployment goes on', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-wizard-'))
+    try {
+      const templates = join(directory, 'templates')
+      const runtime = join(directory, 'runtime')
+      await bootstrapOf(templates)
+      await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+
+      const provider = providerOf([
+        { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+      ])
+      const { runtime: cli, progress } = runtimeOf([provider])
+      const status = await run(cli, [
+        'deploy',
+        'azure',
+        '--yes',
+        '--directory',
+        templates,
+        '--runtime',
+        runtime,
+        '--answers',
+        await answersFileOf(
+          directory,
+          'name_prefix = "platform"\noperator_addresses = "203.0.113.4/32"\n'
+        ),
+      ])
+      expect(status).toBe(0)
+      // The answers of the operator are told before the deployment
+      // takes its minutes: an answer that is wrong is caught before
+      // them and not after them.
+      expect(progress.join('\n')).toContain('the deployment goes on with these answers:')
+      expect(progress.join('\n')).toContain('name_prefix')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('a recovery that does not free the name carries what the tool said', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-wizard-'))
+    try {
+      const templates = join(directory, 'templates')
+      await bootstrapOf(templates)
+      await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+
+      const tool = new FakeInfrastructure()
+      tool.plan_ = {
+        directory: templates,
+        changes: [
+          {
+            address: 'azurerm_key_vault.platform',
+            action: 'create',
+            kind: 'azurerm_key_vault',
+            name: 'platform',
+            provider: 'hashicorp/azurerm',
+          },
+        ],
+        drift: [],
+        summary: { create: 1, update: 0, delete: 0, replace: 0 },
+        errored: false,
+      }
+      // The tool refuses every apply, and the recovery writes the
+      // resource in the state every time: the plan is run again, and
+      // the tool refuses it again.
+      tool.alwaysFails = true
+      tool.failure = new CliFailure(
+        'the deployment was not applied: Error: creating Key Vault (Subscription: "the-sub"): the vault name is already in use'
+      )
+      const provider = {
+        ...providerOf([
+          { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+        ]),
+        leftoverOf: async () => ({
+          name: 'the-vault',
+          ids: [
+            '/subscriptions/the-sub/resourceGroups/the-group/providers/Microsoft.KeyVault/vaults/the-vault',
+          ],
+        }),
+      }
+      const { runtime: cli } = runtimeOf([provider], tool)
+      const refusal = await run(cli, [
+        'deploy',
+        'azure',
+        '--yes',
+        '--directory',
+        templates,
+        '--runtime',
+        join(directory, 'runtime'),
+        '--answers',
+        await answersFileOf(
+          directory,
+          'name_prefix = "platform"\noperator_addresses = "203.0.113.4/32"\n'
+        ),
+      ]).catch((error: unknown) => error)
+      expect(refusal).toBeInstanceOf(CliFailure)
+      // The refusal carries what the tool said, and not the summary of
+      // the recovery: the reason of the failure is the reason the tool
+      // gave.
+      expect((refusal as CliFailure).message).toContain('the vault name is already in use')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the plan is shown before the confirmation, whatever the format of the answer is', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-wizard-'))
+    try {
+      const templates = join(directory, 'templates')
+      const runtime = join(directory, 'runtime')
+      await bootstrapOf(templates)
+      await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+
+      const tool = new FakeInfrastructure()
+      tool.plan_ = {
+        directory: templates,
+        changes: [
+          {
+            address: 'azurerm_key_vault.platform',
+            action: 'create',
+            kind: 'azurerm_key_vault',
+            name: 'platform',
+            provider: 'hashicorp/azurerm',
+          },
+        ],
+        drift: [],
+        summary: { create: 1, update: 0, delete: 0, replace: 0 },
+        errored: false,
+      }
+      const provider = providerOf([
+        { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+      ])
+      const { runtime: cli, out, progress } = runtimeOf([provider], tool)
+      const status = await withDialogue(
+        [],
+        async () =>
+          await run(cli, [
+            'deploy',
+            'azure',
+            '--yes',
+            '--output',
+            'json',
+            '--directory',
+            templates,
+            '--runtime',
+            runtime,
+            '--answers',
+            await answersFileOf(
+              directory,
+              'name_prefix = "platform"\noperator_addresses = "203.0.113.4/32"\n'
+            ),
+          ])
+      )
+      expect(status).toBe(0)
+      // The plan is shown before the apply, whatever the format of the
+      // answer is: the plan that is applied is the plan that was read.
+      expect(progress.join('\n')).toContain('the plan creates 1, changes 0 and destroys 0')
+      // The dialog did not touch the answer of the command.
+      expect(out.join('\n')).toContain('azurerm_key_vault.platform')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the answer of the wizard says what the apply did, and not what the plan still holds', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-wizard-'))
+    try {
+      const templates = join(directory, 'templates')
+      const runtime = join(directory, 'runtime')
+      await bootstrapOf(templates)
+      await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+
+      const tool = new FakeInfrastructure()
+      tool.plan_ = {
+        directory: templates,
+        changes: [
+          {
+            address: 'azurerm_key_vault.platform',
+            action: 'create',
+            kind: 'azurerm_key_vault',
+            name: 'platform',
+            provider: 'hashicorp/azurerm',
+          },
+        ],
+        drift: [],
+        summary: { create: 1, update: 0, delete: 0, replace: 0 },
+        errored: false,
+      }
+      const provider = providerOf([
+        { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+      ])
+      const { runtime: cli, out } = runtimeOf([provider], tool)
+      const status = await withDialogue(
+        [],
+        async () =>
+          await run(cli, [
+            'deploy',
+            'azure',
+            '--yes',
+            '--directory',
+            templates,
+            '--runtime',
+            runtime,
+            '--answers',
+            await answersFileOf(
+              directory,
+              'name_prefix = "platform"\noperator_addresses = "203.0.113.4/32"\n'
+            ),
+          ])
+      )
+      expect(status).toBe(0)
+      // The answer of the command is what the apply did: a plan that
+      // is told after the apply reads as a plan that is still to come.
+      expect(out.join('\n')).toContain('the deployment created 1, changed 0 and destroyed 0')
+      expect(out.join('\n')).not.toContain('the plan creates 1, changes 0 and destroys 0')
+      // The resources the apply changed are named all the same.
+      expect(out.join('\n')).toContain('azurerm_key_vault.platform')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
 })
 
 /** A file of the answers of the operator. */
@@ -1234,6 +2157,65 @@ esac
 `
 
 describe('the leftover of a failed apply', () => {
+  test('the resources the tool named are taken over', async () => {
+    const provider = azureProvider([{ name: 'tenant_id', summary: 'the tenant', kind: 'given' }], {
+      PATH: '',
+    })
+    // The tool refuses to create a secret of a vault that is already
+    // there, and it names the secret and its identifier: the state of
+    // the deployment has to learn about it.
+    const importables = provider.importablesOf?.(
+      [
+        'Error: a resource with the ID "https://platform-development-kv2.vault.azure.net/secrets/access-encryption-key/a398d93c5bfe4a0dbf76361f05caf4e6" already exists - to be managed via Terraform this resource needs to be imported into the State.',
+        '',
+        '  with azurerm_key_vault_secret.platform["access-encryption-key"],',
+        '  on keyvault.tf line 76, in resource "azurerm_key_vault_secret" "platform":',
+        '  76: resource "azurerm_key_vault_secret" "platform" {',
+      ].join('\n')
+    )
+    expect(importables).toEqual([
+      {
+        address: 'azurerm_key_vault_secret.platform["access-encryption-key"]',
+        ids: [
+          'https://platform-development-kv2.vault.azure.net/secrets/access-encryption-key',
+          'https://platform-development-kv2.vault.azure.net/secrets/access-encryption-key/a398d93c5bfe4a0dbf76361f05caf4e6',
+        ],
+      },
+    ])
+  })
+
+  test('every resource the tool named is taken over', async () => {
+    const provider = azureProvider([{ name: 'tenant_id', summary: 'the tenant', kind: 'given' }], {
+      PATH: '',
+    })
+    // A plan that holds one resource of a hundred refuses the
+    // hundredth one: every resource the tool named is taken over.
+    const importables = provider.importablesOf?.(
+      [
+        'Error: a resource with the ID "https://the-vault.vault.azure.net/secrets/the-first/a398d93c5bfe4a0dbf76361f05caf4e6" already exists - to be managed via Terraform this resource needs to be imported into the State.',
+        '',
+        '  with azurerm_key_vault_secret.platform["the-first"],',
+        '  on keyvault.tf line 76, in resource "azurerm_key_vault_secret" "platform":',
+        '',
+        'Error: a resource with the ID "https://the-vault.vault.azure.net/secrets/the-second/6f8b4c2d1e0a9b8c7d6e5f4a3b2c1d0e" already exists - to be managed via Terraform this resource needs to be imported into the State.',
+        '',
+        '  with azurerm_key_vault_secret.platform["the-second"],',
+        '  on keyvault.tf line 76, in resource "azurerm_key_vault_secret" "platform":',
+      ].join('\n')
+    )
+    expect(importables?.map((one) => one.address)).toEqual([
+      'azurerm_key_vault_secret.platform["the-first"]',
+      'azurerm_key_vault_secret.platform["the-second"]',
+    ])
+  })
+
+  test('a failure that names no resource takes nothing over', async () => {
+    const provider = azureProvider([{ name: 'tenant_id', summary: 'the tenant', kind: 'given' }], {
+      PATH: '',
+    })
+    expect(provider.importablesOf?.('Error: something else went wrong')).toEqual([])
+  })
+
   test('the provider reads the name of the resource and not the name of the group', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'platformctl-azure-'))
     try {

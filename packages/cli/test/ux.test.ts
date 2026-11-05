@@ -4,6 +4,7 @@ import { lineOf, paint } from '../src/app/color'
 import type { CommandSpec, GroupSpec, Services } from '../src/app/commands'
 import { CliFailure } from '../src/domains/failure'
 import { closestOf, distanceOf } from '../src/app/suggest'
+import { ask, confirm } from '../src/app/prompt'
 import { FakeHttp, FakeInfrastructure } from './support'
 
 /** A command of the root of the test. */
@@ -202,6 +203,74 @@ describe('the refusal of a command', () => {
     } catch (error) {
       expect((error as CliFailure).hint).toBe('run platformctl words greet --help')
     }
+  })
+})
+
+describe('the questions of the reader', () => {
+  test('an answer that is not one of the choices is asked again', async () => {
+    const { PassThrough } = await import('node:stream')
+    const input = new PassThrough() as unknown as NodeJS.ReadStream
+    ;(input as unknown as { isTTY: boolean }).isTTY = true
+    const output = new PassThrough() as unknown as NodeJS.WriteStream
+    const written: string[] = []
+    output.write = ((chunk: string) => {
+      written.push(chunk)
+      return true
+    }) as unknown as NodeJS.WriteStream['write']
+
+    const answering = ask(
+      'the subscription of the deployment',
+      ['the-first', 'the-second'],
+      input,
+      output
+    )
+    input.write('3\n')
+    // The answer comes after the reader was told the first one was no
+    // answer at all: the question is asked again.
+    setTimeout(() => input.write('2\n'), 20)
+    expect(await answering).toBe('the-second')
+    expect(written.join('')).toContain('"3" is not one of the choices')
+  })
+
+  test('a selection takes the default when the reader answers nothing', async () => {
+    const { PassThrough } = await import('node:stream')
+    const input = new PassThrough() as unknown as NodeJS.ReadStream
+    ;(input as unknown as { isTTY: boolean }).isTTY = true
+    const output = new PassThrough() as unknown as NodeJS.WriteStream
+    const written: string[] = []
+    output.write = ((chunk: string) => {
+      written.push(chunk)
+      return true
+    }) as unknown as NodeJS.WriteStream['write']
+
+    const answering = ask(
+      'the environment of the deployment',
+      ['development', 'staging', 'production'],
+      input,
+      output,
+      'staging'
+    )
+    // The reader answers nothing: the reader confirms the default of
+    // the selection.
+    input.write('\n')
+    expect(await answering).toBe('staging')
+  })
+
+  test('the context is shown even when the reader asked for no question', async () => {
+    const { PassThrough } = await import('node:stream')
+    const output = new PassThrough() as unknown as NodeJS.WriteStream
+    const written: string[] = []
+    output.write = ((chunk: string) => {
+      written.push(chunk)
+      return true
+    }) as unknown as NodeJS.WriteStream['write']
+
+    await confirm('the deployment is applied?', true, process.stdin, output, [
+      'the plan creates 1, changes 0 and destroys 0',
+    ])
+    // `--yes` answers the question with yes: it does not hide the plan
+    // the answer is about.
+    expect(written.join('')).toContain('the plan creates 1, changes 0 and destroys 0')
   })
 })
 

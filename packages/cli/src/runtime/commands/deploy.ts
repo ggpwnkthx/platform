@@ -17,27 +17,38 @@
 
 import { existsSync } from 'node:fs'
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join } from 'node:path'
 import type { CommandInput, CommandResult, CommandSpec, GroupSpec } from '../../app/commands'
 import { stringOf } from '../../app/commands'
 import { ask, confirm } from '../../app/prompt'
 import { CliFailure } from '../../domains/failure'
-import { changesNothing, type InfrastructurePort, questionOf } from '../../domains/infrastructure'
+import {
+  appliedOf,
+  changesNothing,
+  type InfrastructurePlan,
+  type InfrastructurePort,
+  questionOf,
+} from '../../domains/infrastructure'
 import {
   answerOf,
   defaultsOf,
   type DeploymentProvider,
+  type Importable,
+  problemOf,
   problemsOf,
+  type Question,
   questionsOf,
+  type SignIn,
   valuesFile,
   type Values,
 } from '../../domains/deployment'
 import { azureProvider } from '../../platform/azure'
 import { isAddress, publicAddressOf, rangeOf, servicesOf } from '../../platform/address'
 import { digestOf, tagOf } from '../../platform/registry'
+import { pathOf, placeOf } from '../../platform/checkout'
 import { type Release, releaseOf } from '../../platform/release'
 import { VERSION } from '../../runtime/version'
-import { linesOfPlan, tableOfPlan, toolOf } from './infrastructure'
+import { planContext, tableOfChanges, toolOf, unlockState } from './infrastructure'
 
 /** The directory of the templates, when the reader names none. */
 const DEFAULT_DIRECTORY = join('deploy', 'tofu', 'azure')
@@ -108,16 +119,8 @@ class Notes extends Array<string> {
  */
 function templatesOf(input: CommandInput): string {
   const named = stringOf(input.options, 'directory')
-  if (named) return resolve(named)
-  let directory = process.cwd()
-  for (let depth = 0; depth < 6; depth += 1) {
-    const candidate = join(directory, DEFAULT_DIRECTORY)
-    if (existsSync(candidate)) return candidate
-    const parent = dirname(directory)
-    if (parent === directory) break
-    directory = parent
-  }
-  return resolve(DEFAULT_DIRECTORY)
+  if (named) return pathOf(named)
+  return placeOf(DEFAULT_DIRECTORY)
 }
 
 /**
@@ -139,7 +142,7 @@ function templatesOf(input: CommandInput): string {
  */
 function runtimeOf(input: CommandInput, directory: string, environment: string): string {
   const named = stringOf(input.options, 'runtime')
-  if (named) return resolve(named)
+  if (named) return pathOf(named)
   return join(dirname(directory), 'runtime', environment)
 }
 
@@ -167,7 +170,7 @@ export async function existingOf(
   const existing = new Map<string, Values>()
   const files: string[] = []
   if (named) {
-    files.push(join(resolve(named), VALUES))
+    files.push(join(pathOf(named), VALUES))
   } else {
     const root = join(dirname(directory), 'runtime')
     let entries: string[]
@@ -229,6 +232,34 @@ export function fallbackOf(
 }
 
 /**
+ * The default of a question, when the deployment can use it.
+ *
+ * A default the deployment cannot use is no default at all: a
+ * question that offers an answer the templates refuse asks the
+ * operator to type one the templates take, and the offer is a trap.
+ * The example of the templates takes the place of a default that
+ * cannot be used, and the operator is asked when there is none.
+ *
+ * @param question the question the default answers.
+ * @param fallback the default the wizard found.
+ * @param defaults the values of the example of the templates.
+ */
+export function offeredOf(
+  question: Question,
+  fallback: string | undefined,
+  defaults: Readonly<Values>
+): string | undefined {
+  if (fallback !== undefined && fallback !== '' && problemOf(question, fallback) === undefined) {
+    return fallback
+  }
+  const example = defaults[question.name]
+  if (example !== undefined && example !== '' && problemOf(question, example) === undefined) {
+    return example
+  }
+  return undefined
+}
+
+/**
  * The answers the operator gave in a file.
  *
  * The file holds the values in the shape of the example of the
@@ -242,7 +273,7 @@ async function answersOf(input: CommandInput): Promise<Values> {
   if (!named) return {}
   let content: string
   try {
-    content = await readFile(resolve(named), 'utf8')
+    content = await readFile(pathOf(named), 'utf8')
   } catch {
     throw new CliFailure(`the file of the answers cannot be read: ${named}`, 4, 'not_found')
   }
@@ -261,6 +292,244 @@ function shownOf(path: string): string {
   const here = process.cwd()
   if (!path.startsWith(`${here}/`)) return path
   return path.slice(here.length + 1)
+}
+
+/**
+ * What the wizard checks before it asks anything.
+ */
+interface Preflight {
+  /** The tool that writes the infrastructure, when the deployment is applied. */
+  readonly tool?: InfrastructurePort
+  /** The directory of the bootstrap of the deployment. */
+  readonly bootstrap: string
+  /** The variables the bootstrap of the deployment declares. */
+  readonly declared: ReadonlySet<string>
+  /** The variables the templates of the deployment declare. */
+  readonly declaredDeployment: ReadonlySet<string>
+}
+
+/**
+ * What the wizard refuses before it asks anything.
+ *
+ * The templates of the deployment and their bootstrap, the tool that
+ * writes the infrastructure and the identity of the operator are
+ * checked before the first question: a wizard that answers twenty
+ * questions and refuses afterwards has taken the time of the operator
+ * for nothing.
+ *
+ * A dry run runs no tool: it applies nothing, and the tool is not part
+ * of what it does.
+ *
+ * @param input what the command received.
+ * @param directory the directory of the templates.
+ * @param dryRun true when the command applies nothing.
+ */
+async function preflight(
+  input: CommandInput,
+  directory: string,
+  dryRun: boolean
+): Promise<Preflight> {
+  const bootstrap = bootstrapOf(directory)
+  if (!existsSync(bootstrap)) {
+    throw new CliFailure(
+      `the templates of the deployment hold no bootstrap: the place where the state of the deployment lives cannot be created: ${bootstrap}`,
+      4,
+      'not_found'
+    )
+  }
+  const tool = dryRun ? undefined : await toolOf(input)
+  const declared = await declaredVariablesOf(bootstrap)
+  const declaredDeployment = await declaredVariablesOf(directory)
+  return { tool, bootstrap, declared, declaredDeployment }
+}
+
+/**
+ * The facts of the provider, as a dry run reads them.
+ *
+ * A dry run signs nobody in: it reads the facts the machine of the
+ * operator already holds, and it asks what it cannot read. A provider
+ * that holds no facts without a session holds none.
+ *
+ * @param provider the provider of the deployment.
+ */
+async function factsOf(provider: DeploymentProvider): Promise<SignIn> {
+  const facts = provider.facts === undefined ? {} : await provider.facts().catch(() => ({}))
+  return { facts, message: 'the dry run signs nobody in' }
+}
+
+/**
+ * The values of the deployment that are already there.
+ *
+ * @param file the file of the values of the deployment.
+ */
+async function previousOf(file: string): Promise<Values | undefined> {
+  try {
+    return defaultsOf(await readFile(file, 'utf8'))
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The values the wizard writes in the file of the deployment.
+ *
+ * The file holds the values of the questions of the deployment and
+ * nothing else: the facts the provider read and the images of the
+ * release are not values of the deployment.
+ *
+ * @param provider the provider of the deployment.
+ * @param values the values the wizard collected.
+ */
+function collectedOf(provider: DeploymentProvider, values: Readonly<Values>): Values {
+  const collected: Values = {}
+  for (const question of provider.questions) {
+    const value = values[question.name]
+    if (value !== undefined) collected[question.name] = value
+  }
+  return collected
+}
+
+/**
+ * Reports whether the values that are there are the ones the operator
+ * chose.
+ *
+ * A file that holds a value the wizard does not collect is not the
+ * file the wizard would write: the operator changed it, and the
+ * wizard does not throw it away without saying so.
+ *
+ * @param collected the values the wizard collected.
+ * @param previous the values that are there.
+ */
+function sameValues(collected: Readonly<Values>, previous: Readonly<Values>): boolean {
+  const names = Object.keys(collected)
+  if (names.length !== Object.keys(previous).length) return false
+  return names.every((name) => previous[name] === collected[name])
+}
+
+/**
+ * The answers of the operator, as a person reads them.
+ *
+ * The questions the wizard asked are the answers of the operator, and
+ * they are told before the deployment goes on.
+ *
+ * @param provider the provider of the deployment.
+ * @param values the values the wizard collected.
+ */
+function reviewOf(provider: DeploymentProvider, values: Readonly<Values>): string[] {
+  const asked = provider.questions.filter((question) => question.kind !== 'given')
+  if (asked.length === 0) return []
+  const width = Math.max(...asked.map((question) => question.name.length))
+  return asked.map((question) => `  ${question.name.padEnd(width)}  ${values[question.name] ?? ''}`)
+}
+
+/**
+ * The answers of the operator, as the wizard tells them.
+ *
+ * @param provider the provider of the deployment.
+ * @param values the values the wizard collected.
+ */
+function reviewLines(provider: DeploymentProvider, values: Readonly<Values>): string[] {
+  const answers = reviewOf(provider, values)
+  if (answers.length === 0) return []
+  return ['', 'the deployment goes on with these answers:', ...answers]
+}
+
+/**
+ * The question of the values that are already there.
+ *
+ * The values of a deployment that is already there are the answers of
+ * an earlier run, and the operator says whether they are replaced. The
+ * reader who answers no keeps them, and the deployment of the values
+ * that are there goes on.
+ *
+ * @param file the file of the values of the deployment.
+ * @param yes true when the reader asked for no question.
+ */
+async function confirmValues(file: string, yes: boolean): Promise<void> {
+  try {
+    await confirm(
+      `the values of the deployment are already there: ${file}. They are not the ones you chose: write them again?`,
+      yes,
+      process.stdin,
+      process.stderr
+    )
+  } catch (error) {
+    if (error instanceof CliFailure && error.code === 'not_confirmed') {
+      throw new CliFailure(
+        `the values of the deployment are already there: ${file}. Pass --force to write them again.`,
+        5,
+        'already_there'
+      )
+    }
+    throw error
+  }
+}
+
+/**
+ * The number of times a question is asked before it is refused.
+ *
+ * A reader who answers with something the deployment cannot use is
+ * asked again: the wizard that refuses the whole interview over one
+ * mistyped character throws the answers of the reader away.
+ */
+const ATTEMPTS = 3
+
+/**
+ * The answer of a question, and the answer is one the deployment can use.
+ *
+ * The question is asked again when the answer is not one the
+ * deployment can use, and the operator is told why: an identifier that
+ * is not an identifier is refused at the question, and not at the end
+ * of the interview, where the reader has already answered everything.
+ *
+ * A question that has choices is asked with the choices: the operator
+ * picks one of them, and the answer is one of them before the
+ * deployment starts.
+ *
+ * @param question the question of the wizard.
+ * @param prompt the question, as the operator reads it.
+ * @param facts the facts the provider read.
+ * @param effective the values the answer falls back on.
+ * @param tell what the operator is told about an answer it cannot use.
+ */
+async function askOf(
+  question: Question,
+  prompt: string,
+  facts: Readonly<Record<string, string>>,
+  effective: Readonly<Values>,
+  tell: (text: string) => void
+): Promise<string> {
+  let problem = `${question.summary} is needed`
+  // A question that has choices is asked with the choices, and the
+  // default of the question is one of them: the operator confirms the
+  // default by answering nothing.
+  const fallback = defaultOf(question, effective)
+  for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
+    const answer = await ask(prompt, question.choices, process.stdin, process.stderr, fallback)
+    const value = answerOf(question, facts, effective, answer)
+    const found = problemOf(question, value)
+    if (found === undefined) return value
+    problem = found
+    tell(`that answer cannot be used: ${problem}`)
+  }
+  throw new CliFailure(`the deployment is not ready: ${problem}`, 8, 'invalid_values')
+}
+
+/**
+ * The default of a question that has choices.
+ *
+ * The default is the answer the operator confirms by answering
+ * nothing, and it is one of the choices: a default that is not one of
+ * them is not a default the operator can take.
+ *
+ * @param question the question of the wizard.
+ * @param effective the values the answer falls back on.
+ */
+function defaultOf(question: Question, effective: Readonly<Values>): string | undefined {
+  if (question.choices === undefined) return undefined
+  const value = effective[question.name]
+  if (value === undefined || value === '') return undefined
+  return question.choices.includes(value) ? value : undefined
 }
 
 /**
@@ -306,14 +575,19 @@ function bootstrapOf(directory: string): string {
  * changes it by typing another one. A reader who cannot answer the
  * question keeps the address that was read.
  *
+ * An address that is not a range is refused at the question, and the
+ * question is asked again.
+ *
  * @param environment the environment of the process.
  * @param answers the answers the operator gave in a file.
  * @param notes what the operator is told about the reading of the address.
+ * @param tell what the operator is told about an answer it cannot use.
  */
 async function askAddresses(
   environment: Readonly<Record<string, string | undefined>>,
   answers: Values,
-  notes: string[]
+  notes: string[],
+  tell: (text: string) => void
 ): Promise<readonly string[]> {
   const given = answers[ADDRESSES]
   if (given !== undefined && given.trim() !== '') return noted(rangesIn(given), notes)
@@ -326,20 +600,29 @@ async function askAddresses(
     fallback === undefined
       ? 'the addresses that reach the account of the state of the deployment, separated by commas'
       : `the addresses that reach the account of the state of the deployment, separated by commas [${fallback}]`
-  let answer: string
-  try {
-    answer = await ask(question)
-  } catch (error) {
-    // Nobody can answer the question: the address that was read is the
-    // answer, and the operator is told which one it is.
-    if (fallback !== undefined && error instanceof CliFailure && error.code === 'not_answered') {
-      notes.push(`the addresses that reach the account of the state are ${fallback}`)
-      return [fallback]
+  let problem = 'the addresses that reach the account of the state of the deployment are needed'
+  for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
+    let answer: string
+    try {
+      answer = await ask(question)
+    } catch (error) {
+      // Nobody can answer the question: the address that was read is
+      // the answer, and the operator is told which one it is.
+      if (fallback !== undefined && error instanceof CliFailure && error.code === 'not_answered') {
+        notes.push(`the addresses that reach the account of the state are ${fallback}`)
+        return [fallback]
+      }
+      throw error
     }
-    throw error
+    try {
+      return noted(addressesOf(answer, fallback), notes)
+    } catch (error) {
+      if (!(error instanceof CliFailure)) throw error
+      problem = error.message
+      tell(`that answer cannot be used: ${problem}`)
+    }
   }
-  const ranges = addressesOf(answer, fallback)
-  return noted(ranges, notes)
+  throw new CliFailure(`the deployment is not ready: ${problem}`, 8, 'invalid_values')
 }
 
 /**
@@ -573,6 +856,65 @@ export interface Recovery {
   readonly yes: boolean
   /** The names the recovery has already freed. */
   readonly purged: readonly string[]
+  /** What the operator is told about the recovery. */
+  readonly tell: (text: string) => void
+}
+
+/**
+ * Writes the resources that a failed apply left in the cloud into the
+ * state of the deployment.
+ *
+ * The resources are already there, and the state of the deployment
+ * does not know them: the next apply refuses to create them again. The
+ * tool names every one of them, and the state learns about all of them
+ * before the plan is run again: a plan that holds one resource of a
+ * hundred is a plan that refuses the hundredth one.
+ *
+ * The identifiers of a resource are tried in the order the provider
+ * gave them: the tool refuses an import that names the resource in a
+ * way it does not know, and the next one is tried.
+ *
+ * @param recovery what the recovery needs to know.
+ * @param importables the resources the tool named.
+ */
+async function takeOver(
+  recovery: Recovery,
+  importables: readonly Importable[]
+): Promise<{ note: string }> {
+  const { port, directory, file, tell } = recovery
+  // The recovery writes one resource at a time, and there may be a
+  // hundred of them: the operator is told how many and that it takes a
+  // moment, or the recovery looks like a wizard that is stuck.
+  tell(
+    `${importables.length} resources that a failed apply left in the cloud are written in the state of the deployment, this takes a moment`
+  )
+  for (const one of importables) {
+    let refusal: string | undefined
+    let written = false
+    for (const id of one.ids) {
+      try {
+        await port.import(directory, one.address, id, { varFile: file })
+        written = true
+        break
+      } catch (error) {
+        refusal = error instanceof CliFailure ? error.message : String(error)
+      }
+    }
+    if (!written) {
+      throw new CliFailure(
+        `the deployment is not applied: ${one.address} is already in the cloud and could not be written in the state: ${refusal ?? 'the tool refused the import'}`,
+        5,
+        'already_there'
+      )
+    }
+    // The recovery writes one resource at a time, and there may be a
+    // hundred of them: the operator is told about each one, or the
+    // recovery looks like a wizard that is stuck.
+    tell(`${one.address} is written in the state of the deployment`)
+  }
+  return {
+    note: `${importables.length} resources that a failed apply left in the cloud are written in the state`,
+  }
 }
 
 /**
@@ -600,12 +942,21 @@ export async function recoverLeftover(
   error: unknown
 ): Promise<{ note: string; purged?: string; values?: Readonly<Values> } | undefined> {
   const { provider, port, directory, file, region, yes, purged } = recovery
-  if (provider.leftoverOf === undefined) return undefined
   if (!(error instanceof CliFailure)) return undefined
   const reason = error.message
   if (!/already exists|alreadyexists|already in use/i.test(reason)) return undefined
   const address = addressOf(reason)
   if (address === undefined) return undefined
+
+  // The tool names every resource that is already there and not in
+  // the state: they are written in the state, and the plan that
+  // follows holds them.
+  const importables = provider.importablesOf?.(reason) ?? []
+  if (importables.length > 0) {
+    return await takeOver(recovery, importables)
+  }
+
+  if (provider.leftoverOf === undefined) return undefined
   const leftover = await provider.leftoverOf(reason, region)
   if (leftover === undefined) return undefined
 
@@ -636,7 +987,7 @@ export async function recoverLeftover(
         `${leftover.name} ${where}, and the deployment cannot take it over: the deployment names its resource ${named[1]} instead: is that right?`,
         yes,
         process.stdin,
-        process.stdout
+        process.stderr
       )
     } catch (error) {
       if (error instanceof CliFailure && error.code === 'not_confirmed') {
@@ -670,7 +1021,7 @@ export async function recoverLeftover(
         `${leftover.name} was deleted and not purged, and it holds the name the deployment wants: purging it frees the name and loses what is left of it: purge it?`,
         yes,
         process.stdin,
-        process.stdout
+        process.stderr
       )
     } catch (error) {
       if (error instanceof CliFailure && error.code === 'not_confirmed') {
@@ -772,6 +1123,12 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
       }
       const defaults = defaultsOf(example)
 
+      // The wizard refuses what is missing before it asks anything: a
+      // reader who answers twenty questions and is told afterwards
+      // that the tool is not there answered for nothing.
+      const checked = await preflight(input, directory, input.globals.dryRun)
+      const { bootstrap, declared, declaredDeployment } = checked
+
       // The sign in comes first: the facts the provider reads answer
       // some of the questions, and the operator does not type them.
       const answers = await answersOf(input)
@@ -790,8 +1147,9 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
 
       // The provider is asked for a session after the release: the
       // facts of the provider answer the questions that the release
-      // does not.
-      const signIn = await provider.signIn(ask)
+      // does not. A dry run signs nobody in: it reads the facts the
+      // machine of the operator already holds.
+      const signIn = input.globals.dryRun ? await factsOf(provider) : await provider.signIn(ask)
       input.services.progress(signIn.message)
       Object.assign(known, signIn.facts)
       if (release === undefined) {
@@ -828,6 +1186,32 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
       // are asked for nothing.
       Object.assign(known, answers)
 
+      // The identity of the operator is the one of the session of the
+      // client of Azure, and the deployment writes its secrets with
+      // it: a wizard that asks every question before it says that the
+      // identity is missing has wasted the answers of the operator.
+      const identity = known.operator_principal_id ?? ''
+      if (declaredDeployment.has('operator_principal_id') && identity === '') {
+        if (input.globals.dryRun) {
+          // A dry run signs nobody in, and the identity it cannot read
+          // is a note: the deployment that follows needs it.
+          notes.push(
+            'the identity of the operator could not be read: the dry run signs nobody in, and the deployment needs the identity of the operator'
+          )
+        } else {
+          throw new CliFailure(
+            'the identity of the operator could not be read: the deployment writes the secrets of the deployment in the vault of the deployment, and the permission to write them is a role of Entra ID: sign in to Azure as the operator of the deployment',
+            7,
+            'unreachable'
+          )
+        }
+      }
+      if (declared.has('operator_principal_id') && identity === '') {
+        notes.push(
+          'the identity of the operator could not be read: the account of the state keeps the permissions the operator already holds'
+        )
+      }
+
       // The values of the deployments that are already there are the
       // defaults of the questions: the operator confirms the answers of
       // a deployment instead of typing them again.
@@ -840,14 +1224,16 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
           continue
         }
         const fallback = fallbackOf(question.name, values, defaults, existing)
+        const offered = offeredOf(question, fallback, defaults)
         const prompt =
-          fallback !== undefined && fallback !== ''
-            ? `${question.summary} [${fallback}]`
+          offered !== undefined && offered !== ''
+            ? `${question.summary} [${offered}]`
             : question.summary
-        const answer = await ask(prompt)
         const effective =
-          fallback === undefined ? defaults : { ...defaults, [question.name]: fallback }
-        values[question.name] = answerOf(question, known, effective, answer)
+          offered === undefined ? defaults : { ...defaults, [question.name]: offered }
+        values[question.name] = await askOf(question, prompt, known, effective, (text) =>
+          input.services.progress(text)
+        )
       }
 
       // The values of the questions the wizard does not ask are the
@@ -874,27 +1260,21 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
 
       const environment = values.environment ?? defaults.environment ?? 'production'
       const runtime = runtimeOf(input, directory, environment)
-      await mkdir(runtime, { recursive: true })
       const file = join(runtime, VALUES)
-      // The values of a deployment are the ones the operator chose: a
-      // wizard that overwrites them without asking loses the answers
-      // of a deployment that is already there.
-      if (existsSync(file) && input.options.force !== true) {
-        throw new CliFailure(
-          `the values of the deployment are already there: ${file}. Pass --force to write them again.`,
-          5,
-          'already_there'
-        )
-      }
-      await writeFile(file, valuesFile(provider, values))
-
       const relative = runtime.startsWith(process.cwd())
         ? runtime.slice(process.cwd().length + 1)
         : runtime
-      const written = `the values of the deployment are written in ${relative}/${VALUES}`
+      // The values of the deployment that are already there: a
+      // deployment that is already there is the default of the
+      // questions, and the file that holds it is left alone when the
+      // operator chose the same values.
+      const previous = await previousOf(file)
+      const collected = collectedOf(provider, values)
+      const same = previous !== undefined && sameValues(collected, previous)
 
-      // A dry run applies nothing: it writes the values, tells the
-      // operator the steps the deployment takes, and stops there.
+      // A dry run writes nothing: it tells the operator what the
+      // deployment would do, and it stops there. It signs nobody in
+      // either: a dry run that opens a browser is not a dry run.
       if (input.globals.dryRun) {
         return {
           value: {
@@ -903,48 +1283,63 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
             runtime,
             values,
             account: signIn.account ?? '',
+            written: previous === undefined,
+            same,
           },
           lines: [
             '',
             'the deployment goes on:',
             ...stepsOf().map((step, index) => `  ${index + 1}. ${step}`),
+            ...reviewLines(provider, values),
           ],
-          message: written,
+          message:
+            previous === undefined
+              ? `the values of the deployment would be written in ${relative}/${VALUES}`
+              : same
+                ? `the values of the deployment are already there: ${relative}/${VALUES}`
+                : `the values of the deployment would be written over ${relative}/${VALUES}`,
         }
       }
+
+      // The values of a deployment are the ones the operator chose: a
+      // wizard that overwrites them without asking loses the answers
+      // of a deployment that is already there. The values that are
+      // there are the answers of an earlier run, and the operator says
+      // whether they are replaced.
+      if (previous === undefined) {
+        await mkdir(runtime, { recursive: true })
+        await writeFile(file, valuesFile(provider, values))
+      } else if (!same) {
+        if (input.options.force !== true) {
+          await confirmValues(file, input.globals.yes)
+        }
+        await writeFile(file, valuesFile(provider, values))
+      }
+      const written =
+        previous !== undefined && same
+          ? `the values of the deployment are already there: ${relative}/${VALUES}`
+          : `the values of the deployment are written in ${relative}/${VALUES}`
+
+      // The answers of the operator are told before the deployment
+      // goes on: the deployment takes minutes, and an answer that is
+      // wrong is caught before the minutes and not after them.
+      for (const line of reviewLines(provider, values)) input.services.progress(line)
+      input.services.progress('')
 
       // The deployment goes on: the wizard wrote the values, and the
       // tool writes the place where the state lives, the plan and the
       // deployment.
       input.services.progress(written)
-      const port = await toolOf(input)
-      const bootstrap = bootstrapOf(directory)
-      if (!existsSync(bootstrap)) {
-        throw new CliFailure(
-          `the templates of the deployment hold no bootstrap: the place where the state of the deployment lives cannot be created: ${bootstrap}`,
-          4,
-          'not_found'
-        )
-      }
-      const declared = await declaredVariablesOf(bootstrap)
-      const declaredDeployment = await declaredVariablesOf(directory)
-      const identity = values.operator_principal_id ?? ''
-      if (declaredDeployment.has('operator_principal_id') && identity === '') {
-        throw new CliFailure(
-          'the identity of the operator could not be read: the deployment writes the secrets of the deployment in the vault of the deployment, and the permission to write them is a role of Entra ID: sign in to Azure as the operator of the deployment',
-          7,
-          'unreachable'
-        )
-      }
+      // The tool was checked before the questions: the dry run is the
+      // only way to reach this line without a tool, and the dry run
+      // stops above.
+      const tool = checked.tool ?? (await toolOf(input))
       const addresses = declared.has(ADDRESSES)
-        ? await askAddresses(input.environment, answers, notes)
+        ? await askAddresses(input.environment, answers, notes, (text) =>
+            input.services.progress(text)
+          )
         : []
-      if (declared.has('operator_principal_id') && identity === '') {
-        notes.push(
-          'the identity of the operator could not be read: the account of the state keeps the permissions the operator already holds'
-        )
-      }
-      const place = await port.bootstrap(
+      const place = await tool.bootstrap(
         bootstrap,
         bootstrapVariables(values, defaults, addresses, declared)
       )
@@ -958,8 +1353,18 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
         `the configuration of the backend of the state is written in ${shownOf(backend)}`
       )
 
-      await port.initialize(directory, { backendConfig: backend })
+      const state = await tool.initialize(directory, { backendConfig: backend })
       input.services.progress('the templates of the deployment are initialized')
+      if (!state.read) {
+        // The state of the deployment could not be read: the plan
+        // that follows is the plan of a deployment whose state is
+        // empty, and the resources of the deployment that are already
+        // there are not in it. The operator is told before the plan is
+        // written, and the question of the plan names it again.
+        notes.push(
+          `the state of the deployment could not be read: ${state.reason ?? 'the tool refused'}: the plan that follows is the plan of a deployment whose state is empty`
+        )
+      }
 
       // The plan is written, the operator answers about it, and the
       // plan is applied. A resource that a failed apply left in the
@@ -970,13 +1375,30 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
       // need a plan of its own to be tried: the loop is long enough
       // for the names the recovery frees.
       let attempts = 2
+      let last: unknown
       for (let attempt = 0; attempt < attempts; attempt += 1) {
-        const plan = await port.plan(directory, { varFile: file, planFile: join(runtime, PLAN) })
+        let plan: InfrastructurePlan
+        try {
+          plan = await tool.plan(directory, { varFile: file, planFile: join(runtime, PLAN) })
+        } catch (error) {
+          // The state of the deployment is locked: a run that was
+          // killed left its lock behind it. The operator says whether
+          // that run is still there, and the plan is written again
+          // when the lock is freed.
+          const unlocked = await unlockState(
+            tool,
+            directory,
+            { varFile: file },
+            error,
+            input.globals.yes,
+            (text) => input.services.progress(text)
+          )
+          if (!unlocked) throw error
+          plan = await tool.plan(directory, { varFile: file, planFile: join(runtime, PLAN) })
+        }
         // The plan is what the operator answers about: it is shown
         // before the question, and the question names what the plan
         // does, counted.
-        const planLines = ['', ...linesOfPlan(plan)]
-        const planTable = tableOfPlan(plan)
         const value = {
           provider: provider.name,
           directory,
@@ -996,34 +1418,52 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
           }
         }
 
+        // The plan is what the operator answers about: it is shown
+        // before the question, whatever the format of the answer is. A
+        // reader that answers about a plan it has not seen answers
+        // blind, and the format of the answer says nothing about what
+        // the reader is shown.
         await confirm(
-          questionOf(plan),
+          state.read
+            ? questionOf(plan)
+            : `the state of the deployment is empty: ${questionOf(plan)}`,
           input.globals.yes,
           process.stdin,
-          process.stdout,
-          input.globals.output === 'table' && !input.globals.quiet ? planTable : []
+          process.stderr,
+          planContext(
+            plan,
+            input.globals.output === 'table' && !input.globals.quiet,
+            input.globals.yes
+          ),
+          (text) => input.services.progress(text)
         )
         try {
-          const applied = await port.apply(directory, plan)
+          const applied = await tool.apply(directory, plan)
           return {
             value: {
               ...value,
               summary: applied.summary,
               applied: applied.applied,
             },
-            lines: planLines,
+            // The answer of the command is what the apply did, and
+            // not the plan that was shown before the question: a plan
+            // that is told after the apply reads as a plan that is
+            // still to come.
+            lines: ['', appliedOf(applied.summary), '', ...tableOfChanges(applied.applied)],
             message: 'the deployment is applied',
           }
         } catch (error) {
+          last = error
           const recovered = await recoverLeftover(
             {
               provider,
-              port,
+              port: tool,
               directory,
               file,
               region: values.location,
               yes: input.globals.yes,
               purged,
+              tell: (text) => input.services.progress(text),
             },
             error
           )
@@ -1039,10 +1479,17 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
           }
         }
       }
+      // The recovery freed what it could, and the plan was run again,
+      // and the tool refused it again. The refusal carries what the
+      // tool said: the reason of the failure of the deployment is the
+      // reason the tool gave, and not the summary of the recovery.
+      const reason = last instanceof CliFailure ? last.message : String(last ?? 'the tool refused')
       throw new CliFailure(
-        'the deployment was not applied: the resource that is already there was written in the state, and the plan is run again',
+        reason,
         1,
-        'apply_failed'
+        'apply_failed',
+        undefined,
+        'the plan was run again after the recovery, and the tool refused it again: read the plan of the deployment with "platformctl infra plan"'
       )
     },
   }

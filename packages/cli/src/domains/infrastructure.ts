@@ -87,6 +87,33 @@ export interface InfrastructureBootstrap {
   readonly created: boolean
 }
 
+/**
+ * The state of the deployment, as the initialization of the templates
+ * found it.
+ *
+ * The state of a deployment that is new is empty, and the plan of an
+ * empty state is the plan of a new deployment. The state of a
+ * deployment that is already there is not empty, and a plan of an
+ * empty state would create the resources that are already there: the
+ * operator is told when the state could not be read.
+ */
+export interface InfrastructureState {
+  /** True when the state of the deployment holds the resources of the deployment. */
+  readonly read: boolean
+  /** The reason the state was not read, as the tool said it. */
+  readonly reason?: string
+}
+
+/** The lock of the state of the deployment. */
+export interface StateLock {
+  /** The identifier of the lock. */
+  readonly id: string
+  /** Who holds the lock. */
+  readonly who: string
+  /** When the lock was taken. */
+  readonly created: string
+}
+
 /** What a run of the tool needs to know. */
 export interface InfrastructureRun {
   /** The file of the values of the deployment. */
@@ -138,7 +165,7 @@ export interface InfrastructurePort {
    * @param directory the directory of the templates.
    * @param run what the run needs to know.
    */
-  initialize(directory: string, run: InfrastructureRun): Promise<void>
+  initialize(directory: string, run: InfrastructureRun): Promise<InfrastructureState>
   /**
    * Writes a resource of the cloud into the state of the deployment.
    *
@@ -156,6 +183,18 @@ export interface InfrastructurePort {
   import(directory: string, address: string, id: string, run: InfrastructureRun): Promise<void>
   /** The plan of the deployment. */
   plan(directory: string, run: InfrastructureRun): Promise<InfrastructurePlan>
+  /**
+   * Frees the lock of the state of the deployment.
+   *
+   * A run that was killed leaves the lock of the state behind it, and
+   * the next run cannot write the state at all: the lock is freed by
+   * its identifier.
+   *
+   * @param directory the directory of the templates.
+   * @param id the identifier of the lock.
+   * @param run what the run needs to know.
+   */
+  unlock(directory: string, id: string, run: InfrastructureRun): Promise<void>
   /** Applies a plan that the tool has written. */
   apply(directory: string, plan: InfrastructurePlan): Promise<AppliedInfrastructure>
   /** The outputs of the deployment. */
@@ -269,6 +308,21 @@ export function destroys(plan: InfrastructurePlan): boolean {
 export function countedOf(plan: InfrastructurePlan): string {
   const destroys = plan.summary.delete + plan.summary.replace
   return `the plan creates ${plan.summary.create}, changes ${plan.summary.update} and destroys ${destroys}`
+}
+
+/**
+ * What an apply did, counted.
+ *
+ * A plan is counted in the future, because it is a question, and an
+ * apply is counted in the past, because it is an answer. The words are
+ * the words of the plan, so that a reader who read the question reads
+ * the answer the same way.
+ *
+ * @param summary what the apply did, counted.
+ */
+export function appliedOf(summary: PlanSummary): string {
+  const destroys = summary.delete + summary.replace
+  return `the deployment created ${summary.create}, changed ${summary.update} and destroyed ${destroys}`
 }
 
 /**

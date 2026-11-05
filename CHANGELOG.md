@@ -10,35 +10,6 @@ in the same commit as the code.
 
 ## Unreleased
 
-### The place where the state of the deployment lives is taken over when it is there
-
-The state of the place where the state of the deployment lives is a file
-of the machine of the operator, and the file is lost when the
-directory of the templates is cleaned: the resources of the place are
-there, and the state of the place does not know them, and the apply
-refuses to create them again.
-
-The tool writes the resources that are already there in the state of the
-place and creates the place again, the way it takes over the resources
-of a deployment that a failed apply left behind. A resource of another
-group is not taken over: the name is not ours, and the state of the
-deployment does not belong to a group that is not its group.
-
-### A crash of the tool that writes the deployment is told with the reason of the crash
-
-The tool that writes the deployment crashes when it cannot read the
-directory of the templates, and the crash is a stack trace of the tool:
-the operator reads the trace and not the name of the file that is in
-the way. The tool answers with the reason when it is asked what it
-cannot read, and the CLI asks it.
-
-A crash is not a state that becomes reachable: the templates are not
-initialized again, and the operator is told at once.
-
-The check of the deployment holds the directory of the templates to the
-files of the templates: a file that is not a file of the templates is a
-file that nobody owns, and the tool reads the whole directory.
-
 ### The credentials of a deployment on Azure are strong enough for the services that read them
 
 The templates of the deployment on Azure generated their credentials as
@@ -83,6 +54,13 @@ it shows the shape the answer needs.
 The plan of a deployment says what it does, counted, in the same words
 everywhere it is told: the line above the plan, the question of the
 operator and the answer of the command.
+
+The answer of the wizard held the plan of the deployment after the
+apply: a plan that is told again once it is applied reads as a plan
+that is still to come, and the operator reads the numbers of the plan
+as numbers of work that is left. The answer holds what the apply did,
+and it counts it in the past, because an apply is an answer and not a
+question.
 
 ### The CLI says where you are and what you can do
 
@@ -204,6 +182,15 @@ provider, and a plan that tries to change a zone is a plan the service
 refuses: a zone only moves when it is exchanged with the standby zone.
 The templates hold the zones out of the plan now.
 
+### The container of the state is named by the identifier of the account
+
+The templates of the container of the state named the account that
+holds it by its name, and the provider of Azure deprecated the argument
+that does that: the container is named by the identifier of the account
+now, and the warning the provider wrote on every bootstrap is gone. The
+name of a resource is the name of a resource, and the identifier of a
+resource is not its name.
+
 ### The bootstrap registers the resource providers the deployment needs
 
 The templates of a deployment do not register the resource providers of
@@ -218,6 +205,56 @@ The provider sends the counts of a workload profile it does not know as
 a consumption one, and the service refuses the counts of a consumption
 profile: the profile of the environment of the deployment is named
 `Consumption`, which is the name the provider reads.
+
+### The deployment writes the records of the names of the deployment
+
+The names of the deployment are the subdomains of a domain, and the
+domain is a zone of DNS. The operator wrote the records of the names by
+hand: a `CNAME` of every name at the application of the gateway, and a
+`TXT` record that proves the ownership of every name. The records are
+the records of a zone, and a zone of Azure holds them: the deployment
+writes the records of the names when the operator names the zone, and
+the operator writes one thing only — the delegation of the zone at the
+registrar, with the name servers the deployment answers with.
+
+A zone that is named in the group of the operator outlives the
+deployment, and the deployment writes the records of the names in it
+and creates nothing. A zone that the deployment creates lives in the
+group of the deployment and dies with it.
+
+### The names of the deployment are labels in a zone
+
+The wizard asked for the public name of every service and then for the
+zone that holds the names: the zone was asked twice, in two shapes, and
+the names of the deployment could be outside the zone the operator
+named. The names of the deployment are the labels of the services in the
+zone of the deployment, and the wizard asks for the zone and for the
+labels: the public name of a service is the label and the zone, and the
+templates write the name once.
+
+A deployment that names its zone in the values file and deploys the
+templates of an earlier version has to name the labels and the zone
+instead of the names: the names the templates compose are the names the
+deployment answered under.
+
+### The paths of a deployment are paths of the checkout
+
+The CLI reads the paths of a deployment from the directory it runs in,
+and the CLI is run through the workspace of a package: the workspace is
+a directory of the checkout, and a path the operator typed is a path of
+the checkout and not a path of the workspace. A command that named the
+templates of the deployment was told that the directory of the
+deployment is not there, and the path it looked for was the path of the
+workspace.
+
+The CLI finds the checkout by walking up from the directory it runs in,
+and it reads a path that is not there from the checkout. A path that is
+absolute is the path it is, and a command that runs outside of a
+checkout reads its paths from the directory it runs in.
+
+The script of the root that runs the CLI runs it in the directory the
+operator is in, and not in the workspace of the package: the working
+directory of a command is the working directory of the operator.
 
 ### The plan of a deployment is shown before it is applied
 

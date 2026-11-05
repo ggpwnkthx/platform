@@ -35,9 +35,11 @@ import {
   type InfrastructurePlan,
   type InfrastructurePort,
   type InfrastructureRun,
+  type InfrastructureState,
   type InfrastructureValidation,
   type PlanSummary,
   type PlannedResource,
+  type StateLock,
   summaryOf,
 } from '../domains/infrastructure'
 
@@ -184,6 +186,34 @@ export function hintOf(reason: string): string {
  */
 export function changedBackend(stderr: string): boolean {
   return stderr.includes('Backend configuration changed')
+}
+
+/**
+ * The lock of the state of the deployment, as the tool names it.
+ *
+ * The tool refuses to write the state when another run holds its lock,
+ * and it names the lock, the one who holds it and the moment it was
+ * taken:
+ *
+ *   Error: Error acquiring the state lock
+ *
+ *   Error message: state blob is already locked
+ *   Lock Info:
+ *     ID:        74e078e2-ccfa-a2ef-6a45-0ac061764254
+ *     Who:       isaac@isaac-gaming
+ *     Created:   2026-11-04 21:55:29.404365078 +0000 UTC
+ *
+ * @param reason what the tool said.
+ */
+export function lockOf(reason: string): StateLock | undefined {
+  if (!/state blob is already locked|Error acquiring the state lock/i.test(reason)) {
+    return undefined
+  }
+  const id = reason.match(/^\s*ID:\s*(\S+)/m)?.[1]
+  if (id === undefined) return undefined
+  const who = reason.match(/^\s*Who:\s*(.+)$/m)?.[1]?.trim() ?? 'another run'
+  const created = reason.match(/^\s*Created:\s*(.+)$/m)?.[1]?.trim() ?? 'a moment ago'
+  return { id, who, created }
 }
 
 /**
@@ -615,10 +645,17 @@ export class TofuInfrastructure implements InfrastructurePort {
    * after the management plane created it: the init is run again while
    * it fails.
    *
+   * The configuration of the backend changed: the state of the
+   * deployment may have to move with it, and the tool never moves it
+   * on its own. When the state cannot be moved, the templates are
+   * initialized with a state that is empty, and the CLI is told that
+   * the state of the deployment was not read: the plan that follows is
+   * the plan of a deployment whose state is empty.
+   *
    * @param directory the directory of the templates.
    * @param run what the run needs to know.
    */
-  async initialize(directory: string, run: InfrastructureRun): Promise<void> {
+  async initialize(directory: string, run: InfrastructureRun): Promise<InfrastructureState> {
     const args = [`-chdir=${directory}`, 'init', '-input=false', '-no-color']
     if (run.backendConfig) args.push(`-backend-config=${run.backendConfig}`)
     let answer = await this.#run(args, process.cwd(), true)
@@ -628,13 +665,13 @@ export class TofuInfrastructure implements InfrastructurePort {
     // on its own.
     if (answer.status !== 0 && changedBackend(answer.stderr)) {
       const migrated = await this.#run([...args, '-migrate-state'], process.cwd(), true)
-      if (migrated.status === 0) return
+      if (migrated.status === 0) return { read: true }
       const reconfigured = await this.#run([...args, '-reconfigure'], process.cwd(), true)
       if (reconfigured.status === 0) {
-        process.stderr.write(
-          'the state of the deployment was not migrated: the plan that follows is the plan of a deployment whose state is empty\n'
-        )
-        return
+        // The state of the deployment could not be moved: the
+        // templates are initialized against a state that is empty, and
+        // the reason the state was not read is carried to the CLI.
+        return { read: false, reason: migrated.stderr.trim() || migrated.stdout.trim() }
       }
       answer = migrated
     }
@@ -657,6 +694,7 @@ export class TofuInfrastructure implements InfrastructurePort {
         'not_initialized'
       )
     }
+    return { read: true }
   }
 
   /**
@@ -713,6 +751,31 @@ export class TofuInfrastructure implements InfrastructurePort {
     if (answer.status !== 0) {
       throw new CliFailure(
         `the resource ${address} was not written in the state: ${answer.stderr.trim()}`,
+        1,
+        'tool_failed'
+      )
+    }
+  }
+
+  /**
+   * Frees the lock of the state of the deployment.
+   *
+   * A run that was killed leaves the lock of the state behind it, and
+   * the next run cannot write the state at all: the lock is freed by
+   * its identifier.
+   *
+   * @param directory the directory of the templates.
+   * @param id the identifier of the lock.
+   * @param run what the run needs to know.
+   */
+  async unlock(directory: string, id: string, run: InfrastructureRun): Promise<void> {
+    const args = [`-chdir=${directory}`, 'force-unlock', '-force', '-no-color']
+    if (run.backendConfig) args.push(`-backend-config=${run.backendConfig}`)
+    args.push(id)
+    const answer = await this.#run(args, process.cwd())
+    if (answer.status !== 0) {
+      throw new CliFailure(
+        `the lock of the state of the deployment could not be freed: ${answer.stderr.trim() || answer.stdout.trim()}`,
         1,
         'tool_failed'
       )

@@ -143,24 +143,85 @@ part itself.
 The names are the second half of the deployment, because the record of DNS
 needs the application to exist:
 
-1. the first apply creates the environment, the applications and the vault;
-2. the operator writes the records of DNS that the output `dns_records`
-   names — a `CNAME` of every name at the application of the gateway, and a
-   `TXT` record named `asuid` and the subdomain of the name, holding the
-   code of the verification (`dns_verification_id`);
+1. the first apply creates the environment, the applications and the vault,
+   and the zone of the names with the records of the names;
+2. the operator delegates the zone at the registrar with the `NS` records
+   that the output `dns_name_servers` names, and waits for the delegation
+   to be live;
 3. the operator sets `public_names_enabled = true` in the values of the
    deployment;
 4. the second apply binds the names to the gateway, and the environment
    issues their certificates.
 
 ```bash
+tofu -chdir=deploy/tofu/azure output dns_name_servers
+```
+
+A deployment that does not write the records of the names leaves them to
+the operator: the output `dns_records` names them — a `CNAME` of every name
+at the application of the gateway, and a `TXT` record named `asuid` and the
+label of the name, holding the code of the verification
+(`dns_verification_id`).
+
+```bash
 tofu -chdir=deploy/tofu/azure output dns_records
 tofu -chdir=deploy/tofu/azure output -raw dns_verification_id
 ```
 
-The names of the deployment do not have to live in a zone of Azure: the
-records of DNS are the ones of the operator, and the environment proves
-the ownership of a name with the record of the verification.
+#### The zone of the names
+
+The names of the deployment are the labels of the services in the zone of
+the deployment: the zone is the domain of the names, and the public name
+of a service is the label of the service and the zone.
+
+```hcl
+dns_zone_name = "platform.example.com"
+gateway_name  = "api"
+access_name   = "auth"
+console_name  = "app"
+```
+
+The names are `api.platform.example.com`, `auth.platform.example.com` and
+`app.platform.example.com`, and the zone holds every one of them: the
+templates write the name once, and the deployment refuses a label that is
+not a name.
+
+The records of the names are the records of the zone, and the zone can be a
+zone of Azure. The deployment writes the records of the names itself, and
+the operator writes one thing only: the delegation of the zone.
+
+The zone the deployment creates lives in the group of the deployment and
+dies with it. A zone that is named in the group the operator names
+outlives the deployment, and the operator owns it:
+
+```hcl
+dns_zone_name = "platform.example.com"
+dns_zone_resource_group_name = "the-group-of-the-zone"
+```
+
+A deployment that does not write the records leaves them to the operator,
+and the output `dns_records` names them:
+
+```hcl
+dns_records_managed = false
+```
+
+The operator delegates the zone at the registrar with the `NS` records
+that the output `dns_name_servers` names, and waits for the delegation to
+be live:
+
+```bash
+tofu -chdir=deploy/tofu/azure output dns_name_servers
+```
+
+The delegation moves the names of the zone and nothing else, when the zone
+is a subdomain of the domain of the operator. A zone that is the domain of
+the operator moves every record of the domain, and the records of the
+domain that the operator keeps elsewhere have to move with it.
+
+The order of the two halves is the same with a zone of Azure: the zone and
+the records are written by the first apply, the delegation is written by
+the operator, and the second apply binds the names.
 
 ### 5. The address of the caller
 
@@ -277,6 +338,22 @@ The templates of the provider of Azure can write a secret without
 keeping it (`value_wo`). It is not used here: the secrets of the
 deployment are generated, and a generated secret cannot be written
 without a value in the state.
+
+A secret that is in the vault and that the state does not know is a
+secret the plan wants to create, and the tool refuses because it is
+already there. The wizard writes it in the state and runs the plan
+again, and the plan writes the secret again with the value of the
+state: the secret of the vault gets a new version, and the version
+before it is kept for ninety days.
+
+The value of a secret is in the state and nowhere else, and a state
+that is lost is a deployment with new credentials. The roles of the
+database are set by the migration, and the migration sets them again
+with the values of the state: the roles follow the state. The password
+of the administrator of the server does not follow it: the server keeps
+the password it was created with, and the value of the state is the
+value the deployment expects. A state that was rebuilt is a server whose
+administrator password has to be set again.
 
 The vault is written through its data plane, and the data plane answers
 to the roles of Entra ID: the operator holds the role that writes the

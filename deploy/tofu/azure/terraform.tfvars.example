@@ -76,11 +76,15 @@ postgres_client_image = "postgres:18-alpine@sha256:00000000000000000000000000000
 #
 # The three names are the names the deployment answers under, and the
 # names of the records of DNS that point at the edge of the deployment.
+#
+# The names are the labels of the services in the zone of the
+# deployment: the public name of a service is the label and the zone,
+# and the templates write the name once.
 # --------------------------------------------------------------------------
 
-gateway_hostname = "api.example.com"
-access_hostname  = "access.example.com"
-console_hostname = "console.example.com"
+gateway_name = "api"
+access_name  = "access"
+console_name = "console"
 
 # --------------------------------------------------------------------------
 # The clients of Access
@@ -165,6 +169,23 @@ redis_sku_name = "Balanced_B0"
 # The names of the deployment do not have to live in a zone of Azure: the
 # records of DNS are the ones of the operator.
 public_names_enabled = false
+
+# The zone of DNS that holds the public names of the deployment.
+#
+# The zone is the domain of the names of the deployment, and the
+# deployment writes the records of the names in the zone of Azure: the
+# operator delegates the zone to Azure with the records of the
+# registrar, and the delegation is the only record the operator writes.
+#
+# The zone of the deployment is a zone of the group of the deployment,
+# and it dies with the deployment. A zone that is named in the group the
+# operator names outlives the deployment.
+#
+# A deployment that does not write the records leaves them to the
+# operator, and the output "dns_records" names them.
+dns_zone_name = "example.com"
+dns_records_managed = true
+dns_zone_resource_group_name = ""
 
 # The addresses of the proxies the gateway trusts. The ingress of the
 # environment is the peer of the gateway, and it is the address of every

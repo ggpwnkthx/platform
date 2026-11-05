@@ -6,6 +6,7 @@ import { run, type CliRuntime } from '../src/app/cli'
 import type { Services } from '../src/app/commands'
 import {
   actionOf,
+  appliedOf,
   changesNothing,
   destroys,
   isTooOld,
@@ -16,6 +17,7 @@ import {
   hintOf,
   isBackendConfiguration,
   isSensitive,
+  lockOf,
   redact,
   TofuInfrastructure,
 } from '../src/platform/tofu'
@@ -32,7 +34,7 @@ import { FakeInfrastructure } from './support'
  */
 
 /** The services of the tests. */
-function servicesOf(tool: FakeInfrastructure): Services {
+function servicesOf(tool: FakeInfrastructure, progress: string[] = []): Services {
   return {
     http: {
       send: async () => {
@@ -58,7 +60,7 @@ function servicesOf(tool: FakeInfrastructure): Services {
     },
     infrastructure: tool,
     files: { profiles: '/tmp/profiles.json', credentials: '/tmp/credentials.json' },
-    progress: () => undefined,
+    progress: (text) => progress.push(text),
   }
 }
 
@@ -67,18 +69,21 @@ function runtimeOf(tool: FakeInfrastructure): {
   runtime: CliRuntime
   out: string[]
   err: string[]
+  progress: string[]
 } {
   const out: string[] = []
   const err: string[] = []
+  const progress: string[] = []
   return {
     out,
     err,
+    progress,
     runtime: {
       name: 'platformctl',
       commands: [],
       groups: [infrastructureGroup],
       environment: {},
-      services: () => servicesOf(tool),
+      services: () => servicesOf(tool, progress),
       contextOf: async () => ({ name: 'default' }),
       out: (text) => out.push(text),
       err: (text) => err.push(text),
@@ -263,6 +268,18 @@ describe('the commands of the infrastructure', () => {
     ).toBe('the plan creates 3, changes 1 and destroys 2: the deployment is applied?')
   })
 
+  test('an apply is counted in the past, because it is an answer', () => {
+    expect(appliedOf({ create: 5, update: 27, delete: 0, replace: 0 })).toBe(
+      'the deployment created 5, changed 27 and destroyed 0'
+    )
+    expect(appliedOf({ create: 0, update: 0, delete: 0, replace: 0 })).toBe(
+      'the deployment created 0, changed 0 and destroyed 0'
+    )
+    expect(appliedOf({ create: 1, update: 0, delete: 2, replace: 3 })).toBe(
+      'the deployment created 1, changed 0 and destroyed 5'
+    )
+  })
+
   test('a tool that is too old for the templates is refused', async () => {
     const tool = new FakeInfrastructure()
     tool.toolVersion = '1.8.0'
@@ -318,6 +335,50 @@ describe('the commands of the infrastructure', () => {
       expect(out.join('\n')).toContain('azurerm_key_vault.platform')
       expect(tool.applied).toHaveLength(1)
       expect(tool.applied[0]?.planFile).toBe('/runtime/plan.bin')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the plan is shown before the apply, whatever the format of the answer is', async () => {
+    const tool = new FakeInfrastructure()
+    tool.plan_ = {
+      directory: '/templates',
+      changes: [
+        {
+          address: 'azurerm_key_vault.platform',
+          action: 'delete',
+          kind: 'azurerm_key_vault',
+          name: 'platform',
+          provider: 'hashicorp/azurerm',
+        },
+      ],
+      drift: [],
+      summary: { create: 0, update: 0, delete: 1, replace: 0 },
+      errored: false,
+    }
+    const { runtime, out, progress } = runtimeOf(tool)
+    const directory = await runtimeDirectory()
+    try {
+      const status = await run(runtime, [
+        'infra',
+        'apply',
+        '--yes',
+        '--output',
+        'json',
+        '--directory',
+        join(directory, 'templates'),
+        '--runtime',
+        directory,
+      ])
+      expect(status).toBe(0)
+      // The plan is shown before the apply, whatever the format of the
+      // answer is: the plan that is applied is the plan that was read.
+      expect(progress.join('\n')).toContain('the plan destroys:')
+      expect(progress.join('\n')).toContain('azurerm_key_vault.platform')
+      // The answer of the command is the json of the plan, and the
+      // dialog did not touch it.
+      expect(out.join('\n')).toContain('"azurerm_key_vault.platform"')
     } finally {
       await rm(directory, { recursive: true, force: true })
     }
@@ -817,6 +878,32 @@ describe('the tool that writes the infrastructure', () => {
     expect(hintOf('Error: something else entirely')).toBe('')
   })
 
+  test('the lock of the state of the deployment is read', () => {
+    // A run that was killed leaves the lock of the state behind it,
+    // and the tool names the lock, the one who holds it and the moment
+    // it was taken.
+    const lock = lockOf(
+      [
+        'Error: Error acquiring the state lock',
+        '',
+        'Error message: state blob is already locked',
+        'Lock Info:',
+        '  ID:        74e078e2-ccfa-a2ef-6a45-0ac061764254',
+        '  Path:      https://the-account.blob.core.windows.net/tfstate/the.tfstate',
+        '  Operation: OperationTypeInvalid',
+        '  Who:       isaac@isaac-gaming',
+        '  Version:   1.13.1',
+        '  Created:   2026-11-04 21:55:29.404365078 +0000 UTC',
+      ].join('\n')
+    )
+    expect(lock).toEqual({
+      id: '74e078e2-ccfa-a2ef-6a45-0ac061764254',
+      who: 'isaac@isaac-gaming',
+      created: '2026-11-04 21:55:29.404365078 +0000 UTC',
+    })
+    expect(lockOf('Error: something else entirely')).toBeUndefined()
+  })
+
   test('a place that is already there is a failure of the tool', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'platformctl-tool-'))
     try {
@@ -864,8 +951,13 @@ describe('the tool that writes the infrastructure', () => {
 
       // The migration of the state fails, and the state stays where it
       // is: the templates are initialized again with the configuration
-      // the CLI wrote.
-      await tool.initialize(templates, { backendConfig: join(directory, 'backend.hcl') })
+      // the CLI wrote, and the CLI is told that the state was not
+      // read.
+      const state = await tool.initialize(templates, {
+        backendConfig: join(directory, 'backend.hcl'),
+      })
+      expect(state.read).toBe(false)
+      expect(state.reason).toContain('the state to migrate is not there')
       const words = await Bun.file(argumentsFile).text()
       expect(words).toContain('-migrate-state')
       expect(words).toContain('-reconfigure')
