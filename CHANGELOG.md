@@ -79,6 +79,10 @@ The CLI says what it did when it cannot find the assignment: the
 operator is not left with the refusal of the provider and no word of
 what the CLI did.
 
+The name of an assignment in the cloud carries the dashes of the
+identifier, and the refusal of the provider does not: the assignment is
+found by its name and not by the end of its identifier.
+
 ### The wizard of a deployment says what it is doing
 
 The wizard of a deployment said everything at the end: the operator

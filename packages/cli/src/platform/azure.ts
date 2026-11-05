@@ -551,16 +551,7 @@ async function assignmentOf(
   if (named === null) return undefined
   const address = reason.match(/with ([A-Za-z0-9_.[\]"-]+),/)?.[1]
   if (address === undefined) return undefined
-  const listed = await run(binary, [
-    'role',
-    'assignment',
-    'list',
-    '--all',
-    '--query',
-    `[?ends_with(id, '${named[1]}')].id | [0]`,
-    '--output',
-    'json',
-  ])
+  const listed = await run(binary, ['role', 'assignment', 'list', '--all', '--output', 'json'])
   if (listed.status !== 0) {
     throw new CliFailure(
       `the role assignment ${named[1]} is already there, and the client of Azure could not list the assignments of the subscription: ${listed.stderr.trim() || listed.stdout.trim()}`,
@@ -568,25 +559,42 @@ async function assignmentOf(
       'already_there'
     )
   }
-  let id = ''
+  let assignments: unknown
   try {
-    const parsed = JSON.parse(listed.stdout) as unknown
-    if (typeof parsed === 'string') id = parsed
+    assignments = JSON.parse(listed.stdout) as unknown
   } catch {
     throw new CliFailure(
-      `the role assignment ${named[1]} is already there, and the client of Azure answered with something that is not an assignment`,
+      `the role assignment ${named[1]} is already there, and the client of Azure answered with something that is not a list of assignments`,
       5,
       'already_there'
     )
   }
-  if (id === '') {
+  if (!Array.isArray(assignments)) {
     throw new CliFailure(
-      `the role assignment ${named[1]} is already there, and the client of Azure did not find it in the assignments of the subscription: the assignment is in another subscription, or the account of the operator cannot read it`,
+      `the role assignment ${named[1]} is already there, and the client of Azure answered with something that is not a list of assignments`,
       5,
       'already_there'
     )
   }
-  return { address, id }
+  // The name of an assignment is the identifier of the assignment, and
+  // the identifier of the assignment in the cloud carries it with the
+  // dashes that the refusal of the provider does not.
+  const wanted = named[1]!.replace(/-/g, '').toLowerCase()
+  for (const assignment of assignments) {
+    if (!assignment || typeof assignment !== 'object') continue
+    const record = assignment as Record<string, unknown>
+    const id = typeof record.id === 'string' ? record.id : ''
+    const name = typeof record.name === 'string' ? record.name : ''
+    const identifier = (id.split('/').pop() ?? '').replace(/-/g, '').toLowerCase()
+    if (identifier !== wanted && name.replace(/-/g, '').toLowerCase() !== wanted) continue
+    if (id === '') continue
+    return { address, id }
+  }
+  throw new CliFailure(
+    `the role assignment ${named[1]} is already there, and the client of Azure did not find it in the assignments of the subscription: the assignment is in another subscription, or the account of the operator cannot read it`,
+    5,
+    'already_there'
+  )
 }
 
 /**

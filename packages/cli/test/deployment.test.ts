@@ -2185,7 +2185,7 @@ const CLIENT_WITH_ASSIGNMENT = `#!/bin/sh
 case "$1 $2" in
   "account show") echo '{"id":"sub-1","name":"the-subscription","tenantId":"11111111-1111-4111-8111-111111111111"}' ;;
   "account list") echo '[{"id":"sub-1","name":"the-subscription","tenantId":"11111111-1111-4111-8111-111111111111"}]' ;;
-  "role assignment") echo '"/subscriptions/sub-1/resourceGroups/the-group/providers/Microsoft.Authorization/roleAssignments/a674fb9fae2f8e4474d87fe96527edf6"' ;;
+  "role assignment") echo '[{"id":"/subscriptions/sub-1/resourceGroups/the-group/providers/Microsoft.Authorization/roleAssignments/a674fb9f-ae2f-8e44-74d8-7fe96527edf6","name":"a674fb9f-ae2f-8e44-74d8-7fe96527edf6","principalId":"the-principal","roleDefinitionName":"Storage Blob Data Contributor"}]' ;;
   *) exit 0 ;;
 esac
 `
@@ -2339,8 +2339,11 @@ describe('the leftover of a failed apply', () => {
         'Error: unexpected status 409 (409 Conflict) with error: RoleAssignmentExists: The role assignment already exists. The ID of the existing role assignment is a674fb9fae2f8e4474d87fe96527edf6.\n\n  with azurerm_role_assignment.state_data_owner[0],\n  on main.tf line 160'
       )
       expect(leftover?.name).toBe('azurerm_role_assignment.state_data_owner[0]')
+      // The identifier of the assignment in the cloud carries the
+      // dashes that the refusal of the provider does not, and it is the
+      // identifier the import of the assignment takes.
       expect(leftover?.ids).toEqual([
-        '/subscriptions/sub-1/resourceGroups/the-group/providers/Microsoft.Authorization/roleAssignments/a674fb9fae2f8e4474d87fe96527edf6',
+        '/subscriptions/sub-1/resourceGroups/the-group/providers/Microsoft.Authorization/roleAssignments/a674fb9f-ae2f-8e44-74d8-7fe96527edf6',
       ])
     } finally {
       await rm(directory, { recursive: true, force: true })
