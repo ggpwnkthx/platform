@@ -95,6 +95,16 @@ export interface InfrastructureRun {
   readonly planFile?: string
   /** The file of the configuration of the backend of the state. */
   readonly backendConfig?: string
+  /**
+   * The values of the deployment, as the tool is told them.
+   *
+   * A stack that has no file of values is told its values one by one,
+   * and the tool is told them the same way when it writes a resource
+   * in the state: a resource that is written in the state with other
+   * values than the ones of the apply is a resource the next apply
+   * wants to change.
+   */
+  readonly variables?: Readonly<Record<string, string>>
 }
 
 /**

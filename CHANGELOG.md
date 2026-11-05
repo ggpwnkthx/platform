@@ -10,6 +10,20 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The place where the state of the deployment lives is taken over when it is there
+
+The state of the place where the state of the deployment lives is a file
+of the machine of the operator, and the file is lost when the
+directory of the templates is cleaned: the resources of the place are
+there, and the state of the place does not know them, and the apply
+refuses to create them again.
+
+The tool writes the resources that are already there in the state of the
+place and creates the place again, the way it takes over the resources
+of a deployment that a failed apply left behind. A resource of another
+group is not taken over: the name is not ours, and the state of the
+deployment does not belong to a group that is not its group.
+
 ### A crash of the tool that writes the deployment is told with the reason of the crash
 
 The tool that writes the deployment crashes when it cannot read the
