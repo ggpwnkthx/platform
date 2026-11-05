@@ -75,6 +75,10 @@ the place where the state of the deployment lives is never created.
 The assignment is found in the directory of the assignments of the
 subscription, and the state of the deployment takes it over.
 
+The CLI says what it did when it cannot find the assignment: the
+operator is not left with the refusal of the provider and no word of
+what the CLI did.
+
 ### The wizard of a deployment says what it is doing
 
 The wizard of a deployment said everything at the end: the operator

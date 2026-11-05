@@ -561,15 +561,31 @@ async function assignmentOf(
     '--output',
     'json',
   ])
-  if (listed.status !== 0) return undefined
+  if (listed.status !== 0) {
+    throw new CliFailure(
+      `the role assignment ${named[1]} is already there, and the client of Azure could not list the assignments of the subscription: ${listed.stderr.trim() || listed.stdout.trim()}`,
+      5,
+      'already_there'
+    )
+  }
   let id = ''
   try {
     const parsed = JSON.parse(listed.stdout) as unknown
     if (typeof parsed === 'string') id = parsed
   } catch {
-    return undefined
+    throw new CliFailure(
+      `the role assignment ${named[1]} is already there, and the client of Azure answered with something that is not an assignment`,
+      5,
+      'already_there'
+    )
   }
-  if (id === '') return undefined
+  if (id === '') {
+    throw new CliFailure(
+      `the role assignment ${named[1]} is already there, and the client of Azure did not find it in the assignments of the subscription: the assignment is in another subscription, or the account of the operator cannot read it`,
+      5,
+      'already_there'
+    )
+  }
   return { address, id }
 }
 
