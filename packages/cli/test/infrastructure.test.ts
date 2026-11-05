@@ -487,7 +487,7 @@ case "$*" in
   *-raw*) if [ -n "$RAW_OUTPUT" ]; then printf '%s' "$RAW_OUTPUT"; else printf '%s' 'resource_group_name = "platform-production-state"'; fi ;;
   *show*) printf '%s' "$PLAN_JSON" ;;
   *output*) printf '%s' "$OUTPUT_JSON" ;;
-  *validate*) echo '{"diagnostics":[]}' ;;
+  *validate*) if [ -n "$CRASHES" ]; then echo '{"diagnostics":[{"severity":"error","summary":"Failed to read test directory","detail":"Test directory tests could not be read: readdirent tests: not a directory."}]}'; else echo '{"diagnostics":[]}'; fi ;;
 esac
 if [ -n "$APPLY_FAILS" ]; then
   case "$*" in
@@ -505,6 +505,15 @@ if [ -n "$INIT_FAILS" ]; then
         echo "Error: the state of the deployment is not reachable yet" >&2
         exit 1
       fi
+      ;;
+  esac
+fi
+if [ -n "$CRASHES" ]; then
+  case "$*" in
+    *init*)
+      echo "!!!!!!!!!!!!!!!!!!!!!!!!!!! OPENTOFU CRASH !!!!!!!!!!!!!!!!!!!!!!!!!!!!" >&2
+      echo "runtime error: invalid memory address or nil pointer dereference" >&2
+      exit 1
       ;;
   esac
 fi
@@ -835,6 +844,45 @@ describe('the tool that writes the infrastructure', () => {
       await tool.initialize(templates, { backendConfig: join(directory, 'backend.hcl') })
       const words = await Bun.file(argumentsFile).text()
       expect(words.split('\n').filter((line) => line.includes('init')).length).toBe(3)
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('a crash of the tool is told with the reason the tool gives', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-tool-'))
+    try {
+      const binary = join(directory, 'tofu')
+      const argumentsFile = join(directory, 'arguments.txt')
+      const templates = join(directory, 'templates')
+      await mkdir(templates, { recursive: true })
+      await writeFile(binary, TOOL)
+      await chmod(binary, 0o755)
+
+      const tool = new TofuInfrastructure(
+        {
+          PATH: process.env.PATH ?? '',
+          TOFU_BINARY: binary,
+          ARGS_FILE: argumentsFile,
+          CRASHES: '1',
+        },
+        { retries: 3, waitMs: 0 }
+      )
+
+      // The tool crashes when it cannot read the directory of the
+      // templates, and the crash is a stack trace of the tool: the
+      // operator is told what the tool cannot read, and the answer
+      // names the file that is in the way.
+      await expect(
+        tool.initialize(templates, { backendConfig: join(directory, 'backend.hcl') })
+      ).rejects.toThrow(
+        'the templates of the deployment cannot be initialized: Failed to read test directory: Test directory tests could not be read: readdirent tests: not a directory.'
+      )
+
+      // A crash is not a state that becomes reachable: the tool is not
+      // asked to initialize the templates again.
+      const words = await Bun.file(argumentsFile).text()
+      expect(words.split('\n').filter((line) => line.includes('init')).length).toBe(1)
     } finally {
       await rm(directory, { recursive: true, force: true })
     }

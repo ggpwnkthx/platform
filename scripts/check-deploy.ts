@@ -1143,6 +1143,14 @@ export async function checkInfrastructure(root: string): Promise<DeployFinding[]
     // The credentials the templates generate are strong enough for the
     // services that read them.
     findings.push(...checkCredentials(await sourcesWithNames(root, stack.directory)))
+
+    // The directory of the templates holds the files of the templates
+    // and nothing else. A file that is not a file of the templates is a
+    // file that nobody owns, and the tool that writes the deployment
+    // reads the whole directory: a file it cannot read stops the
+    // deployment with the stack trace of the tool and not with the
+    // name of the file.
+    findings.push(...(await checkFilesOfStack(root, stack)))
   }
 
   // The runtime directory is not committed: the files of a deployment
@@ -1160,6 +1168,70 @@ export async function checkInfrastructure(root: string): Promise<DeployFinding[]
     })
   }
 
+  return findings
+}
+
+/**
+ * The files of a stack that belong to a deployment and not to the
+ * repository.
+ *
+ * The state of a deployment and the plan of a deployment are the files
+ * of one deployment, and the repository ignores them. The check holds
+ * the directory of the templates to the files of the templates, and the
+ * files of a deployment are not files of the templates.
+ *
+ * @param name the name of the file.
+ */
+function fileOfADeployment(name: string): boolean {
+  return (
+    name.endsWith('.tfstate') ||
+    name.endsWith('.tfstate.backup') ||
+    name.endsWith('.tfvars') ||
+    name.endsWith('.tfplan') ||
+    name.endsWith('.bin')
+  )
+}
+
+/**
+ * Checks that the directory of a stack holds the files of the stack.
+ *
+ * The tool that writes the deployment reads the whole directory of the
+ * templates, and it reads a file it does not expect: a file that is
+ * named `tests` and that is not a directory stops the tool with the
+ * stack trace of the tool, and the operator is told nothing about the
+ * file that is in the way. The check holds the directory to the files
+ * of the stack, and the tool reads what the check knows.
+ *
+ * @param root the root of the repository.
+ * @param stack the stack of the deployment.
+ */
+export async function checkFilesOfStack(
+  root: string,
+  stack: { directory: string; files: readonly string[] }
+): Promise<DeployFinding[]> {
+  const findings: DeployFinding[] = []
+  const directory = join(root, stack.directory)
+  if (!existsSync(directory)) return findings
+  const allowed = new Set(stack.files)
+  const entries = await readdir(directory, { withFileTypes: true })
+  for (const entry of entries) {
+    // A dotted entry is the work of the tool: the directory of the
+    // providers, the directory of the modules and the like.
+    if (entry.name.startsWith('.')) continue
+    // The documentation of the stack is a file of the stack.
+    if (entry.name.endsWith('.md')) continue
+    if (allowed.has(entry.name)) continue
+    // The stack of the bootstrap lives in the directory of the
+    // templates, and it is a stack of the deployment of its own.
+    if (entry.isDirectory() && entry.name === 'bootstrap') continue
+    // The files of a deployment are the files of one deployment.
+    if (fileOfADeployment(entry.name)) continue
+    findings.push({
+      file: join(stack.directory, entry.name),
+      message:
+        'the file is not a file of the templates: the tool that writes the deployment reads the whole directory, and a file it cannot read stops the deployment',
+    })
+  }
   return findings
 }
 

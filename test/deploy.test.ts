@@ -8,6 +8,7 @@ import {
   BOOTSTRAP_FILES,
   checkCredentials,
   checkDeploy,
+  checkFilesOfStack,
   checkInfrastructure,
   checkLayout,
   checkMinimumEnvironment,
@@ -398,6 +399,53 @@ describe('the infrastructure as code of the deployment', () => {
           message: 'the file is not a file of the templates of the platform',
         },
       ])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('the files of the templates of the deployment', () => {
+  test('a file of the directory of the templates that is not a file of the templates is reported', async () => {
+    // The tool that writes the deployment reads the whole directory of
+    // the templates, and a file that is named `tests` and that is not
+    // a directory stops the tool with the stack trace of the tool: the
+    // operator is told nothing about the file that is in the way.
+    const directory = await mkdtemp(join(tmpdir(), 'platform-templates-'))
+    try {
+      const templates = join(directory, 'deploy', 'tofu', 'azure')
+      await mkdir(templates, { recursive: true })
+      await writeFile(join(templates, 'locals.tf'), 'locals {}\n')
+      await writeFile(join(templates, 'tests'), '')
+      const findings = await checkFilesOfStack(directory, {
+        directory: join('deploy', 'tofu', 'azure'),
+        files: ['locals.tf'],
+      })
+      expect(findings).toEqual([
+        {
+          file: join('deploy', 'tofu', 'azure', 'tests'),
+          message:
+            'the file is not a file of the templates: the tool that writes the deployment reads the whole directory, and a file it cannot read stops the deployment',
+        },
+      ])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the files of the templates and the files of a deployment are not reported', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platform-templates-'))
+    try {
+      const templates = join(directory, 'deploy', 'tofu', 'azure')
+      await mkdir(templates, { recursive: true })
+      await writeFile(join(templates, 'locals.tf'), 'locals {}\n')
+      await writeFile(join(templates, 'README.md'), '# the templates\n')
+      await writeFile(join(templates, 'terraform.tfstate'), '{}\n')
+      const findings = await checkFilesOfStack(directory, {
+        directory: join('deploy', 'tofu', 'azure'),
+        files: ['locals.tf'],
+      })
+      expect(findings).toEqual([])
     } finally {
       await rm(directory, { recursive: true, force: true })
     }

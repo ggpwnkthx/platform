@@ -10,6 +10,21 @@ in the same commit as the code.
 
 ## Unreleased
 
+### A crash of the tool that writes the deployment is told with the reason of the crash
+
+The tool that writes the deployment crashes when it cannot read the
+directory of the templates, and the crash is a stack trace of the tool:
+the operator reads the trace and not the name of the file that is in
+the way. The tool answers with the reason when it is asked what it
+cannot read, and the CLI asks it.
+
+A crash is not a state that becomes reachable: the templates are not
+initialized again, and the operator is told at once.
+
+The check of the deployment holds the directory of the templates to the
+files of the templates: a file that is not a file of the templates is a
+file that nobody owns, and the tool reads the whole directory.
+
 ### The credentials of a deployment on Azure are strong enough for the services that read them
 
 The templates of the deployment on Azure generated their credentials as

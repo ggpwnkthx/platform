@@ -57,6 +57,52 @@ const RETRIES = 3
 const WAIT_MS = 20_000
 
 /**
+ * Reports whether the tool crashed.
+ *
+ * The tool crashes when it cannot read the directory of the templates,
+ * and the crash is a stack trace of the tool: the reason of the crash
+ * is not in it. A crash is not a state that becomes reachable, and the
+ * tool is not asked again.
+ *
+ * @param answer what the tool said.
+ */
+export function crashed(answer: Answer): boolean {
+  return answer.stderr.includes('OPENTOFU CRASH')
+}
+
+/**
+ * The errors of a document of the tool.
+ *
+ * The tool answers with a json document that holds the diagnostics of
+ * the templates, and the summary of an error is the reason the tool
+ * gives.
+ *
+ * @param document the json the tool answered with.
+ */
+export function errorsOf(document: string): { summary: string; detail: string }[] {
+  let parsed: Record<string, unknown> = {}
+  try {
+    parsed = JSON.parse(document) as Record<string, unknown>
+  } catch {
+    return []
+  }
+  const diagnostics = Array.isArray(parsed.diagnostics) ? parsed.diagnostics : []
+  const errors: { summary: string; detail: string }[] = []
+  for (const diagnostic of diagnostics) {
+    if (!diagnostic || typeof diagnostic !== 'object') continue
+    const record = diagnostic as Record<string, unknown>
+    if (record.severity !== 'error') continue
+    const summary = record.summary ?? record.detail
+    const detail = record.detail
+    errors.push({
+      summary: typeof summary === 'string' ? summary : 'the templates do not hold',
+      detail: typeof detail === 'string' && detail !== summary ? detail : '',
+    })
+  }
+  return errors
+}
+
+/**
  * The hint of a resource that is already there.
  *
  * A resource that a failed apply left in the cloud is not in the state
@@ -523,6 +569,10 @@ export class TofuInfrastructure implements InfrastructurePort {
     }
 
     for (let attempt = 0; attempt < this.#retries && answer.status !== 0; attempt += 1) {
+      // A crash of the tool is not a state that becomes reachable: the
+      // tool cannot read the templates, and it will not read them
+      // later either.
+      if (crashed(answer)) break
       process.stderr.write(
         `the state of the deployment is not reachable yet: the templates are initialized again in ${this.#waitMs / 1000} seconds\n`
       )
@@ -531,11 +581,36 @@ export class TofuInfrastructure implements InfrastructurePort {
     }
     if (answer.status !== 0) {
       throw new CliFailure(
-        `the templates of the deployment cannot be initialized: ${answer.stderr.trim()}`,
+        `the templates of the deployment cannot be initialized: ${await this.#reasonOf(directory, answer)}`,
         8,
         'not_initialized'
       )
     }
+  }
+
+  /**
+   * The reason the tool could not initialize the templates.
+   *
+   * The tool crashes when it cannot read the directory of the
+   * templates, and the crash is a stack trace of the tool and not a
+   * reason: the tool answers with the reason when it is asked what it
+   * cannot read. The answer names the file that is in the way, and the
+   * operator can do something about it.
+   *
+   * @param directory the directory of the templates.
+   * @param answer what the tool said.
+   */
+  async #reasonOf(directory: string, answer: Answer): Promise<string> {
+    if (!crashed(answer)) return answer.stderr.trim()
+    const validated = await this.#run(
+      [`-chdir=${directory}`, 'validate', '-json', '-no-color'],
+      process.cwd()
+    )
+    const errors = errorsOf(validated.stdout)
+    if (errors.length === 0) return answer.stderr.trim()
+    return errors
+      .map((error) => (error.detail === '' ? error.summary : `${error.summary}: ${error.detail}`))
+      .join('; ')
   }
 
   /**
@@ -723,21 +798,7 @@ export class TofuInfrastructure implements InfrastructurePort {
       [`-chdir=${directory}`, 'validate', '-json', '-no-color'],
       process.cwd()
     )
-    let document: Record<string, unknown> = {}
-    try {
-      document = JSON.parse(answer.stdout) as Record<string, unknown>
-    } catch {
-      document = {}
-    }
-    const diagnostics = Array.isArray(document.diagnostics) ? document.diagnostics : []
-    const errors: string[] = []
-    for (const diagnostic of diagnostics) {
-      if (!diagnostic || typeof diagnostic !== 'object') continue
-      const record = diagnostic as Record<string, unknown>
-      if (record.severity !== 'error') continue
-      const summary = record.summary ?? record.detail
-      errors.push(typeof summary === 'string' ? summary : 'the templates do not hold')
-    }
-    return { directory, valid: errors.length === 0, errors }
+    const errors = errorsOf(answer.stdout)
+    return { directory, valid: errors.length === 0, errors: errors.map((e) => e.summary) }
   }
 }
