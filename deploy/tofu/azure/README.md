@@ -208,6 +208,12 @@ tofu -chdir=deploy/tofu/azure output -raw gateway_client_secret
 
 The procedure is in [Onboard a tenant](../../../docs/guides/onboard-a-tenant.md).
 
+The secret of the client of the gateway is a credential of the
+deployment, and the templates generate it. An apply that changes it is
+an apply that changes the secret of the tenant: the registration is
+repeated with the new value, and the gateway is rolled, because Access
+keeps the old secret for ten minutes.
+
 ## The three things that are not like the Compose stack
 
 The deployment is the platform, and it is not the Compose stack. Three

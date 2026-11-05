@@ -191,6 +191,24 @@ describe('the environment of Access', () => {
     )
   })
 
+  test('a credential of thirty-two bytes in hexadecimal is accepted', () => {
+    // The templates of the deployment generate their credentials as
+    // thirty-two bytes in hexadecimal, and the deployment starts: a
+    // credential that the services count in thirty-two bytes is a
+    // credential they accept.
+    const secret = '9e2f7c1d4b6a8035d1c9f2e7b5a4d0839e2f7c1d4b6a8035d1c9f2e7b5a4d083'
+    expect(secretBytes(secret)).toBe(32)
+    expect(() =>
+      readEnv({
+        ...PRODUCTION,
+        ACCESS_ADMIN_TOKEN: secret,
+        ACCESS_STATE_SECRET: secret,
+        ACCESS_SECRET_ENCRYPTION_KEY: secret,
+        ACCESS_CONTEXT_TOKENS: JSON.stringify({ [secret]: ['the-tenant-of-the-deployment'] }),
+      })
+    ).not.toThrow()
+  })
+
   test('a signing key that is not a private key is refused', () => {
     expect(() => readEnv({ ...PRODUCTION, ACCESS_SIGNING_KEY: 'the-key' })).toThrow(
       /ACCESS_SIGNING_KEY/

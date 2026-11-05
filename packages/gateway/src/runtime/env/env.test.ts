@@ -254,6 +254,24 @@ describe('the environment of a production deployment', () => {
     ).toThrow(/GATEWAY_SESSION_SECRET must be at least 32 bytes/)
   })
 
+  test('a secret of thirty-two bytes in hexadecimal is accepted', () => {
+    // The templates of the deployment generate their credentials as
+    // thirty-two bytes in hexadecimal, and the deployment starts: a
+    // credential that the services count in thirty-two bytes is a
+    // credential they accept.
+    const secret = '9e2f7c1d4b6a8035d1c9f2e7b5a4d0839e2f7c1d4b6a8035d1c9f2e7b5a4d083'
+    expect(secretBytes(secret)).toBe(32)
+    expect(() =>
+      readEnv({
+        ...production,
+        GATEWAY_SESSION_SECRET: secret,
+        GATEWAY_ACCESS_TOKEN: secret,
+        GATEWAY_OIDC_CLIENT_SECRET: secret,
+        GATEWAY_METRICS_TOKEN: secret,
+      })
+    ).not.toThrow()
+  })
+
   test('a secret of one repeated character is refused', () => {
     expect(() => readEnv({ ...production, GATEWAY_SESSION_SECRET: '0'.repeat(40) })).toThrow(
       /GATEWAY_SESSION_SECRET is the value of the example/

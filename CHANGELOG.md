@@ -10,6 +10,27 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The credentials of a deployment on Azure are strong enough for the services that read them
+
+The templates of the deployment on Azure generated their credentials as
+passphrases, and the services count the bytes of a credential the way
+they read it: a passphrase of forty characters is a credential of thirty
+bytes, because the characters of a passphrase are the characters of
+base64. The gateway and Access refused to start with the credentials
+they were given, and the deployment was a deployment that was down.
+
+The templates now generate their credentials as thirty-two bytes in
+hexadecimal, and every one of the three readings of a secret counts
+those as thirty-two bytes. The check of the deployment holds the
+templates to the rule of the services: a credential that a service
+counts in fewer than thirty-two bytes is reported before the
+deployment, and not by a service that stops.
+
+The shared credential of the decisions was missing on the side of
+Access: the gateway presents its token on `POST /v1/decisions`, and
+Access accepts it as the token of the deployment. The templates write
+it once, and the two services hold the same value.
+
 ### The wizard of a deployment says what it is doing
 
 The wizard of a deployment said everything at the end: the operator

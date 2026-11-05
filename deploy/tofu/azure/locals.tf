@@ -109,76 +109,73 @@ resource "tls_private_key" "access_signing" {
 }
 
 # The credentials of the deployment.
-resource "random_password" "gateway_session" {
-  length  = 48
-  special = false
+#
+# A credential of the deployment is a bearer token or a secret, and the
+# services count the bytes of a secret the way they read it: a
+# hexadecimal secret is counted as half of its characters, a base64
+# secret as three quarters of them, and a passphrase as its whole
+# length. A credential that is generated as thirty-two bytes in
+# hexadecimal is sixty-four characters, and it is counted as thirty-two
+# bytes by every one of the three readings. A credential that is
+# generated as a passphrase is counted as a part of its length, and a
+# passphrase of forty characters is a credential of thirty bytes: a
+# deployment that holds one refuses to start.
+resource "random_bytes" "gateway_session" {
+  length = 32
 }
 
-resource "random_password" "gateway_access_token" {
-  length  = 40
-  special = false
+resource "random_bytes" "gateway_access_token" {
+  length = 32
 }
 
-resource "random_password" "gateway_metrics" {
-  length  = 40
-  special = false
+resource "random_bytes" "gateway_metrics" {
+  length = 32
 }
 
-resource "random_password" "gateway_client_secret" {
-  length  = 24
-  special = false
+resource "random_bytes" "gateway_client_secret" {
+  length = 32
 }
 
-resource "random_password" "console_client_secret" {
-  length  = 24
-  special = false
+resource "random_bytes" "console_client_secret" {
+  length = 32
 }
 
-resource "random_password" "console_session" {
-  length  = 48
-  special = false
+resource "random_bytes" "console_session" {
+  length = 32
 }
 
-resource "random_password" "console_access_context" {
-  length  = 40
-  special = false
+resource "random_bytes" "console_access_context" {
+  length = 32
 }
 
-resource "random_password" "access_admin" {
-  length  = 24
-  special = false
+resource "random_bytes" "access_admin" {
+  length = 32
 }
 
-resource "random_password" "access_metrics" {
-  length  = 32
-  special = false
+resource "random_bytes" "access_metrics" {
+  length = 32
 }
 
-resource "random_password" "access_context" {
-  length  = 40
-  special = false
+resource "random_bytes" "access_context" {
+  length = 32
 }
 
-resource "random_password" "data_metrics" {
-  length  = 32
-  special = false
+resource "random_bytes" "data_metrics" {
+  length = 32
 }
 
 # The secrets that are counted in the bytes they are read in: a secret
-# of thirty-two bytes is forty-four characters of base64.
-resource "random_password" "access_state_secret" {
-  length  = 44
-  special = false
+# of thirty-two bytes is sixty-four characters of hexadecimal.
+resource "random_bytes" "access_state_secret" {
+  length = 32
 }
 
-resource "random_password" "access_encryption_key" {
-  length  = 44
-  special = false
+resource "random_bytes" "access_encryption_key" {
+  length = 32
 }
 
-resource "random_password" "data_cursor_key" {
-  length  = 44
-  special = false
+resource "random_bytes" "data_cursor_key" {
+  length = 32
 }
 
 # The passwords of the roles of the deployment. They carry no character
@@ -369,7 +366,7 @@ locals {
 # surface that everybody holds.
 locals {
   control_tokens = {
-    (random_password.gateway_client_secret.result) = {
+    (random_bytes.gateway_client_secret.hex) = {
       operator = "the-operator-of-the-deployment"
       scope    = "admin"
     }
@@ -382,7 +379,7 @@ locals {
 # about one tenant, the one of the deployment.
 locals {
   access_context_tokens = {
-    (random_password.access_context.result) = [var.access_tenant_id]
+    (random_bytes.access_context.hex) = [var.access_tenant_id]
   }
 }
 
@@ -433,33 +430,33 @@ locals {
 
   secret_values = {
     # The secrets of the gateway.
-    "gateway-session-secret"       = random_password.gateway_session.result
-    "gateway-access-token"         = random_password.gateway_access_token.result
-    "gateway-metrics-token"        = random_password.gateway_metrics.result
-    "gateway-client-secret"        = random_password.gateway_client_secret.result
+    "gateway-session-secret"       = random_bytes.gateway_session.hex
+    "gateway-access-token"         = random_bytes.gateway_access_token.hex
+    "gateway-metrics-token"        = random_bytes.gateway_metrics.hex
+    "gateway-client-secret"        = random_bytes.gateway_client_secret.hex
     "gateway-identity-signing-key" = base64encode(tls_private_key.identity.private_key_pem)
     "gateway-routes"               = jsonencode(local.gateway_route_table)
     "gateway-control-tokens"       = jsonencode(local.control_tokens)
 
     # The secrets of Access.
     "access-signing-key"    = tls_private_key.access_signing.private_key_pem
-    "access-state-secret"   = random_password.access_state_secret.result
-    "access-encryption-key" = random_password.access_encryption_key.result
-    "access-admin-token"    = random_password.access_admin.result
-    "access-metrics-token"  = random_password.access_metrics.result
+    "access-state-secret"   = random_bytes.access_state_secret.hex
+    "access-encryption-key" = random_bytes.access_encryption_key.hex
+    "access-admin-token"    = random_bytes.access_admin.hex
+    "access-metrics-token"  = random_bytes.access_metrics.hex
     "access-context-tokens" = jsonencode(local.access_context_tokens)
 
     # The secrets of Data.
-    "data-access-context-token"   = random_password.access_context.result
-    "data-cursor-key"             = random_password.data_cursor_key.result
-    "data-metrics-token"          = random_password.data_metrics.result
+    "data-access-context-token"   = random_bytes.access_context.hex
+    "data-cursor-key"             = random_bytes.data_cursor_key.hex
+    "data-metrics-token"          = random_bytes.data_metrics.hex
     "data-gateway-bindings"       = jsonencode(local.data_gateway_bindings)
     "identity-signing-public-key" = tls_private_key.identity.public_key_pem
 
     # The secrets of the console.
-    "console-client-secret"        = random_password.console_client_secret.result
-    "console-session-secret"       = random_password.console_session.result
-    "console-access-context-token" = random_password.console_access_context.result
+    "console-client-secret"        = random_bytes.console_client_secret.hex
+    "console-session-secret"       = random_bytes.console_session.hex
+    "console-access-context-token" = random_bytes.console_access_context.hex
 
     # The addresses that carry a password.
     "postgres-admin-url"     = local.postgres_admin_url

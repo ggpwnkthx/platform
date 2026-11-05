@@ -88,7 +88,7 @@ output "identity_signing_public_key" {
 # of the deployment take them.
 output "access_admin_token" {
   description = "The token of the administration of Access."
-  value       = random_password.access_admin.result
+  value       = random_bytes.access_admin.hex
   sensitive   = true
 }
 
@@ -101,7 +101,7 @@ output "gateway_client_id" {
 
 output "gateway_client_secret" {
   description = "The secret of the gateway as a client of Access."
-  value       = random_password.gateway_client_secret.result
+  value       = random_bytes.gateway_client_secret.hex
   sensitive   = true
 }
 
@@ -112,7 +112,7 @@ output "console_client_id" {
 
 output "console_client_secret" {
   description = "The secret of the console as a client of Access."
-  value       = random_password.console_client_secret.result
+  value       = random_bytes.console_client_secret.hex
   sensitive   = true
 }
 
@@ -120,7 +120,7 @@ output "console_client_secret" {
 # that read the data of a workspace take it.
 output "data_access_context_token" {
   description = "The credential of the access context of Data."
-  value       = random_password.access_context.result
+  value       = random_bytes.access_context.hex
   sensitive   = true
 }
 

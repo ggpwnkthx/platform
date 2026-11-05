@@ -1,17 +1,19 @@
 import { describe, expect, test } from 'bun:test'
 import { spawnSync } from 'bun'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   assignmentsOf,
   BOOTSTRAP_FILES,
+  checkCredentials,
   checkDeploy,
   checkInfrastructure,
   checkLayout,
   checkMinimumEnvironment,
   checkStacks,
   checkTrackedInfrastructure,
+  credentialsOfTemplates,
   imagesOfTemplates,
   providerVersionsOf,
   TEMPLATE_FILES,
@@ -399,6 +401,90 @@ describe('the infrastructure as code of the deployment', () => {
     } finally {
       await rm(directory, { recursive: true, force: true })
     }
+  })
+})
+
+describe('the credentials of the templates of the deployment', () => {
+  /**
+   * The templates of the deployment of the repository.
+   *
+   * The credentials the templates generate are credentials that the
+   * services of the deployment read, and the services count their bytes
+   * the way they read them: a secret of hexadecimal is counted in half
+   * of its characters, and a passphrase is counted in three quarters of
+   * them when it is a part of the alphabet of base64.
+   */
+  async function templatesOf(): Promise<{ file: string; source: string }[]> {
+    const directory = join(root, 'deploy', 'tofu', 'azure')
+    const entries = await readdir(directory, { withFileTypes: true })
+    const sources: { file: string; source: string }[] = []
+    for (const entry of entries) {
+      if (!entry.isFile()) continue
+      if (!entry.name.endsWith('.tf')) continue
+      sources.push({
+        file: join('deploy', 'tofu', 'azure', entry.name),
+        source: await readFile(join(directory, entry.name), 'utf8'),
+      })
+    }
+    return sources
+  }
+
+  test('the credentials the templates generate are strong enough for the services', async () => {
+    expect(await checkCredentials(await templatesOf())).toEqual([])
+  })
+
+  test('a credential that is counted in fewer than thirty-two bytes is reported', () => {
+    // A passphrase of forty characters is a credential of thirty bytes:
+    // the services count the characters of a passphrase as the
+    // characters of base64, and a deployment that holds one starts a
+    // service that stops.
+    const source = [
+      'resource "random_password" "gateway_access_token" {',
+      '  length  = 40',
+      '  special = false',
+      '}',
+      'locals {',
+      '  token = random_password.gateway_access_token.result',
+      '}',
+    ].join('\n')
+    expect(checkCredentials([{ file: 'locals.tf', source }])).toEqual([
+      {
+        file: 'locals.tf',
+        message:
+          'the credential gateway_access_token is counted in 30 bytes: a service refuses to start with a credential of fewer than 32 bytes',
+      },
+    ])
+  })
+
+  test('a password of a role of a database is not a credential of a service', () => {
+    // The password of a role is carried by the address of the database,
+    // and a service reads the address and not the password.
+    const source = [
+      'resource "random_password" "data_owner" {',
+      '  length  = 32',
+      '  special = false',
+      '}',
+      'locals {',
+      `  url = "postgres://data_owner:\${random_password.data_owner.result}@localhost:5432/data"`,
+      '}',
+    ].join('\n')
+    expect(checkCredentials([{ file: 'locals.tf', source }])).toEqual([])
+  })
+
+  test('the credentials of the templates are read', () => {
+    const source = [
+      'resource "random_bytes" "access_admin" {',
+      '  length = 32',
+      '}',
+      'resource "random_password" "postgres_admin" {',
+      '  length  = 32',
+      '  special = false',
+      '}',
+    ].join('\n')
+    expect(credentialsOfTemplates([{ file: 'locals.tf', source }])).toEqual([
+      { name: 'access_admin', file: 'locals.tf', bytes: 32, carriedByDatabase: false },
+      { name: 'postgres_admin', file: 'locals.tf', bytes: 24, carriedByDatabase: false },
+    ])
   })
 })
 

@@ -142,7 +142,7 @@ resource "azurerm_container_app" "gateway" {
       }
       env {
         name  = "GATEWAY_OIDC_CLIENT_SECRET"
-        value = random_password.gateway_client_secret.result
+        value = random_bytes.gateway_client_secret.hex
       }
       env {
         name  = "GATEWAY_OIDC_REDIRECT_URI"
@@ -154,11 +154,11 @@ resource "azurerm_container_app" "gateway" {
       }
       env {
         name  = "GATEWAY_ACCESS_TOKEN"
-        value = random_password.gateway_access_token.result
+        value = random_bytes.gateway_access_token.hex
       }
       env {
         name  = "GATEWAY_SESSION_SECRET"
-        value = random_password.gateway_session.result
+        value = random_bytes.gateway_session.hex
       }
       env {
         # The key that signs the identity of a request is a PEM, and a
@@ -177,7 +177,7 @@ resource "azurerm_container_app" "gateway" {
       }
       env {
         name  = "GATEWAY_METRICS_TOKEN"
-        value = random_password.gateway_metrics.result
+        value = random_bytes.gateway_metrics.hex
       }
       env {
         name  = "GATEWAY_RATE_LIMIT_TOTAL_MAX"
@@ -495,6 +495,14 @@ resource "azurerm_container_app" "access" {
       env {
         name  = "ACCESS_LOG_LEVEL"
         value = "info"
+      }
+      env {
+        # The token of the decisions is the token of the gateway: the
+        # gateway presents it on `POST /v1/decisions`, and Access
+        # accepts it as the shared credential of the deployment. The
+        # two are the same value, and the templates write it once.
+        name  = "ACCESS_DECISION_TOKEN"
+        value = random_bytes.gateway_access_token.hex
       }
       env {
         name  = "ACCESS_SIGNING_KEY_FILE"
@@ -822,15 +830,15 @@ resource "azurerm_container_app" "console" {
       }
       env {
         name  = "CONSOLE_CLIENT_SECRET"
-        value = random_password.console_client_secret.result
+        value = random_bytes.console_client_secret.hex
       }
       env {
         name  = "CONSOLE_SESSION_SECRET"
-        value = random_password.console_session.result
+        value = random_bytes.console_session.hex
       }
       env {
         name  = "CONSOLE_ACCESS_CONTEXT_TOKEN"
-        value = random_password.console_access_context.result
+        value = random_bytes.console_access_context.hex
       }
       env {
         name  = "CONSOLE_ROUTE_ID"

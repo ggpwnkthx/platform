@@ -21,6 +21,8 @@
  *   stack refuses to start without?
  * - Do the templates of the deployment hold every variable in their
  *   example, and do they name no file of a deployment?
+ * - Are the credentials the templates generate strong enough for the
+ *   services that read them?
  *
  *   bun run deploy:check
  */
@@ -29,6 +31,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { readdir, readFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { parseAllDocuments } from 'yaml'
+import { secretBytes } from '../packages/gateway/src/runtime/env/read'
 import { git } from '../tooling/compatibility/reference'
 
 /** A disagreement between the directory of the deployment and the platform. */
@@ -730,6 +733,26 @@ async function sourcesOf(root: string, directory: string): Promise<string[]> {
   return sources.sort()
 }
 
+/** The sources of the templates of a stack, with the file they are in. */
+async function sourcesWithNames(
+  root: string,
+  directory: string
+): Promise<{ file: string; source: string }[]> {
+  const path = join(root, directory)
+  if (!existsSync(path)) return []
+  const entries = await readdir(path, { withFileTypes: true })
+  const sources: { file: string; source: string }[] = []
+  for (const entry of entries) {
+    if (!entry.isFile()) continue
+    if (!entry.name.endsWith('.tf')) continue
+    sources.push({
+      file: join(directory, entry.name),
+      source: readFileSync(join(path, entry.name), 'utf8'),
+    })
+  }
+  return sources.sort((a, b) => a.file.localeCompare(b.file))
+}
+
 /**
  * The brackets a text opens and closes.
  *
@@ -878,6 +901,110 @@ export function providerVersionsOf(versions: string): { provider: string; versio
 }
 
 /**
+ * The minimum number of bytes of a credential of the deployment.
+ *
+ * The services count the bytes of a secret the way they read it, and a
+ * service that reads a credential that counts fewer than thirty-two
+ * bytes refuses to start. The check counts the bytes the same way the
+ * services do.
+ */
+export const MINIMUM_CREDENTIAL_BYTES = 32
+
+/** A credential that the templates of a deployment generate. */
+export interface TemplateCredential {
+  /** The name of the resource that generates it. */
+  name: string
+  /** The file the resource is declared in. */
+  file: string
+  /** The number of bytes the services count the credential in. */
+  bytes: number
+  /** Whether a database of the deployment carries the credential. */
+  carriedByDatabase: boolean
+}
+
+/**
+ * Reads the credentials that the templates of a deployment generate.
+ *
+ * The templates generate two kinds of credential: bytes that are written
+ * in hexadecimal, and passphrases that are written as they are. The
+ * services count the bytes of the two the way they read them, and the
+ * check counts them the same way: a hexadecimal credential is counted in
+ * its own bytes, and a passphrase of forty characters is counted in
+ * thirty, because forty characters of a passphrase are forty characters
+ * of base64.
+ */
+export function credentialsOfTemplates(
+  sources: readonly { file: string; source: string }[]
+): TemplateCredential[] {
+  const credentials: TemplateCredential[] = []
+  const lines = sources.flatMap(({ source }) => source.split('\n'))
+  for (const { file, source } of sources) {
+    for (const match of source.matchAll(
+      /resource\s+"(random_bytes|random_password)"\s+"([a-z0-9_]+)"\s*\{/g
+    )) {
+      const body = blockOf(source, match.index + match[0].length - 1)
+      const length = Number(body.match(/length\s*=\s*(\d+)/)?.[1] ?? '0')
+      const special = body.match(/special\s*=\s*(true|false)/)?.[1] === 'true'
+      const name = match[2]!
+      // The value of a credential of bytes is written in hexadecimal,
+      // and the value of a passphrase is written as it is. The check
+      // counts the bytes of the value the way the services read it.
+      const value =
+        match[1] === 'random_bytes'
+          ? 'ab'.repeat(length)
+          : 'aZ0bZ9cX8dW7eV6uT5sR4qP3oN2mK1jL0hGqP9oN2mK1jL0hGqP9'.repeat(2).slice(0, length)
+      // A passphrase that carries a special character is not a part of
+      // the alphabet of base64, and it is counted in its whole length.
+      const bytes = special ? value.length : secretBytes(value)
+      const usages = lines.filter((line) => line.includes(`${match[1]}.${name}.`))
+      // A password of a role of a database is carried by the address of
+      // the database, and the vault holds it under the name of the
+      // password of the role. A service reads the address and not the
+      // password.
+      const carriedByDatabase =
+        usages.length > 0 &&
+        usages.every(
+          (line) =>
+            line.includes('postgres://') ||
+            line.includes('administrator_password') ||
+            /"[a-z0-9-]*-password"\s*=/.test(line)
+        )
+      credentials.push({ name, file, bytes, carriedByDatabase })
+    }
+  }
+  return credentials
+}
+
+/**
+ * Checks that the credentials the templates generate are strong enough.
+ *
+ * A credential that a service reads is counted in the bytes the service
+ * counts it in, and a service refuses to start with a credential of
+ * fewer than thirty-two bytes. The check holds the templates to the
+ * rule of the services: a deployment that generates a credential that
+ * is too short starts a service that stops, and the deployment of the
+ * operator is a deployment that is down.
+ *
+ * The passwords of the roles of the databases are a different thing:
+ * they are carried by the address of a database, and a service reads
+ * the address and not the password.
+ */
+export function checkCredentials(
+  sources: readonly { file: string; source: string }[]
+): DeployFinding[] {
+  const findings: DeployFinding[] = []
+  for (const credential of credentialsOfTemplates(sources)) {
+    if (credential.carriedByDatabase) continue
+    if (credential.bytes >= MINIMUM_CREDENTIAL_BYTES) continue
+    findings.push({
+      file: credential.file,
+      message: `the credential ${credential.name} is counted in ${credential.bytes} bytes: a service refuses to start with a credential of fewer than ${MINIMUM_CREDENTIAL_BYTES} bytes`,
+    })
+  }
+  return findings
+}
+
+/**
  * Checks that the files of a deployment are not in the templates.
  *
  * The state of a deployment holds the value of every secret of the
@@ -1012,6 +1139,10 @@ export async function checkInfrastructure(root: string): Promise<DeployFinding[]
         message: `the provider ${provider} is not pinned: a provider that changes changes the deployment`,
       })
     }
+
+    // The credentials the templates generate are strong enough for the
+    // services that read them.
+    findings.push(...checkCredentials(await sourcesWithNames(root, stack.directory)))
   }
 
   // The runtime directory is not committed: the files of a deployment
