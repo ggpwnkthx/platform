@@ -48,6 +48,18 @@ locals {
   # init container that writes it.
   secret_env = { for name in local.secret_names : name => "SECRET_${upper(replace(name, "-", "_"))}" }
 
+  # The name of the file that a secret is written to.
+  #
+  # A file is named after the secret that fills it, and the name of a
+  # secret of a vault is a name of dashes: a file of the platform may
+  # be named with dots, and the file of the public key of the identity
+  # is one of them. The name of the file is the name that every other
+  # deployment gives it — the Compose stack mounts the secret under it,
+  # and the bindings of Data name it.
+  secret_file_names = {
+    "identity-signing-public-key" = "identity-signing.public.pem"
+  }
+
   # The command of an init container that writes a set of secrets as the
   # files that a service reads them from.
   write_secrets = tomap({
@@ -58,7 +70,7 @@ locals {
       control = local.control_secret_files
       } : key => join("\n", [
         for name in names :
-        "printf '%s' \"$${SECRET_${upper(replace(name, "-", "_"))}}\" > /run/secrets/${name}"
+        "printf '%s' \"$${SECRET_${upper(replace(name, "-", "_"))}}\" > /run/secrets/${lookup(local.secret_file_names, name, name)}"
     ])
   })
 }

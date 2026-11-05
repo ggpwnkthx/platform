@@ -322,6 +322,23 @@ The documentation of Azure names `Microsoft.App/managedEnvironments` for
 the same delegation. If the apply refuses the delegation, that value is
 the one thing to change.
 
+### The link of the zone of the database
+
+The server of the database is injected into the network of the
+deployment, and the name of the server is a name of the zone of the
+private names of Azure: `privatelink.postgres.database.azure.com`. The
+resolver of Azure answers that zone for the networks that are linked to
+it, and for no other, so the templates link the zone of the database to
+the network of the deployment.
+
+A deployment whose services fail to start with a name they cannot find
+— `getaddrinfo ENOTFOUND …postgres.database.azure.com` — is a
+deployment whose zone of the database is not linked to its network.
+
+The zone of the cache is not linked by the templates: the cache is
+reached through a private endpoint, and Azure writes the link of the
+zone of an endpoint when it writes its zone group.
+
 ## The state of a deployment is a secret store
 
 The templates write the value of every secret of the deployment into

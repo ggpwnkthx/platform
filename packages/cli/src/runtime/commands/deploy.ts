@@ -46,7 +46,7 @@ import {
 import { azureProvider } from '../../platform/azure'
 import { isAddress, publicAddressOf, rangeOf, servicesOf } from '../../platform/address'
 import { digestOf, tagOf } from '../../platform/registry'
-import { pathOf, placeOf } from '../../platform/checkout'
+import { pathOf, placeOf, templatesStateOf } from '../../platform/checkout'
 import { type Release, releaseOf } from '../../platform/release'
 import { VERSION } from '../../runtime/version'
 import { planContext, tableOfChanges, toolOf, unlockState } from './infrastructure'
@@ -792,6 +792,30 @@ function bootstrapVariables(
 }
 
 /**
+ * The images of the platform that a release holds.
+ *
+ * The digests of these four images are the digests of a build that was
+ * proved, and the templates of the deployment are the ones of the same
+ * release.
+ */
+const PLATFORM_IMAGES = ['gateway_image', 'access_image', 'data_image', 'console_image'] as const
+
+/**
+ * Whether the operator brought the images of the deployment.
+ *
+ * The digests of the images of a release are the digests of a build
+ * that was proved, and the templates of the deployment are the ones of
+ * the same release. An operator who names the digests of the images of
+ * another build brings the templates of that build too, and the wizard
+ * does not compare the two.
+ *
+ * @param answers the answers the operator gave in a file.
+ */
+function carriesImages(answers: Readonly<Values>): boolean {
+  return PLATFORM_IMAGES.some((name) => answers[name] !== undefined)
+}
+
+/**
  * The release of the platform the deployment runs.
  *
  * The release carries the digest of every image it published. A release
@@ -1234,6 +1258,26 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
         if (release.version !== VERSION) {
           notes.push(
             `the release ${release.tag} is not the release of the CLI (${VERSION}): the templates of the deployment are the ones of ${VERSION}`
+          )
+        }
+      }
+
+      // The templates of the deployment and the images of the release
+      // are one release. A checkout that is ahead of the tag of the
+      // release holds templates that the images of the release do not
+      // know: a gateway that reads a route table of a version it does
+      // not know refuses to start, and a service that reads a secret
+      // under another name refuses to start too. The wizard refuses it
+      // before it applies anything.
+      if (release !== undefined && !carriesImages(answers)) {
+        const state = await templatesStateOf(directory, release.tag)
+        if (state === 'different') {
+          throw new CliFailure(
+            `the templates of the checkout are not the ones of the release ${release.tag}: the deployment would run the images of ${release.tag} with the templates of another commit, and a service that reads a document it does not know refuses to start`,
+            5,
+            'templates_mismatch',
+            undefined,
+            `check out the tag ${release.tag}, or publish a release of the templates of the checkout, or name the digests of the images of another build in the file of the answers`
           )
         }
       }

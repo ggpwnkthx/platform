@@ -10,6 +10,8 @@ in the same commit as the code.
 
 ## Unreleased
 
+## 1.0.5
+
 ### The credentials of a deployment on Azure are strong enough for the services that read them
 
 The templates of the deployment on Azure generated their credentials as
@@ -334,6 +336,47 @@ digest the release published, and writes the tool in the directory
 path of the machine still comes first, `TOFU_BINARY` still names the
 tool to run, `TOFU_DOWNLOAD` set to `off` refuses the download, and
 `TOFU_DIRECTORY` names the directory the tool is written in.
+
+### The name of the server of the database of a deployment on Azure resolves
+
+The deployment on Azure created the zone of the private names of the
+database and did not link it to the network of the deployment. The
+resolver of Azure answers the zone for the networks that are linked to
+it, and for no other: the name of the server of the database did not
+resolve at all, and Access and Data failed to start with a name they
+could not find.
+
+The templates link the zone of the database to the network of the
+deployment, the way the zone of the cache is linked to it by the
+private endpoint of the cache.
+
+### The public key of the identity of the gateway is written under the name that Data reads
+
+The deployment on Azure wrote the public key of the identity of the
+gateway into the file that is named after the secret that carries it,
+`identity-signing-public-key`, and the bindings of Data named the
+file of the key: `identity-signing.public.pem`. Data read a file that
+was not there, and refused to start.
+
+The name of a secret of a vault is a name of dashes, and the name of a
+file of the platform is a name of dots: the templates write the file
+of the key under the name that every other deployment gives it.
+
+### The wizard of a deployment refuses the templates that are not the ones of the release of its images
+
+The wizard pinned the images of a release and the templates of the
+checkout, and it did not compare the two: a checkout that is ahead of
+the tag of the release holds templates that the images of the release
+do not know. A gateway that reads a route table of a version it does
+not know refuses to start, and the operator reads it in the log of a
+container that was deployed minutes before.
+
+The wizard compares the templates of the checkout with the tag of the
+release and refuses the deployment when they are not the same. An
+operator who names the digests of the images of another build in the
+file of the answers brings the templates of that build too, and the
+wizard does not compare the two.
+
 
 ## 1.0.4
 

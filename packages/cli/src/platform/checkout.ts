@@ -18,7 +18,8 @@
  */
 
 import { existsSync } from 'node:fs'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { run } from './process'
 
 /** The directory of the deployment of a checkout. */
 const DEPLOYMENT = join('deploy', 'tofu')
@@ -86,4 +87,55 @@ export function placeOf(named: string, from: string = process.cwd()): string {
   const checkout = checkoutOf(from)
   if (checkout !== undefined) return join(checkout, named)
   return resolve(from, named)
+}
+
+/**
+ * What a checkout says about the templates of a release.
+ *
+ * - `same` — the templates of the checkout are the ones of the tag.
+ * - `different` — they are not: the checkout is ahead of the tag, or
+ *   the templates of the checkout were changed.
+ * - `unknown` — the checkout cannot tell: it is not a repository, the
+ *   tag is not in it, or the program that reads it is not there.
+ */
+export type TemplatesState = 'same' | 'different' | 'unknown'
+
+/**
+ * The state of the templates of a checkout, against the tag of a
+ * release.
+ *
+ * The templates of a deployment and the images of the release are one
+ * release: a deployment that runs the images of a release with the
+ * templates of another commit runs a service that reads a document it
+ * does not know, and refuses to start.
+ *
+ * The state is read with the program that reads the state of a
+ * repository. A checkout that holds no program, or a tag that is not
+ * in it, tells nothing: the state is unknown, and the caller decides
+ * what to do with a thing it cannot know.
+ *
+ * @param directory the directory of the templates of the deployment.
+ * @param tag the tag of the release.
+ */
+export async function templatesStateOf(directory: string, tag: string): Promise<TemplatesState> {
+  const here = resolve(directory)
+  let top: string
+  try {
+    const answer = await run('git', ['-C', here, 'rev-parse', '--show-toplevel'])
+    if (answer.status !== 0) return 'unknown'
+    top = answer.stdout.trim()
+  } catch {
+    return 'unknown'
+  }
+  if (top === '') return 'unknown'
+  const path = relative(top, here)
+  if (path === '' || path.startsWith('..')) return 'unknown'
+  try {
+    const answer = await run('git', ['-C', top, 'diff', '--quiet', tag, '--', path])
+    if (answer.status === 0) return 'same'
+    if (answer.status === 1) return 'different'
+    return 'unknown'
+  } catch {
+    return 'unknown'
+  }
 }

@@ -88,6 +88,28 @@ resource "azurerm_private_dns_zone" "redis" {
   tags                = local.tags
 }
 
+# The link between the private zone of the database and the network of
+# the deployment.
+#
+# The zone of the private names of Azure is answered by the resolver of
+# Azure, and the resolver answers it only for the networks that are
+# linked to the zone. The server of the database is injected into the
+# network of the deployment, and the services of the deployment are in
+# that network: without the link, the name of the server does not
+# resolve at all, and every service that reads the database fails to
+# start with a name it cannot find.
+#
+# The link of the zone of the cache is not written here: the endpoint
+# of the cache is a private endpoint, and Azure writes the link of the
+# zone of an endpoint when it writes its zone group.
+resource "azurerm_private_dns_zone_virtual_network_link" "postgres" {
+  name                  = "${local.prefix}-postgres"
+  resource_group_name   = azurerm_resource_group.platform.name
+  private_dns_zone_name = azurerm_private_dns_zone.postgres.name
+  virtual_network_id    = azurerm_virtual_network.platform.id
+  registration_enabled  = false
+}
+
 # The private endpoint of the cache of the deployment. The cache is not
 # published, and the endpoint is the only way in.
 resource "azurerm_private_endpoint" "redis" {

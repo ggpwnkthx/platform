@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test'
+import { spawnSync } from 'bun'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { checkoutOf, pathOf, placeOf } from '../src/platform/checkout'
+import { checkoutOf, pathOf, placeOf, templatesStateOf } from '../src/platform/checkout'
 
 /**
  * The checkout the command runs in.
@@ -112,6 +113,69 @@ describe('a path the deployment names', () => {
       expect(placeOf(join('deploy', 'tofu', 'azure'), root)).toBe(
         join(root, 'deploy', 'tofu', 'azure')
       )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+})
+
+/**
+ * A repository with a tag and a directory of templates in it.
+ *
+ * The repository holds one commit and one tag, and the templates of
+ * the deployment are a file in it.
+ */
+async function repositoryOf(): Promise<{ root: string; templates: string }> {
+  const root = await mkdtemp(join(tmpdir(), 'platformctl-repository-'))
+  const templates = join(root, 'deploy', 'tofu', 'azure')
+  await mkdir(templates, { recursive: true })
+  await writeFile(join(templates, 'locals.tf'), 'version = 1\n')
+  const git = (...args: string[]): void => {
+    const answer = spawnSync(['git', ...args], { cwd: root, stdout: 'ignore' })
+    if (answer.exitCode !== 0) throw new Error(`git ${args.join(' ')} failed`)
+  }
+  git('init', '--quiet')
+  git('config', 'user.email', 'operator@example.com')
+  git('config', 'user.name', 'the operator')
+  git('add', '.')
+  git('commit', '--quiet', '--message', 'the templates')
+  git('tag', 'v1.0.4')
+  return { root, templates }
+}
+
+describe('the templates of a checkout against the tag of a release', () => {
+  test('the templates of the tag are the templates of the checkout', async () => {
+    const { root, templates } = await repositoryOf()
+    try {
+      expect(await templatesStateOf(templates, 'v1.0.4')).toBe('same')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('templates that are not the ones of the tag are told', async () => {
+    const { root, templates } = await repositoryOf()
+    try {
+      await writeFile(join(templates, 'locals.tf'), 'version = 2\n')
+      expect(await templatesStateOf(templates, 'v1.0.4')).toBe('different')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a tag that is not in the checkout tells nothing', async () => {
+    const { root, templates } = await repositoryOf()
+    try {
+      expect(await templatesStateOf(templates, 'v9.9.9')).toBe('unknown')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a directory that is in no repository tells nothing', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'platformctl-repository-'))
+    try {
+      expect(await templatesStateOf(root, 'v1.0.4')).toBe('unknown')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
