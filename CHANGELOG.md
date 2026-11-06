@@ -263,6 +263,29 @@ of Alpine: the version of the fix is the floor of the patch, and the
 patches that follow it are taken as well. The check of the images holds
 every advisory that the images have to carry the fix of, and not one.
 
+### The services of the deployment reach each other at the address of the ingress
+
+The address of a service inside the environment of the container apps is
+the name of the environment and the port of its ingress, and the
+templates wrote the port of the container on the name of the
+environment: the traffic to that port is dropped, and every call to
+every service of the deployment waited for a timeout that never ended.
+The gateway answered `504` for Access and for Data, and the console
+never became ready: the console is ready when Access answers its
+discovery document, and it could not reach it.
+
+The upstreams of the route table name the ingress of the environment,
+and the three services that are not published have an ingress that
+speaks the plain HTTP. The gateway is published, and its ingress
+terminates the TLS of the three public names: the console reaches the
+gateway at its public name.
+
+The route table of the gateway is written in the vault, and the gateway
+reads it when its revision starts: a table that changed and a gateway
+that did not start again is a gateway that serves the table of the last
+apply. The digest of the table is a variable of the gateway, and it is
+what makes the revision start.
+
 
 ## 1.0.7
 

@@ -210,6 +210,17 @@ resource "azurerm_container_app" "gateway" {
         name  = "GATEWAY_CONFIG_SOURCE"
         value = "file"
       }
+      # The digest of the route table the gateway reads.
+      #
+      # The table is written in the vault of the deployment, and the
+      # gateway reads it out of the vault when its revision starts: a
+      # table that changed and a gateway that did not start again is a
+      # gateway that serves the table of the last apply. The digest is
+      # what makes the revision start.
+      env {
+        name  = "GATEWAY_CONFIG_DIGEST"
+        value = sha256(jsonencode(local.gateway_route_table))
+      }
       env {
         name  = "GATEWAY_OIDC_ISSUER"
         value = local.access_issuer
@@ -358,7 +369,10 @@ resource "azurerm_container_app" "control" {
   ingress {
     external_enabled = false
     target_port      = 9090
-    transport        = "auto"
+    # The control plane is never published, and it is reached from
+    # inside the network of the deployment: its ingress speaks the
+    # plain HTTP, and the name of the environment is its address.
+    transport = "http"
 
     traffic_weight {
       percentage      = 100
@@ -508,7 +522,10 @@ resource "azurerm_container_app" "access" {
     # deployment, and the gateway forwards the request to it.
     external_enabled = false
     target_port      = 8081
-    transport        = "auto"
+    # Access is never published, and it is reached from inside the
+    # network of the deployment: its ingress speaks the plain HTTP, and
+    # the name of the environment is its address.
+    transport = "http"
 
     traffic_weight {
       percentage      = 100
@@ -676,7 +693,10 @@ resource "azurerm_container_app" "data" {
   ingress {
     external_enabled = false
     target_port      = 8082
-    transport        = "auto"
+    # Data is never published, and it is reached from inside the
+    # network of the deployment: its ingress speaks the plain HTTP, and
+    # the name of the environment is its address.
+    transport = "http"
 
     traffic_weight {
       percentage      = 100
@@ -845,7 +865,10 @@ resource "azurerm_container_app" "console" {
     # the deployment, and the gateway forwards the request to it.
     external_enabled = false
     target_port      = 8083
-    transport        = "auto"
+    # The console is never published, and it is reached from inside the
+    # network of the deployment: its ingress speaks the plain HTTP, and
+    # the name of the environment is its address.
+    transport = "http"
 
     traffic_weight {
       percentage      = 100
@@ -881,27 +904,30 @@ resource "azurerm_container_app" "console" {
         name  = "CONSOLE_PUBLIC_URL"
         value = local.console_url
       }
-      # The console is a client of Access and of the gateway, and it
-      # reaches them at the addresses they answer on inside the
-      # environment of the deployment.
+      # The console is a client of Access and of the gateway.
       #
-      # The environment is joined to the network of the deployment, and
-      # the network has no road to the internet: the public name of
-      # Access is a name the console cannot resolve into a road it can
-      # walk, and the call to it waits for a timeout that the probe of
-      # the platform does not wait for. The console is ready when Access
-      # answers, and it can only know it when it reaches it.
+      # The console reaches Access at the address the environment gives
+      # it: the name of the environment and the port of the ingress.
+      # The name of the environment is the address of the ingress, and
+      # the ingress answers on the standard ports and forwards to the
+      # port of the container: the port of the container on the name of
+      # the environment is not an address, and the call to it waits for
+      # a timeout that never ends.
       #
       # The browsers are not the console: they reach Access and the
       # gateway at their public names, and the addresses they use are
       # the ones the discovery document of Access carries.
       env {
         name  = "CONSOLE_ACCESS_URL"
-        value = "http://${local.access_fqdn}:8081"
+        value = "http://${local.access_fqdn}"
       }
+      # The gateway is the front door of the deployment, and its ingress
+      # terminates the TLS of the three public names: the console
+      # reaches it at the public name of the gateway, and the browsers
+      # reach it at the same name.
       env {
         name  = "CONSOLE_GATEWAY_URL"
-        value = "http://${local.gateway_fqdn}:8080"
+        value = local.gateway_url
       }
       env {
         name  = "CONSOLE_CLIENT_ID"

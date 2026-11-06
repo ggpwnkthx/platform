@@ -367,19 +367,32 @@ them.
 
 ### The addresses the services reach each other at
 
-The environment of the container apps is joined to the network of the
-deployment, and the network has no road to the internet: a service that
-reaches another one at its public name waits for a timeout that never
-ends. The services of the deployment reach each other at the addresses
-they answer on inside the environment, and the browsers reach them at
-their public names.
+The address of a service inside the environment of the container apps is
+the name of the environment and the port of its ingress:
 
-The console is a client of Access and of the gateway, and it reaches
-them at the addresses of the environment. The browsers are not the
-console: they reach Access and the gateway at their public names, and
-the addresses they use are the ones the discovery document of Access
-carries. The console is ready when Access answers its discovery
-document, and it can only know it when it reaches it.
+```
+http://<the-service>.<the-environment>.<the-region>.azurecontainerapps.io
+```
+
+The ingress answers on the standard ports, and it forwards to the port
+of the container. The port of the container on the name of the
+environment is **not** an address: the traffic to it is dropped, and
+the call to it waits for a timeout that never ends. A service that
+answers `http://<the-service>.<the-environment>:8081` is a service that
+nobody reaches.
+
+The three services that are not published — Access, Data and the
+console — have an ingress that speaks the plain HTTP, and the gateway
+reaches them at their internal address. The gateway is published, and
+its ingress terminates the TLS of the three public names: the console
+reaches the gateway at its public name, and the browsers reach it at the
+same name.
+
+The browsers are not the services: they reach Access and the gateway at
+their public names, and the addresses they use are the ones the
+discovery document of Access carries. The console is ready when Access
+answers its discovery document, and it can only know it when it reaches
+it.
 
 The gateway reaches Access at the public name of the deployment, and
 that is the next work: the gateway discovers its identity provider at

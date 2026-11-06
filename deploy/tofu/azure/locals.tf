@@ -308,6 +308,12 @@ locals {
 # forwards to the address of Data. The upstream is the internal address
 # of the service: Data is not published, and the gateway is the only
 # one that reaches it.
+#
+# The internal address of a service is the name of the environment and
+# the port of its ingress: the ingress answers on the standard ports
+# and forwards to the port of the container. The port of the container
+# on the name of the environment is not an address: the traffic to it
+# is dropped, and the call waits for a timeout that never ends.
 locals {
   gateway_route_table = {
     version = 2
@@ -333,7 +339,7 @@ locals {
           host = local.gateway_hostname
           path = var.workspace_path_prefix
         }
-        upstream = "http://${local.data_fqdn}:8082"
+        upstream = "http://${local.data_fqdn}"
         auth = {
           mode = "any"
           workspace = {
@@ -353,7 +359,7 @@ locals {
           host = local.access_hostname
           path = "/"
         }
-        upstream     = "http://${local.access_fqdn}:8081"
+        upstream     = "http://${local.access_fqdn}"
         auth         = { mode = "none" }
         upstreamHost = "original"
         # The issuer of the tokens needs the credential of its clients:
@@ -366,7 +372,7 @@ locals {
           host = local.access_hostname
           path = "/{rest}"
         }
-        upstream             = "http://${local.access_fqdn}:8081"
+        upstream             = "http://${local.access_fqdn}"
         auth                 = { mode = "none" }
         upstreamHost         = "original"
         forwardAuthorization = true
@@ -379,7 +385,7 @@ locals {
           host = local.console_hostname
           path = "/"
         }
-        upstream     = "http://${local.console_fqdn}:8083"
+        upstream     = "http://${local.console_fqdn}"
         auth         = { mode = "none" }
         upstreamHost = "original"
       },
@@ -389,7 +395,7 @@ locals {
           host = local.console_hostname
           path = "/{rest}"
         }
-        upstream     = "http://${local.console_fqdn}:8083"
+        upstream     = "http://${local.console_fqdn}"
         auth         = { mode = "none" }
         upstreamHost = "original"
       }
