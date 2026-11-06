@@ -10,6 +10,9 @@ in the same commit as the code.
 
 ## Unreleased
 
+## 1.0.6
+
+
 ## 1.0.5
 
 ### The credentials of a deployment on Azure are strong enough for the services that read them
