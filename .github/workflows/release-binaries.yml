@@ -95,6 +95,14 @@ jobs:
       - name: the versions of the platform agree
         run: bun run versions
 
+      # The compiler of the client is a dependency of the platform, and
+      # the dependencies of the platform are installed by the job that
+      # needs them. The runner image is not asked to hold a compiler:
+      # the image of the runner changes, and the compiler of the
+      # release is the one of the lockfile.
+      - name: install the dependencies of the platform
+        run: bun install --frozen-lockfile
+
       # The client of Data: it is published as a tarball of
       # the release and on the registry of the packages. The check of the
       # packaging installs the tarball in a consumer outside of this

@@ -359,3 +359,34 @@ describe('the inputs of the workflows', () => {
     expect(findings).toEqual([])
   })
 })
+
+describe('the dependencies of the workflows', () => {
+  test('a job that packs a package installs the dependencies of the platform first', async () => {
+    // Packing a package runs its `prepack` script, and the script of
+    // the client of Data compiles with the compiler of TypeScript: the
+    // compiler is a dependency of the platform, and the job installs
+    // the dependencies before it packs. A job that asks the runner
+    // image for a compiler fails on the day the image changes, and the
+    // failure is a release that holds no client.
+    const files = (await readdir(WORKFLOWS)).filter((name) => name.endsWith('.yml'))
+    expect(files.length).toBeGreaterThan(0)
+
+    const findings: string[] = []
+    for (const file of files) {
+      const content = await readFile(join(WORKFLOWS, file), 'utf8')
+      const workflow = parseAllDocuments(content)[0]!.toJS() as {
+        jobs: Record<string, { steps?: Step[] }>
+      }
+      for (const [jobName, job] of Object.entries(workflow.jobs ?? {})) {
+        const steps = job.steps ?? []
+        const packs = steps.some((step) => step.run?.includes('bun pm pack') === true)
+        if (!packs) continue
+        const installs = steps.some((step) => step.run?.includes('bun install') === true)
+        if (!installs) {
+          findings.push(`${file}: the job ${jobName} packs a package and installs nothing`)
+        }
+      }
+    }
+    expect(findings).toEqual([])
+  })
+})

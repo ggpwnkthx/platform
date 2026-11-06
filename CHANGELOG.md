@@ -362,6 +362,21 @@ The name of a secret of a vault is a name of dashes, and the name of a
 file of the platform is a name of dots: the templates write the file
 of the key under the name that every other deployment gives it.
 
+### The release of the binaries installs the dependencies of the platform before it packs the client
+
+The release of the binaries packed the client of Data without
+installing the dependencies of the platform, and packing a package runs
+the script of the package: the client is compiled with the compiler of
+TypeScript, and the compiler is a dependency of the platform. The job
+asked the image of the runner for a compiler, and the image of the
+runner changed: the release of the binaries failed in ten seconds, and
+the release held no client and no binary of the CLI.
+
+The job installs the dependencies of the platform before it packs the
+client, and the check of the workflows holds every job that packs a
+package to that rule: a job that packs a package and installs nothing
+is reported.
+
 ### The wizard of a deployment refuses the templates that are not the ones of the release of its images
 
 The wizard pinned the images of a release and the templates of the
