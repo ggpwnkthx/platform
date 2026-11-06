@@ -139,3 +139,52 @@ export async function templatesStateOf(directory: string, tag: string): Promise<
     return 'unknown'
   }
 }
+
+/**
+ * The files of the templates of a deployment at a tag.
+ *
+ * The release published the images of a commit, and the documents the
+ * images read are the documents the templates of that commit write: the
+ * files at the tag are the contract of the release.
+ *
+ * A checkout that holds no tag, or no repository, holds no files: the
+ * caller decides what to do with a thing it cannot know.
+ *
+ * @param directory the directory of the templates of the deployment.
+ * @param tag the tag of the release.
+ */
+export async function templatesAtTagOf(
+  directory: string,
+  tag: string
+): Promise<Record<string, string> | undefined> {
+  const here = resolve(directory)
+  let top: string
+  try {
+    const answer = await run('git', ['-C', here, 'rev-parse', '--show-toplevel'])
+    if (answer.status !== 0) return undefined
+    top = answer.stdout.trim()
+  } catch {
+    return undefined
+  }
+  if (top === '') return undefined
+  const path = relative(top, here)
+  if (path === '' || path.startsWith('..')) return undefined
+  try {
+    const listed = await run('git', ['-C', top, 'ls-tree', '-r', '--name-only', tag, '--', path])
+    if (listed.status !== 0) return undefined
+    const files: Record<string, string> = {}
+    for (const entry of listed.stdout.split('\n')) {
+      const name = entry.trim()
+      // The files of the templates and not the files of the
+      // directories below them: the bootstrap of the deployment holds
+      // no document the images read.
+      if (!name.endsWith('.tf') || name.slice(path.length + 1).includes('/')) continue
+      const shown = await run('git', ['-C', top, 'show', `${tag}:${name}`])
+      if (shown.status !== 0) return undefined
+      files[name.slice(path.length + 1)] = shown.stdout
+    }
+    return files
+  } catch {
+    return undefined
+  }
+}

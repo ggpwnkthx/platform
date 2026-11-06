@@ -16,7 +16,7 @@
  */
 
 import { existsSync } from 'node:fs'
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { CommandInput, CommandResult, CommandSpec, GroupSpec } from '../../app/commands'
 import { stringOf } from '../../app/commands'
@@ -46,7 +46,8 @@ import {
 import { azureProvider } from '../../platform/azure'
 import { isAddress, publicAddressOf, rangeOf, servicesOf } from '../../platform/address'
 import { digestOf, tagOf } from '../../platform/registry'
-import { pathOf, placeOf, templatesStateOf } from '../../platform/checkout'
+import { pathOf, placeOf, templatesAtTagOf, templatesStateOf } from '../../platform/checkout'
+import { contractOf, differencesOf } from '../../platform/contract'
 import { type Release, releaseOf } from '../../platform/release'
 import { VERSION } from '../../runtime/version'
 import { planContext, tableOfChanges, toolOf, unlockState } from './infrastructure'
@@ -565,6 +566,69 @@ function bootstrapOf(directory: string): string {
 }
 
 /**
+ * The directory the bootstrap of the deployment runs in.
+ *
+ * The bootstrap is the only stack that runs without a backend, and its
+ * state is a local state: the tool writes it in the directory it runs
+ * in. The state of the bootstrap holds the credentials of the account
+ * of the state of the deployment, and a credential in a checkout of the
+ * repository is a credential in the working tree of every machine that
+ * clones it.
+ *
+ * The templates of the bootstrap are copied into the directory of the
+ * files of the deployment, and the tool runs them there: the state of
+ * the bootstrap is written next to the values of the deployment, and
+ * the directory of the files of the deployment is not committed.
+ *
+ * The file of the lock of the providers is copied with the templates:
+ * the bootstrap of the deployment reads the resources of Azure with the
+ * version of the provider the templates pin, and not with the version
+ * that happens to be the newest of the day.
+ *
+ * The state of a bootstrap that ran before the deployment moved it is
+ * taken with it: the state holds the name of the account of the state
+ * of the deployment, and it is a credential that belongs in the
+ * directory of the files of the deployment and not in the checkout of
+ * the templates.
+ *
+ * @param source the directory of the templates of the bootstrap.
+ * @param runtime the directory of the files of the deployment.
+ * @param notes the notes the operator is told.
+ */
+async function bootstrapWorkspaceOf(
+  source: string,
+  runtime: string,
+  notes: Notes
+): Promise<string> {
+  const workspace = join(runtime, 'bootstrap')
+  await mkdir(workspace, { recursive: true })
+  let entries: string[]
+  try {
+    entries = await readdir(source)
+  } catch (error) {
+    throw new CliFailure(
+      `the templates of the bootstrap cannot be read: ${source}: ${(error as Error).message}`,
+      4,
+      'not_found'
+    )
+  }
+  for (const entry of entries) {
+    if (!entry.endsWith('.tf') && entry !== '.terraform.lock.hcl') continue
+    await copyFile(join(source, entry), join(workspace, entry))
+  }
+  for (const entry of ['terraform.tfstate', 'terraform.tfstate.backup']) {
+    const state = join(source, entry)
+    if (!existsSync(state)) continue
+    await copyFile(state, join(workspace, entry))
+    await rm(state, { force: true })
+    notes.push(
+      `the state of the place where the state of the deployment lives was in the checkout of the templates: it is written in ${join(runtime, 'bootstrap')} now`
+    )
+  }
+  return workspace
+}
+
+/**
  * The addresses that reach the account of the state of the deployment.
  *
  * The account of the state is a secret store, and it is closed to every
@@ -782,6 +846,11 @@ function bootstrapVariables(
     // deployment: the shared key of the account of the state is off,
     // and the access is a role of Entra ID.
     operator_principal_id: values.operator_principal_id ?? '',
+    // The place where the state of the deployment lives is created in
+    // the subscription of the deployment, and in no other: a provider
+    // that takes the subscription of the session creates the state of
+    // the deployment wherever the session of the operator points at.
+    subscription_id: values.subscription_id ?? '',
   }
   const taken: Record<string, string> = {}
   for (const [name, value] of Object.entries(wanted)) {
@@ -789,6 +858,54 @@ function bootstrapVariables(
     taken[name] = value
   }
   return taken
+}
+
+/**
+ * The ways the contract of the templates of the checkout differs from
+ * the contract of the templates of a release.
+ *
+ * The contract of the release is the contract of the templates at the
+ * tag of the release: the images of the release were built out of that
+ * commit, and they read the documents that the templates of that
+ * commit write.
+ *
+ * A checkout that holds no tag, or no templates, holds no contract:
+ * the answer is undefined, and the caller refuses the deployment,
+ * because a contract it cannot prove is a contract it cannot trust.
+ *
+ * @param directory the directory of the templates of the deployment.
+ * @param tag the tag of the release.
+ */
+async function contractDifferencesOf(
+  directory: string,
+  tag: string
+): Promise<readonly string[] | undefined> {
+  const here = await templateFilesOf(directory)
+  const there = await templatesAtTagOf(directory, tag)
+  if (here === undefined || there === undefined) return undefined
+  return differencesOf(contractOf(here), contractOf(there))
+}
+
+/**
+ * The files of the templates of the deployment.
+ *
+ * @param directory the directory of the templates of the deployment.
+ */
+async function templateFilesOf(directory: string): Promise<Record<string, string> | undefined> {
+  let entries: string[]
+  try {
+    entries = await readdir(directory)
+  } catch {
+    return undefined
+  }
+  const files: Record<string, string> = {}
+  for (const entry of entries) {
+    if (!entry.endsWith('.tf')) continue
+    const content = await readFile(join(directory, entry), 'utf8').catch(() => null)
+    if (content === null) return undefined
+    files[entry] = content
+  }
+  return files
 }
 
 /**
@@ -822,19 +939,32 @@ function carriesImages(answers: Readonly<Values>): boolean {
  * that cannot be read is not a failure: the wizard asks the operator
  * for the digests, and says why it asks.
  *
+ * The default is the **latest** release of the platform: a deployment
+ * runs the newest images that were published, and the digests are
+ * written in the values of the deployment, so the deployment stays the
+ * one that was applied. A reader who wants another release names it.
+ *
  * @param input what the command received.
  */
 async function readRelease(input: CommandInput): Promise<Release | undefined> {
   const named = stringOf(input.options, 'release')
-  const version = named ?? VERSION
+  if (named !== undefined) {
+    // A release the reader named is one release: it is not there, and
+    // the deployment is a failure, and the message says why.
+    return await releaseOf(named)
+  }
+  // The latest release is a moving target, and the release of the CLI
+  // is the release of the line of the templates: a machine that cannot
+  // reach the repository of the releases runs the images of its own
+  // line.
   try {
-    return await releaseOf(version)
-  } catch (error) {
-    // A release the reader named is not there: that is a failure, and
-    // the message says why. The release of the CLI is the default, and
-    // a build that was never released asks for the digests.
-    if (named !== undefined) throw error
-    return undefined
+    return await releaseOf('latest')
+  } catch {
+    try {
+      return await releaseOf(VERSION)
+    } catch {
+      return undefined
+    }
   }
 }
 
@@ -1166,6 +1296,47 @@ function addressOf(reason: string): string | undefined {
  *
  * @param provider the provider of the deployment.
  */
+/**
+ * Binds what the system of the provider needs after the apply.
+ *
+ * The provider of the deployment reads the names of the deployment in
+ * the answers of the templates: a name that is written in the
+ * templates and in the code of the provider is a name that drifts.
+ *
+ * The step is not a failure of the deployment when it does not go
+ * through: the deployment is applied, and the binding is written again
+ * the next time the deployment goes on.
+ *
+ * @param provider the provider of the deployment.
+ * @param tool the tool that writes the infrastructure.
+ * @param directory the directory of the templates.
+ * @param backend the configuration of the backend of the state.
+ * @param values the values of the deployment.
+ */
+async function boundAfter(
+  provider: DeploymentProvider,
+  tool: InfrastructurePort,
+  directory: string,
+  backend: string,
+  values: Values
+): Promise<string[]> {
+  if (provider.afterApply === undefined) return []
+  let outputs: Record<string, unknown>
+  try {
+    outputs = await tool.output(directory, { backendConfig: backend })
+  } catch (error) {
+    return [
+      `\nthe answers of the templates could not be read: ${error instanceof Error ? error.message : String(error)}`,
+    ]
+  }
+  try {
+    const lines = await provider.afterApply({ values, outputs })
+    return lines.map((line) => `\n${line}`)
+  } catch (error) {
+    return [`\n${error instanceof Error ? error.message : String(error)}`]
+  }
+}
+
 export function deployCommand(provider: DeploymentProvider): CommandSpec {
   return {
     name: provider.name,
@@ -1197,7 +1368,7 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
         name: 'release',
         kind: 'string',
         summary:
-          'the release of the platform the deployment runs: a version, or "latest". The default is the version of the CLI',
+          'the release of the platform the deployment runs: a version, or "latest". The default is the latest release the platform published',
       },
     ],
     examples: [`platformctl deploy ${provider.name}`],
@@ -1269,15 +1440,44 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
       // not know refuses to start, and a service that reads a secret
       // under another name refuses to start too. The wizard refuses it
       // before it applies anything.
+      //
+      // A commit is more than its documents: a commit that moves a
+      // private endpoint, or that keeps more than one revision of an
+      // application, writes the documents of the commit before it. The
+      // **contract** of the templates is the documents they write, and
+      // the deployment runs the images of the release when the contract
+      // of the checkout and the contract of the release are the same.
       if (release !== undefined && !carriesImages(answers)) {
         const state = await templatesStateOf(directory, release.tag)
         if (state === 'different') {
+          const differences = await contractDifferencesOf(directory, release.tag)
+          if (differences === undefined || differences.length > 0) {
+            const why =
+              differences === undefined || differences.length === 0
+                ? ''
+                : `: ${differences.join(', ')}`
+            throw new CliFailure(
+              `the templates of the checkout are not the ones of the release ${release.tag}: the deployment would run the images of ${release.tag} with the templates of another commit, and a service that reads a document it does not know refuses to start${why}`,
+              5,
+              'templates_mismatch',
+              undefined,
+              `check out the tag ${release.tag}, or publish a release of the templates of the checkout, or name the digests of the images of another build in the file of the answers`
+            )
+          }
+          notes.push(
+            `the templates of the checkout are ahead of the release ${release.tag}, and the documents the images read did not change: the deployment runs the images of ${release.tag} with the templates of the checkout`
+          )
+        } else if (state === 'unknown' && release.version !== VERSION) {
+          // The images of another line than the line of the CLI, and
+          // the templates of the checkout cannot be compared with the
+          // templates of the release: the deployment would run the
+          // images of a release it cannot prove anything about.
           throw new CliFailure(
-            `the templates of the checkout are not the ones of the release ${release.tag}: the deployment would run the images of ${release.tag} with the templates of another commit, and a service that reads a document it does not know refuses to start`,
+            `the templates of the deployment are not in a checkout that holds the tag ${release.tag} of the release: the deployment cannot prove that the images of the release ${release.tag} read the documents the templates write`,
             5,
             'templates_mismatch',
             undefined,
-            `check out the tag ${release.tag}, or publish a release of the templates of the checkout, or name the digests of the images of another build in the file of the answers`
+            `fetch the tag of the release (git fetch --tags), or name the digests of the images of the release in the file of the answers`
           )
         }
       }
@@ -1457,7 +1657,10 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
         {
           provider,
           port: tool,
-          directory: bootstrap,
+          // The bootstrap runs in the directory of the files of the
+          // deployment: the state of the bootstrap is written there,
+          // and not in the checkout of the templates.
+          directory: await bootstrapWorkspaceOf(bootstrap, runtime, notes),
           // The place has no file of values: the tool is told the
           // values of the place one by one.
           file: '',
@@ -1537,9 +1740,15 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
         }
 
         if (changesNothing(plan)) {
+          // The deployment is applied and nothing changed, and the
+          // binding of the system of the provider is written anyway:
+          // the binding of a name waits for the records of DNS of the
+          // name, and the records of a name are not always in place
+          // when the deployment goes on.
+          const bound = await boundAfter(provider, tool, directory, backend, values)
           return {
             value,
-            lines: [],
+            lines: bound,
             message: 'the deployment is already what it should be',
           }
         }
@@ -1565,6 +1774,10 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
         )
         try {
           const applied = await tool.apply(directory, plan)
+          // The deployment is applied, and the system of the provider
+          // is told what it needs after the apply: the certificate of
+          // the public names is one of those things.
+          const bound = await boundAfter(provider, tool, directory, backend, values)
           return {
             value: {
               ...value,
@@ -1575,7 +1788,13 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
             // not the plan that was shown before the question: a plan
             // that is told after the apply reads as a plan that is
             // still to come.
-            lines: ['', appliedOf(applied.summary), '', ...tableOfChanges(applied.applied)],
+            lines: [
+              '',
+              appliedOf(applied.summary),
+              '',
+              ...tableOfChanges(applied.applied),
+              ...bound,
+            ],
             message: 'the deployment is applied',
           }
         } catch (error) {

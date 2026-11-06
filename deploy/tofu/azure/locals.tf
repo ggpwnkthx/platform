@@ -127,8 +127,17 @@ locals {
 
   # The address of the cache, without the credentials. The credentials
   # are the ones of the access key of the cache.
-  redis_host = azurerm_managed_redis.platform.hostname
-  redis_port = azurerm_managed_redis.platform.default_database[0].port
+  #
+  # The port of the cache is the port of the database of the cache, and
+  # the database of an Azure Managed Redis answers on the port 10000:
+  # the port of the Redis of the community edition (6379) is not the
+  # port of the cache, and an address that names a port the cache does
+  # not answer on is an address that times out. The templates take the
+  # port the service reports, and the port 10000 when the service
+  # reports none.
+  redis_host          = azurerm_managed_redis.platform.hostname
+  redis_reported_port = azurerm_managed_redis.platform.default_database[0].port
+  redis_port          = local.redis_reported_port != 0 ? local.redis_reported_port : 10000
 }
 
 # The secrets of the deployment.
@@ -273,8 +282,18 @@ locals {
   access_database_url = "postgres://access_app:${random_password.postgres_access_app.result}@${local.postgres_host}:${local.postgres_port}/${local.platform_database}?sslmode=require"
   data_runtime_url    = "postgres://data_runtime:${random_password.data_runtime.result}@${local.postgres_host}:${local.postgres_port}/${local.data_database}?sslmode=require"
   data_registry_url   = "postgres://data_registry:${random_password.data_registry.result}@${local.postgres_host}:${local.postgres_port}/${local.data_database}?sslmode=require"
-  postgres_admin_url  = "postgres://${azurerm_postgresql_flexible_server.platform.administrator_login}:${random_password.postgres_admin.result}@${local.postgres_host}:${local.postgres_port}/postgres?sslmode=require"
-  postgres_owner_url  = "postgres://data_owner:${random_password.data_owner.result}@${local.postgres_host}:${local.postgres_port}/${local.data_database}?sslmode=require"
+  # The address of the administrator of the server.
+  #
+  # The administrator is the account that creates the roles of the
+  # deployment, and a grant of a role belongs to the database the role
+  # works in: the role of Access creates the eight tables of its schema
+  # in the database of the platform, and the grant that lets it is a
+  # grant of the schema `public` of that database. The address of the
+  # administrator names the database of the platform and not the
+  # maintenance database, or the grant is a grant of another database
+  # and the service cannot create its tables.
+  postgres_admin_url = "postgres://${azurerm_postgresql_flexible_server.platform.administrator_login}:${random_password.postgres_admin.result}@${local.postgres_host}:${local.postgres_port}/${local.platform_database}?sslmode=require"
+  postgres_owner_url = "postgres://data_owner:${random_password.data_owner.result}@${local.postgres_host}:${local.postgres_port}/${local.data_database}?sslmode=require"
 
   # The addresses of the cache. The credential is the access key of the
   # cache; the README describes the access control list that narrows it
@@ -410,11 +429,24 @@ locals {
 # The map is a secret: the token of the example of the repository is
 # published, and a deployment that starts with it has an administrative
 # surface that everybody holds.
+#
+# The scope of a token is one of the three the control plane knows:
+# `read`, `operate` and `config`. A scope of `admin` is not one of
+# them, and a control plane that is given a map it does not understand
+# stops before it listens: the deployment was up, and the control plane
+# of it was not.
+#
+# The scopes are not a chain: a token that may operate may not write
+# the route table. This deployment serves its route table from a file of
+# the vault and not from the store of the control plane, and the work of
+# the operator is to read the state of the deployment and to purge what
+# has to be purged: the scope of the token is `operate`, and it holds
+# the reads with it.
 locals {
   control_tokens = {
     (random_bytes.gateway_client_secret.hex) = {
       operator = "the-operator-of-the-deployment"
-      scope    = "admin"
+      scope    = "operate"
     }
   }
 }

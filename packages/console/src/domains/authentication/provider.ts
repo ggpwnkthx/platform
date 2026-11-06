@@ -107,8 +107,15 @@ export class AccessProvider {
     })
   }
 
-  /** The discovery document, read once and kept for ten minutes. */
-  async discovery(): Promise<Discovery> {
+  /**
+   * The discovery document, read once and kept for ten minutes.
+   *
+   * @param timeoutMs the budget of the call. A probe that asks for the
+   * document gives it the budget of a probe: a call that waits longer
+   * than the probe that waits for it answers nothing, and the platform
+   * says that the probe timed out and says nothing about why.
+   */
+  async discovery(timeoutMs: number = this.#options.timeoutMs): Promise<Discovery> {
     const now = Date.now()
     if (this.#discovery && now - this.#discovery.at < 10 * 60 * 1000) {
       return this.#discovery.value
@@ -118,7 +125,7 @@ export class AccessProvider {
       this.#fetch,
       `${this.#options.accessUrl}/.well-known/openid-configuration`,
       { headers: { accept: 'application/json' } },
-      this.#options.timeoutMs
+      timeoutMs
     )
     const body = (await bodyOf(response)) as Record<string, unknown> | null
     if (

@@ -7,9 +7,9 @@ How to use `platformctl` against a deployment: install it, write your first prof
 Each platform release publishes the CLI as its own archive for every supported platform. The archive carries the runtime, so it needs nothing else.
 
 ```bash
-curl -sSLO https://github.com/ggpwnkthx/platform/releases/download/v1.0.7/platformctl-1.0.7-linux-x64.tar.gz
-tar -xzf platformctl-1.0.7-linux-x64.tar.gz
-install platformctl-1.0.7-linux-x64/platformctl /usr/local/bin/platformctl
+curl -sSLO https://github.com/ggpwnkthx/platform/releases/download/v1.0.8/platformctl-1.0.8-linux-x64.tar.gz
+tar -xzf platformctl-1.0.8-linux-x64.tar.gz
+install platformctl-1.0.8-linux-x64/platformctl /usr/local/bin/platformctl
 platformctl --help
 ```
 
@@ -202,7 +202,7 @@ The wizard of a deployment signs you in to the provider, asks what the deploymen
 platformctl deploy azure
 ```
 
-It signs you in with the Azure CLI, so it opens a browser the first time and it lets you pick the subscription when you hold more than one. It asks only what it cannot answer itself: the names the deployment answers under and the identifiers of the tenant and of the workspace.
+It signs you in with the Azure CLI, so it opens a browser the first time and it lets you pick the subscription when you hold more than one. It asks only what it cannot answer itself: the names the deployment answers under and the identifiers of the tenant and of the workspace. The subscription of the deployment is the one it signed in to, and it writes it in the values of the deployment: the templates write their resources in that subscription, and not in the subscription of the session.
 
 The wizard checks what it needs before it asks anything: the templates of the deployment, the OpenTofu binary and your identity in Azure. If one of them is missing, the wizard says so in a second instead of after twenty questions.
 
@@ -214,24 +214,27 @@ An answer the deployment cannot use — an identifier that is not an identifier,
 
 The values of a deployment that is already there are the defaults of the questions: the wizard reads the file of the values of the deployment of the environment and offers every answer of it, so a second run is a matter of pressing enter. The example of the templates is the default of everything the deployment does not hold.
 
-The digests of the images are not asked: they are read from the release of the platform, and the release carries the digest of every image it published. The release is the version of the CLI by default, because the CLI, the templates of the deployment and the images are one version line. To run another release:
+The digests of the images are not asked: they are read from the release of the platform, and the release carries the digest of every image it published. The release is the latest one the platform published, and the digests it names are written into the values of the deployment, so the deployment stays pinned even when the latest release moves. To run another release:
 
 ```bash
 platformctl deploy azure --release 1.1.0
 platformctl deploy azure --release latest
 ```
 
-`latest` is the release the platform published last. The digests it names are written into the values of the deployment, so the deployment stays pinned even when the latest release moves.
+`latest` is the release the platform published last, and it is the default. The images of a release read the route table of the deployment, the files of its secrets and the variables of its environment, and an image that reads a document it does not know refuses to start. The wizard therefore compares the **contract** of the templates of the checkout with the contract of the templates of the release — the route table, the names of the secrets, the files of the secrets and the variables of the environment — and the deployment goes on when the two are the same: a checkout that is ahead of the release and writes the same documents runs the images of the release.
+
+A checkout whose templates write a document the images of the release do not know is refused, and the refusal names the document that changed. Fetch the tag of the release first (`git fetch --tags`), or name the digests of the images of another build in the file of the answers.
 
 The wizard writes the file of the values, `deploy/tofu/runtime/production/terraform.tfvars`, and then it continues:
 
 1. It asks for the addresses that reach the account of the state of the deployment. The account holds the state and the secrets of the deployment, and it is closed to every other address. The public address of your machine is read and offered as the default, so answering nothing takes it; type another address when your machine reaches the internet through another one.
 
 The service that holds the state refuses a range of one address, so the range of the address of your machine is the range of four addresses that holds it: `159.96.225.85` becomes `159.96.225.84/30`. A range you name yourself is used as it is, and a range that is narrower than the service takes is widened to the range that holds it.
-2. It runs the bootstrap of the templates, which creates the resource group and the storage account of the state.
+2. It runs the bootstrap of the templates, which creates the resource group and the storage account of the state. The bootstrap runs in the directory of the files of the deployment, `deploy/tofu/runtime/<environment>/bootstrap`: the state of the bootstrap is local, and a local state is written in the directory the tool runs in. That state holds the name of the account of the state of the deployment, and the checkout of the templates is not the place of a credential.
 3. It writes the configuration of the backend of the state, `deploy/tofu/runtime/production/backend.hcl`.
 4. It initializes the templates against that backend.
 5. It writes the plan, shows it, and applies it once you confirm it. The plan that is applied is the plan you read. The plan is shown before the question whatever the format of the answer is, and `--yes` does not hide it.
+6. It binds the certificate of every public name of the deployment. The names are custom domains of the gateway, and the environment of the container apps issues the certificate of a name and renews it. The binding waits for the records of DNS of the name, so a name whose records are not in place yet is bound the next time the deployment goes on. The wizard says what it bound and what it could not bind.
 
 The OpenTofu binary is found on the path, or downloaded by the CLI when the machine holds none, so the steps above need no tool installed by hand.
 
@@ -313,7 +316,7 @@ platformctl deploy azure --dry-run
 | `the templates of the deployment hold no bootstrap` | The templates hold no stack that creates the place where the state lives | Check out the templates of the release |
 | `the addresses that reach the account of the state … are needed` | The account of the state is closed to every address | Name the addresses of the operator in the file of the answers |
 | `the address … is not a range` | The address is not in the notation of a network | Write the address with its mask, for example `203.0.113.4/32` |
-| `the place where the state of the deployment lives cannot be created` | The bootstrap of the templates failed | Read the message of the tool, and run `tofu -chdir=deploy/tofu/azure/bootstrap apply` yourself |
+| `the place where the state of the deployment lives cannot be created` | The bootstrap of the templates failed | Read the message of the tool, and run `tofu -chdir=deploy/tofu/runtime/<environment>/bootstrap apply` yourself |
 | `the place where the state of the deployment lives was not created` | The bootstrap of the templates failed | Read the message of the tool: it names the resource that could not be created |
-| `the configuration of the backend of the state cannot be read` | The tool answered with something that is not a configuration | Run `tofu -chdir=deploy/tofu/azure/bootstrap apply` and read what it says |
+| `the configuration of the backend of the state cannot be read` | The tool answered with something that is not a configuration | Run `tofu -chdir=deploy/tofu/runtime/<environment>/bootstrap apply` and read what it says |
 | `the state of the deployment is locked …` | Another run holds the lock of the state | The wizard asks before it frees the lock: answer yes when that run is not there anymore, or free the lock with the command the message names |

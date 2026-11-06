@@ -156,6 +156,41 @@ export interface DeploymentProvider {
    * @param leftover the resource that holds the name.
    */
   release?(leftover: Leftover): Promise<void>
+  /**
+   * Binds what the system of the provider needs after the apply.
+   *
+   * Some systems of the provider hold a binding that the templates of
+   * the deployment cannot write: the provider of the infrastructure
+   * writes the resources of the deployment, and the binding is not one
+   * of them. The provider of the deployment writes it here, with the
+   * client of the system, and says what it did.
+   *
+   * The step is not a failure of the deployment when it does not go
+   * through: the deployment is applied, and the binding is read again
+   * the next time the deployment goes on.
+   *
+   * @param context what the deployment applied: its values and what the
+   * templates answered.
+   */
+  afterApply?(context: AfterApply): Promise<readonly string[]>
+}
+
+/**
+ * What a deployment applied, as the provider of the deployment reads
+ * it.
+ */
+export interface AfterApply {
+  /** The values of the deployment. */
+  readonly values: Readonly<Record<string, string>>
+  /**
+   * What the templates answered.
+   *
+   * The answers are the names of the resources of the deployment: a
+   * name that is written in the templates and in the code of the
+   * provider is a name that drifts, and the provider reads the names
+   * of the deployment where they are written.
+   */
+  readonly outputs: Readonly<Record<string, unknown>>
 }
 
 /** A resource of the system that a failed apply left behind. */

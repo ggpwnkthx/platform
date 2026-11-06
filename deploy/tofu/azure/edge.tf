@@ -21,6 +21,29 @@
 # The environment proves the ownership of a name with a record of DNS,
 # and the record of a name that the deployment writes is written before
 # the name is bound: the binding waits for the proof.
+#
+# The templates write the names without a certificate, and the
+# certificate of a name is bound by the client of Azure: the provider
+# of the infrastructure of Azure writes a custom domain without a
+# certificate, because it has no resource that binds the certificate of
+# the environment of the container apps to a name of an application
+# (the issue <https://github.com/hashicorp/terraform-provider-azurerm/issues/27362>
+# is open). A name without a certificate is a name that answers in
+# plain HTTP only.
+#
+# The wizard of the deployment binds the certificate of every public
+# name after the apply, with the client of Azure: the environment
+# issues the certificate of the name and renews it, and the ingress of
+# the environment terminates the TLS of the callers with it. A
+# deployment that is applied without the wizard binds the certificates
+# with the client of Azure:
+#
+#   az containerapp hostname bind \
+#     --hostname api.<the-zone-of-the-names> \
+#     --name <the-application-of-the-gateway> \
+#     --resource-group <the-group-of-the-deployment> \
+#     --environment <the-environment-of-the-container-apps> \
+#     --validation-method HTTP
 resource "azurerm_container_app_custom_domain" "gateway" {
   count = var.public_names_enabled ? 1 : 0
 

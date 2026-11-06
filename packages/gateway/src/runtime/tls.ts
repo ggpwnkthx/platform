@@ -12,6 +12,7 @@ import { readFile } from 'node:fs/promises'
 import type { CertificateStore, DeploymentCertificate } from '../domains/tls'
 import { certificateOfFile, type AcmeCertificates } from '../domains/tls'
 import type { Logger } from '../observability'
+import { isConnectionError } from '../platform/redis'
 
 export interface CertificateManagerOptions {
   /** The store of the certificate of the deployment. */
@@ -116,6 +117,22 @@ export class CertificateManager {
           ? await this.#options.acme.ensure()
           : await this.#options.store.read()
     } catch (error) {
+      // The certificate of the deployment lives in the shared state,
+      // and a shared state that cannot be reached takes the
+      // certificate with it: the log names the shared state and not
+      // only a certificate that could not be read. An operator that
+      // reads "the certificate could not be read" looks for a
+      // certificate that is wrong, and the certificate is not wrong:
+      // the state that holds it is not there.
+      if (isConnectionError(error)) {
+        this.#options.logger.warn(
+          'the shared state is not reachable, and the certificate of the deployment lives in it',
+          {
+            error: error instanceof Error ? error.message : String(error),
+          }
+        )
+        return
+      }
       this.#options.logger.warn('the certificate of the deployment could not be read', {
         error: error instanceof Error ? error.message : String(error),
       })

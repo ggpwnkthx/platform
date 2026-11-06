@@ -3,7 +3,13 @@ import { spawnSync } from 'bun'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { checkoutOf, pathOf, placeOf, templatesStateOf } from '../src/platform/checkout'
+import {
+  checkoutOf,
+  pathOf,
+  placeOf,
+  templatesAtTagOf,
+  templatesStateOf,
+} from '../src/platform/checkout'
 
 /**
  * The checkout the command runs in.
@@ -176,6 +182,37 @@ describe('the templates of a checkout against the tag of a release', () => {
     const root = await mkdtemp(join(tmpdir(), 'platformctl-repository-'))
     try {
       expect(await templatesStateOf(root, 'v1.0.4')).toBe('unknown')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('the files of the templates at the tag of a release', () => {
+  test('the files of the tag are the files of the templates', async () => {
+    const { root, templates } = await repositoryOf()
+    try {
+      const files = await templatesAtTagOf(templates, 'v1.0.4')
+      expect(files).toBeDefined()
+      expect(files?.['locals.tf']).toBe('version = 1\n')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a tag that is not in the checkout holds no files', async () => {
+    const { root, templates } = await repositoryOf()
+    try {
+      expect(await templatesAtTagOf(templates, 'v9.9.9')).toBeUndefined()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a directory that is in no repository holds no files', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'platformctl-repository-'))
+    try {
+      expect(await templatesAtTagOf(root, 'v1.0.4')).toBeUndefined()
     } finally {
       await rm(root, { recursive: true, force: true })
     }

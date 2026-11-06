@@ -265,6 +265,30 @@ export function isSensitive(name: string): boolean {
 }
 
 /**
+ * The values of the outputs, as the tool answers with them.
+ *
+ * The tool answers with the full metadata of every output — whether it
+ * is sensitive and what its type is — and the value of an output is
+ * inside that metadata. The values are what the deployment answers,
+ * and the metadata is what the tool knows about them.
+ *
+ * @param outputs the answers of the tool.
+ */
+export function valuesOf(outputs: unknown): Record<string, unknown> {
+  if (!outputs || typeof outputs !== 'object' || Array.isArray(outputs)) return {}
+  const values: Record<string, unknown> = {}
+  for (const [name, entry] of Object.entries(outputs as Record<string, unknown>)) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      values[name] = entry
+      continue
+    }
+    const metadata = entry as { value?: unknown }
+    values[name] = 'value' in metadata ? metadata.value : entry
+  }
+  return values
+}
+
+/**
  * Holds the credentials of the outputs back.
  *
  * @param value the outputs of the deployment.
@@ -819,7 +843,7 @@ export class TofuInfrastructure implements InfrastructurePort {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return {}
     }
-    return redact(parsed) as Record<string, unknown>
+    return redact(valuesOf(parsed)) as Record<string, unknown>
   }
 
   /**

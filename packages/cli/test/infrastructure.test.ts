@@ -20,6 +20,7 @@ import {
   lockOf,
   redact,
   TofuInfrastructure,
+  valuesOf,
 } from '../src/platform/tofu'
 import { infrastructureGroup } from '../src/runtime/commands/infrastructure'
 import { FakeInfrastructure } from './support'
@@ -183,6 +184,35 @@ describe('the credentials of the outputs', () => {
       access_admin_token: '(sensitive value)',
       nested: { console_client_secret: '(sensitive value)' },
     })
+  })
+})
+
+describe('the outputs of the deployment', () => {
+  test('the value of an output is read out of the metadata of the output', () => {
+    // The tool answers with the metadata of every output: whether it
+    // is sensitive and what its type is. The value of the output is
+    // inside that metadata.
+    expect(
+      valuesOf({
+        gateway_url: { sensitive: false, type: 'string', value: 'https://api.example.com' },
+        container_apps: {
+          sensitive: false,
+          type: 'object',
+          value: { gateway: 'platform-production-gateway' },
+        },
+      })
+    ).toEqual({
+      gateway_url: 'https://api.example.com',
+      container_apps: { gateway: 'platform-production-gateway' },
+    })
+  })
+
+  test('a value that is not the metadata of an output is the value', () => {
+    expect(valuesOf({ gateway_url: 'https://api.example.com' })).toEqual({
+      gateway_url: 'https://api.example.com',
+    })
+    expect(valuesOf({})).toEqual({})
+    expect(valuesOf('not an answer')).toEqual({})
   })
 })
 

@@ -28,8 +28,14 @@ resource "azurerm_postgresql_flexible_server" "platform" {
   private_dns_zone_id           = azurerm_private_dns_zone.postgres.id
   public_network_access_enabled = false
 
-  backup_retention_days        = var.postgresql_backup_retention_days
-  geo_redundant_backup_enabled = false
+  backup_retention_days = var.postgresql_backup_retention_days
+
+  # The backup of the server is kept in a second region when the server
+  # is zone redundant: a zone that is lost takes the server with it,
+  # and the backup of the server is in the zone that was lost. A
+  # server that is not zone redundant has no standby zone, and Azure
+  # refuses a backup that is kept in a second region for it.
+  geo_redundant_backup_enabled = var.postgresql_high_availability
 
   # The high availability is zone redundant: the server answers from two
   # zones. A region whose delegated subnet is not zone redundant refuses

@@ -16,8 +16,16 @@ tofu -chdir=deploy/tofu/azure/bootstrap apply \
   -var name_prefix=platform -var environment=production \
   -var resource_group_name=platform-production-state \
   -var 'operator_addresses=["203.0.113.4/30"]' \
-  -var operator_principal_id=00000000-0000-0000-0000-000000000000
+  -var operator_principal_id=00000000-0000-0000-0000-000000000000 \
+  -var subscription_id=00000000-0000-0000-0000-000000000000
 ```
+
+The state of this stack is local, and it is written in the directory the
+tool runs in. The wizard of the deployment copies these templates into
+the directory of the files of the deployment
+(`deploy/tofu/runtime/<environment>/bootstrap`) and runs them there, so
+that the state of the bootstrap — which holds the name of the account of
+the state — is not written in the checkout of the templates.
 
 ## What the subscription needs
 
@@ -87,3 +95,15 @@ state is a role of Entra ID.
 The state of **this** stack is local, and it holds the name of the
 account of the state of the deployment. It is not committed, and the
 directory of the tools is in `.gitignore`.
+
+## The subscription of the place
+
+The place where the state of the deployment lives is created in the
+subscription of the deployment, and in no other: `subscription_id` names
+it, and the wizard of the deployment writes the subscription it reads at
+the sign-in. A value that is empty takes the subscription of the
+session of the operator:
+
+```bash
+az account show --query id --output tsv
+```

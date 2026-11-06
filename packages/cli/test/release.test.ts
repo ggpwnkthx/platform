@@ -82,6 +82,28 @@ describe('the release of the platform', () => {
     }
   })
 
+  test('the latest release is read from the address of the releases', async () => {
+    // The address of the latest release redirects to the address of the
+    // release, and the tag is the last part of it. The API of the
+    // repository answers a machine that asks it often with a refusal.
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url === 'https://github.com/ggpwnkthx/platform/releases/latest') {
+        const response = new Response('', { status: 200 })
+        Object.defineProperty(response, 'url', {
+          value: 'https://github.com/ggpwnkthx/platform/releases/tag/v1.2.3',
+        })
+        return response
+      }
+      return new Response('not found', { status: 404 })
+    }) as typeof globalThis.fetch
+    try {
+      expect(await latestTagOf()).toBe('v1.2.3')
+    } finally {
+      globalThis.fetch = real
+    }
+  })
+
   test('the latest release names the digests of its images', async () => {
     const digest = `sha256:${'7'.repeat(64)}`
     globalThis.fetch = answering({

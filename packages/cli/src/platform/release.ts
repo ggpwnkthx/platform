@@ -31,9 +31,17 @@ const SERVICES = ['gateway', 'access', 'data', 'console'] as const
  * not a prerelease: a deployment that runs a prerelease runs code that
  * nobody proved.
  *
+ * The web address of the latest release answers with the address of the
+ * release: the tag is the last part of it. The address is asked before
+ * the API of the repository, because the API answers a machine that
+ * asks it often with a refusal, and the address of the release answers
+ * always.
+ *
  * @param repository the repository the releases live in.
  */
 export async function latestTagOf(repository: string = REPOSITORY): Promise<string> {
+  const address = await tagOfAddress(repository)
+  if (address !== undefined) return address
   const url = `https://api.github.com/repos/${repository}/releases/latest`
   let response: Response
   try {
@@ -145,4 +153,30 @@ export async function releaseOf(
     tag: typeof record.tag === 'string' ? record.tag : `v${version}`,
     images: found,
   }
+}
+
+/**
+ * The tag the address of the latest release answers with.
+ *
+ * The address of the latest release of a repository redirects to the
+ * address of the release, and the tag is the last part of it. The
+ * answer is the tag of the release, and nothing else: a machine that
+ * cannot reach the repository answers nothing.
+ *
+ * @param repository the repository the releases live in.
+ */
+async function tagOfAddress(repository: string): Promise<string | undefined> {
+  let response: Response
+  try {
+    response = await fetch(`https://github.com/${repository}/releases/latest`, {
+      redirect: 'follow',
+    })
+  } catch {
+    return undefined
+  }
+  if (!response.ok) return undefined
+  const address = response.url
+  const tag = address.slice(address.lastIndexOf('/') + 1)
+  if (tag === '' || tag === 'latest' || tag.includes('/')) return undefined
+  return tag
 }

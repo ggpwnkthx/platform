@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -348,6 +349,21 @@ describe('the environment of a deployment', () => {
     expect(asked?.choices).toEqual(['development', 'staging', 'production'])
   })
 
+  test('the provider of Azure names the subscription of the deployment', () => {
+    // The subscription of the session is the subscription of the
+    // deployment: the templates write their resources in it, and the
+    // wizard writes it in the values of the deployment.
+    const asked = azureProvider().questions.find((one) => one.name === 'subscription_id')
+    expect(asked?.kind).toBe('given')
+  })
+
+  test('the provider of Azure names the time the logs are kept', () => {
+    const asked = azureProvider().questions.find(
+      (one) => one.name === 'log_analytics_retention_days'
+    )
+    expect(asked?.kind).toBe('given')
+  })
+
   test('a default the deployment cannot use is not offered', () => {
     // A deployment that is already there holds the answers of an
     // earlier run, and an answer of an earlier run that the templates
@@ -577,7 +593,14 @@ describe('the wizard of a deployment', () => {
       // The bootstrap is run with the values of the deployment and with
       // the addresses that reach the account of the state.
       expect(tool.bootstraps).toHaveLength(1)
-      expect(tool.bootstraps[0]?.directory).toBe(join(templates, 'bootstrap'))
+      // The bootstrap runs in the directory of the files of the
+      // deployment: the state of the bootstrap is a local state, and a
+      // local state is written in the directory the tool runs in. The
+      // state of the bootstrap holds the credentials of the account of
+      // the state, and the checkout of the templates is not the place
+      // of a credential.
+      expect(tool.bootstraps[0]?.directory).toBe(join(runtime, 'bootstrap'))
+      expect(await readFile(join(runtime, 'bootstrap', 'main.tf'), 'utf8')).toBe(BOOTSTRAP)
       expect(tool.bootstraps[0]?.variables.name_prefix).toBe('platform')
       expect(tool.bootstraps[0]?.variables.environment).toBe('production')
       expect(tool.bootstraps[0]?.variables.operator_addresses).toBe('["203.0.113.4/30"]')
@@ -591,6 +614,274 @@ describe('the wizard of a deployment', () => {
 
       // The plan that was shown is the plan that was applied.
       expect(tool.applied).toHaveLength(1)
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the wizard binds the certificate of the public names after the apply', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-wizard-'))
+    try {
+      const templates = join(directory, 'templates')
+      const runtime = join(directory, 'runtime')
+      await bootstrapOf(templates)
+      await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+
+      // The provider of the deployment binds what the templates cannot
+      // write, and it reads the names of the deployment in the answers
+      // of the templates.
+      const bound: {
+        values: Readonly<Record<string, string>>
+        outputs: Readonly<Record<string, unknown>>
+      }[] = []
+      const provider: DeploymentProvider = {
+        ...providerOf([
+          { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+        ]),
+        afterApply: async (context) => {
+          bound.push({ values: context.values, outputs: context.outputs })
+          return ['the certificate of the name api.example.com is bound to the gateway']
+        },
+      }
+      const tool = new FakeInfrastructure()
+      tool.outputs = {
+        container_apps: { gateway: 'platform-production-gateway' },
+        container_app_environment: 'platform-production-environment',
+        resource_group_name: 'platform-production',
+        public_names: { api: 'api.example.com' },
+      }
+      tool.plan_ = {
+        directory: templates,
+        changes: [
+          {
+            address: 'azurerm_container_app.gateway',
+            action: 'create',
+            kind: 'azurerm_container_app',
+            name: 'platform-production-gateway',
+            provider: 'hashicorp/azurerm',
+          },
+        ],
+        drift: [],
+        summary: { create: 1, update: 0, delete: 0, replace: 0 },
+        errored: false,
+        planFile: join(runtime, 'plan.bin'),
+      }
+      const { runtime: cli, out } = runtimeOf([provider], tool)
+      const status = await run(cli, [
+        'deploy',
+        'azure',
+        '--yes',
+        '--directory',
+        templates,
+        '--runtime',
+        runtime,
+        '--answers',
+        await answersFileOf(
+          directory,
+          'name_prefix = "platform"\noperator_addresses = "203.0.113.4/32"\n'
+        ),
+      ])
+      expect(status).toBe(0)
+
+      // The binding is written after the apply, and not before: the
+      // certificate of a name is bound to a gateway that is there.
+      expect(bound).toHaveLength(1)
+      expect(bound[0]?.values.name_prefix).toBe('platform')
+      expect(bound[0]?.outputs.public_names).toEqual({ api: 'api.example.com' })
+      expect(out.join('\n')).toContain(
+        'the certificate of the name api.example.com is bound to the gateway'
+      )
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the wizard binds the certificate of the public names when the deployment changes nothing', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-wizard-'))
+    try {
+      const templates = join(directory, 'templates')
+      const runtime = join(directory, 'runtime')
+      await bootstrapOf(templates)
+      await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+
+      // The binding of a name waits for the records of DNS of the
+      // name: the wizard binds it again when the deployment changes
+      // nothing.
+      const bound: number[] = []
+      const provider: DeploymentProvider = {
+        ...providerOf([
+          { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+        ]),
+        afterApply: async () => {
+          bound.push(1)
+          return ['the certificate of the name api.example.com is bound to the gateway']
+        },
+      }
+      const tool = new FakeInfrastructure()
+      tool.outputs = {
+        container_apps: { gateway: 'platform-production-gateway' },
+        container_app_environment: 'platform-production-environment',
+        resource_group_name: 'platform-production',
+        public_names: { api: 'api.example.com' },
+      }
+      tool.plan_ = {
+        directory: templates,
+        changes: [],
+        drift: [],
+        summary: { create: 0, update: 0, delete: 0, replace: 0 },
+        errored: false,
+        planFile: join(runtime, 'plan.bin'),
+      }
+      const { runtime: cli, out } = runtimeOf([provider], tool)
+      const status = await run(cli, [
+        'deploy',
+        'azure',
+        '--yes',
+        '--directory',
+        templates,
+        '--runtime',
+        runtime,
+        '--answers',
+        await answersFileOf(
+          directory,
+          'name_prefix = "platform"\noperator_addresses = "203.0.113.4/32"\n'
+        ),
+      ])
+      expect(status).toBe(0)
+      expect(bound).toHaveLength(1)
+      expect(out.join('\n')).toContain(
+        'the certificate of the name api.example.com is bound to the gateway'
+      )
+      // The plan changed nothing, and nothing was applied.
+      expect(tool.applied).toHaveLength(0)
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the wizard names the subscription of the deployment and runs the bootstrap outside the checkout', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-wizard-'))
+    try {
+      const templates = join(directory, 'templates')
+      const runtime = join(directory, 'runtime')
+      const bootstrap = await bootstrapOf(templates)
+      // The file of the lock of the providers is the file that pins the
+      // version of the provider of Azure, and the copy of the
+      // bootstrap carries it.
+      await writeFile(
+        join(bootstrap, '.terraform.lock.hcl'),
+        'provider "registry.opentofu.org/hashicorp/azurerm" { version = "4.81.0" }\n'
+      )
+      await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+
+      const provider: DeploymentProvider = {
+        ...providerOf([
+          { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+          { name: 'subscription_id', summary: 'the subscription', kind: 'given' },
+        ]),
+        signIn: async () => ({
+          facts: {
+            tenant_id: '11111111-1111-4111-8111-111111111111',
+            subscription_id: 'the-subscription',
+          },
+          message: 'signed in to Azure as the-subscription',
+          account: 'the-subscription',
+        }),
+      }
+      const tool = new FakeInfrastructure()
+      tool.plan_ = {
+        directory: templates,
+        changes: [],
+        drift: [],
+        summary: { create: 0, update: 0, delete: 0, replace: 0 },
+        errored: false,
+      }
+      const { runtime: cli } = runtimeOf([provider], tool)
+      const status = await run(cli, [
+        'deploy',
+        'azure',
+        '--yes',
+        '--directory',
+        templates,
+        '--runtime',
+        runtime,
+        '--answers',
+        await answersFileOf(
+          directory,
+          'name_prefix = "platform"\noperator_addresses = "203.0.113.4/32"\n'
+        ),
+      ])
+      expect(status).toBe(0)
+
+      // The subscription of the session is the subscription of the
+      // deployment, and the values of the deployment name it: the
+      // templates write their resources in that subscription.
+      const file = await readFile(join(runtime, 'terraform.tfvars'), 'utf8')
+      expect(file).toContain('subscription_id = "the-subscription"')
+
+      // The bootstrap runs in the directory of the files of the
+      // deployment: its state is local, and it holds the name of the
+      // account of the state of the deployment.
+      expect(tool.bootstraps[0]?.directory).toBe(join(runtime, 'bootstrap'))
+      expect(tool.bootstraps[0]?.variables.subscription_id).toBe('the-subscription')
+      expect(await readFile(join(runtime, 'bootstrap', 'main.tf'), 'utf8')).toBe(BOOTSTRAP)
+      expect(await readFile(join(runtime, 'bootstrap', '.terraform.lock.hcl'), 'utf8')).toContain(
+        '4.81.0'
+      )
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the state of the place is taken out of the checkout of the templates', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-wizard-'))
+    try {
+      const templates = join(directory, 'templates')
+      const runtime = join(directory, 'runtime')
+      const bootstrap = await bootstrapOf(templates)
+      await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+      // The state of a bootstrap that ran before the deployment moved
+      // it is in the checkout of the templates, and it holds the name
+      // of the account of the state of the deployment.
+      await writeFile(join(bootstrap, 'terraform.tfstate'), '{"version": 4}\n')
+
+      const provider = providerOf([
+        { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+      ])
+      const tool = new FakeInfrastructure()
+      tool.plan_ = {
+        directory: templates,
+        changes: [],
+        drift: [],
+        summary: { create: 0, update: 0, delete: 0, replace: 0 },
+        errored: false,
+      }
+      const { runtime: cli, progress } = runtimeOf([provider], tool)
+      const status = await run(cli, [
+        'deploy',
+        'azure',
+        '--yes',
+        '--directory',
+        templates,
+        '--runtime',
+        runtime,
+        '--answers',
+        await answersFileOf(
+          directory,
+          'name_prefix = "platform"\noperator_addresses = "203.0.113.4/32"\n'
+        ),
+      ])
+      expect(status).toBe(0)
+
+      // The state is in the directory of the files of the deployment,
+      // and it is not in the checkout of the templates any more.
+      expect(await readFile(join(runtime, 'bootstrap', 'terraform.tfstate'), 'utf8')).toBe(
+        '{"version": 4}\n'
+      )
+      expect(existsSync(join(bootstrap, 'terraform.tfstate'))).toBe(false)
+      expect(progress.join('\n')).toContain(
+        'the state of the place where the state of the deployment lives was in the checkout of the templates'
+      )
     } finally {
       await rm(directory, { recursive: true, force: true })
     }
@@ -996,7 +1287,9 @@ describe('the wizard of a deployment', () => {
       // is told the values of the place: a resource that is written
       // with other values than the ones of the apply is a resource the
       // next apply wants to change.
-      expect(tool.importedRuns[0]?.directory).toBe(join(templates, 'bootstrap'))
+      expect(tool.importedRuns[0]?.directory).toBe(
+        join(directory, 'runtime', 'production', 'bootstrap')
+      )
       expect(tool.importedRuns[0]?.run.variables?.resource_group_name).toBe(
         'platform-production-state'
       )
@@ -1771,7 +2064,10 @@ describe('the wizard of a deployment', () => {
         '--runtime',
         runtime,
         '--answers',
-        await answersFileOf(directory, 'name_prefix = "platform"\n'),
+        await answersFileOf(
+          directory,
+          'name_prefix = "platform"\noperator_addresses = "203.0.113.4/32"\n'
+        ),
       ])
       expect(status).toBe(0)
       // The dry run signs nobody in: a dry run that opens a browser is
@@ -2108,6 +2404,7 @@ const BOOTSTRAP = [
   'variable "resource_group_name" {}',
   'variable "operator_addresses" {}',
   'variable "operator_principal_id" {}',
+  'variable "subscription_id" {}',
   '',
 ].join('\n')
 
@@ -2439,6 +2736,241 @@ describe('the leftover of a failed apply', () => {
   })
 })
 
+/**
+ * The certificate of the public names.
+ *
+ * The templates of the deployment write the public names as custom
+ * domains of the gateway, and the provider of the infrastructure of
+ * Azure writes them without a certificate: the certificate of a name
+ * is bound by the client of Azure, and the environment of the container
+ * apps issues it.
+ */
+describe('the certificate of the public names', () => {
+  test('the provider binds the certificate of every public name of the deployment', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-certificate-'))
+    try {
+      const binary = join(directory, 'az')
+      const calls = join(directory, 'calls')
+      await writeFile(binary, CLIENT_BINDING(calls))
+      await chmod(binary, 0o755)
+      const provider = azureProvider([], { PATH: process.env.PATH ?? '', AZURE_CLI: binary })
+      const notes = await provider.afterApply?.({
+        values: { public_names_enabled: 'true' },
+        outputs: {
+          container_apps: { gateway: 'platform-production-gateway' },
+          container_app_environment: 'platform-production-environment',
+          resource_group_name: 'platform-production',
+          public_names: { api: 'api.example.com', access: 'access.example.com' },
+        },
+      })
+      expect(notes?.join('\n')).toContain(
+        'the certificate of the name api.example.com is bound to the gateway'
+      )
+      expect(notes?.join('\n')).toContain(
+        'the certificate of the name access.example.com is bound to the gateway'
+      )
+
+      // The client of Azure is told the names of the deployment and the
+      // names of the resources of the deployment: the names are read in
+      // the answers of the templates and not written in the code.
+      const written = await readFile(calls, 'utf8')
+      expect(written).toContain('--hostname api.example.com')
+      expect(written).toContain('--hostname access.example.com')
+      expect(written).toContain('--name platform-production-gateway')
+      expect(written).toContain('--resource-group platform-production')
+      expect(written).toContain('--environment platform-production-environment')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('a deployment without public names binds no certificate', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-certificate-'))
+    try {
+      const binary = join(directory, 'az')
+      const calls = join(directory, 'calls')
+      await writeFile(binary, CLIENT_BINDING(calls))
+      await chmod(binary, 0o755)
+      const provider = azureProvider([], { PATH: process.env.PATH ?? '', AZURE_CLI: binary })
+      const notes = await provider.afterApply?.({
+        values: { public_names_enabled: 'false' },
+        outputs: { public_names: { api: 'api.example.com' } },
+      })
+      // No name is bound, and the client of Azure is not asked for
+      // anything: the deployment has no public name and no job of the
+      // migration in its answers.
+      expect(notes?.join('\n')).not.toContain('the certificate of the name')
+      expect(notes?.join('\n')).toContain('the migration of the schema is not started')
+      expect(existsSync(calls)).toBe(false)
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('a client that refuses is told what it refused', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-certificate-'))
+    try {
+      const binary = join(directory, 'az')
+      await writeFile(binary, CLIENT_THAT_REFUSES)
+      await chmod(binary, 0o755)
+      const provider = azureProvider([], { PATH: process.env.PATH ?? '', AZURE_CLI: binary })
+      const notes = await provider.afterApply?.({
+        values: { public_names_enabled: 'true' },
+        outputs: {
+          container_apps: { gateway: 'platform-production-gateway' },
+          container_app_environment: 'platform-production-environment',
+          resource_group_name: 'platform-production',
+          public_names: { api: 'api.example.com' },
+        },
+      })
+      // The deployment is applied, and the binding is written again the
+      // next time the deployment goes on: the refusal is told and not
+      // thrown.
+      expect(notes?.join('\n')).toContain(
+        'the certificate of the name api.example.com is not bound'
+      )
+      expect(notes?.join('\n')).toContain(
+        'Please configure the DNS records before adding the hostname.'
+      )
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+})
+
+/**
+ * The migration of the schema.
+ *
+ * The job of the migration creates the roles of the deployment, and the
+ * services that read the database of the deployment do not start without
+ * them: the provider starts the job when the deployment is applied.
+ */
+describe('the migration of the schema', () => {
+  test('the provider starts the job of the migration of the deployment', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-migration-'))
+    try {
+      const binary = join(directory, 'az')
+      const calls = join(directory, 'calls')
+      await writeFile(binary, CLIENT_BINDING(calls))
+      await chmod(binary, 0o755)
+      const provider = azureProvider([], { PATH: process.env.PATH ?? '', AZURE_CLI: binary })
+      const notes = await provider.afterApply?.({
+        values: { public_names_enabled: 'true' },
+        outputs: {
+          container_apps: { gateway: 'platform-production-gateway' },
+          container_app_environment: 'platform-production-environment',
+          resource_group_name: 'platform-production',
+          public_names: { api: 'api.example.com' },
+          migration_job: 'platform-production-migrate',
+        },
+      })
+      expect(notes?.join('\n')).toContain('the migration of the schema is started')
+
+      // The client of Azure is told the name of the job and the name of
+      // the group of the deployment: the names are read in the answers
+      // of the templates and not written in the code.
+      const written = await readFile(calls, 'utf8')
+      expect(written).toContain('job start')
+      expect(written).toContain('--name platform-production-migrate')
+      expect(written).toContain('--resource-group platform-production')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('a deployment without a job of the migration starts no job', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-migration-'))
+    try {
+      const binary = join(directory, 'az')
+      const calls = join(directory, 'calls')
+      await writeFile(binary, CLIENT_BINDING(calls))
+      await chmod(binary, 0o755)
+      const provider = azureProvider([], { PATH: process.env.PATH ?? '', AZURE_CLI: binary })
+      const notes = await provider.afterApply?.({
+        values: { public_names_enabled: 'false' },
+        outputs: { resource_group_name: 'platform-production' },
+      })
+      expect(notes?.join('\n')).toContain('the migration of the schema is not started')
+      expect(existsSync(calls)).toBe(false)
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('a client that refuses the job is told what it refused', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-migration-'))
+    try {
+      const binary = join(directory, 'az')
+      await writeFile(binary, CLIENT_THAT_REFUSES_THE_JOB)
+      await chmod(binary, 0o755)
+      const provider = azureProvider([], { PATH: process.env.PATH ?? '', AZURE_CLI: binary })
+      const notes = await provider.afterApply?.({
+        values: { public_names_enabled: 'true' },
+        outputs: {
+          resource_group_name: 'platform-production',
+          migration_job: 'platform-production-migrate',
+        },
+      })
+      // The deployment is applied, and the job is started by hand: the
+      // refusal is told and not thrown.
+      expect(notes?.join('\n')).toContain('the migration of the schema is not started')
+      expect(notes?.join('\n')).toContain('the job is not there')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+})
+
+/**
+ * The client of Azure, as the tests answer with it.
+ *
+ * The client writes the words of the commands it is given in a file of
+ * the test: the test reads them and knows what the provider told the
+ * client of Azure to do.
+ *
+ * @param calls the file the client writes its commands in.
+ */
+const CLIENT_BINDING = (calls: string) => `#!/bin/sh
+case "$1 $2" in
+  "containerapp hostname"|"containerapp job") echo "$@" >> "${calls}" ;;
+esac
+exit 0
+`
+
+/**
+ * The client of Azure, when it refuses to bind the certificate of a
+ * name.
+ *
+ * The client refuses the way it refuses when the records of DNS of the
+ * name are not in place yet.
+ */
+const CLIENT_THAT_REFUSES = `#!/bin/sh
+case "$1 $2" in
+  "containerapp hostname")
+    echo "Please configure the DNS records before adding the hostname." >&2
+    exit 1
+    ;;
+esac
+exit 0
+`
+
+/**
+ * The client of Azure, when it refuses to start the job of the
+ * migration.
+ *
+ * The client refuses the way it refuses when the job of the migration
+ * is not there.
+ */
+const CLIENT_THAT_REFUSES_THE_JOB = `#!/bin/sh
+case "$1 $2" in
+  "containerapp job")
+    echo "the job is not there" >&2
+    exit 1
+    ;;
+esac
+exit 0
+`
+
 describe('the sign in to Azure', () => {
   test('the provider signs the operator in and reads the facts of the deployment', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'platformctl-azure-'))
@@ -2482,6 +3014,194 @@ describe('the sign in to Azure', () => {
       const signIn = await provider.signIn(async () => 'the-subscription')
       expect(signIn.facts.operator_principal_id).toBe('operator-2')
     } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+})
+
+/**
+ * The templates of the checkout and the images of the release.
+ *
+ * The images of a release read the documents the templates write, and
+ * the wizard refuses to run the images of a release with the templates
+ * of another commit. The refusal is right when the documents changed:
+ * the images would read a document they do not know. A commit that
+ * writes the same documents is a commit the images know.
+ */
+
+/** The templates of a deployment, with the documents the images read. */
+const DOCUMENTS = [
+  '# The route table of the deployment.',
+  'locals {',
+  '  gateway_route_table = {',
+  '    version = 2',
+  '    hosts   = [local.gateway_hostname]',
+  '  }',
+  '}',
+  '',
+  '# The secrets of the deployment.',
+  'locals {',
+  '  secret_names = toset([',
+  '    "gateway-routes",',
+  '  ])',
+  '}',
+  '',
+].join('\n')
+
+/** The environment of the services, with the documents the images read. */
+const ENVIRONMENT = [
+  'locals {',
+  '  gateway_secret_files = [',
+  '    "gateway-routes",',
+  '  ]',
+  '',
+  '  gateway_env_secrets = {',
+  '    GATEWAY_SESSION_SECRET = "gateway-session-secret"',
+  '  }',
+  '}',
+  '',
+].join('\n')
+
+/**
+ * A repository with the templates of a deployment and the tag of the
+ * release of the platform.
+ *
+ * @param directory the directory of the repository.
+ */
+async function repositoryOf(directory: string): Promise<string> {
+  const templates = join(directory, 'deploy', 'tofu', 'azure')
+  await mkdir(templates, { recursive: true })
+  await bootstrapOf(templates)
+  await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+  await writeFile(join(templates, 'locals.tf'), DOCUMENTS)
+  await writeFile(join(templates, 'containerapps.tf'), ENVIRONMENT)
+  const git = (...args: string[]): void => {
+    const answer = spawnSync('git', args, { cwd: directory, stdio: 'ignore' })
+    if (answer.status !== 0) throw new Error(`git ${args.join(' ')} failed`)
+  }
+  git('init', '--quiet')
+  git('config', 'user.email', 'operator@example.com')
+  git('config', 'user.name', 'the operator')
+  git('add', '.')
+  git('commit', '--quiet', '--message', 'the templates')
+  git('tag', 'v1.0.7')
+  return templates
+}
+
+/**
+ * The release of the platform, as the tests answer with it.
+ *
+ * @returns the fetch that answers with the release.
+ */
+function releasing(): typeof globalThis.fetch {
+  const digests = {
+    version: '1.0.7',
+    tag: 'v1.0.7',
+    registry: 'ghcr.io/ggpwnkthx',
+    images: {
+      gateway: `ghcr.io/ggpwnkthx/gateway@sha256:${'1'.repeat(64)}`,
+      access: `ghcr.io/ggpwnkthx/access@sha256:${'2'.repeat(64)}`,
+      data: `ghcr.io/ggpwnkthx/data@sha256:${'3'.repeat(64)}`,
+      console: `ghcr.io/ggpwnkthx/console@sha256:${'4'.repeat(64)}`,
+    },
+  }
+  return (async (input: string | URL | Request) => {
+    const url = typeof input === 'string' ? input : input.toString()
+    if (url.endsWith('/releases/latest')) {
+      return new Response(JSON.stringify({ tag_name: 'v1.0.7' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    if (url.endsWith('/v1.0.7/digests.json')) {
+      return new Response(JSON.stringify(digests), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    return new Response('not found', { status: 404 })
+  }) as typeof globalThis.fetch
+}
+
+describe('the templates of the checkout and the images of the release', () => {
+  test('the deployment runs when the documents the images read did not change', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-templates-'))
+    const real = globalThis.fetch
+    try {
+      const templates = await repositoryOf(directory)
+      const runtime = join(directory, 'runtime')
+      // The templates of the checkout are ahead of the tag of the
+      // release, and they write the documents of the release: the
+      // deployment runs the images of the release with them.
+      await writeFile(join(templates, 'locals.tf'), `${DOCUMENTS}\n# A comment.\n`)
+      globalThis.fetch = releasing()
+      const provider = providerOf([
+        { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+      ])
+      const tool = new FakeInfrastructure()
+      tool.plan_ = {
+        directory: templates,
+        changes: [],
+        drift: [],
+        summary: { create: 0, update: 0, delete: 0, replace: 0 },
+        errored: false,
+        planFile: join(runtime, 'plan.bin'),
+      }
+      const { runtime: cli, progress } = runtimeOf([provider], tool)
+      const status = await run(cli, [
+        'deploy',
+        'azure',
+        '--yes',
+        '--directory',
+        templates,
+        '--runtime',
+        runtime,
+        '--answers',
+        await answersFileOf(
+          directory,
+          'name_prefix = "platform"\noperator_addresses = "203.0.113.4/32"\n'
+        ),
+      ])
+      expect(status).toBe(0)
+      expect(progress.join('\n')).toContain(
+        'the templates of the checkout are ahead of the release v1.0.7'
+      )
+    } finally {
+      globalThis.fetch = real
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the deployment is refused when the documents the images read changed', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-templates-'))
+    const real = globalThis.fetch
+    try {
+      const templates = await repositoryOf(directory)
+      const runtime = join(directory, 'runtime')
+      await writeFile(join(templates, 'locals.tf'), DOCUMENTS.replace('version = 2', 'version = 3'))
+      globalThis.fetch = releasing()
+      const provider = providerOf([
+        { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+      ])
+      const { runtime: cli } = runtimeOf([provider])
+      const refusal = await run(cli, [
+        'deploy',
+        'azure',
+        '--yes',
+        '--directory',
+        templates,
+        '--runtime',
+        runtime,
+        '--answers',
+        await answersFileOf(directory, 'name_prefix = "platform"\n'),
+      ]).catch((error: unknown) => error)
+      expect(refusal).toBeInstanceOf(CliFailure)
+      expect((refusal as CliFailure).message).toContain(
+        'the route table the templates write is not the one of the release'
+      )
+      expect((refusal as CliFailure).exit).toBe(5)
+    } finally {
+      globalThis.fetch = real
       await rm(directory, { recursive: true, force: true })
     }
   })

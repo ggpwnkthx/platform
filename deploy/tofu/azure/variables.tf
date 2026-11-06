@@ -65,6 +65,17 @@ variable "tenant_id" {
   }
 }
 
+variable "subscription_id" {
+  description = "The identifier of the subscription of Azure the deployment is written in."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.subscription_id == "" || can(regex("^[0-9a-fA-F-]{36}$", var.subscription_id))
+    error_message = "The subscription is the identifier of a subscription of Azure."
+  }
+}
+
 # --------------------------------------------------------------------------
 # The names that are unique in the whole of Azure
 #
@@ -292,6 +303,21 @@ variable "services" {
   validation {
     condition     = alltrue([for service in var.services : service.max_replicas >= service.min_replicas])
     error_message = "A service has at least as many replicas at its ceiling as at its floor."
+  }
+}
+
+# --------------------------------------------------------------------------
+# The logs
+# --------------------------------------------------------------------------
+
+variable "log_analytics_retention_days" {
+  description = "The number of days the logs of the deployment are kept in the workspace of the deployment."
+  type        = number
+  default     = 90
+
+  validation {
+    condition     = var.log_analytics_retention_days >= 30 && var.log_analytics_retention_days <= 730
+    error_message = "The workspace of the deployment keeps the logs for thirty days at least, and for two years at most."
   }
 }
 

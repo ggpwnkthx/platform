@@ -11,12 +11,12 @@ deployment are in [`../runtime/`](../README.md#the-templates-and-the-files-of-a-
 | --- | --- |
 | The gateway, Access, Data, the console and the control plane | Five container apps in one environment |
 | The images of the release | A container registry, and the images are pulled **by digest** |
-| The digests of the images | The file `digests.json` of the release, read by the wizard |
+| The digests of the images | The file `digests.json` of the latest release, read by the wizard |
 | PostgreSQL | Azure Database for PostgreSQL Flexible Server, injected into the network |
 | Redis | Azure Managed Redis, behind a private endpoint |
-| The secrets | A Key Vault, with the access of Entra ID |
+| The secrets | A Key Vault, behind a private endpoint, with the access of Entra ID |
 | The ingress that terminates TLS | The ingress of the environment of the container apps, with one custom domain per public name and the managed certificate of Azure |
-| The logs | A Log Analytics workspace |
+| The logs | A Log Analytics workspace, that keeps the logs for ninety days |
 | The state of the deployment | A storage account, created by the bootstrap |
 
 The names of the environment, the ports and the names of the secrets are
@@ -80,6 +80,15 @@ The addresses are named because the private endpoint of the state would
 live in the network of the deployment, and the network is created by the
 templates that the state is for.
 
+The state of the bootstrap is local, and it holds the name of the
+account of the state. The wizard of the deployment runs the bootstrap in
+the directory of the files of the deployment
+(`deploy/tofu/runtime/<environment>/bootstrap`), and the state of the
+bootstrap is written there: the state holds the credentials of the
+account of the state, and the checkout of the templates is not the place
+of a credential. A bootstrap that is run by hand writes its state next
+to its templates, and the directory of the tools is in `.gitignore`.
+
 The output `backend_config_hcl` is the configuration of the backend. Write
 it to the runtime directory of the deployment:
 
@@ -104,6 +113,14 @@ The identifier of the operator is the one the client of Azure reads at
 the sign-in, and the wizard of the deployment writes it: the operator
 writes the secrets of the deployment in the vault of the deployment,
 and the permission to write them is a role of Entra ID.
+
+The subscription of the deployment is the one the client of Azure reads
+at the sign-in, and the wizard of the deployment writes it too: the
+templates write their resources in the subscription that the values of
+the deployment name, and not in the subscription of the session of the
+operator. A subscription that is named in the values is the only one
+the templates write in; a value that is empty takes the subscription of
+the session.
 
 The digests of the four images of the platform are in the file
 `digests.json` of the release, and the wizard of the deployment reads
@@ -156,6 +173,36 @@ needs the application to exist:
 ```bash
 tofu -chdir=deploy/tofu/azure output dns_name_servers
 ```
+
+The templates write the names without a certificate: the provider of the
+infrastructure of Azure writes a custom domain without a certificate,
+because it has no resource that binds the certificate of the environment
+of the container apps to a name of an application
+([the issue](https://github.com/hashicorp/terraform-provider-azurerm/issues/27362)
+is open). A name without a certificate answers in plain HTTP only, and
+the callers of the deployment reach the names over HTTPS.
+
+The certificate of a name is bound by the client of Azure, and the
+wizard of the deployment binds it after the apply: the environment of
+the container apps issues the certificate of the name and renews it, and
+the ingress of the environment terminates the TLS of the callers with
+it. A deployment that is applied by hand binds the certificates with the
+same command, once for every public name:
+
+```bash
+az containerapp hostname bind \
+  --hostname api.platform.example.com \
+  --name platform-production-gateway \
+  --resource-group platform-production \
+  --environment platform-production-environment \
+  --validation-method HTTP
+```
+
+The binding waits for the records of DNS of the name: the environment
+proves the ownership of a name with them, and a name whose records are
+not in place yet is a name the environment cannot prove. The wizard says
+what it bound and what it could not bind, and the binding is written
+again the next time the deployment goes on.
 
 A deployment that does not write the records of the names leaves them to
 the operator: the output `dns_records` names them — a `CNAME` of every name
@@ -241,17 +288,26 @@ instead of at the public name of the deployment.
 ### 6. The migration of the schema
 
 The migration is an operator command, and not a resource of the
-deployment. The job of the deployment applies it once, with the
-credentials of the administrator of the server and of the owner of the
-schema:
+deployment. The job of the deployment applies it, with the credentials
+of the administrator of the server and of the owner of the schema:
 
 ```bash
 az containerapp job start --name platform-production-migrate \
   --resource-group platform-production
 ```
 
+The wizard of the deployment starts the job when the deployment is
+applied, and the job runs again at every apply: the roles that are
+missing are created, the passwords of the roles that are there are
+written again, and the migrations that are missing are applied. The job
+is started by hand when the wizard could not start it.
+
 The job creates the five roles of Data, creates the role of Access, and
-applies the migrations of the schema of Data.
+applies the migrations of the schema of Data. The grants of the roles
+belong to the database the roles work in: the role of Access creates
+the eight tables of its schema in the database of the platform, and the
+owner of the schema of Data creates the schemas of the service in the
+database of Data.
 
 ### 7. The tenant
 
@@ -305,18 +361,60 @@ as manual entries. That is what they are.
 
 ## The three things that are not like the Compose stack
 
-The deployment is the platform, and it is not the Compose stack. Three
+The deployment is the platform, and it is not the Compose stack. A few
 things differ, and an operator who knows the Compose stack should know
 them.
+
+### The addresses the services reach each other at
+
+The environment of the container apps is joined to the network of the
+deployment, and the network has no road to the internet: a service that
+reaches another one at its public name waits for a timeout that never
+ends. The services of the deployment reach each other at the addresses
+they answer on inside the environment, and the browsers reach them at
+their public names.
+
+The console is a client of Access and of the gateway, and it reaches
+them at the addresses of the environment. The browsers are not the
+console: they reach Access and the gateway at their public names, and
+the addresses they use are the ones the discovery document of Access
+carries. The console is ready when Access answers its discovery
+document, and it can only know it when it reaches it.
+
+The gateway reaches Access at the public name of the deployment, and
+that is the next work: the gateway discovers its identity provider at
+the issuer it was configured with, and the issuer is the public name of
+the deployment.
+
+### The vault and its two addresses
+
+The vault of the deployment holds the credentials of the deployment, and
+it has two addresses:
+
+- the **private** address, which is the private endpoint of the vault in
+  the network of the deployment. The name of the vault resolves to it
+  inside the network, and the services of the deployment read the
+  secrets of the vault over it;
+- the **public** address, which stays open because the operator writes
+  the secrets of the deployment in the vault from a machine that is not
+  in the network of the deployment.
+
+The vault is protected by the roles of Entra ID and not by the address:
+the operator holds the role that writes the secrets, the services hold
+the role that reads them, and neither of them is a credential that a
+person knows. A deployment whose operator is inside the network of the
+deployment can close the public address of the vault by writing
+`public_network_access_enabled = false` in the templates.
 
 ### The access control list of the cache
 
 The cache holds the sessions of the callers, the windows of the limits
 and the decisions that Access answered. The templates give the services
 the **access key** of the cache, because the provider of Azure cannot
-create the users of the access control list of the cache: the users are
-created by hand, once, with the client of Redis, from inside the
-network of the deployment.
+create the users of the access control list of the cache: there is no
+resource for them in the provider, and the users are created by hand,
+once, with the client of Redis, from inside the network of the
+deployment.
 
 The list of the users is [`deploy/redis/gateway.acl`](../../redis/gateway.acl),
 and the two users of the deployment are `gateway` and `gateway-control`.
@@ -363,9 +461,69 @@ A deployment whose services fail to start with a name they cannot find
 — `getaddrinfo ENOTFOUND …postgres.database.azure.com` — is a
 deployment whose zone of the database is not linked to its network.
 
-The zone of the cache is not linked by the templates: the cache is
-reached through a private endpoint, and Azure writes the link of the
-zone of an endpoint when it writes its zone group.
+The zone of the cache is linked to the network of the deployment by the
+templates, like the zone of the database and the zone of the vault: the
+resolver of Azure answers a zone for the networks that are linked to it,
+and the records that the zone group of the private endpoint writes are
+not answered by the resolver of a network that is not linked to the
+zone.
+
+### The zone of the cache
+
+The cache is an Azure Managed Redis, and its name is a name of the zone
+of the private names of Azure Managed Redis:
+`privatelink.redis.azure.net`. The name of the cache is
+`<the-name-of-the-cache>.<the-region>.redis.azure.net`.
+
+The private endpoint of the cache has the subresource `redisEnterprise`.
+The cache is served by the resource provider
+`Microsoft.Cache/redisEnterprise`, and the name of the subresource is
+the name of that provider, not the name of the service. Azure refuses
+the endpoint with any other name, and the answer is `GroupIds weren't
+provided or do not match 'redisEnterprise'`.
+
+The zone of the Azure Cache for Redis, `privatelink.redis.cache.windows.net`,
+and the zone of the Redis Enterprise,
+`privatelink.redisenterprise.cache.windows.net`, are the zones of the
+other services: a zone of one of those names holds the record of the
+cache in a zone the name of the cache is not a name of, and the name of
+the cache then resolves to its public address, which is closed.
+
+A deployment whose gateway reports that the session store is not
+reachable, and that the shared state is not reachable, with a `Connection
+timeout` in the log, is a deployment whose name of the cache resolves to
+the public address of the cache. The name of the cache is resolved from
+inside the network of the deployment:
+
+```bash
+# From a machine that is in the network of the deployment.
+nslookup <the-name-of-the-cache>.<the-region>.redis.azure.net
+```
+
+The answer is the private address of the endpoint of the cache, in the
+subnet of the private endpoints, and not a public address.
+
+The transport of the cache is TLS, and the address of the cache is a
+`rediss://` address. A gateway whose log says that the certificate of the
+cache cannot be verified is a gateway that is not given the authority of
+the certificate of the cache: the gateway reads it from
+`GATEWAY_SESSION_TLS_CA` and `GATEWAY_SHARED_STATE_TLS_CA`, and the
+templates of the deployment do not write them.
+
+The port of the cache is the port of the database of the cache, and the
+database of an Azure Managed Redis answers on the port `10000`: the
+port of the Redis of the community edition (`6379`) is not the port of
+the cache. The templates take the port the service reports and the port
+`10000` when the service reports none, and an address that names a port
+the cache does not answer on is an address that times out.
+
+The log of a gateway that cannot reach the cache says three things, and
+the three are one thing: the session store is not reachable, the shared
+state is not reachable, and the certificate of the deployment cannot be
+read. The certificate of the deployment lives in the shared state, and
+the client of the cache refuses every command while it is not connected:
+`The client is offline` is the offline queue of the client of the cache
+being disabled, and not a certificate that cannot be read.
 
 ## The state of a deployment is a secret store
 

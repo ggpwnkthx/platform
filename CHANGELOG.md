@@ -10,6 +10,248 @@ in the same commit as the code.
 
 ## Unreleased
 
+## 1.0.8
+
+### The outputs of the deployment are read as values
+
+The tool answers with the metadata of every output — whether it is
+sensitive and what its type is — and the value of an output is inside
+that metadata. The CLI read the metadata and called it the value: the
+outputs of the deployment were shown with their metadata, and a command
+that reads a name of the deployment out of them read nothing.
+
+### The log of the gateway names the shared state when it cannot be reached
+
+The certificate of the deployment lives in the shared state, and a
+gateway that cannot reach the shared state cannot read it: the log said
+that the certificate of the deployment could not be read, and an
+operator that reads it looks for a certificate that is wrong. The
+certificate is not wrong: the state that holds it is not there, and the
+log says that the shared state is not reachable.
+
+### The cache of the deployment is reached over the private address of its endpoint
+
+The zone of the private names of the cache was not linked to the network
+of the deployment: the templates linked the zone of the database and the
+zone of the vault, and they left the zone of the cache to Azure, which
+writes the link of the zone of a private endpoint when it writes its
+zone group. The resolver of Azure answers a zone for the networks that
+are linked to it, and for no other, and the records that the zone group
+of the endpoint writes are not answered for a network that is not
+linked to the zone. The name of the cache resolved to the public address
+of the cache, which is closed, and the services of the deployment could
+not reach the cache at all: the gateway reported that the session store
+was not reachable and that the shared state was not reachable, and it
+could not read the certificate of the deployment, which lives in the
+shared state.
+
+The zone of the cache is linked to the network of the deployment now,
+like the zone of the database and the zone of the vault.
+
+The port of the cache is the port of the database of the cache, and the
+database of an Azure Managed Redis answers on the port `10000`: the port
+of the Redis of the community edition (`6379`) is not the port of the
+cache. The templates take the port the service reports, and the port
+`10000` when the service reports none.
+
+### The public names of the deployment have a certificate
+
+The templates wrote the public names of the deployment as custom domains
+of the gateway, and they wrote them without a certificate: the provider
+of the infrastructure of Azure has no resource that binds the
+certificate of the environment of the container apps to a name of an
+application, and it writes a custom domain without a certificate. A name
+without a certificate is a name that answers in plain HTTP only, and the
+callers of the deployment reach the names over HTTPS.
+
+The wizard of the deployment binds the certificate of every public name
+after the apply, with the client of Azure: the environment of the
+container apps issues the certificate of the name and renews it, and the
+ingress of the environment terminates the TLS of the callers with it.
+The wizard says what it bound and what it could not bind, and a binding
+that does not go through is not a failure of the deployment: it is
+written again the next time the deployment goes on.
+
+### The deployment takes the images of the latest release, and it proves that they read the templates
+
+The wizard read the digests of the images of the release of the version of
+the CLI, and it refused a checkout whose templates were not the ones of
+that release: the images of a release and the templates of a deployment
+are one release, and an image that reads a document it does not know
+refuses to start.
+
+A commit is more than its documents: a commit that moves a private
+endpoint, or that keeps more than one revision of an application, writes
+the documents of the commit before it. The wizard compares the
+**contract** of the templates now — the route table, the names of the
+secrets, the files of the secrets and the variables of the environment —
+and the deployment runs the images of the release when the contract of
+the checkout and the contract of the release are the same. A checkout
+whose documents changed is refused, and the refusal names every document
+that changed.
+
+The release of the deployment is the latest one the platform published,
+and the digests of the images are written in the values of the
+deployment: a deployment runs the newest images that were published, and
+it stays the one that was applied. The release of the CLI is the release
+of the deployment when the latest one cannot be read. The tag of the
+latest release is read from the address of the releases and not from the
+API of the repository: the API answers a machine that asks it often with
+a refusal, and the address of the release answers always.
+
+### The cache of the deployment on Azure is reached over its own zone of the private names
+
+The cache of the deployment is an Azure Managed Redis, and the templates
+gave its private endpoint the zone of the Redis Enterprise,
+`privatelink.redisenterprise.cache.windows.net`, a zone the name of the
+cache is not a name of: the name of the cache resolved to the public
+address of the cache, which is closed, and the services of the
+deployment could not reach the cache at all — the gateway reported that
+the session store was not reachable and that the shared state was not
+reachable, and it could not read the certificate of the deployment,
+which lives in the shared state.
+
+The zone of the cache is the zone of the private names of Azure Managed
+Redis, `privatelink.redis.azure.net`, the zone of the name of the
+cache, `<the-name>.<the-region>.redis.azure.net`.
+
+The subresource of the endpoint stays `redisEnterprise`: the Azure
+Managed Redis is served by the resource provider
+`Microsoft.Cache/redisEnterprise`, and the name of the subresource is
+the name of that provider, not the name of the service. Azure refuses
+the endpoint with any other name, and the answer is `GroupIds weren't
+provided or do not match 'redisEnterprise'`.
+
+### The deployment on Azure writes its resources in the subscription of the deployment
+
+The provider of Azure wrote its resources in the subscription of the
+session of the operator, and the subscription of the session is not
+always the subscription of the deployment: a session that points at
+another subscription writes the whole of the deployment there. The
+wizard of the deployment reads the subscription of the session and
+writes it in the values of the deployment, and the templates pin it:
+the resources of the deployment are written in the subscription that
+the values name, and in no other. A value that is empty takes the
+subscription of the session, and the tenant of the deployment is pinned
+the same way: the application of Access is written in the tenant of the
+deployment, and not in the tenant of the session.
+
+### The two stacks of a deployment read Azure with the same provider
+
+The templates of the deployment pinned the provider of Azure to `~> 4.0`
+and the bootstrap pinned it to `~> 4.81`: two stacks of one deployment
+that read the resources of Azure with two versions of the provider are
+two stacks that write the state of one deployment with two dialects. The
+two pin the same version now, and the files of the lock of the providers
+say so.
+
+### The vault of the deployment has the private endpoint it promised
+
+The templates wrote that the services of the deployment reach the vault
+over a private endpoint, and no private endpoint was written: the vault
+was reachable from the internet, and the services of the deployment
+reached it over the public address. The vault has a private endpoint
+now, in the network of the deployment, with the zone of the private
+names of Azure linked to the network. The public address of the vault
+stays open, because the operator writes the secrets of the deployment
+in it from a machine that is not in the network of the deployment; the
+access of the vault is a role of Entra ID, and the role is what
+protects the secrets.
+
+### The backup of the database is kept in a second region when the server is zone redundant
+
+The backup of the server of PostgreSQL was kept in one region, and the
+server was zone redundant: a zone that is lost takes the server with it,
+and the backup of the server was in the zone that was lost. The backup is
+kept in a second region when the server is zone redundant, and a server
+that is not zone redundant has no standby zone and no second region.
+
+### The logs of the deployment are kept for ninety days, and the time is a value
+
+The workspace of the logs kept them for thirty days, and the time was
+written in the templates: a deployment could not keep its logs longer
+without a change of the templates. The time is a value of the
+deployment now, and it is ninety days by default.
+
+### The applications of the deployment keep more than one revision
+
+The applications of the deployment kept one revision, and a revision
+that was broken was replaced by another one while the first one was
+taken away: a deployment that was rolled stopped answering while it was
+rolled. They keep more than one revision now, and a revision that is
+written is the one that answers.
+
+### The state of the place where the state lives is not written in the checkout any more
+
+The bootstrap of the deployment is the only stack that runs without a
+backend, and its state is local: the state holds the name of the
+account of the state of the deployment, and it was written in the
+checkout of the templates, which every machine that clones the
+repository holds. The wizard of the deployment copies the templates of
+the bootstrap into the directory of the files of the deployment and runs
+them there, and the state of a bootstrap that ran before is taken with
+it.
+
+### The console of the deployment reaches the services at their addresses in the environment
+
+The console reached Access and the gateway at their public names, and
+the environment of the console is joined to the network of the
+deployment: the network has no road to the internet, and the call to a
+public name waits for a timeout that never ends. The console is ready
+when Access answers its discovery document, and it could only know it
+when Access answered, and Access never answered: the platform said
+that the probe of the readiness of the console timed out, and said
+nothing about why.
+
+The console reaches Access and the gateway at the addresses they answer
+on inside the environment now. The browsers are not the console: they
+reach the services at their public names, and the addresses they use
+are the ones the discovery document of Access carries.
+
+### The console answers its readiness inside the budget of the probe that asks for it
+
+The probe of the platform gives the console three seconds, and the
+console waited ten for the discovery document of Access: the probe
+timed out, and the console never answered the question it was asked.
+The readiness of the console is given the budget of a probe now, and a
+console that cannot reach Access answers that it is not ready.
+
+### The roles of the deployment are created by a job that can run again
+
+The job of the migration created the role of Access and stopped when
+the role was there: a job that runs again at every apply of the
+deployment left the role with the password of the first apply, and
+Access answered that the password of its role was refused. The roles
+are created when they are missing, and their passwords are written every
+time.
+
+The grants of the roles landed in the database of the maintenance of the
+server, and not in the database the roles work in: the grant of the
+schema `public` was a grant of another database, and the role of Access
+could not create the eight tables of its schema. The administrator of
+the server answers at the database of the platform now, and the owner
+of the schema of Data has the right to create the schemas of the
+service in the database of Data.
+
+### The token of the control plane holds a scope that the control plane knows
+
+The token of the operator held the scope `admin`, and the control plane
+knows three scopes: `read`, `operate` and `config`. A control plane
+that is given a map it does not understand stops before it listens: the
+deployment was up, and the control plane of it was not. The token
+holds the scope `operate` now, and the deployment serves its route table
+from a file of the vault and not from the store of the control plane.
+
+### The wizard of a deployment starts the job of the migration
+
+The job of the migration waits for the hand of the operator, and the
+services that read the database of the deployment do not start without
+the roles it creates: a deployment that was applied was a deployment
+whose Access answered that the password of its role was refused. The
+wizard starts the job when the deployment is applied, and the operator
+starts it by hand when the wizard could not.
+
+
 ## 1.0.7
 
 

@@ -10,6 +10,13 @@
 # the two that they do not reach keep their ingress to themselves. The
 # data of the deployment is reachable from the gateway and from nobody
 # else.
+#
+# Every application keeps more than one revision: a revision that is
+# broken is replaced by another one while the first one still answers,
+# and a deployment that is rolled does not stop answering while it is
+# rolled. The revision that is written is the one that answers, and the
+# revision before it is left behind until the deployment says it is
+# not needed.
 
 # The secrets that a service reads from a file.
 #
@@ -139,7 +146,7 @@ resource "azurerm_container_app" "gateway" {
   container_app_environment_id = azurerm_container_app_environment.platform.id
   name                         = local.names.gateway
   resource_group_name          = azurerm_resource_group.platform.name
-  revision_mode                = "Single"
+  revision_mode                = "Multiple"
 
   identity {
     type         = "UserAssigned"
@@ -336,7 +343,7 @@ resource "azurerm_container_app" "control" {
   container_app_environment_id = azurerm_container_app_environment.platform.id
   name                         = local.names.control
   resource_group_name          = azurerm_resource_group.platform.name
-  revision_mode                = "Single"
+  revision_mode                = "Multiple"
 
   identity {
     type         = "UserAssigned"
@@ -484,7 +491,7 @@ resource "azurerm_container_app" "access" {
   container_app_environment_id = azurerm_container_app_environment.platform.id
   name                         = local.names.access
   resource_group_name          = azurerm_resource_group.platform.name
-  revision_mode                = "Single"
+  revision_mode                = "Multiple"
 
   identity {
     type         = "UserAssigned"
@@ -654,7 +661,7 @@ resource "azurerm_container_app" "data" {
   container_app_environment_id = azurerm_container_app_environment.platform.id
   name                         = local.names.data
   resource_group_name          = azurerm_resource_group.platform.name
-  revision_mode                = "Single"
+  revision_mode                = "Multiple"
 
   identity {
     type         = "UserAssigned"
@@ -821,7 +828,7 @@ resource "azurerm_container_app" "console" {
   container_app_environment_id = azurerm_container_app_environment.platform.id
   name                         = local.names.console
   resource_group_name          = azurerm_resource_group.platform.name
-  revision_mode                = "Single"
+  revision_mode                = "Multiple"
 
   identity {
     type         = "UserAssigned"
@@ -874,13 +881,27 @@ resource "azurerm_container_app" "console" {
         name  = "CONSOLE_PUBLIC_URL"
         value = local.console_url
       }
+      # The console is a client of Access and of the gateway, and it
+      # reaches them at the addresses they answer on inside the
+      # environment of the deployment.
+      #
+      # The environment is joined to the network of the deployment, and
+      # the network has no road to the internet: the public name of
+      # Access is a name the console cannot resolve into a road it can
+      # walk, and the call to it waits for a timeout that the probe of
+      # the platform does not wait for. The console is ready when Access
+      # answers, and it can only know it when it reaches it.
+      #
+      # The browsers are not the console: they reach Access and the
+      # gateway at their public names, and the addresses they use are
+      # the ones the discovery document of Access carries.
       env {
         name  = "CONSOLE_ACCESS_URL"
-        value = local.access_issuer
+        value = "http://${local.access_fqdn}:8081"
       }
       env {
         name  = "CONSOLE_GATEWAY_URL"
-        value = local.gateway_url
+        value = "http://${local.gateway_fqdn}:8080"
       }
       env {
         name  = "CONSOLE_CLIENT_ID"
@@ -980,12 +1001,49 @@ resource "azurerm_container_app_job" "migrate" {
       cpu    = 0.25
       memory = "0.25Gi"
 
+      # The roles of the deployment, and the rights they need.
+      #
       # The role of Access owns the tables of Access, and it cannot do
-      # the work of the administrator of the server. The role is created
-      # once, before the first start of Access.
+      # the work of the administrator of the server. The role of Data
+      # owns the schemas of Data, and the migrations create them.
+      #
+      # The job of the migration runs again at every apply of the
+      # deployment, and the roles are there after the first run: a job
+      # that creates a role and stops when the role is there leaves the
+      # services with a password they do not have, and they answer that
+      # the password of the role is refused. The roles are created when
+      # they are missing, and their passwords are written every time.
+      #
+      # The grants belong to the database the roles work in: the
+      # administrator of the server answers at the database of the
+      # platform, and the schema `public` of that database is the one
+      # the tables of Access are created in.
       command = [
         "sh", "-c",
-        "psql \"$${DATA_ADMIN_DATABASE_URL}\" -v ON_ERROR_STOP=1 -c \"create role access_app login password '$${ACCESS_APP_PASSWORD}'\" -c 'grant usage, create on schema public to access_app'",
+        <<-SCRIPT
+        set -eu
+
+        admin="$${DATA_ADMIN_DATABASE_URL}"
+        access_password="$${ACCESS_APP_PASSWORD}"
+        owner_password="$${DATA_OWNER_PASSWORD}"
+
+        # The role of Access: the service creates the eight tables of
+        # its schema when it starts, and it creates them as this role.
+        if ! psql "$admin" -tAc "select 1 from pg_roles where rolname = 'access_app'" | grep -q 1; then
+          psql "$admin" -v ON_ERROR_STOP=1 -c "create role access_app with login password '$access_password'"
+        fi
+        psql "$admin" -v ON_ERROR_STOP=1 -c "alter role access_app with login password '$access_password'"
+        psql "$admin" -v ON_ERROR_STOP=1 -c "grant usage, create on schema public to access_app"
+
+        # The owner of the schema of Data: the migrations create the
+        # schemas of the service, and a role that creates a schema
+        # needs the right to create one in the database of the service.
+        if ! psql "$admin" -tAc "select 1 from pg_roles where rolname = 'data_owner'" | grep -q 1; then
+          psql "$admin" -v ON_ERROR_STOP=1 -c "create role data_owner with login password '$owner_password'"
+        fi
+        psql "$admin" -v ON_ERROR_STOP=1 -c "alter role data_owner with login password '$owner_password'"
+        psql "$admin" -v ON_ERROR_STOP=1 -c "grant create on database \"${local.data_database}\" to data_owner"
+        SCRIPT
       ]
 
       env {
@@ -995,6 +1053,10 @@ resource "azurerm_container_app_job" "migrate" {
       env {
         name        = "ACCESS_APP_PASSWORD"
         secret_name = "access-app-password"
+      }
+      env {
+        name        = "DATA_OWNER_PASSWORD"
+        secret_name = "data-owner-password"
       }
     }
 

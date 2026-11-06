@@ -20,6 +20,15 @@ provider "azurerm" {
 
   resource_provider_registrations = "none"
 
+  # The place where the state of the deployment lives is created in the
+  # subscription of the deployment, and in no other: a provider that
+  # takes the subscription of the session creates the state of the
+  # deployment wherever the session of the operator happens to point
+  # at. The wizard of the deployment writes the subscription of the
+  # deployment in the values of the place, and a value that is empty
+  # takes the subscription of the session.
+  subscription_id = var.subscription_id != "" ? var.subscription_id : null
+
   # The shared key of the account of the state is off, and the provider
   # signs its requests to the account with that key unless it is told
   # otherwise: the access of the operator is a role of Entra ID, and
@@ -85,6 +94,17 @@ variable "operator_principal_id" {
   description = "The identifier of the identity of the operator, which reads and writes the state of the deployment."
   type        = string
   default     = ""
+}
+
+variable "subscription_id" {
+  description = "The identifier of the subscription of Azure the place where the state lives is created in."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.subscription_id == "" || can(regex("^[0-9a-fA-F-]{36}$", var.subscription_id))
+    error_message = "The subscription is the identifier of a subscription of Azure."
+  }
 }
 
 locals {

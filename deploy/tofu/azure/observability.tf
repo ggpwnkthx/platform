@@ -14,7 +14,7 @@ resource "azurerm_log_analytics_workspace" "platform" {
   resource_group_name = azurerm_resource_group.platform.name
   location            = azurerm_resource_group.platform.location
   sku                 = "PerGB2018"
-  retention_in_days   = 30
+  retention_in_days   = var.log_analytics_retention_days
   tags                = local.tags
 }
 

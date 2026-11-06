@@ -33,3 +33,11 @@ operator_addresses = ["203.0.113.4/30"]
 #
 #   az account show --query user.id --output tsv
 operator_principal_id = "00000000-0000-0000-0000-000000000000"
+
+# The subscription of Azure the place where the state of the deployment
+# lives is created in. The wizard of the deployment reads it from the
+# client of Azure and writes it here. A value that is empty takes the
+# subscription of the session of the operator:
+#
+#   az account show --query id --output tsv
+subscription_id = "00000000-0000-0000-0000-000000000000"

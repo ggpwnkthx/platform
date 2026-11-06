@@ -15,6 +15,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { CliFailure } from '../domains/failure'
 import {
+  type AfterApply,
   ENVIRONMENTS,
   type Asker,
   type DeploymentProvider,
@@ -51,6 +52,12 @@ export const AZURE_QUESTIONS: readonly Question[] = [
   {
     name: 'tenant_id',
     summary: 'the tenant of Entra ID that holds the application of Access',
+    kind: 'given',
+    shape: 'uuid',
+  },
+  {
+    name: 'subscription_id',
+    summary: 'the subscription of Azure the deployment is written in',
     kind: 'given',
     shape: 'uuid',
   },
@@ -205,6 +212,11 @@ export const AZURE_QUESTIONS: readonly Question[] = [
   {
     name: 'trusted_proxy_cidrs',
     summary: 'the addresses of the proxies the gateway trusts',
+    kind: 'given',
+  },
+  {
+    name: 'log_analytics_retention_days',
+    summary: 'the number of days the logs of the deployment are kept',
     kind: 'given',
   },
 ]
@@ -1123,6 +1135,160 @@ async function factsOf(binary: string): Promise<Record<string, string>> {
 }
 
 /**
+ * Reads a name of the answers of the templates.
+ *
+ * The answers of the templates hold the names of the resources of the
+ * deployment, and the provider reads them there: a name that is
+ * written in the templates and in the code of the provider is a name
+ * that drifts.
+ *
+ * @param outputs the answers of the templates.
+ * @param path the way to the name in the answers.
+ */
+function answerOf(outputs: Readonly<Record<string, unknown>>, path: readonly string[]): string {
+  let value: unknown = outputs
+  for (const name of path) {
+    if (typeof value !== 'object' || value === null) return ''
+    value = (value as Record<string, unknown>)[name]
+  }
+  return typeof value === 'string' ? value : ''
+}
+
+/**
+ * Reads the names of the answers of the templates.
+ *
+ * @param outputs the answers of the templates.
+ * @param name the name of the answer that holds the names.
+ */
+function namesOf(outputs: Readonly<Record<string, unknown>>, name: string): string[] {
+  const value = outputs[name]
+  if (typeof value !== 'object' || value === null) return []
+  return Object.values(value as Record<string, unknown>).filter(
+    (entry): entry is string => typeof entry === 'string' && entry !== ''
+  )
+}
+
+/**
+ * Binds the certificate of every public name of the deployment.
+ *
+ * The templates of the deployment write the public names of the
+ * deployment as custom domains of the application of the gateway, and
+ * they write them without a certificate: the provider of the
+ * infrastructure of Azure has no resource that binds the certificate of
+ * the environment of the container apps to a custom domain, and a
+ * custom domain without a certificate is a name that answers in plain
+ * HTTP only.
+ *
+ * The client of Azure writes the binding: it asks the environment of
+ * the container apps for the certificate of the name, the environment
+ * issues the certificate and renews it, and the ingress of the
+ * environment terminates the TLS of the callers with it.
+ *
+ * The binding waits for the records of DNS of the name: the
+ * environment proves the ownership of a name with them, and a name
+ * whose records are not in place yet is a name the environment cannot
+ * prove. The step says what it did and what it could not do, and the
+ * deployment is applied either way: the certificate is issued in the
+ * background, and the binding is written again the next time the
+ * deployment goes on.
+ *
+ * @param binary the path of the client of Azure.
+ * @param context what the deployment applied.
+ */
+async function certificatesOf(binary: string, context: AfterApply): Promise<string[]> {
+  const notes: string[] = []
+  if (context.values.public_names_enabled !== 'true') return notes
+
+  const application = answerOf(context.outputs, ['container_apps', 'gateway'])
+  const environment = answerOf(context.outputs, ['container_app_environment'])
+  const group = answerOf(context.outputs, ['resource_group_name'])
+  const names = namesOf(context.outputs, 'public_names')
+  if (application === '' || environment === '' || group === '' || names.length === 0) {
+    return [
+      'the certificate of the public names is not bound: the templates did not answer the names of the deployment',
+    ]
+  }
+
+  for (const hostname of names) {
+    const answer = await run(binary, [
+      'containerapp',
+      'hostname',
+      'bind',
+      '--hostname',
+      hostname,
+      '--name',
+      application,
+      '--resource-group',
+      group,
+      '--environment',
+      environment,
+      '--validation-method',
+      'HTTP',
+    ])
+    if (answer.status === 0) {
+      notes.push(`the certificate of the name ${hostname} is bound to the gateway`)
+      continue
+    }
+    const reason = answer.stderr.trim() || answer.stdout.trim() || 'the client of Azure refused'
+    notes.push(
+      `the certificate of the name ${hostname} is not bound to the gateway: ${reason}: the binding is written again the next time the deployment goes on`
+    )
+  }
+  return notes
+}
+
+/**
+ * Starts the job of the migration of the schema.
+ *
+ * The templates of the deployment write the job of the migration, and
+ * the job waits for the hand of the operator: it creates the roles of
+ * the deployment, and the services that read the database of the
+ * deployment do not start without them. A deployment that is applied
+ * and whose job waits is a deployment whose Access answers that the
+ * password of its role is refused.
+ *
+ * The wizard starts the job when the deployment is applied, and the job
+ * runs again at every apply: the job creates the roles that are
+ * missing and writes the passwords of the roles that are there, and
+ * the migrations it applies are the migrations that are missing.
+ *
+ * The job is started by the client of Azure, and a client that refuses
+ * is told what it refused: the deployment is applied either way, and
+ * the operator starts the job by hand.
+ *
+ * @param binary the path of the client of Azure.
+ * @param context what the deployment applied.
+ */
+async function migrationOf(binary: string, context: AfterApply): Promise<string[]> {
+  const job = answerOf(context.outputs, ['migration_job'])
+  const group = answerOf(context.outputs, ['resource_group_name'])
+  if (job === '' || group === '') {
+    return [
+      'the migration of the schema is not started: the templates did not answer the job of the migration',
+    ]
+  }
+
+  const answer = await run(binary, [
+    'containerapp',
+    'job',
+    'start',
+    '--name',
+    job,
+    '--resource-group',
+    group,
+  ])
+  if (answer.status === 0) {
+    return [
+      `the migration of the schema is started: the job ${job} creates the roles of the deployment and applies the migrations of the schema`,
+    ]
+  }
+  const reason = answer.stderr.trim() || answer.stdout.trim() || 'the client of Azure refused'
+  return [
+    `the migration of the schema is not started: ${reason}: the job ${job} is started by hand, and the services that read the database of the deployment do not start without their roles`,
+  ]
+}
+
+/**
  * The provider of a deployment on Microsoft Azure.
  *
  * @param questions the questions of the deployment.
@@ -1141,5 +1307,29 @@ export function azureProvider(
       leftoverOf(azureCli(environment), reason, region),
     importablesOf: (reason: string) => importablesOf(reason),
     release: async (leftover: Leftover) => releaseOf(azureCli(environment), leftover),
+    afterApply: async (context: AfterApply) => {
+      const binary = azureCli(environment)
+      const notes: string[] = []
+      try {
+        notes.push(...(await certificatesOf(binary, context)))
+      } catch (error) {
+        // The deployment is applied, and the client of Azure is not
+        // there: the binding is written again the next time the
+        // deployment goes on.
+        notes.push(
+          `the certificate of the public names is not bound: ${error instanceof Error ? error.message : String(error)}`
+        )
+      }
+      try {
+        notes.push(...(await migrationOf(binary, context)))
+      } catch (error) {
+        // The deployment is applied, and the client of Azure is not
+        // there: the job is started by hand.
+        notes.push(
+          `the migration of the schema is not started: ${error instanceof Error ? error.message : String(error)}`
+        )
+      }
+      return notes
+    },
   }
 }

@@ -26,9 +26,12 @@ resource "azurerm_key_vault" "platform" {
   # vault, and a policy is a credential.
   rbac_authorization_enabled = true
 
-  # The services of the deployment reach the vault over the internet and
-  # over a private endpoint; the README describes the private endpoint
-  # that closes the second way in.
+  # The services of the deployment reach the vault over the private
+  # endpoint of the vault, and the name of the vault resolves to the
+  # private address inside the network of the deployment. The public
+  # address of the vault stays open: the operator writes the secrets of
+  # the deployment in it from a machine that is not in the network of
+  # the deployment, and the access of the vault is a role of Entra ID.
   public_network_access_enabled = true
 
   tags = local.tags

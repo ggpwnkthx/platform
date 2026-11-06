@@ -30,7 +30,7 @@ For development, [`packages/console/.env.example`](../../packages/console/.env.e
 | `CONSOLE_SESSION_TTL_MS` | | `28800000` (8 hours) | Idle session lifetime. Between `60000` (one minute) and 30 days. |
 | `CONSOLE_SESSION_MAX_AGE_MS` | | `86400000` (24 hours) | Maximum session age. Between `60000` (one minute) and 90 days. |
 | `CONSOLE_COOKIE_SECURE` | | `true` if the public URL is https | `true` or `false`: whether cookies carry `Secure`. A production console served over http must set `false`. |
-| `CONSOLE_PROBE_TIMEOUT_MS` | | `2000` | Timeout for probing a service, `100` to `60000`. |
+| `CONSOLE_PROBE_TIMEOUT_MS` | | `2000` | Timeout for probing a service, `100` to `60000`. The readiness of the console (`/readyz`) uses it too: keep it below the timeout of the readiness probe of the deployment, or the probe of the platform times out before the console answers. |
 | `CONSOLE_REQUEST_TIMEOUT_MS` | | `10000` | Timeout for a service call, `100` to `120000`. |
 | `CONSOLE_LOG_LEVEL` | | `info` | `debug`, `info`, `warn` or `error`. |
 

@@ -163,6 +163,38 @@ output "container_apps" {
   }
 }
 
+# The job of the migration of the schema.
+#
+# The job waits for the hand of the operator: it creates the roles of
+# the deployment, and the services that read the database of the
+# deployment do not start without them. The wizard of the deployment
+# starts the job when the deployment is applied.
+output "migration_job" {
+  description = "The name of the job of the migration of the schema."
+  value       = azurerm_container_app_job.migrate.name
+}
+
+# The environment of the container apps of the deployment.
+#
+# The environment holds the certificate of the public names: it issues
+# the certificate of a name and renews it, and the ingress of the
+# environment terminates the TLS of the callers with it.
+output "container_app_environment" {
+  description = "The name of the environment of the container apps of the deployment."
+  value       = azurerm_container_app_environment.platform.name
+}
+
+# The public names of the deployment.
+#
+# The names are the addresses the callers reach, and every name of the
+# deployment is a name of the gateway: the gateway serves the three
+# names, and the certificate of a name is the certificate of the
+# environment of the container apps.
+output "public_names" {
+  description = "The public names of the deployment."
+  value       = local.public_names
+}
+
 # The addresses of the state of the deployment, without the credentials.
 output "postgres_host" {
   description = "The address of the server of PostgreSQL."

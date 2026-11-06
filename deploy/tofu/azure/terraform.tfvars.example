@@ -39,6 +39,13 @@ registry_name  = ""
 # The tenant of Entra ID that holds the application of Access.
 tenant_id = "00000000-0000-0000-0000-000000000000"
 
+# The subscription of Azure the deployment is written in. The wizard of
+# the deployment reads it from the client of Azure and writes it here.
+# The resources of the deployment are written in this subscription and
+# in no other: a value that is empty takes the subscription of the
+# session of the operator.
+subscription_id = "00000000-0000-0000-0000-000000000000"
+
 # The identity of the operator. It writes the secrets of the deployment
 # in the vault of the deployment, and it pushes the console to the
 # registry of the deployment. The wizard of the deployment reads it from
@@ -127,6 +134,16 @@ services = {
   data    = { min_replicas = 2, max_replicas = 6, cpu = 1.0, memory = "2Gi" }
   console = { min_replicas = 1, max_replicas = 2, cpu = 0.5, memory = "1Gi" }
 }
+
+# --------------------------------------------------------------------------
+# The logs
+#
+# The number of days the logs of the deployment are kept in the
+# workspace of the deployment. The workspace keeps them for ninety days
+# by default, and it keeps them for two years at most.
+# --------------------------------------------------------------------------
+
+log_analytics_retention_days = 90
 
 # --------------------------------------------------------------------------
 # The PostgreSQL
