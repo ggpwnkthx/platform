@@ -7,6 +7,21 @@ ARG BUN_DIGEST=sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349437206c6b0b7
 ARG VERSION=1.0.5
 ARG REVISION=unknown
 
+# --------------------------------------------------------------- base image
+#
+# The base image is pinned by the digest of a build of October, and
+# Alpine has published a fix for a heap overflow in zlib since then: the
+# image carries the library that the fix is for, and the scan of the
+# image refuses it.
+#
+# The library is patched in the image, and the patch is the one of
+# Alpine: the version of the fix is the floor of the patch, and the
+# patches that follow it are taken as well. The base image is a build of
+# a tag that was not rebuilt, and the tag is not the image that the
+# scan of the image accepts.
+FROM oven/bun:${BUN_VERSION}-alpine@${BUN_DIGEST} AS base
+RUN apk add --no-cache "zlib>=1.3.2-r1"
+
 # ---------------------------------------------------------------- dependencies
 #
 # The dependencies of the platform are one tree: the lockfile of the root
@@ -24,7 +39,7 @@ ARG REVISION=unknown
 #
 # The development dependencies (the fixtures of the tests) are not part of
 # the image of the gateway.
-FROM oven/bun:${BUN_VERSION}-alpine@${BUN_DIGEST} AS runtime-deps
+FROM base AS runtime-deps
 WORKDIR /app
 COPY package.json bun.lock ./
 COPY packages/gateway/package.json ./packages/gateway/
@@ -45,7 +60,7 @@ RUN bun install --frozen-lockfile --production --filter '@platform/gateway' --li
 #
 # This stage is never used for the gateway. It refuses to start in an
 # environment that is marked as production.
-FROM oven/bun:${BUN_VERSION}-alpine@${BUN_DIGEST} AS fixtures
+FROM base AS fixtures
 WORKDIR /app/packages/gateway
 ENV NODE_ENV=development
 # The fixtures need the development dependencies (the identity provider is
@@ -72,7 +87,7 @@ CMD ["services/fixtures/oidc-provider.ts"]
 # the gateway: it is the service the gateway asks about the workspaces, and
 # a deployment that has its own does not need this one. The implementation
 # uses nothing but the runtime, so the image carries no dependency.
-FROM oven/bun:${BUN_VERSION}-alpine@${BUN_DIGEST} AS access-service
+FROM base AS access-service
 WORKDIR /app/packages/gateway
 ENV NODE_ENV=production
 
@@ -88,7 +103,7 @@ CMD ["services/access-service.ts"]
 # The control plane is a separate process. It is the same code and the same
 # dependencies, and it is compiled into a binary of its own for the
 # deployments that run a binary and not the sources.
-FROM oven/bun:${BUN_VERSION}-alpine@${BUN_DIGEST} AS control-binary
+FROM base AS control-binary
 WORKDIR /app/packages/gateway
 ENV NODE_ENV=production
 
@@ -110,7 +125,7 @@ ENTRYPOINT ["/app/bin/gateway-control"]
 #
 # The production image contains the gateway and nothing else. The fixtures
 # with their known accounts and their static policies are not copied into it.
-FROM oven/bun:${BUN_VERSION}-alpine@${BUN_DIGEST} AS runtime
+FROM base AS runtime
 WORKDIR /app/packages/gateway
 
 ARG VERSION

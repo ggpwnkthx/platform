@@ -362,6 +362,20 @@ The name of a secret of a vault is a name of dashes, and the name of a
 file of the platform is a name of dots: the templates write the file
 of the key under the name that every other deployment gives it.
 
+### The images of the platform carry the fix of the advisory of zlib
+
+Alpine has published a fix for a heap overflow in `zlib`, and the base
+image of the images of the platform is a build of a tag that was not
+rebuilt: the images carried the library that the fix is for, and the
+scan of the image refused every image of the platform.
+
+The images patch the library in the base image, and the patch is the one
+of Alpine: the version of the fix is the floor of the patch, and the
+patches that follow it are taken as well. Every stage of every image
+starts from the stage that patches the library, and the check of the
+images holds them to that rule: a stage that starts from the image of
+the runtime carries the library that the fix is for.
+
 ### The release of the binaries installs the dependencies of the platform before it packs the client
 
 The release of the binaries packed the client of Data without

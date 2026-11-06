@@ -10,13 +10,28 @@ ARG BUN_DIGEST=sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349437206c6b0b7
 ARG VERSION=1.0.5
 ARG REVISION=unknown
 
+# --------------------------------------------------------------- base image
+#
+# The base image is pinned by the digest of a build of October, and
+# Alpine has published a fix for a heap overflow in zlib since then: the
+# image carries the library that the fix is for, and the scan of the
+# image refuses it.
+#
+# The library is patched in the image, and the patch is the one of
+# Alpine: the version of the fix is the floor of the patch, and the
+# patches that follow it are taken as well. The base image is a build of
+# a tag that was not rebuilt, and the tag is not the image that the
+# scan of the image accepts.
+FROM oven/bun:${BUN_VERSION}-alpine@${BUN_DIGEST} AS base
+RUN apk add --no-cache "zlib>=1.3.2-r1"
+
 # ----------------------------------------------------------------------- build
 #
 # The dependencies of the platform are one tree: the lockfile of the root
 # holds every workspace, and the packages of every workspace are copied
 # because the installer reads them. The build needs Vite and HonoX; the
 # image does not: the server Vite builds holds what it needs.
-FROM oven/bun:${BUN_VERSION}-alpine@${BUN_DIGEST} AS build
+FROM base AS build
 WORKDIR /app
 COPY package.json bun.lock ./
 COPY packages/gateway/package.json ./packages/gateway/
@@ -42,7 +57,7 @@ RUN bun run --cwd packages/console build
 # The image holds the build of the console and the process that serves it,
 # and nothing else: no module of the development, no source of a page, no
 # secret. The credentials are the environment the deployment gives it.
-FROM oven/bun:${BUN_VERSION}-alpine@${BUN_DIGEST} AS runtime
+FROM base AS runtime
 WORKDIR /app/packages/console
 
 ARG VERSION

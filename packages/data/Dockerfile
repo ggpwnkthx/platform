@@ -10,6 +10,21 @@ ARG BUN_DIGEST=sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349437206c6b0b7
 ARG VERSION=1.0.5
 ARG REVISION=unknown
 
+# --------------------------------------------------------------- base image
+#
+# The base image is pinned by the digest of a build of October, and
+# Alpine has published a fix for a heap overflow in zlib since then: the
+# image carries the library that the fix is for, and the scan of the
+# image refuses it.
+#
+# The library is patched in the image, and the patch is the one of
+# Alpine: the version of the fix is the floor of the patch, and the
+# patches that follow it are taken as well. The base image is a build of
+# a tag that was not rebuilt, and the tag is not the image that the
+# scan of the image accepts.
+FROM oven/bun:${BUN_VERSION}-alpine@${BUN_DIGEST} AS base
+RUN apk add --no-cache "zlib>=1.3.2-r1"
+
 # ---------------------------------------------------------------- dependencies
 #
 # The dependencies of the platform are one tree: the lockfile of the root
@@ -27,7 +42,7 @@ ARG REVISION=unknown
 #
 # The development dependencies (the types of the tests) are not part of the
 # image of the service.
-FROM oven/bun:${BUN_VERSION}-alpine@${BUN_DIGEST} AS runtime-deps
+FROM base AS runtime-deps
 WORKDIR /app
 COPY package.json bun.lock ./
 COPY packages/gateway/package.json ./packages/gateway/
@@ -45,7 +60,7 @@ RUN bun install --frozen-lockfile --production --filter '@platform/data' --linke
 # secret in it: the credentials of the database, of Access and of the
 # signature are files that the deployment mounts, and they are read at the
 # start of the process.
-FROM oven/bun:${BUN_VERSION}-alpine@${BUN_DIGEST} AS runtime
+FROM base AS runtime
 WORKDIR /app/packages/data
 
 ARG VERSION
