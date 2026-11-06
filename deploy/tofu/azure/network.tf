@@ -200,8 +200,8 @@ resource "azurerm_private_endpoint" "redis" {
     # is the name of that provider, not the name of the service. Azure
     # refuses the endpoint with any other name: the answer is
     # `GroupIds weren't provided or do not match 'redisEnterprise'`.
-    subresource_names              = ["redisEnterprise"]
-    is_manual_connection           = false
+    subresource_names    = ["redisEnterprise"]
+    is_manual_connection = false
   }
 
   private_dns_zone_group {

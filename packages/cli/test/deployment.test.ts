@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
@@ -28,6 +28,7 @@ import {
   offeredOf,
   recoverLeftover,
 } from '../src/runtime/commands/deploy'
+import { VERSION } from '../src/runtime/version'
 import { FakeInfrastructure } from './support'
 
 /**
@@ -3084,19 +3085,28 @@ async function repositoryOf(directory: string): Promise<string> {
   git('config', 'user.name', 'the operator')
   git('add', '.')
   git('commit', '--quiet', '--message', 'the templates')
-  git('tag', 'v1.0.7')
+  git('tag', `v${VERSION}`)
   return templates
 }
 
 /**
  * The release of the platform, as the tests answer with it.
  *
+ * The release the wizard reads is the release of the line of the CLI:
+ * the wizard pairs the images of a release with the templates of a
+ * release, and a release of another line is a release it cannot prove
+ * anything about. The answer is the release of the version of the CLI,
+ * and the version moves with the commit: the tests do not read the
+ * release of the repository, and they do not fail when a release is
+ * published.
+ *
  * @returns the fetch that answers with the release.
  */
 function releasing(): typeof globalThis.fetch {
+  const tag = `v${VERSION}`
   const digests = {
-    version: '1.0.7',
-    tag: 'v1.0.7',
+    version: VERSION,
+    tag,
     registry: 'ghcr.io/ggpwnkthx',
     images: {
       gateway: `ghcr.io/ggpwnkthx/gateway@sha256:${'1'.repeat(64)}`,
@@ -3108,12 +3118,12 @@ function releasing(): typeof globalThis.fetch {
   return (async (input: string | URL | Request) => {
     const url = typeof input === 'string' ? input : input.toString()
     if (url.endsWith('/releases/latest')) {
-      return new Response(JSON.stringify({ tag_name: 'v1.0.7' }), {
+      return new Response(JSON.stringify({ tag_name: tag }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       })
     }
-    if (url.endsWith('/v1.0.7/digests.json')) {
+    if (url.endsWith(`/${tag}/digests.json`)) {
       return new Response(JSON.stringify(digests), {
         status: 200,
         headers: { 'content-type': 'application/json' },
@@ -3122,6 +3132,27 @@ function releasing(): typeof globalThis.fetch {
     return new Response('not found', { status: 404 })
   }) as typeof globalThis.fetch
 }
+
+/**
+ * The release of the platform, as the tests answer with it.
+ *
+ * The wizard reads the release of the platform from the repository of
+ * the releases, and the tests do not read the repository: they answer
+ * with the release of the line of the CLI. The wizard pairs the images
+ * of a release with the templates of a release, and a release of
+ * another line is a release it cannot prove anything about: a test
+ * that read the repository would fail the day a release is published,
+ * and the day before it.
+ */
+const realFetch = globalThis.fetch
+
+beforeAll(() => {
+  globalThis.fetch = releasing()
+})
+
+afterAll(() => {
+  globalThis.fetch = realFetch
+})
 
 describe('the templates of the checkout and the images of the release', () => {
   test('the deployment runs when the documents the images read did not change', async () => {
@@ -3164,7 +3195,7 @@ describe('the templates of the checkout and the images of the release', () => {
       ])
       expect(status).toBe(0)
       expect(progress.join('\n')).toContain(
-        'the templates of the checkout are ahead of the release v1.0.7'
+        `the templates of the checkout are ahead of the release v${VERSION}`
       )
     } finally {
       globalThis.fetch = real

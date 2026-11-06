@@ -24,16 +24,18 @@ const root = join(import.meta.dir, '..')
 const IMAGES = ['gateway', 'access', 'data', 'console'] as const
 
 /**
- * The version of the fix of the advisory of the library.
+ * The advisories the base image has to carry the fix of.
  *
  * Alpine published the fix of the heap overflow of `zlib` in the
- * revision `1.3.2-r1` of the package: the images carry that revision
- * or a later one.
+ * revision `1.3.2-r1` of the package, and the fix of the integer
+ * overflow of `musl` in the revision `1.2.6-r3`: the images carry that
+ * revision or a later one.
  */
-const ZLIB_FIX = '1.3.2-r1'
-
-/** The advisory that the fix is for. */
-const ADVISORY = 'CVE-2026-85091'
+const ADVISORIES = [
+  { package: 'zlib', fix: '1.3.2-r1', advisory: 'CVE-2026-85091' },
+  { package: 'musl', fix: '1.2.6-r3', advisory: 'CVE-2026-107891' },
+  { package: 'musl-utils', fix: '1.2.6-r3', advisory: 'CVE-2026-107891' },
+] as const
 
 /** A stage of an image. */
 interface Stage {
@@ -126,28 +128,32 @@ describe('the images of the platform', () => {
         findings.push(`${service}: the image patches no library of the base image`)
         continue
       }
-      const constraint = /zlib(>=|<=|>|<|=|~)?([0-9]+(?:\.[0-9]+)*(?:-r[0-9]+)?)/.exec(patch)
-      if (constraint === null) {
-        findings.push(`${service}: the image does not patch zlib`)
-        continue
-      }
-      const operator = constraint[1] ?? '='
-      const version = constraint[2]!
-      const read = versionOf(`${operator}${version}`)
-      if (read === undefined) {
-        findings.push(`${service}: the constraint of zlib is not a version: ${constraint[0]}`)
-        continue
-      }
-      // The patch is a floor: the fix of the advisory, or a later
-      // revision of the library.
-      if (operator !== '>=' && operator !== '=') {
-        findings.push(`${service}: the patch of zlib is not a floor: ${constraint[0]}`)
-        continue
-      }
-      if (compare(version, ZLIB_FIX) < 0) {
-        findings.push(
-          `${service}: zlib ${version} is older than the fix of ${ADVISORY}: ${ZLIB_FIX}`
-        )
+      for (const { package: name, fix, advisory } of ADVISORIES) {
+        const constraint = new RegExp(
+          `${name}(>=|<=|>|<|=|~)?([0-9]+(?:\\.[0-9]+)*(?:-r[0-9]+)?)`
+        ).exec(patch)
+        if (constraint === null) {
+          findings.push(`${service}: the image does not patch ${name}`)
+          continue
+        }
+        const operator = constraint[1] ?? '='
+        const version = constraint[2]!
+        const read = versionOf(`${operator}${version}`)
+        if (read === undefined) {
+          findings.push(`${service}: the constraint of ${name} is not a version: ${constraint[0]}`)
+          continue
+        }
+        // The patch is a floor: the fix of the advisory, or a later
+        // revision of the library.
+        if (operator !== '>=' && operator !== '=') {
+          findings.push(`${service}: the patch of ${name} is not a floor: ${constraint[0]}`)
+          continue
+        }
+        if (compare(version, fix) < 0) {
+          findings.push(
+            `${service}: ${name} ${version} is older than the fix of ${advisory}: ${fix}`
+          )
+        }
       }
     }
     expect(findings).toEqual([])

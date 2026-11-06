@@ -251,6 +251,18 @@ whose Access answered that the password of its role was refused. The
 wizard starts the job when the deployment is applied, and the operator
 starts it by hand when the wizard could not.
 
+### The images of the platform carry the fix of the advisory of musl
+
+Alpine has published a fix for an integer overflow in `musl`, and the
+base image of the images of the platform is a build of a tag that was
+not rebuilt: the images carried the library that the fix is for, and
+the scan of the image refused every image of the platform.
+
+The images patch the library in the base image, and the patch is the one
+of Alpine: the version of the fix is the floor of the patch, and the
+patches that follow it are taken as well. The check of the images holds
+every advisory that the images have to carry the fix of, and not one.
+
 
 ## 1.0.7
 

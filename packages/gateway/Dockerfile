@@ -10,17 +10,17 @@ ARG REVISION=unknown
 # --------------------------------------------------------------- base image
 #
 # The base image is pinned by the digest of a build of October, and
-# Alpine has published a fix for a heap overflow in zlib since then: the
-# image carries the library that the fix is for, and the scan of the
-# image refuses it.
+# Alpine has published fixes since then: a heap overflow in `zlib` and
+# an integer overflow in `musl`. The image carries the libraries that
+# the fixes are for, and the scan of the image refuses it otherwise.
 #
-# The library is patched in the image, and the patch is the one of
-# Alpine: the version of the fix is the floor of the patch, and the
+# The libraries are patched in the image, and the patches are the ones
+# of Alpine: the version of a fix is the floor of a patch, and the
 # patches that follow it are taken as well. The base image is a build of
 # a tag that was not rebuilt, and the tag is not the image that the
 # scan of the image accepts.
 FROM oven/bun:${BUN_VERSION}-alpine@${BUN_DIGEST} AS base
-RUN apk add --no-cache "zlib>=1.3.2-r1"
+RUN apk add --no-cache "zlib>=1.3.2-r1" "musl>=1.2.6-r3" "musl-utils>=1.2.6-r3"
 
 # ---------------------------------------------------------------- dependencies
 #
