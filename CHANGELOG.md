@@ -10,6 +10,9 @@ in the same commit as the code.
 
 ## Unreleased
 
+## 1.0.7
+
+
 ## 1.0.6
 
 
