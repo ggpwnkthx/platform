@@ -73,6 +73,65 @@ locals {
         "printf '%s' \"$${SECRET_${upper(replace(name, "-", "_"))}}\" > /run/secrets/${lookup(local.secret_file_names, name, name)}"
     ])
   })
+
+  # The secrets that a service reads from its environment.
+  #
+  # A secret that a service reads from a file is written to the file by
+  # the init container of the service. A secret that a service reads
+  # from its environment is bound to the variable by the application
+  # itself: the value of the secret lives in the vault of the
+  # deployment, and the application resolves the reference when the
+  # revision starts. The configuration of the application holds the
+  # name of the secret and never its value.
+  #
+  # The names of the variables are the names the services read, and the
+  # values are the names of the secrets of the vault.
+  #
+  # The key that signs the identity of a request is a PEM, and a PEM
+  # carries newlines: the secret of the vault holds it in its base64
+  # form, and the gateway reads it back. The token of the decisions is
+  # the token of the gateway: the gateway presents it on
+  # `POST /v1/decisions`, and Access accepts it as the shared
+  # credential of the deployment, so the two read the same secret.
+  gateway_env_secrets = {
+    GATEWAY_OIDC_CLIENT_SECRET          = "gateway-client-secret"
+    GATEWAY_ACCESS_TOKEN                = "gateway-access-token"
+    GATEWAY_SESSION_SECRET              = "gateway-session-secret"
+    GATEWAY_IDENTITY_SIGNING_KEY_BASE64 = "gateway-identity-signing-key"
+    GATEWAY_SESSION_URL                 = "redis-session-url"
+    GATEWAY_SHARED_STATE_URL            = "redis-shared-state-url"
+    GATEWAY_METRICS_TOKEN               = "gateway-metrics-token"
+  }
+
+  control_env_secrets = {
+    GATEWAY_CONTROL_STATE_URL = "redis-shared-state-url"
+  }
+
+  access_env_secrets = {
+    ACCESS_DATABASE_URL   = "access-database-url"
+    ACCESS_REDIS_URL      = "redis-session-url"
+    ACCESS_DECISION_TOKEN = "gateway-access-token"
+  }
+
+  data_env_secrets = {
+    DATA_DATABASE_URL          = "data-database-url"
+    DATA_REGISTRY_DATABASE_URL = "data-registry-url"
+  }
+
+  console_env_secrets = {
+    CONSOLE_CLIENT_SECRET        = "console-client-secret"
+    CONSOLE_SESSION_SECRET       = "console-session-secret"
+    CONSOLE_ACCESS_CONTEXT_TOKEN = "console-access-context-token"
+  }
+
+  # Every secret that a service reads: the ones it reads from a file
+  # and the ones it reads from its environment. The application binds
+  # every one of them to the vault of the deployment.
+  gateway_secrets = toset(concat(local.gateway_secret_files, values(local.gateway_env_secrets)))
+  control_secrets = toset(concat(local.control_secret_files, values(local.control_env_secrets)))
+  access_secrets  = toset(concat(local.access_secret_files, values(local.access_env_secrets)))
+  data_secrets    = toset(concat(local.data_secret_files, values(local.data_env_secrets)))
+  console_secrets = values(local.console_env_secrets)
 }
 
 # The gateway: the only service the callers reach.
@@ -153,10 +212,6 @@ resource "azurerm_container_app" "gateway" {
         value = var.gateway_client_id
       }
       env {
-        name  = "GATEWAY_OIDC_CLIENT_SECRET"
-        value = random_bytes.gateway_client_secret.hex
-      }
-      env {
         name  = "GATEWAY_OIDC_REDIRECT_URI"
         value = local.gateway_redirect_uri
       }
@@ -164,32 +219,16 @@ resource "azurerm_container_app" "gateway" {
         name  = "GATEWAY_ACCESS_URL"
         value = local.access_issuer
       }
-      env {
-        name  = "GATEWAY_ACCESS_TOKEN"
-        value = random_bytes.gateway_access_token.hex
-      }
-      env {
-        name  = "GATEWAY_SESSION_SECRET"
-        value = random_bytes.gateway_session.hex
-      }
-      env {
-        # The key that signs the identity of a request is a PEM, and a
-        # PEM carries newlines: it travels in its base64 form and the
-        # gateway reads it back.
-        name  = "GATEWAY_IDENTITY_SIGNING_KEY_BASE64"
-        value = base64encode(tls_private_key.identity.private_key_pem)
-      }
-      env {
-        name  = "GATEWAY_SESSION_URL"
-        value = local.redis_session_url
-      }
-      env {
-        name  = "GATEWAY_SHARED_STATE_URL"
-        value = local.redis_shared_state_url
-      }
-      env {
-        name  = "GATEWAY_METRICS_TOKEN"
-        value = random_bytes.gateway_metrics.hex
+      # The secrets of the gateway are read out of the vault of the
+      # deployment: the application binds the name of the secret to the
+      # name of the variable, and the value of the secret never travels
+      # in the configuration of the application.
+      dynamic "env" {
+        for_each = local.gateway_env_secrets
+        content {
+          name        = env.key
+          secret_name = env.value
+        }
       }
       env {
         name  = "GATEWAY_RATE_LIMIT_TOTAL_MAX"
@@ -281,7 +320,7 @@ resource "azurerm_container_app" "gateway" {
   }
 
   dynamic "secret" {
-    for_each = local.gateway_secret_files
+    for_each = local.gateway_secrets
     content {
       name                = secret.value
       key_vault_secret_id = azurerm_key_vault_secret.platform[secret.value].versionless_id
@@ -351,10 +390,6 @@ resource "azurerm_container_app" "control" {
         value = "/run/secrets/gateway-control-tokens"
       }
       env {
-        name  = "GATEWAY_CONTROL_STATE_URL"
-        value = local.redis_shared_state_url
-      }
-      env {
         name  = "GATEWAY_CONTROL_KEY_PREFIX"
         value = "gateway"
       }
@@ -365,6 +400,18 @@ resource "azurerm_container_app" "control" {
       env {
         name  = "GATEWAY_LOG_LEVEL"
         value = "info"
+      }
+
+      # The secrets of the control plane are read out of the vault of the
+      # deployment: the application binds the name of the secret to the
+      # name of the variable, and the value of the secret never travels
+      # in the configuration of the application.
+      dynamic "env" {
+        for_each = local.control_env_secrets
+        content {
+          name        = env.key
+          secret_name = env.value
+        }
       }
 
       liveness_probe {
@@ -423,7 +470,7 @@ resource "azurerm_container_app" "control" {
   }
 
   dynamic "secret" {
-    for_each = local.control_secret_files
+    for_each = local.control_secrets
     content {
       name                = secret.value
       key_vault_secret_id = azurerm_key_vault_secret.platform[secret.value].versionless_id
@@ -493,14 +540,6 @@ resource "azurerm_container_app" "access" {
         value = local.access_issuer
       }
       env {
-        name  = "ACCESS_DATABASE_URL"
-        value = local.access_database_url
-      }
-      env {
-        name  = "ACCESS_REDIS_URL"
-        value = local.redis_session_url
-      }
-      env {
         name  = "ACCESS_SIGNING_KID"
         value = local.access_signing_kid
       }
@@ -508,13 +547,16 @@ resource "azurerm_container_app" "access" {
         name  = "ACCESS_LOG_LEVEL"
         value = "info"
       }
-      env {
-        # The token of the decisions is the token of the gateway: the
-        # gateway presents it on `POST /v1/decisions`, and Access
-        # accepts it as the shared credential of the deployment. The
-        # two are the same value, and the templates write it once.
-        name  = "ACCESS_DECISION_TOKEN"
-        value = random_bytes.gateway_access_token.hex
+      # The secrets of Access are read out of the vault of the
+      # deployment: the application binds the name of the secret to the
+      # name of the variable, and the value of the secret never travels
+      # in the configuration of the application.
+      dynamic "env" {
+        for_each = local.access_env_secrets
+        content {
+          name        = env.key
+          secret_name = env.value
+        }
       }
       env {
         name  = "ACCESS_SIGNING_KEY_FILE"
@@ -597,7 +639,7 @@ resource "azurerm_container_app" "access" {
   }
 
   dynamic "secret" {
-    for_each = local.access_secret_files
+    for_each = local.access_secrets
     content {
       name                = secret.value
       key_vault_secret_id = azurerm_key_vault_secret.platform[secret.value].versionless_id
@@ -664,14 +706,6 @@ resource "azurerm_container_app" "data" {
         value = "api"
       }
       env {
-        name  = "DATA_DATABASE_URL"
-        value = local.data_runtime_url
-      }
-      env {
-        name  = "DATA_REGISTRY_DATABASE_URL"
-        value = local.data_registry_url
-      }
-      env {
         name  = "DATA_ACCESS_URL"
         value = local.access_issuer
       }
@@ -702,6 +736,18 @@ resource "azurerm_container_app" "data" {
       env {
         name  = "DATA_LOG_LEVEL"
         value = "info"
+      }
+
+      # The secrets of Data are read out of the vault of the deployment:
+      # the application binds the name of the secret to the name of the
+      # variable, and the value of the secret never travels in the
+      # configuration of the application.
+      dynamic "env" {
+        for_each = local.data_env_secrets
+        content {
+          name        = env.key
+          secret_name = env.value
+        }
       }
 
       liveness_probe {
@@ -760,7 +806,7 @@ resource "azurerm_container_app" "data" {
   }
 
   dynamic "secret" {
-    for_each = local.data_secret_files
+    for_each = local.data_secrets
     content {
       name                = secret.value
       key_vault_secret_id = azurerm_key_vault_secret.platform[secret.value].versionless_id
@@ -841,24 +887,24 @@ resource "azurerm_container_app" "console" {
         value = var.console_client_id
       }
       env {
-        name  = "CONSOLE_CLIENT_SECRET"
-        value = random_bytes.console_client_secret.hex
-      }
-      env {
-        name  = "CONSOLE_SESSION_SECRET"
-        value = random_bytes.console_session.hex
-      }
-      env {
-        name  = "CONSOLE_ACCESS_CONTEXT_TOKEN"
-        value = random_bytes.console_access_context.hex
-      }
-      env {
         name  = "CONSOLE_ROUTE_ID"
         value = "console"
       }
       env {
         name  = "CONSOLE_LOG_LEVEL"
         value = "info"
+      }
+
+      # The secrets of the console are read out of the vault of the
+      # deployment: the application binds the name of the secret to the
+      # name of the variable, and the value of the secret never travels
+      # in the configuration of the application.
+      dynamic "env" {
+        for_each = local.console_env_secrets
+        content {
+          name        = env.key
+          secret_name = env.value
+        }
       }
 
       liveness_probe {
@@ -882,6 +928,15 @@ resource "azurerm_container_app" "console" {
         timeout                 = 3
         failure_count_threshold = 3
       }
+    }
+  }
+
+  dynamic "secret" {
+    for_each = local.console_secrets
+    content {
+      name                = secret.value
+      key_vault_secret_id = azurerm_key_vault_secret.platform[secret.value].versionless_id
+      identity            = azurerm_user_assigned_identity.platform.id
     }
   }
 }

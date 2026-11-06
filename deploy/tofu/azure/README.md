@@ -275,6 +275,34 @@ an apply that changes the secret of the tenant: the registration is
 repeated with the new value, and the gateway is rolled, because Access
 keeps the old secret for ten minutes.
 
+## The environment of the services
+
+Every variable of a service that carries a secret is a **reference** to
+a secret of the vault of the deployment, and never a value: the portal
+of Azure shows the variable as a secret, and the configuration of an
+application holds the name of the secret and not its value.
+
+```
+GATEWAY_SESSION_SECRET  ->  secretName: gateway-session-secret
+```
+
+The templates write every secret of the deployment into the vault — the
+credentials, the addresses of the databases and of the cache, and the
+documents that the services read — and the identity of the deployment
+reads them with the role of Entra ID that reads the secrets of the
+vault. The application resolves the reference when the revision starts,
+and a revision that starts after a rotation of the vault reads the new
+value without a new apply.
+
+A secret that a service reads from a file is a secret of the vault too:
+the init container of the service reads it out of the vault and writes
+it to the file that the service reads it from, and the service never
+sees the variable that carried it.
+
+The variables that carry no secret — the ports, the levels of the logs,
+the names of the routes — are values, and the portal of Azure shows them
+as manual entries. That is what they are.
+
 ## The three things that are not like the Compose stack
 
 The deployment is the platform, and it is not the Compose stack. Three
