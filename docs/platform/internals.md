@@ -216,7 +216,7 @@ The Data harness starts its own PostgreSQL server in a temporary directory, beca
 
 ## Release
 
-A release is a git tag named after the root `package.json` version. Pushing the tag publishes three images and three sets of binaries.
+A release is a git tag named after the root `package.json` version. Pushing the tag publishes three images and three sets of binaries. The push of a commit that carries a version that went up cuts that tag by itself.
 
 ### One version
 
@@ -234,8 +234,8 @@ A release is a git tag named after the root `package.json` version. Pushing the 
 ### Release steps
 
 1. **Bump the version** in the files above, then run `bun run versions`.
-2. **Wait for green CI.** Tag only a commit that passed.
-3. **Cut the tag.** The tagger refuses a version that is not newer than every existing tag, and refuses versions that disagree.
+2. **Push.** The push of the commit starts the tag workflow, and the workflow waits for the CI of that commit: a release that was never tested is not a release, and a CI that is red cuts no tag.
+3. **Cut the tag.** The tagger refuses a version that is not newer than every existing tag, and refuses versions that disagree. The tag carries the version of the root `package.json`.
 
    ```bash
    bun run release:tag:dry-run   # show what it would do

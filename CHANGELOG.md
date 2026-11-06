@@ -10,6 +10,9 @@ in the same commit as the code.
 
 ## Unreleased
 
+## 1.0.9
+
+
 ## 1.0.8
 
 ### The outputs of the deployment are read as values
@@ -264,7 +267,6 @@ patches that follow it are taken as well. The check of the images holds
 every advisory that the images have to carry the fix of, and not one.
 
 ### The services of the deployment reach each other at the address of the ingress
-
 The address of a service inside the environment of the container apps is
 the name of the environment and the port of its ingress, and the
 templates wrote the port of the container on the name of the
@@ -285,6 +287,34 @@ reads it when its revision starts: a table that changed and a gateway
 that did not start again is a gateway that serves the table of the last
 apply. The digest of the table is a variable of the gateway, and it is
 what makes the revision start.
+
+### The push of a commit cuts the tag of the release
+
+The workflow of the tag was started by the completion of the CI of the
+commit, and a push that carried a version that went up waited for the CI
+to end before anything happened: the run of the workflow said that it
+was skipped, and the reason of the skip was the conclusion of another
+run. The push of the commit starts the workflow now, and the workflow
+waits for the CI of that commit: the version of the tag is the version
+of the package of the root, and a CI that is red cuts no tag.
+
+The tag is still pushed with the token of the workflow, and GitHub
+starts no workflow for a push that carries it: the release is dispatched
+by the workflow that cut the tag, and a tag that a person pushes starts
+the release by itself.
+
+### The cache of the deployment holds the sessions and the state that the replicas share
+
+The deployment puts the sessions of the callers in the database `0` of
+the cache and the state that the replicas share in the database `1`, and
+the templates created the cache in the Balanced tier: the Balanced tier
+holds one database, and the shared state of the deployment was in a
+database the cache did not have. The gateway served the sessions of the
+callers and said that the shared state was not reachable, and the rate
+limits and the cached decisions of the deployment were not kept.
+
+The tier of the cache is Premium now, and the tier is the one the
+deployment needs: the tier that holds more than one database.
 
 
 ## 1.0.7

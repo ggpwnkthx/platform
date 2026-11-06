@@ -367,7 +367,14 @@ variable "postgresql_backup_retention_days" {
 variable "redis_sku_name" {
   description = "The size of the cache of Redis: the name of the tier of Azure Managed Redis."
   type        = string
-  default     = "Balanced_B0"
+  # The tier is Premium, and the tier is the one the deployment needs:
+  # the Balanced tier holds one database, and the deployment puts the
+  # sessions of the callers in one database and the state that the
+  # replicas share in another. A cache of one database and a shared
+  # state that names a second one is a shared state that is not
+  # reachable, and the gateway says that the shared state is not
+  # reachable while the sessions of the callers work.
+  default = "Premium_B0"
 }
 
 # --------------------------------------------------------------------------

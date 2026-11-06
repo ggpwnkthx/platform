@@ -351,8 +351,20 @@ locals {
         accessCacheTtlMs = 0
       },
       # Access, the issuer of the tokens of the platform. It is reached
-      # under the name of the deployment, and the upstream receives that
-      # name: the issuer of the tokens is the name the callers use.
+      # under the name of the deployment, and the upstream receives the
+      # name of the environment and not the name of the caller.
+      #
+      # The name of the caller is the name of a custom domain of the
+      # deployment, and the ingress of the environment answers that name
+      # over TLS only: it answers a plain HTTP request with a redirect
+      # to the TLS name, and the request that follows it leaves the
+      # network of the deployment. The name of the environment is the
+      # name of the ingress, and the ingress answers it over the plain
+      # HTTP.
+      #
+      # The issuer of the tokens is not the name of the caller: it is
+      # the issuer that Access is configured with, and Access writes it
+      # in the discovery document it answers with.
       {
         id = "access-root"
         match = {
@@ -361,7 +373,7 @@ locals {
         }
         upstream     = "http://${local.access_fqdn}"
         auth         = { mode = "none" }
-        upstreamHost = "original"
+        upstreamHost = "address"
         # The issuer of the tokens needs the credential of its clients:
         # the console and the gateway authenticate to it.
         forwardAuthorization = true
@@ -374,11 +386,13 @@ locals {
         }
         upstream             = "http://${local.access_fqdn}"
         auth                 = { mode = "none" }
-        upstreamHost         = "original"
+        upstreamHost         = "address"
         forwardAuthorization = true
       },
       # The console. It is a client of the three services, and it is
-      # reached under the name of the deployment.
+      # reached under the name of the deployment. The upstream receives
+      # the name of the environment, for the reason of the routes of
+      # Access.
       {
         id = "console-root"
         match = {
@@ -387,7 +401,7 @@ locals {
         }
         upstream     = "http://${local.console_fqdn}"
         auth         = { mode = "none" }
-        upstreamHost = "original"
+        upstreamHost = "address"
       },
       {
         id = "console"
@@ -397,7 +411,7 @@ locals {
         }
         upstream     = "http://${local.console_fqdn}"
         auth         = { mode = "none" }
-        upstreamHost = "original"
+        upstreamHost = "address"
       }
     ]
   }

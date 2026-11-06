@@ -6,16 +6,24 @@ name: tag
 # goes up. The workflows of the release run on the tag: they publish the
 # three images and the three binaries of the three workspaces.
 #
+# The workflow is started by the **push** of the commit, and the version
+# of the tag is the version of the package of the root: a push that
+# carries a version that went up is a release to cut, and a push that
+# carries the version of the last release is nothing to do.
+#
 # The tag is cut **after** the CI of the commit is green: a release that
-# was never tested is not a release. The tag names the commit that the
-# CI proved, and not the head of the branch: two commits that land in
-# the meantime do not change what is released.
+# was never tested is not a release. The workflow waits for the CI of the
+# commit it was started for, and the tag names that commit and not the
+# head of the branch: two commits that land in the meantime do not
+# change what is released.
 #
 # The tag is pushed **with the token of the workflow**, and GitHub does
 # not start a workflow on a push that carries it. The release is
 # therefore **dispatched** instead of being triggered by the push: the
 # dispatch is the exception to that rule, and it is the only path that
-# starts a release on its own.
+# starts a release on its own. A tag that a person pushes starts the
+# release by itself, and the dispatch is only needed for the tag of the
+# workflow.
 #
 # The tagger refuses what the release would refuse: a tag is only cut
 # when the version of the platform, the version of the image and the
@@ -23,7 +31,15 @@ name: tag
 # the version is newer than every tag of the repository.
 
 on:
-  # The CI of the commit has to be green before a release is cut.
+  # The push of a commit starts the workflow: the version of the
+  # package is the version of the release.
+  push:
+    branches: [main]
+  # The CI of the commit has to be green before a release is cut. The
+  # push starts the workflow and the workflow waits for the CI, and the
+  # completion of the CI starts it too: a CI that is run again starts
+  # the workflow again, and the tag of a release that was held back by a
+  # red CI is cut when the CI is green.
   workflow_run:
     workflows: ['ci']
     types: [completed]
@@ -50,8 +66,9 @@ concurrency:
 jobs:
   tag:
     name: the tag of the release
-    # The CI of the commit was red: there is no release.
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    # The CI of the commit was red: there is no release. The push waits
+    # for the CI in a step, and the step fails when the CI is red.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -67,6 +84,33 @@ jobs:
 
       - name: install
         run: bun install --frozen-lockfile
+
+      - name: the CI of the commit is green
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          # The CI of the commit is a workflow of the repository, and the
+          # push of the commit started it: the run is looked up by the
+          # commit it proves, and the workflow waits for it.
+          run_id=""
+          for _ in $(seq 1 60); do
+            run_id="$(gh run list --repo "$REPOSITORY" --workflow ci --commit "$COMMIT" \
+              --json databaseId --jq '.[0].databaseId // ""')"
+            if [ -n "$run_id" ]; then break; fi
+            echo "the CI of $COMMIT is not started yet: waiting for it"
+            sleep 10
+          done
+          if [ -z "$run_id" ]; then
+            echo "the CI of the commit $COMMIT is not there: the tag is not cut"
+            exit 1
+          fi
+          echo "the CI of the commit $COMMIT is the run $run_id"
+          # The watch ends with the status of the run: a CI that is red
+          # fails the step, and the tag is not cut.
+          gh run watch "$run_id" --repo "$REPOSITORY" --exit-status
 
       - name: the identity of the commit
         run: |

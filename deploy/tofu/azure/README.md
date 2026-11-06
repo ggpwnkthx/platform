@@ -429,6 +429,15 @@ resource for them in the provider, and the users are created by hand,
 once, with the client of Redis, from inside the network of the
 deployment.
 
+The tier of the cache is **Premium**, and the tier is not a matter of
+size: the deployment puts the sessions of the callers in the database
+`0` and the state that the replicas share in the database `1`, and the
+Balanced tier holds one database. A cache of one database and a shared
+state that names a second one is a shared state that is not reachable:
+the gateway serves the sessions of the callers and says that the shared
+state is not reachable, and the rate limits and the cached decisions of
+the deployment are not kept.
+
 The list of the users is [`deploy/redis/gateway.acl`](../../redis/gateway.acl),
 and the two users of the deployment are `gateway` and `gateway-control`.
 The password of a user is written into the vault of the deployment, and

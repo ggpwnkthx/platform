@@ -284,6 +284,31 @@ describe('the release of the workflows', () => {
     expect(findings).toEqual([])
   })
 
+  test('the workflow of the tag is started by the push and waits for the CI', async () => {
+    // The push of a commit starts the workflow of the tag: the version
+    // of the package is the version of the release, and the tag of the
+    // release is cut from it. The workflow waits for the CI of the
+    // commit it was started for, and a CI that is red cuts no tag.
+    const content = await readFile(join(WORKFLOWS, 'tag.yml'), 'utf8')
+    const findings: string[] = []
+    const push = triggerOf(content, 'push')
+    if (push === '') {
+      findings.push('tag.yml: a push does not start it')
+    } else if (!/branches:\s*\[main\]/.test(push)) {
+      findings.push('tag.yml: a push of another branch starts it')
+    }
+    // The CI of the commit is waited for, and the wait ends with the
+    // status of the run: a CI that is red fails the step, and the tag
+    // is not cut.
+    if (!content.includes('gh run watch')) {
+      findings.push('tag.yml: it does not wait for the CI of the commit')
+    }
+    if (!content.includes('--exit-status')) {
+      findings.push('tag.yml: it does not read the status of the CI')
+    }
+    expect(findings).toEqual([])
+  })
+
   test('the workflow of the tag dispatches the release', async () => {
     // The tag is pushed by the workflow of the tag: nothing starts on
     // that push, and the workflow dispatches the release itself.
