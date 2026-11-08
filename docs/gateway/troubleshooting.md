@@ -294,6 +294,18 @@ upstream, not from the gateway.
 - **Fix.** Restore the server; the gateway reconnects in the background and logs the recovery.
 - **Rule.** [spec §12.5](spec.md#125-shared-state).
 
+### The cache answers with a redirection (`MOVED`)
+
+- **Cause.** The cache is a cluster and the client is a client of one server: the server answers a command on a key it
+  does not hold with a redirection, `MOVED <the-slot> <the-node>`, and the client follows none. The server answers
+  every ping, so the gateway says that the session store is reachable while every keyed command fails. The sessions
+  and the windows of the limits are kept in the memory of a replica.
+- **Check.** The log line `the cache is a cluster and the client follows no redirection`, and the error of the
+  redirection in the log.
+- **Fix.** Give the cache a policy that a client of one server can use (`EnterpriseCluster` on an Azure Managed
+  Redis), or name the servers of the cluster in `GATEWAY_SESSION_URL` and `GATEWAY_SHARED_STATE_URL`.
+- **Rule.** [spec §12.5](spec.md#125-shared-state).
+
 ### `413 payload_too_large`
 
 - **Cause.** The body exceeds the route's limit (`maxBodyBytes`, then `defaults.maxBodyBytes`, then

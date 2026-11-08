@@ -6,7 +6,7 @@
  * the domains that own them.
  */
 
-export { createRedisClient, isConnectionError, isRedisUrl } from './client'
+export { createRedisClient, isClusterRedirect, isConnectionError, isRedisUrl } from './client'
 export type { SharedStateClient } from './client'
 
 export { withRetries } from './commands'

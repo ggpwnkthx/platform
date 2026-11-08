@@ -380,6 +380,26 @@ function toUrl(entry: string, original: string): string {
 }
 
 /**
+ * Reports whether an error is the redirection of a cluster.
+ *
+ * A cluster answers a command on a key it does not hold with a
+ * redirection: `MOVED <the-slot> <the-node>` or `ASK <the-slot>
+ * <the-node>`. The client of the platform is a client of one server and
+ * it follows no redirection, so the answer is a failure.
+ *
+ * The failure is not an outage: the server answers, and the answer says
+ * that the command belongs to another node. An operator that reads "the
+ * shared state is not reachable" cannot act on it, and an operator that
+ * reads "the cache is a cluster and the client follows no redirection"
+ * can.
+ */
+export function isClusterRedirect(error: unknown): boolean {
+  if (!error) return false
+  const message = error instanceof Error ? error.message : String(error)
+  return /^\s*(MOVED|ASK)\s+\d+\s+\S+/i.test(message)
+}
+
+/**
  * Reports whether an error is the symptom of a connection that is not
  * established yet.
  */

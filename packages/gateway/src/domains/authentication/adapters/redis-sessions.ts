@@ -255,7 +255,16 @@ export class RedisSessionStore implements SessionStore {
 
   async ping(): Promise<boolean> {
     try {
-      await this.#client.ping()
+      // The probe reads a key and does not ping the server.
+      //
+      // A ping answers on every server, and a cluster answers it on the
+      // node the client is connected to, even when that node holds none
+      // of the keys of the caller. A client that follows no redirection
+      // fails on the read of a key it does not hold, and that failure is
+      // the truth about the store: a cache that redirects every command
+      // is a cache that holds nothing for this client, and a gateway
+      // that says that it is ready serves a store it cannot write.
+      await this.#client.get(`${this.#prefix}:probe`)
       return true
     } catch {
       return false

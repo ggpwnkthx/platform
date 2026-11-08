@@ -54,7 +54,7 @@ import { startListener, type StartedListener } from '../platform/bun/listener'
 import { CertificateManager } from './tls'
 import { drain as drainRuntime } from './lifecycle'
 import { VERSION } from './version'
-import { createRedisClient, isRedisUrl, withRetries } from '../platform/redis'
+import { createRedisClient, isClusterRedirect, isRedisUrl, withRetries } from '../platform/redis'
 import type { SharedStateClient } from '../platform/redis'
 import {
   createPostgresClient,
@@ -350,6 +350,18 @@ export async function createRuntime(
 
   // The failure of the shared state is reported once per outage.
   const onSharedStateError = (error: unknown): void => {
+    if (isClusterRedirect(error)) {
+      // A redirection of a cluster is not an outage: the server answers,
+      // and the answer says that the command belongs to another node. The
+      // client of the platform is a client of one server, and the cache
+      // has to be one that a client of one server can use.
+      logger.warn('the cache is a cluster and the client follows no redirection', {
+        error,
+        hint: 'the cache answers a command on a key it does not hold with a redirection (MOVED): the client of the platform is a client of one server. Give the cache a policy of a proxy (EnterpriseCluster on an Azure Managed Redis), or name the servers of the cluster in GATEWAY_SESSION_URL and GATEWAY_SHARED_STATE_URL',
+      })
+      observer.recordSharedStateError()
+      return
+    }
     logger.warn('the shared state is not reachable', { error })
     observer.recordSharedStateError()
   }
