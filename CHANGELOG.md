@@ -10,6 +10,8 @@ in the same commit as the code.
 
 ## Unreleased
 
+## 1.0.10
+
 ### The console of the deployment is the client of the tenant
 
 The links of the console to Access did not work: the console sent the browser to Access with a client id of its own, and Access answered that the client id named no tenant of the platform. The gateway failed the same way, and no link into the platform signed anybody in.
@@ -55,6 +57,7 @@ The templates choose the policy of the proxy, `EnterpriseCluster`: the proxy rou
 The shared state was reported as unreachable, and the error of the log line said `MOVED`: the failure was not an outage, and the answer of the server was that the command belongs to another node. The gateway says that now, and it says what to do about it.
 
 The probe of the session store was a ping, and a ping answers on every server, and a cluster answers it on the node the client is connected to even when that node holds none of the keys of the caller: the gateway said that the store was reachable while every keyed command failed. The probe reads a key now, and a gateway that cannot write its sessions is not ready.
+
 
 ## 1.0.9
 
