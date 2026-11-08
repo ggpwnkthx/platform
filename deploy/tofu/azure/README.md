@@ -319,16 +319,77 @@ the outputs of the deployment:
 
 ```bash
 tofu -chdir=deploy/tofu/azure output -raw access_admin_token
-tofu -chdir=deploy/tofu/azure output -raw gateway_client_id
-tofu -chdir=deploy/tofu/azure output -raw gateway_client_secret
+tofu -chdir=deploy/tofu/azure output -raw client_id
+tofu -chdir=deploy/tofu/azure output -raw client_secret
+tofu -chdir=deploy/tofu/azure output -json client_redirect_uris
+```
+
+The tenant has **one** client at Access, and the gateway and the
+console are that client: Access holds one set of credentials for a
+tenant, and it resolves the tenant of a login from the identifier of the
+client. The registration of the tenant therefore carries the identifier
+and the secret above, and the redirect URIs of the client are the
+callback of the gateway and the callback of the console:
+
+```
+https://<the-gateway>/auth/callback
+https://<the-console>/auth/callback
 ```
 
 The procedure is in [Onboard a tenant](../../../docs/guides/onboard-a-tenant.md).
+The registration of the tenant of the deployment is one call:
 
-The secret of the client of the gateway is a credential of the
-deployment, and the templates generate it. An apply that changes it is
-an apply that changes the secret of the tenant: the registration is
-repeated with the new value, and the gateway is rolled, because Access
+```bash
+ACCESS=$(tofu -chdir=deploy/tofu/azure output -raw access_issuer)
+ADMIN=$(tofu -chdir=deploy/tofu/azure output -raw access_admin_token)
+CLIENT=$(tofu -chdir=deploy/tofu/azure output -raw client_id)
+SECRET=$(tofu -chdir=deploy/tofu/azure output -raw client_secret)
+CALLBACKS=$(tofu -chdir=deploy/tofu/azure output -json client_redirect_uris)
+
+curl -sS -X POST $ACCESS/v1/admin/tenants \
+  -H "authorization: Bearer $ADMIN" -H "content-type: application/json" \
+  -d '{"slug":"<the-slug-of-the-tenant>","displayName":"<the-name-of-the-tenant>",
+       "issuer":"<the-issuer-of-the-identity-provider-of-Access>",
+       "idpClientId":"<the-client-of-the-identity-provider-of-Access>",
+       "idpClientSecret":"<the-secret-of-the-identity-provider-of-Access>",
+       "idpRedirectUri":"<the-callback-of-the-identity-provider-of-Access>",
+       "clientId":"'"$CLIENT"'","clientSecret":"'"$SECRET"'",
+       "clientRedirectUris":'"$CALLBACKS"'}'
+```
+
+The identifier of the tenant that the answer carries is the one the
+values of the deployment name as `access_tenant_id`: the access context
+credentials of Data and of the console ask about that tenant, and a
+placeholder names no tenant.
+
+The console reads the scope of the people who sign in through the
+credential of the access context, and it opens nothing without the
+grants that name its route. The grant of a person is one call, with
+the slug of the tenant as the workspace and the route of the console as
+the route:
+
+```bash
+curl -sS -X PUT $ACCESS/v1/admin/grants \
+  -H "authorization: Bearer $ADMIN" -H "content-type: application/json" \
+  -d '{"tenant":"<the-slug-of-the-tenant>","userId":"<the-id-of-the-principal>",
+       "permission":"console.admin","workspaceId":"<the-slug-of-the-tenant>",
+       "routeId":"console"}'
+```
+
+The steps of the console are in [Console operations](../../../docs/console/operations.md#set-up-access).
+
+The console holds no credential of the administration of Access: the
+deployment gives the platform's token to Access, and the console reads
+the scope of the people who sign in through the credential of the
+access context. An operator who administers the tenants from the
+console gives the console a credential of the administration — the
+token of the platform, or the token of a tenant — and the steps are in
+[Console operations](../../../docs/console/operations.md#credentials-it-holds).
+
+The secret of the client is a credential of the deployment, and the
+templates generate it. An apply that changes it is an apply that
+changes the secret of the tenant: the registration is repeated with the
+new value, and the gateway and the console are rolled, because Access
 keeps the old secret for ten minutes.
 
 ## The environment of the services
@@ -368,18 +429,32 @@ them.
 ### The addresses the services reach each other at
 
 The address of a service inside the environment of the container apps is
-the name of the environment and the port of its ingress:
+the **name of its application**:
 
 ```
-http://<the-service>.<the-environment>.<the-region>.azurecontainerapps.io
+http://<the-application>
 ```
 
-The ingress answers on the standard ports, and it forwards to the port
-of the container. The port of the container on the name of the
-environment is **not** an address: the traffic to it is dropped, and
-the call to it waits for a timeout that never ends. A service that
-answers `http://<the-service>.<the-environment>:8081` is a service that
-nobody reaches.
+The name resolves in the internal DNS of the environment, and it reaches
+the ingress of the service itself. The ingress answers on the standard
+ports, and it forwards to the port of the container. The port of the
+container on the name of the environment is **not** an address: the
+traffic to it is dropped, and the call to it waits for a timeout that
+never ends. A service that answers
+`http://<the-service>.<the-environment>:8081` is a service that nobody
+reaches.
+
+The name of the environment,
+`<the-service>.<the-environment>.<the-region>.azurecontainerapps.io`, is
+the **public** name of the service. A service that is not published has
+no answer there: the environment answers `404` for a request that
+arrives at the public name of an application whose ingress is internal,
+and the answer is a page of the environment and not an answer of the
+service. The internal name of an application carries `internal` between
+the name of the application and the name of the environment,
+`<the-service>.internal.<the-environment>.<the-region>.azurecontainerapps.io`,
+and it answers as well — but the name of the application alone is the
+shortest of the three.
 
 The three services that are not published — Access, Data and the
 console — have an ingress that speaks the plain HTTP, and the gateway
@@ -387,6 +462,12 @@ reaches them at their internal address. The gateway is published, and
 its ingress terminates the TLS of the three public names: the console
 reaches the gateway at its public name, and the browsers reach it at the
 same name.
+
+The console reaches Access and Data at their internal addresses: it
+probes the two of them for its status board, and it reads the data of
+a workspace through the gateway. A console that is given no address of
+a service shows that service as not configured, and the check of the
+deployment reports it.
 
 The browsers are not the services: they reach Access and the gateway at
 their public names, and the addresses they use are the ones the
@@ -429,14 +510,34 @@ resource for them in the provider, and the users are created by hand,
 once, with the client of Redis, from inside the network of the
 deployment.
 
-The tier of the cache is **Premium**, and the tier is not a matter of
-size: the deployment puts the sessions of the callers in the database
-`0` and the state that the replicas share in the database `1`, and the
-Balanced tier holds one database. A cache of one database and a shared
-state that names a second one is a shared state that is not reachable:
-the gateway serves the sessions of the callers and says that the shared
-state is not reachable, and the rate limits and the cached decisions of
-the deployment are not kept.
+The tier of the cache is **Balanced**, and the tier is not a matter of
+the databases: an Azure Managed Redis holds **one** database, the
+database `0`. The service that replaces Azure Cache for Redis does not
+have the databases of the tiers of the old service, and a cache that is
+asked for a second database does not hold it: the gateway then serves
+the sessions of the callers and says that the shared state is not
+reachable, and the rate limits and the cached decisions of the
+deployment are not kept.
+
+The two stores of the deployment — the sessions of the callers and the
+state that the replicas share — live in that one database, and they are
+apart by the keys they use: the sessions use the keys `gateway:s:` and
+`gateway:u:`, the state that the replicas share uses the keys
+`gateway:cfg:`, `gateway:rl:`, `gateway:dec:` and `gateway:control:`.
+
+The cache is a **cluster** on every tier and every size: an Azure
+Managed Redis is built on Redis Enterprise, and the policy of the cluster
+decides how a client reaches it. The templates choose the policy of the
+proxy, `EnterpriseCluster`: the proxy routes every command to the shard
+that holds the key, and the cache looks like a server to a client that
+knows one server. The default of the service is the policy of the Redis
+of the community edition, `OSSCluster`, and a client that knows one
+server cannot use it: the server answers a command on a key it does not
+hold with a redirection, `MOVED <the-slot> <the-node>`, and the gateway
+then says that the shared state is not reachable while the server answers
+every ping. The policy is chosen when the database is created, and
+changing it recreates the database: the sessions of the callers are lost,
+and nothing else is.
 
 The list of the users is [`deploy/redis/gateway.acl`](../../redis/gateway.acl),
 and the two users of the deployment are `gateway` and `gateway-control`.
@@ -587,6 +688,15 @@ the operator reaches the token of the operator a little after the role
 is created, and the templates wait for it before they write the first
 secret: the wait is a resource of the templates, and it is not paid
 again by the deployments that follow.
+
+The token of the control plane is a secret of the vault: the file
+`gateway-control-tokens` holds the map of the tokens, and the control
+plane reads it. The token of the operator is the one that holds the
+scope `operate`, and the commands of the operator carry it in
+`PLATFORMCTL_CONTROL_TOKEN`. It is a credential of its own, and it is
+not the secret of the client of the tenant: the console is the service
+that the browsers reach, and it holds no credential of the control
+plane.
 
 ## The checks
 

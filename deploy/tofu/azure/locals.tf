@@ -110,20 +110,44 @@ locals {
     control = "${local.prefix}-control"
   }
 
-  gateway_fqdn = "${local.names.gateway}.${azurerm_container_app_environment.platform.default_domain}"
-  access_fqdn  = "${local.names.access}.${azurerm_container_app_environment.platform.default_domain}"
-  console_fqdn = "${local.names.console}.${azurerm_container_app_environment.platform.default_domain}"
-  data_fqdn    = "${local.names.data}.${azurerm_container_app_environment.platform.default_domain}"
+  # The addresses of the services inside the environment.
+  #
+  # A service of the environment is reached at the **name of its
+  # application**: the name resolves in the internal DNS of the
+  # environment, and it reaches the ingress of the service itself.
+  #
+  # The name of the environment —
+  # `<the-service>.<the-environment>.<the-region>.azurecontainerapps.io` —
+  # is the **public** name of the service, and a service that is not
+  # published has no answer there: the environment answers `404` for a
+  # request that arrives at the public name of an application whose
+  # ingress is internal, and the answer is a page of the environment and
+  # not an answer of the service. The internal name of an application
+  # carries `internal` between the name of the application and the name
+  # of the environment —
+  # `<the-service>.internal.<the-environment>.<the-region>.azurecontainerapps.io` —
+  # and the name of the application alone is the shortest of the two.
+  gateway_address = local.names.gateway
+  access_address  = local.names.access
+  console_address = local.names.console
+  data_address    = local.names.data
 
   # The addresses of the state of the deployment.
   #
   # The sessions of the callers and the state that the replicas share
-  # live in two databases of the same cache: a session that lives in the
-  # memory of a replica is unknown to the other replicas, and a limit
-  # that lives in the memory of a replica is the limit of that replica
-  # and not the limit of the deployment.
+  # live in the same cache: a session that lives in the memory of a
+  # replica is unknown to the other replicas, and a limit that lives
+  # in the memory of a replica is the limit of that replica and not
+  # the limit of the deployment.
+  #
+  # An Azure Managed Redis holds one database, the database `0`. The
+  # service that replaces Azure Cache for Redis does not have the
+  # databases of the tiers of the old service: the old Premium tier
+  # held several of them, and the new service holds one. The two
+  # stores of the deployment are apart by the keys they use, and not
+  # by the database they live in.
   redis_session_database      = 0
-  redis_shared_state_database = 1
+  redis_shared_state_database = 0
 
   # The address of the cache, without the credentials. The credentials
   # are the ones of the access key of the cache.
@@ -187,11 +211,11 @@ resource "random_bytes" "gateway_metrics" {
   length = 32
 }
 
-resource "random_bytes" "gateway_client_secret" {
+resource "random_bytes" "client_secret" {
   length = 32
 }
 
-resource "random_bytes" "console_client_secret" {
+resource "random_bytes" "control_token" {
   length = 32
 }
 
@@ -309,11 +333,11 @@ locals {
 # of the service: Data is not published, and the gateway is the only
 # one that reaches it.
 #
-# The internal address of a service is the name of the environment and
-# the port of its ingress: the ingress answers on the standard ports
-# and forwards to the port of the container. The port of the container
-# on the name of the environment is not an address: the traffic to it
-# is dropped, and the call waits for a timeout that never ends.
+# The internal address of a service is the name of its application: the
+# name resolves in the internal DNS of the environment, and it reaches
+# the ingress of the service itself. The public name of the application
+# is not an address of a service that is not published: the environment
+# answers `404` for it.
 locals {
   gateway_route_table = {
     version = 2
@@ -339,7 +363,7 @@ locals {
           host = local.gateway_hostname
           path = var.workspace_path_prefix
         }
-        upstream = "http://${local.data_fqdn}"
+        upstream = "http://${local.data_address}"
         auth = {
           mode = "any"
           workspace = {
@@ -371,7 +395,7 @@ locals {
           host = local.access_hostname
           path = "/"
         }
-        upstream     = "http://${local.access_fqdn}"
+        upstream     = "http://${local.access_address}"
         auth         = { mode = "none" }
         upstreamHost = "address"
         # The issuer of the tokens needs the credential of its clients:
@@ -384,7 +408,7 @@ locals {
           host = local.access_hostname
           path = "/{rest}"
         }
-        upstream             = "http://${local.access_fqdn}"
+        upstream             = "http://${local.access_address}"
         auth                 = { mode = "none" }
         upstreamHost         = "address"
         forwardAuthorization = true
@@ -399,7 +423,7 @@ locals {
           host = local.console_hostname
           path = "/"
         }
-        upstream     = "http://${local.console_fqdn}"
+        upstream     = "http://${local.console_address}"
         auth         = { mode = "none" }
         upstreamHost = "address"
       },
@@ -409,7 +433,7 @@ locals {
           host = local.console_hostname
           path = "/{rest}"
         }
-        upstream     = "http://${local.console_fqdn}"
+        upstream     = "http://${local.console_address}"
         auth         = { mode = "none" }
         upstreamHost = "address"
       }
@@ -464,7 +488,7 @@ locals {
 # the reads with it.
 locals {
   control_tokens = {
-    (random_bytes.gateway_client_secret.hex) = {
+    (random_bytes.control_token.hex) = {
       operator = "the-operator-of-the-deployment"
       scope    = "operate"
     }
@@ -477,7 +501,8 @@ locals {
 # about one tenant, the one of the deployment.
 locals {
   access_context_tokens = {
-    (random_bytes.access_context.hex) = [var.access_tenant_id]
+    (random_bytes.access_context.hex)         = [var.access_tenant_id]
+    (random_bytes.console_access_context.hex) = [var.access_tenant_id]
   }
 }
 
@@ -497,8 +522,8 @@ locals {
     "access-metrics-token",
     "access-signing-key",
     "access-state-secret",
+    "client-secret",
     "console-access-context-token",
-    "console-client-secret",
     "console-session-secret",
     "data-access-context-token",
     "data-cursor-key",
@@ -512,7 +537,6 @@ locals {
     "data-registry-url",
     "data-runtime-password",
     "gateway-access-token",
-    "gateway-client-secret",
     "gateway-control-tokens",
     "gateway-identity-signing-key",
     "gateway-metrics-token",
@@ -531,7 +555,6 @@ locals {
     "gateway-session-secret"       = random_bytes.gateway_session.hex
     "gateway-access-token"         = random_bytes.gateway_access_token.hex
     "gateway-metrics-token"        = random_bytes.gateway_metrics.hex
-    "gateway-client-secret"        = random_bytes.gateway_client_secret.hex
     "gateway-identity-signing-key" = base64encode(tls_private_key.identity.private_key_pem)
     "gateway-routes"               = jsonencode(local.gateway_route_table)
     "gateway-control-tokens"       = jsonencode(local.control_tokens)
@@ -551,8 +574,11 @@ locals {
     "data-gateway-bindings"       = jsonencode(local.data_gateway_bindings)
     "identity-signing-public-key" = tls_private_key.identity.public_key_pem
 
+    # The secret of the client of the tenant. The gateway and the
+    # console are the one client, and they read the one secret.
+    "client-secret" = random_bytes.client_secret.hex
+
     # The secrets of the console.
-    "console-client-secret"        = random_bytes.console_client_secret.hex
     "console-session-secret"       = random_bytes.console_session.hex
     "console-access-context-token" = random_bytes.console_access_context.hex
 

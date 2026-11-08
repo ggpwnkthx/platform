@@ -23,6 +23,10 @@
  *   example, and do they name no file of a deployment?
  * - Are the credentials the templates generate strong enough for the
  *   services that read them?
+ * - Does the console of the deployment know the address of every
+ *   service it probes?
+ * - Does the console of the deployment hold the credentials that Access
+ *   knows, and only those?
  *
  *   bun run deploy:check
  */
@@ -183,6 +187,21 @@ const LOCK = '.terraform.lock.hcl'
 
 /** The pattern of the digest of an image. */
 const DIGEST = /@sha256:[0-9a-f]{64}$/
+
+/**
+ * The variables the console of the deployment names to reach the
+ * services it probes.
+ *
+ * The console shows the state of the three services of the platform on
+ * its status board, and it reads each of them at the address its
+ * environment names. The variable of each of them is the one the
+ * console reads the address of that service in.
+ */
+const CONSOLE_PROBES: readonly string[] = [
+  'CONSOLE_ACCESS_URL',
+  'CONSOLE_GATEWAY_URL',
+  'CONSOLE_DATA_URL',
+]
 
 /** A value of a yaml that is not known. */
 type Unknown = Record<string, unknown>
@@ -1173,6 +1192,236 @@ export async function checkInfrastructure(root: string): Promise<DeployFinding[]
 }
 
 /**
+ * The variables the environment of the console of the templates names.
+ *
+ * The console reads the state of the three services of the platform and
+ * shows it on its status board, and it reads each of them at the
+ * address its environment names. The variables are read out of the
+ * blocks of `env` of the application of the console, and the name of a
+ * variable is the `name` of its block.
+ *
+ * @param sources the sources of the templates.
+ */
+export function consoleVariablesOf(sources: readonly string[]): string[] {
+  const names = new Set<string>()
+  for (const source of sources) {
+    const lines = source.split('\n')
+    const start = lines.findIndex((line) =>
+      /^resource\s+"azurerm_container_app"\s+"console"/.test(line)
+    )
+    if (start < 0) continue
+    const rest = lines.slice(start + 1)
+    const end = rest.findIndex((line) => /^resource\s/.test(line))
+    const block = (end < 0 ? rest : rest.slice(0, end)).join('\n')
+    for (const match of block.matchAll(/\benv\s*\{\s*name\s*=\s*"([^"]+)"/g)) {
+      names.add(match[1]!)
+    }
+  }
+  return [...names].sort()
+}
+
+/**
+ * Checks that the console of the deployment knows the address of every
+ * service it probes.
+ *
+ * The console shows the state of the three services of the platform on
+ * its status board, and it reads each of them at the address its
+ * environment names. A console that names no address of a service shows
+ * that service as not configured, and an operator reads a service that
+ * is not configured as a service that is not there.
+ *
+ * @param root the root of the repository.
+ */
+export async function checkConsoleProbes(root: string): Promise<DeployFinding[]> {
+  const findings: DeployFinding[] = []
+  const sources = await sourcesOf(root, TEMPLATES)
+  const names = consoleVariablesOf(sources)
+  for (const variable of CONSOLE_PROBES) {
+    if (names.includes(variable)) continue
+    findings.push({
+      file: join(TEMPLATES, 'containerapps.tf'),
+      message: `the console of the deployment does not name the variable ${variable}: the status board of the console shows the service as not configured`,
+    })
+  }
+  return findings
+}
+
+/**
+ * The block of a resource of the templates.
+ *
+ * The block of a resource is the text of the resource, from its
+ * declaration to the declaration of the resource that follows it. The
+ * blocks are read out of the sources of the templates.
+ *
+ * @param source the source of a template.
+ * @param name the name of the resource.
+ */
+function resourceBlockOf(source: string, name: string): string {
+  const lines = source.split('\n')
+  const start = lines.findIndex((line) =>
+    new RegExp(`^resource\\s+"[^"]+"\\s+"${name}"`).test(line)
+  )
+  if (start < 0) return ''
+  const rest = lines.slice(start + 1)
+  const end = rest.findIndex((line) => /^resource\s/.test(line))
+  return (end < 0 ? rest : rest.slice(0, end)).join('\n')
+}
+
+/**
+ * The variables of the environment of an application of the templates.
+ *
+ * The environment of an application is the list of its `env` blocks, and
+ * the value of a variable is the expression of the `value` of its block.
+ * A block that names a secret has no value, and the name of the secret
+ * is not a value of the environment.
+ *
+ * @param sources the sources of the templates.
+ * @param application the name of the application.
+ */
+export function environmentOf(
+  sources: readonly string[],
+  application: string
+): Map<string, string> {
+  const environment = new Map<string, string>()
+  for (const source of sources) {
+    const block = resourceBlockOf(source, application)
+    if (block === '') continue
+    for (const match of block.matchAll(/env\s*\{([^{}]*)\}/g)) {
+      const body = match[1]!
+      const name = /name\s*=\s*"([^"]+)"/.exec(body)?.[1]
+      if (name === undefined) continue
+      const value = /value\s*=\s*([^\n]+)/.exec(body)?.[1]?.trim()
+      if (value === undefined) continue
+      environment.set(name, value)
+    }
+  }
+  return environment
+}
+
+/**
+ * The name of the secret of the vault that a map of secrets names.
+ *
+ * The maps of the secrets of the environment of the applications are
+ * read out of the sources of the templates, and the name of the secret
+ * of a variable is the value of the entry of the map.
+ *
+ * @param sources the sources of the templates.
+ * @param map the name of the map.
+ * @param name the name of the variable.
+ */
+export function secretOf(
+  sources: readonly string[],
+  map: string,
+  name: string
+): string | undefined {
+  for (const source of sources) {
+    const block = new RegExp(`${map}\\s*=\\s*\\{([^}]*)\\}`).exec(source)?.[1]
+    if (block === undefined) continue
+    const secret = new RegExp(`^\\s*${name}\\s*=\\s*"([^"]+)"`, 'm').exec(block)?.[1]
+    if (secret !== undefined) return secret
+  }
+  return undefined
+}
+
+/**
+ * The value of a secret of the vault.
+ *
+ * The values of the secrets of the vault are written out of the map of
+ * the sources of the templates, and the value of a secret is the
+ * expression of its entry.
+ *
+ * @param sources the sources of the templates.
+ * @param name the name of the secret.
+ */
+export function valueOfSecret(sources: readonly string[], name: string): string | undefined {
+  for (const source of sources) {
+    const block = /secret_values\s*=\s*\{([^}]*)\}/.exec(source)?.[1]
+    if (block === undefined) continue
+    const value = new RegExp(`^\\s*"${name}"\\s*=\\s*([^\\n]+)`, 'm').exec(block)?.[1]?.trim()
+    if (value !== undefined) return value
+  }
+  return undefined
+}
+
+/**
+ * Checks the credentials the console of the deployment holds at Access.
+ *
+ * Access holds one client for a tenant: it resolves the tenant of a
+ * login from the identifier of the client, and it holds one secret for
+ * that client. The gateway and the console are that client, and the
+ * callbacks of the two of them are the redirect URIs of the one client.
+ * A console that presents a client of its own presents a client that
+ * names no tenant, and the sign-in of the console fails with a request
+ * that is not valid.
+ *
+ * The check holds the templates to that rule, and it holds the console
+ * to the two rules that follow from it: the credential of the access
+ * context that the console reads is registered at Access, or the
+ * console reads no scope for the people who sign in; and the token of
+ * the control plane is a credential of its own, and the console never
+ * holds one — it is the service that the browsers reach.
+ *
+ * @param root the root of the repository.
+ */
+export async function checkConsoleCredentials(root: string): Promise<DeployFinding[]> {
+  const findings: DeployFinding[] = []
+  const sources = await sourcesOf(root, TEMPLATES)
+
+  const gateway = environmentOf(sources, 'gateway')
+  const consoleApp = environmentOf(sources, 'console')
+  const gatewayId = gateway.get('GATEWAY_OIDC_CLIENT_ID')
+  const consoleId = consoleApp.get('CONSOLE_CLIENT_ID')
+  if (gatewayId !== undefined && consoleId !== undefined && gatewayId !== consoleId) {
+    findings.push({
+      file: join(TEMPLATES, 'containerapps.tf'),
+      message: `the console of the deployment is a client of Access of its own (${consoleId}), and the gateway is another one (${gatewayId}): Access holds one client for a tenant, and the sign-in of the console fails with a request that names no tenant`,
+    })
+  }
+
+  const gatewaySecret = secretOf(sources, 'gateway_env_secrets', 'GATEWAY_OIDC_CLIENT_SECRET')
+  const consoleSecret = secretOf(sources, 'console_env_secrets', 'CONSOLE_CLIENT_SECRET')
+  if (
+    gatewaySecret !== undefined &&
+    consoleSecret !== undefined &&
+    gatewaySecret !== consoleSecret
+  ) {
+    findings.push({
+      file: join(TEMPLATES, 'containerapps.tf'),
+      message: `the console of the deployment reads the secret ${consoleSecret} of the vault and the gateway reads the secret ${gatewaySecret}, and the two of them are the one client of the tenant: the sign-in of the console fails with a request that is not valid`,
+    })
+  }
+
+  const control = secretOf(sources, 'console_env_secrets', 'CONSOLE_CLIENT_SECRET')
+  const token = /control_tokens\s*=\s*\{([^}]*)\}/.exec(sources.join('\n'))?.[1]
+  const held = token === undefined ? undefined : /random_bytes\.(\w+)\.hex/.exec(token)?.[1]
+  const client = control === undefined ? undefined : valueOfSecret(sources, control)
+  const owner = client === undefined ? undefined : /random_bytes\.(\w+)\.hex/.exec(client)?.[1]
+  if (held !== undefined && owner !== undefined && held === owner) {
+    findings.push({
+      file: join(TEMPLATES, 'locals.tf'),
+      message: `the console of the deployment reads the secret of the client, and that secret is the token of the control plane: the service that the browsers reach holds a credential of the control plane`,
+    })
+  }
+
+  const context = secretOf(sources, 'console_env_secrets', 'CONSOLE_ACCESS_CONTEXT_TOKEN')
+  const value = context === undefined ? undefined : valueOfSecret(sources, context)
+  const credential = value === undefined ? undefined : /random_bytes\.(\w+)\.hex/.exec(value)?.[1]
+  const registered = /access_context_tokens\s*=\s*\{([^}]*)\}/.exec(sources.join('\n'))?.[1]
+  const known = new Set<string>()
+  for (const match of (registered ?? '').matchAll(/random_bytes\.(\w+)\.hex/g)) {
+    known.add(match[1]!)
+  }
+  if (credential !== undefined && !known.has(credential)) {
+    findings.push({
+      file: join(TEMPLATES, 'locals.tf'),
+      message: `the console of the deployment reads the credential of the access context and that credential is not registered at Access: the console reads no scope for the people that sign in, and it opens nothing`,
+    })
+  }
+
+  return findings
+}
+
+/**
  * The files of a stack that belong to a deployment and not to the
  * repository.
  *
@@ -1273,6 +1522,8 @@ export async function checkDeploy(root: string): Promise<DeployFinding[]> {
   findings.push(...(await checkManifests(root, version)))
   findings.push(...(await checkMinimumEnvironment(root)))
   findings.push(...(await checkInfrastructure(root)))
+  findings.push(...(await checkConsoleProbes(root)))
+  findings.push(...(await checkConsoleCredentials(root)))
   findings.push(...checkTrackedInfrastructure(root))
   return findings
 }

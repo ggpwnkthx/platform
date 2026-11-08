@@ -211,23 +211,20 @@ variable "console_name" {
 }
 
 # --------------------------------------------------------------------------
-# The clients of Access
+# The client of Access
 #
-# The gateway and the console are clients of Access: Access holds their
-# credentials, and the identifiers below are the ones the deployment
-# registers with the administration API of Access.
+# The tenant of the deployment has one client at Access, and the
+# gateway and the console are that client: Access holds one set of
+# credentials for a tenant, and the callback of the gateway and the
+# callback of the console are the redirect URIs of the one client. The
+# identifier below is the one the deployment registers with the
+# administration API of Access.
 # --------------------------------------------------------------------------
 
-variable "gateway_client_id" {
-  description = "The identifier of the gateway as a client of Access."
+variable "client_id" {
+  description = "The identifier of the tenant's client at Access."
   type        = string
-  default     = "gateway"
-}
-
-variable "console_client_id" {
-  description = "The identifier of the console as a client of Access."
-  type        = string
-  default     = "console"
+  default     = "platform"
 }
 
 # --------------------------------------------------------------------------
@@ -360,21 +357,31 @@ variable "postgresql_backup_retention_days" {
 #
 # The cache of the deployment holds the sessions of the callers, the
 # windows of the limits and the decisions that Access answered. The
-# tier is Premium: the tier that holds more than one database and that
+# tier is the Balanced tier: the tier that holds the cache of a
+# deployment that is not under load, and every tier of the service
 # knows the access control list of the users.
 # --------------------------------------------------------------------------
 
 variable "redis_sku_name" {
   description = "The size of the cache of Redis: the name of the tier of Azure Managed Redis."
   type        = string
-  # The tier is Premium, and the tier is the one the deployment needs:
-  # the Balanced tier holds one database, and the deployment puts the
-  # sessions of the callers in one database and the state that the
-  # replicas share in another. A cache of one database and a shared
-  # state that names a second one is a shared state that is not
-  # reachable, and the gateway says that the shared state is not
-  # reachable while the sessions of the callers work.
-  default = "Premium_B0"
+  # The tiers of an Azure Managed Redis are Balanced (the `B` sizes),
+  # Compute Optimized (the `X` sizes), Memory Optimized (the `M`
+  # sizes) and Flash Optimized (the `A` sizes). There is no Premium
+  # tier: the service that replaces Azure Cache for Redis does not
+  # have one, and the provider refuses a name that is not one of the
+  # tiers of the service.
+  #
+  # The size is not a matter of the databases: an Azure Managed Redis
+  # holds one database, the database `0`, and the deployment puts the
+  # sessions of the callers and the state that the replicas share in
+  # it. The two stores are apart by the keys they use, and not by the
+  # database they live in.
+  #
+  # The smallest size of the Balanced tier is enough for a deployment
+  # that is not under load. A deployment that is under load names a
+  # bigger size here.
+  default = "Balanced_B0"
 }
 
 # --------------------------------------------------------------------------

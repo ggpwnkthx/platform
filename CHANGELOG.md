@@ -10,11 +10,39 @@ in the same commit as the code.
 
 ## Unreleased
 
-### The gateway names the redirection of a cluster, and its readiness probe reads a key
+### The console of the deployment is the client of the tenant
 
-The shared state was reported as unreachable, and the error of the log line said `MOVED`: the failure was not an outage, and the answer of the server was that the command belongs to another node. The gateway says that now, and it says what to do about it.
+The links of the console to Access did not work: the console sent the browser to Access with a client id of its own, and Access answered that the client id named no tenant of the platform. The gateway failed the same way, and no link into the platform signed anybody in.
 
-The probe of the session store was a ping, and a ping answers on every server, and a cluster answers it on the node the client is connected to even when that node holds none of the keys of the caller: the gateway said that the store was reachable while every keyed command failed. The probe reads a key now, and a gateway that cannot write its sessions is not ready.
+Access holds one client for a tenant. It resolves the tenant of a login from the identifier of the client, and it holds one secret for that client: the callbacks of the gateway and of the console are the redirect URIs of the one client, and the console signs in as the tenant, as the gateway does. The templates wrote a second client for the console — an identifier of its own and a secret of its own — and a client that is not registered at Access names no tenant, so the sign-in of the console failed before anything else could happen.
+
+The templates name one client now: the gateway and the console read the same identifier and the same secret of the vault of the deployment, and the outputs of the deployment carry the identifier of the client, its secret and the two callbacks that the tenant registers. The outputs `gateway_client_id` and `gateway_client_secret` are `client_id` and `client_secret` now, and the identifier of the client is `platform` unless the operator names another one. The check of the deployment holds the templates to that rule: a console that is a client of its own is reported, and so is a console that holds the token of the control plane — the token of the control plane is a credential of its own, and the service that the browsers reach holds no credential of the control plane.
+
+The credential of the access context that the console reads was not registered at Access: the templates gave the console a credential and Access was never told about it, so the console read no scope for the people who sign in and it opened nothing. The templates register the credential now, with the tenant of the deployment as its scope, and the check of the deployment holds them to it.
+
+### The console of the deployment knows where Data is
+
+The status board of the console showed Data as not configured, and the deployment that produced that board was a deployment that had come up cleanly: the gateway, Access and the console were up, and Data was a service the console had never been told about.
+
+The console reads the state of the three services and shows it on its status board, and it reads each of them at the address its environment names. The templates named the addresses of the gateway and of Access, and they named no address of Data, so the console probed nothing and reported the service as not configured — a state an operator reads as a service that is not there.
+
+The templates name the address of Data now: the name of the application of Data, which resolves in the internal DNS of the environment and reaches the ingress of the service itself. The check of the deployment holds them to it, and a console that names no address of a service it probes is reported.
+
+### The services of the deployment reach each other at the name of their application
+
+The name of the environment — `<the-service>.<the-environment>.<the-region>.azurecontainerapps.io` — is the **public** name of a service of the environment of the container apps. A service that is not published has no answer there: the environment answers `404` for a request that arrives at the public name of an application whose ingress is internal, and the answer is a page of the environment and not an answer of the service.
+
+The templates wrote that name as the address of the upstreams of the route table and as the address of Access that the console reaches. The gateway answered `404` for every request it forwarded to Access, the console never became ready, and the platform was a front door that opened on nothing.
+
+A service of the environment is reached at the **name of its application**: the name resolves in the internal DNS of the environment, and it reaches the ingress of the service itself. The internal name of an application — `<the-service>.internal.<the-environment>.<the-region>.azurecontainerapps.io` — answers as well, and the name of the application alone is the shortest of the three.
+
+### The cache of the deployment is a cache a client of one server can use
+
+An Azure Managed Redis is a cluster on every tier and every size: the service is built on Redis Enterprise, and the policy of the cluster decides how a client reaches it. The default of the service is the policy of the Redis of the community edition, `OSSCluster`, and the client of the platform is a client of one server: the server answers a command on a key it does not hold with a redirection, `MOVED <the-slot> <the-node>`, and the client follows none.
+
+The gateway then says that the shared state is not reachable, and it keeps the sessions of the callers and the windows of the limits in the memory of a replica. The tier of the cache was never the cause of it: the tier chooses the size, and the policy chooses the protocol.
+
+The templates choose the policy of the proxy, `EnterpriseCluster`: the proxy routes every command to the shard that holds the key, and the cache looks like a server to the client. The policy is chosen when the database is created, and changing it recreates the database: the sessions of the callers are lost, and nothing else is.
 
 ## 1.0.9
 

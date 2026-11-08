@@ -21,7 +21,7 @@ For development, [`packages/console/.env.example`](../../packages/console/.env.e
 | `CONSOLE_ACCESS_URL` | yes | | Access base URL, as the console reaches it. Browsers use the endpoints in its discovery document. |
 | `CONSOLE_CLIENT_ID`, `CONSOLE_CLIENT_SECRET` | yes | | The console's client at Access. The secret is at least 16 characters. |
 | `CONSOLE_GATEWAY_URL` | yes | | Gateway base URL, as the console reaches it. Workspace data is read at `{url}/ws/{id}/v1/…`; the host is the host of the Data route. |
-| `CONSOLE_DATA_URL` | | | Data base URL, for status-board probes only. |
+| `CONSOLE_DATA_URL` | | | Data base URL, for status-board probes only. The console probes the three services at the addresses its environment names, and a service it has no address for is shown as not configured. |
 | `CONSOLE_ACCESS_CONTEXT_TOKEN` | | | Read-only access context credential. Without it, administration is open to nobody. |
 | `CONSOLE_ADMIN_TOKEN` | | | Platform administration credential. |
 | `CONSOLE_TENANT_ADMIN_TOKENS` | | | JSON object mapping tenant slugs to their administration credentials, for example `{"acme":"…"}`. |

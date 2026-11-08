@@ -119,28 +119,24 @@ output "access_admin_token" {
   sensitive   = true
 }
 
-# The credentials of the clients of Access. The tenant of the deployment
-# registers them through the administration API of Access.
-output "gateway_client_id" {
-  description = "The identifier of the gateway as a client of Access."
-  value       = var.gateway_client_id
+# The credentials of the client of the tenant at Access. The tenant
+# registers them through the administration API of Access, and the
+# callbacks of the gateway and of the console are the redirect URIs of
+# the one client.
+output "client_id" {
+  description = "The identifier of the tenant's client at Access."
+  value       = var.client_id
 }
 
-output "gateway_client_secret" {
-  description = "The secret of the gateway as a client of Access."
-  value       = random_bytes.gateway_client_secret.hex
+output "client_secret" {
+  description = "The secret of the tenant's client at Access."
+  value       = random_bytes.client_secret.hex
   sensitive   = true
 }
 
-output "console_client_id" {
-  description = "The identifier of the console as a client of Access."
-  value       = var.console_client_id
-}
-
-output "console_client_secret" {
-  description = "The secret of the console as a client of Access."
-  value       = random_bytes.console_client_secret.hex
-  sensitive   = true
+output "client_redirect_uris" {
+  description = "The callbacks the tenant registers at Access: the callback of the gateway and the callback of the console."
+  value       = [local.gateway_redirect_uri, local.console_redirect_uri]
 }
 
 # The credential of the access context of Data. The operator commands

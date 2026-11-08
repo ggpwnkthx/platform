@@ -8,11 +8,13 @@ import {
   BOOTSTRAP_FILES,
   checkCredentials,
   checkDeploy,
+  checkConsoleProbes,
   checkFilesOfStack,
   checkInfrastructure,
   checkLayout,
   checkMinimumEnvironment,
   checkStacks,
+  checkConsoleCredentials,
   checkTrackedInfrastructure,
   credentialsOfTemplates,
   imagesOfTemplates,
@@ -397,6 +399,206 @@ describe('the infrastructure as code of the deployment', () => {
         {
           file: 'deploy/tofu/azure/terraform.tfstate',
           message: 'the file is not a file of the templates of the platform',
+        },
+      ])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('the console of the deployment', () => {
+  test('it names the address of every service it probes', async () => {
+    expect(await checkConsoleProbes(root)).toEqual([])
+  })
+
+  test('a console that names no address of a service is reported', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
+    try {
+      const templates = join(directory, 'deploy', 'tofu', 'azure')
+      await mkdir(templates, { recursive: true })
+      await writeFile(
+        join(templates, 'containerapps.tf'),
+        [
+          'resource "azurerm_container_app" "console" {',
+          '  template {',
+          '    container {',
+          '      env {',
+          '        name  = "CONSOLE_ACCESS_URL"',
+          '        value = "http://access"',
+          '      }',
+          '      env {',
+          '        name  = "CONSOLE_GATEWAY_URL"',
+          '        value = "https://api"',
+          '      }',
+          '    }',
+          '  }',
+          '}',
+          '',
+        ].join('\n')
+      )
+      const findings = await checkConsoleProbes(directory)
+      expect(findings).toEqual([
+        {
+          file: join('deploy', 'tofu', 'azure', 'containerapps.tf'),
+          message:
+            'the console of the deployment does not name the variable CONSOLE_DATA_URL: the status board of the console shows the service as not configured',
+        },
+      ])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('the credentials of the console of the deployment', () => {
+  test('the console is the client of the tenant', async () => {
+    expect(await checkConsoleCredentials(root)).toEqual([])
+  })
+
+  test('a console that is a client of its own is reported', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
+    try {
+      const templates = join(directory, 'deploy', 'tofu', 'azure')
+      await mkdir(templates, { recursive: true })
+      await writeFile(
+        join(templates, 'containerapps.tf'),
+        [
+          'resource "azurerm_container_app" "gateway" {',
+          '  template {',
+          '    container {',
+          '      env {',
+          '        name  = "GATEWAY_OIDC_CLIENT_ID"',
+          '        value = var.client_id',
+          '      }',
+          '    }',
+          '  }',
+          '}',
+          '',
+          'resource "azurerm_container_app" "console" {',
+          '  template {',
+          '    container {',
+          '      env {',
+          '        name  = "CONSOLE_CLIENT_ID"',
+          '        value = "console"',
+          '      }',
+          '    }',
+          '  }',
+          '}',
+          '',
+        ].join('\n')
+      )
+      const findings = await checkConsoleCredentials(directory)
+      expect(findings).toEqual([
+        {
+          file: join('deploy', 'tofu', 'azure', 'containerapps.tf'),
+          message:
+            'the console of the deployment is a client of Access of its own ("console"), and the gateway is another one (var.client_id): Access holds one client for a tenant, and the sign-in of the console fails with a request that names no tenant',
+        },
+      ])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('a console that reads a secret of its own is reported', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
+    try {
+      const templates = join(directory, 'deploy', 'tofu', 'azure')
+      await mkdir(templates, { recursive: true })
+      await writeFile(
+        join(templates, 'containerapps.tf'),
+        [
+          'locals {',
+          '  gateway_env_secrets = {',
+          '    GATEWAY_OIDC_CLIENT_SECRET = "client-secret"',
+          '  }',
+          '  console_env_secrets = {',
+          '    CONSOLE_CLIENT_SECRET = "console-client-secret"',
+          '  }',
+          '}',
+          '',
+        ].join('\n')
+      )
+      const findings = await checkConsoleCredentials(directory)
+      expect(findings).toEqual([
+        {
+          file: join('deploy', 'tofu', 'azure', 'containerapps.tf'),
+          message:
+            'the console of the deployment reads the secret console-client-secret of the vault and the gateway reads the secret client-secret, and the two of them are the one client of the tenant: the sign-in of the console fails with a request that is not valid',
+        },
+      ])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('a console whose credential of the access context is not registered is reported', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
+    try {
+      const templates = join(directory, 'deploy', 'tofu', 'azure')
+      await mkdir(templates, { recursive: true })
+      await writeFile(
+        join(templates, 'locals.tf'),
+        [
+          'locals {',
+          '  access_context_tokens = {',
+          '    (random_bytes.access_context.hex) = [var.access_tenant_id]',
+          '  }',
+          '  secret_values = {',
+          '    "console-access-context-token" = random_bytes.console_access_context.hex',
+          '  }',
+          '  console_env_secrets = {',
+          '    CONSOLE_ACCESS_CONTEXT_TOKEN = "console-access-context-token"',
+          '  }',
+          '}',
+          '',
+        ].join('\n')
+      )
+      const findings = await checkConsoleCredentials(directory)
+      expect(findings).toEqual([
+        {
+          file: join('deploy', 'tofu', 'azure', 'locals.tf'),
+          message:
+            'the console of the deployment reads the credential of the access context and that credential is not registered at Access: the console reads no scope for the people that sign in, and it opens nothing',
+        },
+      ])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('a console that holds the token of the control plane is reported', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
+    try {
+      const templates = join(directory, 'deploy', 'tofu', 'azure')
+      await mkdir(templates, { recursive: true })
+      await writeFile(
+        join(templates, 'locals.tf'),
+        [
+          'locals {',
+          '  control_tokens = {',
+          '    (random_bytes.client_secret.hex) = {',
+          '      operator = "the-operator-of-the-deployment"',
+          '      scope    = "operate"',
+          '    }',
+          '  }',
+          '  secret_values = {',
+          '    "client-secret" = random_bytes.client_secret.hex',
+          '  }',
+          '  console_env_secrets = {',
+          '    CONSOLE_CLIENT_SECRET = "client-secret"',
+          '  }',
+          '}',
+          '',
+        ].join('\n')
+      )
+      const findings = await checkConsoleCredentials(directory)
+      expect(findings).toEqual([
+        {
+          file: join('deploy', 'tofu', 'azure', 'locals.tf'),
+          message:
+            'the console of the deployment reads the secret of the client, and that secret is the token of the control plane: the service that the browsers reach holds a credential of the control plane',
         },
       ])
     } finally {

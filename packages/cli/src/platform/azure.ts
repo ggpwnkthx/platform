@@ -108,13 +108,8 @@ export const AZURE_QUESTIONS: readonly Question[] = [
     kind: 'given',
   },
   {
-    name: 'gateway_client_id',
-    summary: 'the identifier of the gateway as a client of Access',
-    kind: 'given',
-  },
-  {
-    name: 'console_client_id',
-    summary: 'the identifier of the console as a client of Access',
+    name: 'client_id',
+    summary: "the identifier of the tenant's client at Access",
     kind: 'given',
   },
   {

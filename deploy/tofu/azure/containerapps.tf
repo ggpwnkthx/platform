@@ -101,7 +101,7 @@ locals {
   # `POST /v1/decisions`, and Access accepts it as the shared
   # credential of the deployment, so the two read the same secret.
   gateway_env_secrets = {
-    GATEWAY_OIDC_CLIENT_SECRET          = "gateway-client-secret"
+    GATEWAY_OIDC_CLIENT_SECRET          = "client-secret"
     GATEWAY_ACCESS_TOKEN                = "gateway-access-token"
     GATEWAY_SESSION_SECRET              = "gateway-session-secret"
     GATEWAY_IDENTITY_SIGNING_KEY_BASE64 = "gateway-identity-signing-key"
@@ -126,7 +126,7 @@ locals {
   }
 
   console_env_secrets = {
-    CONSOLE_CLIENT_SECRET        = "console-client-secret"
+    CONSOLE_CLIENT_SECRET        = "client-secret"
     CONSOLE_SESSION_SECRET       = "console-session-secret"
     CONSOLE_ACCESS_CONTEXT_TOKEN = "console-access-context-token"
   }
@@ -227,7 +227,7 @@ resource "azurerm_container_app" "gateway" {
       }
       env {
         name  = "GATEWAY_OIDC_CLIENT_ID"
-        value = var.gateway_client_id
+        value = var.client_id
       }
       env {
         name  = "GATEWAY_OIDC_REDIRECT_URI"
@@ -907,19 +907,19 @@ resource "azurerm_container_app" "console" {
       # The console is a client of Access and of the gateway.
       #
       # The console reaches Access at the address the environment gives
-      # it: the name of the environment and the port of the ingress.
-      # The name of the environment is the address of the ingress, and
-      # the ingress answers on the standard ports and forwards to the
-      # port of the container: the port of the container on the name of
-      # the environment is not an address, and the call to it waits for
-      # a timeout that never ends.
+      # it: the name of the application of Access, which resolves in the
+      # internal DNS of the environment and reaches the ingress of the
+      # service itself. The public name of the application —
+      # `<the-service>.<the-environment>.<the-region>.azurecontainerapps.io` —
+      # is the name of a service that is not published, and the
+      # environment answers `404` for it.
       #
       # The browsers are not the console: they reach Access and the
       # gateway at their public names, and the addresses they use are
       # the ones the discovery document of Access carries.
       env {
         name  = "CONSOLE_ACCESS_URL"
-        value = "http://${local.access_fqdn}"
+        value = "http://${local.access_address}"
       }
       # The gateway is the front door of the deployment, and its ingress
       # terminates the TLS of the three public names: the console
@@ -929,9 +929,23 @@ resource "azurerm_container_app" "console" {
         name  = "CONSOLE_GATEWAY_URL"
         value = local.gateway_url
       }
+      # Data is not published, and the console reads the data of a
+      # workspace through the gateway. The console reads the state of
+      # Data for the status board, and it reads it at the address the
+      # environment gives it: the name of the application of Data,
+      # which resolves in the internal DNS of the environment and
+      # reaches the ingress of the service itself.
+      #
+      # A console that names no address of Data shows Data as not
+      # configured on its status board, and an operator reads it as a
+      # service that is not there.
+      env {
+        name  = "CONSOLE_DATA_URL"
+        value = "http://${local.data_address}"
+      }
       env {
         name  = "CONSOLE_CLIENT_ID"
-        value = var.console_client_id
+        value = var.client_id
       }
       env {
         name  = "CONSOLE_ROUTE_ID"
