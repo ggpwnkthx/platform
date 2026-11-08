@@ -28,6 +28,12 @@ The console reads the state of the three services and shows it on its status boa
 
 The templates name the address of Data now: the name of the application of Data, which resolves in the internal DNS of the environment and reaches the ingress of the service itself. The check of the deployment holds them to it, and a console that names no address of a service it probes is reported.
 
+### The wizard compares the documents and not the words of the templates
+
+The wizard refuses a deployment whose templates write a document the images of the release do not know, and it refused a checkout that wrote the same document: it compared the text of the templates, and the text holds more than the document. A comment that changed was a difference, and so was the address of a service that moved — the templates of a checkout that reached the services at another address were refused, and the operator had to publish a release of the templates to deploy what was already written.
+
+The documents are compared by their fields and by the values that are not addresses now. A comment is a word for the reader of the templates, and the address of a service is a value of the deployment: the images of the release read the address they are given.
+
 ### The services of the deployment reach each other at the name of their application
 
 The name of the environment — `<the-service>.<the-environment>.<the-region>.azurecontainerapps.io` — is the **public** name of a service of the environment of the container apps. A service that is not published has no answer there: the environment answers `404` for a request that arrives at the public name of an application whose ingress is internal, and the answer is a page of the environment and not an answer of the service.
@@ -43,6 +49,12 @@ An Azure Managed Redis is a cluster on every tier and every size: the service is
 The gateway then says that the shared state is not reachable, and it keeps the sessions of the callers and the windows of the limits in the memory of a replica. The tier of the cache was never the cause of it: the tier chooses the size, and the policy chooses the protocol.
 
 The templates choose the policy of the proxy, `EnterpriseCluster`: the proxy routes every command to the shard that holds the key, and the cache looks like a server to the client. The policy is chosen when the database is created, and changing it recreates the database: the sessions of the callers are lost, and nothing else is.
+
+### The gateway names the redirection of a cluster, and its readiness probe reads a key
+
+The shared state was reported as unreachable, and the error of the log line said `MOVED`: the failure was not an outage, and the answer of the server was that the command belongs to another node. The gateway says that now, and it says what to do about it.
+
+The probe of the session store was a ping, and a ping answers on every server, and a cluster answers it on the node the client is connected to even when that node holds none of the keys of the caller: the gateway said that the store was reachable while every keyed command failed. The probe reads a key now, and a gateway that cannot write its sessions is not ready.
 
 ## 1.0.9
 

@@ -75,6 +75,29 @@ resource "azurerm_container_app" "gateway" {
 `,
 }
 
+/**
+ * The templates of a deployment, with an address in the route table.
+ *
+ * The address of a service is a value of the deployment: the images of
+ * a release read the address they are given, and the address is not a
+ * part of the document they know.
+ */
+const ADDRESSED: Readonly<Record<string, string>> = {
+  'locals.tf': `locals {
+  gateway_route_table = {
+    version = 2
+    routes  = [
+      {
+        id          = var.route_id
+        upstream    = "http://\${local.data_fqdn}"
+        upstreamHost = "address"
+      }
+    ]
+  }
+}
+`,
+}
+
 describe('the contract of the templates of a deployment', () => {
   test('the route table the templates write is the contract', () => {
     const contract = contractOf(TEMPLATES)
@@ -122,6 +145,26 @@ describe('the contract of the templates of a deployment', () => {
         'locals {\n  # a comment with a } in it\n  gateway_route_table = {\n    version = 2\n  }\n}\n',
     })
     expect(contract.routeTable).toBe('{\n    version = 2\n  }')
+  })
+
+  test('a comment is not a part of the document', () => {
+    const contract = contractOf({
+      'locals.tf':
+        'locals {\n  gateway_route_table = {\n    # The version of the document.\n    version = 2\n  }\n}\n',
+    })
+    expect(contract.routeTable).not.toContain('The version of the document')
+  })
+
+  test('an address is a value of the deployment and not a part of the document', () => {
+    const contract = contractOf({
+      'locals.tf': `locals {
+  gateway_route_table = {
+    upstream = "http://\${local.data_fqdn}"
+  }
+}
+`,
+    })
+    expect(contract.routeTable).toContain('"http://<address>"')
   })
 })
 
@@ -198,5 +241,49 @@ describe('the ways two contracts differ', () => {
       ),
     })
     expect(differencesOf(here, there)).toEqual([])
+  })
+
+  test('a comment that changed is not a difference', () => {
+    const there = contractOf(TEMPLATES)
+    const here = contractOf({
+      ...TEMPLATES,
+      'locals.tf': TEMPLATES['locals.tf']!.replace(
+        '    version = 2',
+        '    # The version of the document.\n    version = 2'
+      ),
+    })
+    expect(differencesOf(here, there)).toEqual([])
+  })
+
+  test('a layout that changed is not a difference', () => {
+    const there = contractOf(TEMPLATES)
+    const here = contractOf({
+      ...TEMPLATES,
+      'locals.tf': TEMPLATES['locals.tf']!.replace(
+        '    version = 2\n    hosts   = [local.gateway_hostname]',
+        '    version = 2\n\n    hosts = [local.gateway_hostname]'
+      ),
+    })
+    expect(differencesOf(here, there)).toEqual([])
+  })
+
+  test('an address that changed is not a difference', () => {
+    const there = contractOf(ADDRESSED)
+    const here = contractOf({
+      ...ADDRESSED,
+      'locals.tf': ADDRESSED['locals.tf']!.replace('local.data_fqdn', 'local.data_address'),
+    })
+    expect(differencesOf(here, there)).toEqual([])
+  })
+
+  test('a value that changed is a difference', () => {
+    const there = contractOf(ADDRESSED)
+    const here = contractOf({
+      ...ADDRESSED,
+      'locals.tf': ADDRESSED['locals.tf']!.replace('"address"', '"host"'),
+    })
+    expect(differencesOf(here, there)).toEqual([
+      'the route table the templates write is not the one of the release',
+    ])
   })
 })

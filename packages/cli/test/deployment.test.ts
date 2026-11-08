@@ -3037,6 +3037,12 @@ const DOCUMENTS = [
   '  gateway_route_table = {',
   '    version = 2',
   '    hosts   = [local.gateway_hostname]',
+  '    routes  = [',
+  '      {',
+  '        id       = var.route_id',
+  `        upstream = "http://\${local.data_fqdn}"`,
+  '      }',
+  '    ]',
   '  }',
   '}',
   '',
@@ -3231,6 +3237,58 @@ describe('the templates of the checkout and the images of the release', () => {
         'the route table the templates write is not the one of the release'
       )
       expect((refusal as CliFailure).exit).toBe(5)
+    } finally {
+      globalThis.fetch = real
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the deployment runs when the address of a service changed', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-templates-'))
+    const real = globalThis.fetch
+    try {
+      const templates = await repositoryOf(directory)
+      const runtime = join(directory, 'runtime')
+      // The address of a service is a value of the deployment: the
+      // templates of the checkout write another address and the same
+      // document, and the images of the release read the address they
+      // are given.
+      await writeFile(
+        join(templates, 'locals.tf'),
+        DOCUMENTS.replace('local.data_fqdn', 'local.data_address')
+      )
+      globalThis.fetch = releasing()
+      const provider = providerOf([
+        { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+      ])
+      const tool = new FakeInfrastructure()
+      tool.plan_ = {
+        directory: templates,
+        changes: [],
+        drift: [],
+        summary: { create: 0, update: 0, delete: 0, replace: 0 },
+        errored: false,
+        planFile: join(runtime, 'plan.bin'),
+      }
+      const { runtime: cli, progress } = runtimeOf([provider], tool)
+      const status = await run(cli, [
+        'deploy',
+        'azure',
+        '--yes',
+        '--directory',
+        templates,
+        '--runtime',
+        runtime,
+        '--answers',
+        await answersFileOf(
+          directory,
+          'name_prefix = "platform"\noperator_addresses = "203.0.113.4/32"\n'
+        ),
+      ])
+      expect(status).toBe(0)
+      expect(progress.join('\n')).toContain(
+        `the templates of the checkout are ahead of the release v${VERSION}`
+      )
     } finally {
       globalThis.fetch = real
       await rm(directory, { recursive: true, force: true })

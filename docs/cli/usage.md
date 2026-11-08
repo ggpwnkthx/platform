@@ -225,6 +225,8 @@ platformctl deploy azure --release latest
 
 A checkout whose templates write a document the images of the release do not know is refused, and the refusal names the document that changed. Fetch the tag of the release first (`git fetch --tags`), or name the digests of the images of another build in the file of the answers.
 
+The documents are compared by their fields and by the values that are not addresses: a comment that changed and the address of a service that moved are not a difference, and the deployment goes on.
+
 The wizard writes the file of the values, `deploy/tofu/runtime/production/terraform.tfvars`, and then it continues:
 
 1. It asks for the addresses that reach the account of the state of the deployment. The account holds the state and the secrets of the deployment, and it is closed to every other address. The public address of your machine is read and offered as the default, so answering nothing takes it; type another address when your machine reaches the internet through another one.

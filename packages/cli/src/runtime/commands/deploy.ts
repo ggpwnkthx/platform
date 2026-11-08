@@ -1447,6 +1447,11 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
       // **contract** of the templates is the documents they write, and
       // the deployment runs the images of the release when the contract
       // of the checkout and the contract of the release are the same.
+      //
+      // A document is read without its comments and without the
+      // addresses of the deployment: the address of a service is a
+      // value of the deployment, and the images of the release read the
+      // address they are given.
       if (release !== undefined && !carriesImages(answers)) {
         const state = await templatesStateOf(directory, release.tag)
         if (state === 'different') {

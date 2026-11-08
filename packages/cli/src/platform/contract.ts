@@ -24,6 +24,12 @@
  * reads it. A template that the reader does not understand is a
  * contract it cannot prove, and a contract it cannot prove is a
  * deployment it refuses.
+ *
+ * A document is read without its comments and without the addresses of
+ * the deployment: a comment is a word for the reader of the templates,
+ * and an address is a value of the deployment. A commit that moves the
+ * address of a service writes another address and the same document,
+ * and the images of the release read the address they are given.
  */
 
 /** The contract of a set of templates. */
@@ -86,24 +92,24 @@ export function contractOf(files: Readonly<Record<string, string>>): TemplatesCo
   const contents = Object.values(files)
   const secretFiles: Record<string, readonly string[]> = {}
   for (const [service, name] of Object.entries(SECRET_FILES)) {
-    secretFiles[service] = stringsOf(blockOf(contents, name))
+    secretFiles[service] = stringsOf(documentOf(blockOf(contents, name)))
   }
   const envSecrets: Record<string, readonly string[]> = {}
   for (const [service, name] of Object.entries(ENV_SECRETS)) {
-    envSecrets[service] = keysOf(blockOf(contents, name))
+    envSecrets[service] = keysOf(documentOf(blockOf(contents, name)))
   }
   const envNames: Record<string, readonly string[]> = {}
   for (const [service, block] of Object.entries(appsOf(contents))) {
     envNames[service] = [...literalsOf(block, 'env'), ...literalsOf(block, 'secret')]
   }
   return {
-    routeTable: blockOf(contents, 'gateway_route_table'),
-    bindings: blockOf(contents, 'data_gateway_bindings'),
-    controlTokens: blockOf(contents, 'control_tokens'),
-    accessContextTokens: blockOf(contents, 'access_context_tokens'),
-    secretNames: stringsOf(blockOf(contents, 'secret_names')),
+    routeTable: documentOf(blockOf(contents, 'gateway_route_table')),
+    bindings: documentOf(blockOf(contents, 'data_gateway_bindings')),
+    controlTokens: documentOf(blockOf(contents, 'control_tokens')),
+    accessContextTokens: documentOf(blockOf(contents, 'access_context_tokens')),
+    secretNames: stringsOf(documentOf(blockOf(contents, 'secret_names'))),
     secretFiles,
-    secretFileNames: pairsOf(blockOf(contents, 'secret_file_names')),
+    secretFileNames: pairsOf(documentOf(blockOf(contents, 'secret_file_names'))),
     envSecrets,
     envNames,
   }
@@ -124,16 +130,16 @@ export function differencesOf(
   there: TemplatesContract
 ): readonly string[] {
   const differences: string[] = []
-  if (here.routeTable !== there.routeTable) {
+  if (!sameDocument(here.routeTable, there.routeTable)) {
     differences.push('the route table the templates write is not the one of the release')
   }
-  if (here.bindings !== there.bindings) {
+  if (!sameDocument(here.bindings, there.bindings)) {
     differences.push('the bindings of Data the templates write are not the ones of the release')
   }
-  if (here.controlTokens !== there.controlTokens) {
+  if (!sameDocument(here.controlTokens, there.controlTokens)) {
     differences.push('the tokens of the control plane are not the ones of the release')
   }
-  if (here.accessContextTokens !== there.accessContextTokens) {
+  if (!sameDocument(here.accessContextTokens, there.accessContextTokens)) {
     differences.push('the credentials of the access context are not the ones of the release')
   }
   if (!sameNames(here.secretNames, there.secretNames)) {
@@ -181,6 +187,66 @@ export function differencesOf(
 }
 
 /**
+ * Whether two documents are the same document.
+ *
+ * The documents are compared by their tokens: a document that was
+ * written with another layout is the same document, and a document
+ * whose words changed is another document.
+ *
+ * @param here the document of the checkout.
+ * @param there the document of the release.
+ */
+function sameDocument(here: string | null, there: string | null): boolean {
+  if (here === null || there === null) return here === there
+  const left = tokensOf(here)
+  const right = tokensOf(there)
+  return left.length === right.length && left.every((token, index) => token === right[index])
+}
+
+/**
+ * The tokens of a document.
+ *
+ * A token is a word, a number, a string or a mark: the layout of the
+ * document is not a token, and neither is a comment.
+ *
+ * @param document the document.
+ */
+function tokensOf(document: string): readonly string[] {
+  const tokens: string[] = []
+  let index = 0
+  while (index < document.length) {
+    const char = document[index]!
+    if (/\s/.test(char)) {
+      index += 1
+      continue
+    }
+    if (char === '"') {
+      const end = endOfString(document, index)
+      tokens.push(document.slice(index, end))
+      index = end
+      continue
+    }
+    if (/[A-Za-z_]/.test(char)) {
+      let end = index
+      while (end < document.length && /[A-Za-z0-9_]/.test(document[end]!)) end += 1
+      tokens.push(document.slice(index, end))
+      index = end
+      continue
+    }
+    if (/[0-9]/.test(char)) {
+      let end = index
+      while (end < document.length && /[0-9.]/.test(document[end]!)) end += 1
+      tokens.push(document.slice(index, end))
+      index = end
+      continue
+    }
+    tokens.push(char)
+    index += 1
+  }
+  return tokens
+}
+
+/**
  * Whether two lists of names are the same names.
  *
  * The order of the names is not a difference: a deployment that writes
@@ -216,6 +282,48 @@ function blockOf(contents: readonly string[], name: string): string | null {
     return region
   }
   return null
+}
+
+/**
+ * The document the templates write.
+ *
+ * The document is the region of the templates without its comments and
+ * without the addresses of the deployment: a comment is a word for the
+ * reader of the templates, and an address is a value of the deployment.
+ * A commit that moves the address of a service writes another address
+ * and the same document, and the images of the release read the address
+ * they are given.
+ *
+ * The fields of the document and the values that are not addresses are
+ * kept: the images read them, and a document that changed is a
+ * document the images of the release do not know.
+ *
+ * @param region the region of the templates.
+ */
+function documentOf(region: string | null): string | null {
+  if (region === null) return null
+  let document = ''
+  let index = 0
+  while (index < region.length) {
+    const char = region[index]!
+    if (char === '"') {
+      const end = endOfString(region, index)
+      document += addressIn(region.slice(index, end))
+      index = end
+      continue
+    }
+    if (char === '#' || (char === '/' && region[index + 1] === '/')) {
+      index = endOfLine(region, index)
+      continue
+    }
+    if (char === '/' && region[index + 1] === '*') {
+      index = endOfComment(region, index)
+      continue
+    }
+    document += char
+    index += 1
+  }
+  return document
 }
 
 /**
@@ -333,6 +441,22 @@ function endOfLine(content: string, open: number): number {
 function endOfComment(content: string, open: number): number {
   const end = content.indexOf('*/', open)
   return end === -1 ? content.length : end + 2
+}
+
+/**
+ * The address of a service, and what is left of it.
+ *
+ * The address of a service is a value of the deployment: the images of
+ * a release read the address they are given, and the address is not a
+ * part of the document they know. The scheme of the address is kept:
+ * the scheme says how the address is read.
+ *
+ * @param text the string of the templates, with its quotes.
+ */
+function addressIn(text: string): string {
+  const match = /^"([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)[^"]*"$/.exec(text)
+  if (match === null) return text
+  return `"${match[1]}<address>"`
 }
 
 /**
