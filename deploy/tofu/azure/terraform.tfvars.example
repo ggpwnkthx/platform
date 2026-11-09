@@ -139,6 +139,14 @@ access_tenant_id   = "11111111-1111-4111-8111-111111111111"
 data_workspace_id  = "22222222-2222-4222-8222-222222222222"
 data_workspace_slug = "acme"
 
+# Whether the tenant of the deployment provisions the identities that
+# sign in. The first person who signs in at Entra ID gets a principal,
+# and the principal is created at that login: nobody has to read the
+# `sub` of the identity in the directory to register it by hand. A
+# principal that is created has no grant at all, and the operator of
+# the deployment gives it one.
+tenant_auto_provision = true
+
 # --------------------------------------------------------------------------
 # The size of the services
 # --------------------------------------------------------------------------

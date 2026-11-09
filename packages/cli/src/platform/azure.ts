@@ -146,6 +146,12 @@ export const AZURE_QUESTIONS: readonly Question[] = [
     kind: 'required',
   },
   {
+    name: 'tenant_auto_provision',
+    summary:
+      'whether the tenant of the deployment provisions the identities that sign in for the first time',
+    kind: 'given',
+  },
+  {
     name: 'gateway_image',
     summary: 'the image of the gateway, by digest',
     kind: 'required',
@@ -1173,6 +1179,25 @@ function settingOf(context: AfterApply, name: string): string {
 }
 
 /**
+ * Whether the tenant of the deployment provisions the identities that
+ * sign in.
+ *
+ * The deployment answers the value: the tenant of the deployment
+ * provisions the identities that sign in, and the operator of the
+ * deployment says so in the values of the deployment. A deployment whose
+ * templates do not answer keeps the flag of the tenant that is already
+ * there, and a tenant that is not there yet provisions its identities.
+ *
+ * @param context what the deployment applied.
+ * @param existing the tenant that is already there.
+ */
+function provisioningOf(context: AfterApply, existing: TenantOfAccess | undefined): boolean {
+  const answered = settingOf(context, 'tenant_auto_provision')
+  if (answered === '') return existing?.autoProvision ?? true
+  return answered === 'true'
+}
+
+/**
  * Reads the names of the answers of the templates.
  *
  * @param outputs the answers of the templates.
@@ -1568,9 +1593,9 @@ async function tenantWithEntra(context: AfterApply, waits: Waits): Promise<strin
     // The tenant of the deployment provisions the identities that sign
     // in for the first time: the operator of the deployment is the
     // first one to sign in, and the principal it needs is created at
-    // that login. The flag of a tenant that is already there is the
-    // work of the operator of the platform, and it is kept.
-    autoProvision: existing?.autoProvision ?? true,
+    // that login. The value is the one of the deployment, and the
+    // deployment holds it.
+    autoProvision: provisioningOf(context, existing),
     sharedClient: existing?.sharedClient ?? false,
     default: existing?.default ?? false,
     enabled: existing?.enabled ?? true,

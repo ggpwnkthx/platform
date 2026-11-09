@@ -301,6 +301,12 @@ variable "data_workspace_slug" {
   default     = "acme"
 }
 
+variable "tenant_auto_provision" {
+  description = "Whether the tenant of the deployment provisions the identities that sign in."
+  type        = bool
+  default     = true
+}
+
 # --------------------------------------------------------------------------
 # The size of the services
 # --------------------------------------------------------------------------

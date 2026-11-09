@@ -516,9 +516,22 @@ platformctl access grants put --tenant esquire --user-id <the-principal> \
 
 Every identity of the tenant that signs in afterwards is provisioned as
 well: the flag provisions the identities of the tenant, and not only the
-first one. A deployment whose tenant provisions no identity is a tenant
-whose principals are registered by hand, and the wizard keeps the flag
-of a tenant that is already there.
+first one.
+
+The flag is a value of the deployment: `tenant_auto_provision` is `true`
+by default, and the wizard registers the tenant with the value the
+deployment holds at every apply. A deployment whose tenant provisions no
+identity is a deployment that says `tenant_auto_provision = false` in
+its values, and its people are registered by hand.
+
+```hcl
+tenant_auto_provision = false
+```
+
+A tenant that is already there and that the deployment answers nothing
+about keeps the flag it has: the wizard reads the values of the
+deployment, and a deployment whose templates are older knows nothing
+about the provisioning of its tenant.
 
 Access is a service of the deployment, and it cannot answer before the
 job of the migration has created the roles of the deployment: the

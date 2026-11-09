@@ -10,6 +10,12 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The provisioning of the tenant of a deployment is a value of the deployment
+
+The tenant of a deployment was registered with the auto-provisioning of the principals as the work of the platform: the wizard created the tenant with the flag off and kept the flag of the tenant that was already there. An operator whose tenant was created before the wizard provisioned it had to register the first principal by hand — and the way to turn the provisioning on was an upsert that carries the whole tenant, with the secret of the provider and the secret of the client in it.
+
+The flag is a value of the deployment now: `tenant_auto_provision` is `true` by default, the wizard reads it in the answers of the templates, and the registration of the tenant carries it at every apply. An operator who wants its people registered by hand says `tenant_auto_provision = false` in the values of the deployment. A deployment whose templates do not answer keeps the flag of the tenant that is already there.
+
 ## 1.0.11
 
 ### The console of the deployment holds the credential of the administration

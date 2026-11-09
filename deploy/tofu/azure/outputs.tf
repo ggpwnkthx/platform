@@ -153,6 +153,11 @@ output "data_workspace_slug" {
   value       = var.data_workspace_slug
 }
 
+output "tenant_auto_provision" {
+  description = "Whether the tenant of the deployment provisions the identities that sign in."
+  value       = var.tenant_auto_provision
+}
+
 output "entra_tenant_enabled" {
   description = "Whether the deployment created the application of Access at Entra ID."
   value       = var.entra_tenant_enabled
