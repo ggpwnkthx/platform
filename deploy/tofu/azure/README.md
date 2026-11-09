@@ -10,7 +10,7 @@ deployment are in [`../runtime/`](../README.md#the-templates-and-the-files-of-a-
 | The platform | Azure |
 | --- | --- |
 | The gateway, Access, Data, the console and the control plane | Five container apps in one environment |
-| The images of the release | A container registry, and the images are pulled **by digest** |
+| The images of the release | The registry of GitHub (`ghcr.io`), and the images are pulled **by digest** |
 | The digests of the images | The file `digests.json` of the latest release, read by the wizard |
 | PostgreSQL | Azure Database for PostgreSQL Flexible Server, injected into the network |
 | Redis | Azure Managed Redis, behind a private endpoint |
@@ -30,7 +30,7 @@ runs the same platform wherever it runs it.
 | A subscription of Azure, and the right to create resources in it | The deployment creates the network, the database, the cache and the services |
 | OpenTofu 1.9 or later, and a login of Entra ID | The templates are applied by a person, and the state is read and written by the identity of the person |
 | A checkout of the tag of the release | The templates and the images of a deployment come from the same tag |
-| The images of the release, pushed to the registry of the deployment | The deployment runs the bytes that the gates of the release proved, and it runs them by digest |
+| The images of the release, published at `ghcr.io` by the release | The deployment runs the bytes that the gates of the release proved, and it runs them by digest. The packages are public, and the pull needs no credential |
 | A network of the deployment that the operator can reach | The database and the cache are private, and the operator commands of the platform run against them |
 
 The resource providers of the deployment are not registered by the
@@ -44,8 +44,6 @@ registration needs them registered by hand:
 az provider register --namespace Microsoft.App
 az provider register --namespace Microsoft.DBforPostgreSQL
 az provider register --namespace Microsoft.Cache
-az provider register --namespace Microsoft.Cdn
-az provider register --namespace Microsoft.ContainerRegistry
 az provider register --namespace Microsoft.KeyVault
 az provider register --namespace Microsoft.Insights
 az provider register --namespace Microsoft.Network
@@ -127,6 +125,52 @@ The digests of the four images of the platform are in the file
 that file: `platformctl deploy azure`. The digest of the image of the
 client of PostgreSQL — the one image of a deployment that the platform
 does not publish — is read from the registry that holds it.
+
+### The images of the deployment
+
+The images are pulled from the registry of GitHub, and the deployment
+holds **no registry of its own**: the packages of the release are
+public, and a public package is pulled without a credential.
+
+The templates name **no registry at all**: an application without a
+registry pulls its images anonymously, and the identity of the
+deployment reads the secrets of the vault and nothing else.
+
+The reference of an image names the registry it is in, and the
+templates pull every image from the registry its reference names:
+
+```
+ghcr.io/ggpwnkthx/gateway@sha256:…
+ghcr.io/ggpwnkthx/access@sha256:…
+ghcr.io/ggpwnkthx/data@sha256:…
+ghcr.io/ggpwnkthx/console@sha256:…
+docker.io/library/postgres:18-alpine@sha256:…
+```
+
+The image of the client of PostgreSQL names the registry of Docker, and
+it is never pulled from the registry of the platform: the job of the
+migration is the one place of the deployment that uses an image of
+somebody else.
+
+The registry of the deployment was a mirror of the packages of the
+release, and it was paid for. The packages of the release are public,
+and the environment of the container apps pulls them from where they
+are published.
+
+A package that is **not** public needs a credential, and the templates
+do not hold one: the deployment reads its secrets out of the vault of
+the deployment, and a token of the registry is a secret of the
+deployment like the other ones. The environment of the container apps
+reads the credential of the registry out of the vault, with the
+identity of the deployment:
+
+```hcl
+registry {
+  server = "ghcr.io"
+  username = "the-name-of-the-account-of-the-registry"
+  password_secret_name = "the-name-of-the-secret-of-the-vault"
+}
+```
 
 ### 3. The deployment
 

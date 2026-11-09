@@ -43,8 +43,6 @@ provider "azurerm" {
   resource_providers_to_register = [
     "Microsoft.App",
     "Microsoft.Cache",
-    "Microsoft.Cdn",
-    "Microsoft.ContainerRegistry",
     "Microsoft.DBforPostgreSQL",
     "Microsoft.Insights",
     "Microsoft.KeyVault",

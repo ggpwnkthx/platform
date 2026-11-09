@@ -45,7 +45,7 @@ import {
 } from '../../domains/deployment'
 import { azureProvider } from '../../platform/azure'
 import { isAddress, publicAddressOf, rangeOf, servicesOf } from '../../platform/address'
-import { digestOf, tagOf } from '../../platform/registry'
+import { digestOf, repositoryOf, tagOf } from '../../platform/registry'
 import { pathOf, placeOf, templatesAtTagOf, templatesStateOf } from '../../platform/checkout'
 import { contractOf, differencesOf } from '../../platform/contract'
 import { type Release, releaseOf } from '../../platform/release'
@@ -976,6 +976,10 @@ async function readRelease(input: CommandInput): Promise<Release | undefined> {
  * registry that cannot be reached is not a failure: the wizard asks the
  * operator for the digest.
  *
+ * The reference names the registry of the image, and the digest is read
+ * from the registry of Docker: the repository of Docker is the name of
+ * the image without the name of the registry.
+ *
  * @param defaults the values of the example of the templates.
  */
 async function readClientImage(defaults: Readonly<Values>): Promise<string | undefined> {
@@ -984,7 +988,7 @@ async function readClientImage(defaults: Readonly<Values>): Promise<string | und
   const tag = tagOf(reference)
   if (!tag) return undefined
   const name = reference.split('@')[0]!.split(':')[0]!
-  const repository = name.includes('/') ? name : `library/${name}`
+  const repository = repositoryOf(name)
   try {
     const digest = await digestOf(repository, tag)
     return `${name}:${tag}@${digest}`

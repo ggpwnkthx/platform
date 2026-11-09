@@ -10,6 +10,16 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The deployment holds no registry of its own
+
+The deployment of the platform on Azure held a container registry of its own: the packages of the release were pushed into it, and the applications of the deployment pulled them from it. The registry was a mirror of packages that are public, and it was paid for.
+
+The images are pulled from the registry of GitHub now, and the deployment holds no registry of its own: a public package is pulled without a credential, and the applications of the deployment name no registry at all. The subscription of the deployment registers two providers less, the deployment holds no role of a registry, and the pull of an image needs no identity.
+
+A block of a registry that names a server and no credential is refused by the provider — the credential of a registry is either an identity or a name of an account and a name of a secret — and a deployment whose images are public needs none of them. The block was left behind when the images moved, and the applications of the deployment were refused one after the other.
+
+The image of the client of PostgreSQL is the one image of a deployment that the platform does not publish, and it names the registry of Docker: the wizard reads its digest from the registry of Docker Hub, and the name of the repository of an image is the name of the image without the name of the registry. The reference of the image names `docker.io/library/postgres`, and the repository of Docker Hub is `library/postgres`.
+
 ## 1.0.10
 
 ### The console of the deployment is the client of the tenant

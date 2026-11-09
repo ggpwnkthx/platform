@@ -97,12 +97,6 @@ output "key_vault_uri" {
   value       = azurerm_key_vault.platform.vault_uri
 }
 
-# The registry of the images of the deployment.
-output "registry_login_server" {
-  description = "The address of the registry of the images of the deployment."
-  value       = azurerm_container_registry.platform.login_server
-}
-
 # The key that signs the identity of a request. The public half is what
 # the upstreams verify a signature with; the private half is in the
 # vault of the deployment and is never an output.

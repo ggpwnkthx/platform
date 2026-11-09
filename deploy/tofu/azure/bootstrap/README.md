@@ -37,14 +37,18 @@ operator, and it registers the providers the deployment needs:
 ```text
 Microsoft.App             the container apps and the job of the migration
 Microsoft.Cache           the cache of the deployment
-Microsoft.Cdn             the edge of the deployment
-Microsoft.ContainerRegistry  the registry of the images
 Microsoft.DBforPostgreSQL   the database of the deployment
 Microsoft.Insights        the workspace of the logs
 Microsoft.KeyVault        the vault of the secrets
 Microsoft.Network         the network of the deployment and the edge
 Microsoft.Storage         the account of the state
 ```
+
+The images of the platform are pulled from the registry of GitHub, and
+the packages are public: the pull needs no credential, and the
+deployment holds no token of the registry. The provider of the
+container registry is not one of the providers of the deployment, and
+the bootstrap does not register it.
 
 The registration takes a minute, and the first apply of this stack waits
 for it. A subscription that forbids the registration needs the providers

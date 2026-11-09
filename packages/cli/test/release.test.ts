@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { digestOf, tagOf } from '../src/platform/registry'
+import { digestOf, repositoryOf, tagOf } from '../src/platform/registry'
 import { latestTagOf, releaseOf } from '../src/platform/release'
 
 /**
@@ -178,6 +178,15 @@ describe('the digests of a registry', () => {
     expect(tagOf('postgres:18-alpine@sha256:0000')).toBe('18-alpine')
     expect(tagOf('postgres@sha256:0000')).toBeUndefined()
     expect(tagOf('library/postgres:18-alpine')).toBe('18-alpine')
+  })
+
+  test('the repository of an image of Docker Hub is read', () => {
+    expect(repositoryOf('postgres')).toBe('library/postgres')
+    expect(repositoryOf('library/postgres')).toBe('library/postgres')
+    expect(repositoryOf('docker.io/library/postgres')).toBe('library/postgres')
+    expect(repositoryOf('index.docker.io/library/postgres')).toBe('library/postgres')
+    expect(repositoryOf('registry-1.docker.io/library/postgres')).toBe('library/postgres')
+    expect(repositoryOf('somebody/postgres')).toBe('somebody/postgres')
   })
 
   test('the digest of an image is read from the registry', async () => {

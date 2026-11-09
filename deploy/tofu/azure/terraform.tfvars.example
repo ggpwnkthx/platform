@@ -30,11 +30,10 @@ location = "westeurope"
 # deployment.
 resource_group_name = "platform-production"
 
-# The vault and the registry carry a name that nobody else in Azure
-# carries. Leave them empty to take the name of the deployment, and name
-# them when the name is taken.
+# The vault carries a name that nobody else in Azure carries. Leave it
+# empty to take the name of the deployment, and name it when the name is
+# taken.
 key_vault_name = ""
-registry_name  = ""
 
 # The tenant of Entra ID that holds the application of Access.
 tenant_id = "00000000-0000-0000-0000-000000000000"
@@ -47,9 +46,8 @@ tenant_id = "00000000-0000-0000-0000-000000000000"
 subscription_id = "00000000-0000-0000-0000-000000000000"
 
 # The identity of the operator. It writes the secrets of the deployment
-# in the vault of the deployment, and it pushes the console to the
-# registry of the deployment. The wizard of the deployment reads it from
-# the client of Azure and writes it here.
+# in the vault of the deployment. The wizard of the deployment reads it
+# from the client of Azure and writes it here.
 operator_principal_id = ""
 
 # --------------------------------------------------------------------------
@@ -60,23 +58,27 @@ operator_principal_id = ""
 #
 #   ghcr.io/ggpwnkthx/gateway:v1.0.0
 #
-# The registry of the deployment holds the copy of the images of the
-# release, and the digests below name that copy.
+# The images are pulled from the registry of GitHub, and the packages
+# are public: the pull needs no credential, and the deployment holds no
+# token of the registry. The digests below name the bytes of the
+# release.
 # --------------------------------------------------------------------------
 
-gateway_image = "platformproductionregistry.azurecr.io/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000000"
-access_image  = "platformproductionregistry.azurecr.io/access@sha256:0000000000000000000000000000000000000000000000000000000000000000"
-data_image    = "platformproductionregistry.azurecr.io/data@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+gateway_image = "ghcr.io/ggpwnkthx/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+access_image  = "ghcr.io/ggpwnkthx/access@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+data_image    = "ghcr.io/ggpwnkthx/data@sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
 # The console has no published image: the release publishes the three
 # services, and the console is built from the tag of the release. Build
-# it, push it to the registry of the deployment, and name its digest
-# here.
-console_image = "platformproductionregistry.azurecr.io/console@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+# it, push it to the registry of GitHub, and name its digest here.
+console_image = "ghcr.io/ggpwnkthx/console@sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
 # The client of PostgreSQL. It carries the psql that creates the role
 # of Access, and it is the image of the PostgreSQL of the repository.
-postgres_client_image = "postgres:18-alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+# It is pulled from the registry of Docker, and the name of the registry
+# is in the reference: the image is never pulled from the registry of
+# the platform.
+postgres_client_image = "docker.io/library/postgres:18-alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
 # --------------------------------------------------------------------------
 # The public names

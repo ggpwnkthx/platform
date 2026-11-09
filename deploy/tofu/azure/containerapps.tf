@@ -153,10 +153,13 @@ resource "azurerm_container_app" "gateway" {
     identity_ids = [azurerm_user_assigned_identity.platform.id]
   }
 
-  registry {
-    server   = azurerm_container_registry.platform.login_server
-    identity = azurerm_user_assigned_identity.platform.id
-  }
+  # The images are pulled anonymously.
+  #
+  # The images of the platform are published at the registry of GitHub
+  # by the release, and they are pulled **by digest**. The packages are
+  # public, and the pull of a public package needs no credential: the
+  # deployment names no registry, it holds no token of a registry, and
+  # the identity of the deployment pulls nothing.
 
   ingress {
     external_enabled = true
@@ -361,10 +364,13 @@ resource "azurerm_container_app" "control" {
     identity_ids = [azurerm_user_assigned_identity.platform.id]
   }
 
-  registry {
-    server   = azurerm_container_registry.platform.login_server
-    identity = azurerm_user_assigned_identity.platform.id
-  }
+  # The images are pulled anonymously.
+  #
+  # The images of the platform are published at the registry of GitHub
+  # by the release, and they are pulled **by digest**. The packages are
+  # public, and the pull of a public package needs no credential: the
+  # deployment names no registry, it holds no token of a registry, and
+  # the identity of the deployment pulls nothing.
 
   ingress {
     external_enabled = false
@@ -512,10 +518,13 @@ resource "azurerm_container_app" "access" {
     identity_ids = [azurerm_user_assigned_identity.platform.id]
   }
 
-  registry {
-    server   = azurerm_container_registry.platform.login_server
-    identity = azurerm_user_assigned_identity.platform.id
-  }
+  # The images are pulled anonymously.
+  #
+  # The images of the platform are published at the registry of GitHub
+  # by the release, and they are pulled **by digest**. The packages are
+  # public, and the pull of a public package needs no credential: the
+  # deployment names no registry, it holds no token of a registry, and
+  # the identity of the deployment pulls nothing.
 
   ingress {
     # Access is behind the gateway: it is reached under the name of the
@@ -685,10 +694,13 @@ resource "azurerm_container_app" "data" {
     identity_ids = [azurerm_user_assigned_identity.platform.id]
   }
 
-  registry {
-    server   = azurerm_container_registry.platform.login_server
-    identity = azurerm_user_assigned_identity.platform.id
-  }
+  # The images are pulled anonymously.
+  #
+  # The images of the platform are published at the registry of GitHub
+  # by the release, and they are pulled **by digest**. The packages are
+  # public, and the pull of a public package needs no credential: the
+  # deployment names no registry, it holds no token of a registry, and
+  # the identity of the deployment pulls nothing.
 
   ingress {
     external_enabled = false
@@ -855,10 +867,13 @@ resource "azurerm_container_app" "console" {
     identity_ids = [azurerm_user_assigned_identity.platform.id]
   }
 
-  registry {
-    server   = azurerm_container_registry.platform.login_server
-    identity = azurerm_user_assigned_identity.platform.id
-  }
+  # The images are pulled anonymously.
+  #
+  # The images of the platform are published at the registry of GitHub
+  # by the release, and they are pulled **by digest**. The packages are
+  # public, and the pull of a public package needs no credential: the
+  # deployment names no registry, it holds no token of a registry, and
+  # the identity of the deployment pulls nothing.
 
   ingress {
     # The console is behind the gateway: it is reached under the name of
@@ -1023,10 +1038,13 @@ resource "azurerm_container_app_job" "migrate" {
     identity_ids = [azurerm_user_assigned_identity.platform.id]
   }
 
-  registry {
-    server   = azurerm_container_registry.platform.login_server
-    identity = azurerm_user_assigned_identity.platform.id
-  }
+  # The images are pulled anonymously.
+  #
+  # The images of the platform are published at the registry of GitHub
+  # by the release, and they are pulled **by digest**. The packages are
+  # public, and the pull of a public package needs no credential: the
+  # deployment names no registry, it holds no token of a registry, and
+  # the identity of the deployment pulls nothing.
 
   # The job waits for the hand of the operator.
   manual_trigger_config {

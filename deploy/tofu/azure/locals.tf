@@ -14,10 +14,9 @@ locals {
   prefix = "${var.name_prefix}-${var.environment}"
 
   # The names of the resources that are unique in the whole of Azure:
-  # the vault and the registry carry a name that nobody else carries,
-  # and the operator names them when the default name is taken.
+  # the vault carries a name that nobody else carries, and the
+  # operator names it when the default name is taken.
   key_vault_name = var.key_vault_name != "" ? var.key_vault_name : "${local.prefix}-kv"
-  registry_name  = var.registry_name != "" ? var.registry_name : replace("${local.prefix}registry", "-", "")
 
   # The tags of every resource of the deployment: the cost of a resource
   # is attributed to the deployment that runs it.

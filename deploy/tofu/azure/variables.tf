@@ -79,9 +79,9 @@ variable "subscription_id" {
 # --------------------------------------------------------------------------
 # The names that are unique in the whole of Azure
 #
-# The vault and the registry of the deployment carry a name that nobody
-# else in Azure carries. The defaults are the name of the deployment;
-# the operator names them when the default name is taken.
+# The vault of the deployment carries a name that nobody else in Azure
+# carries. The defaults are the name of the deployment; the operator
+# names it when the default name is taken.
 # --------------------------------------------------------------------------
 
 variable "key_vault_name" {
@@ -92,17 +92,6 @@ variable "key_vault_name" {
   validation {
     condition     = var.key_vault_name == "" || can(regex("^[a-zA-Z][a-zA-Z0-9-]{2,23}$", var.key_vault_name))
     error_message = "The name of the vault is between three and twenty-four characters, and it starts with a letter."
-  }
-}
-
-variable "registry_name" {
-  description = "The name of the registry of the deployment. It is unique in Azure."
-  type        = string
-  default     = ""
-
-  validation {
-    condition     = var.registry_name == "" || can(regex("^[a-zA-Z0-9]{5,50}$", var.registry_name))
-    error_message = "The name of the registry is between five and fifty characters, and it carries no dash."
   }
 }
 

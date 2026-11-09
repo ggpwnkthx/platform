@@ -151,7 +151,6 @@ export const TEMPLATE_FILES: readonly string[] = [
   'variables.tf',
   'locals.tf',
   'network.tf',
-  'registry.tf',
   'observability.tf',
   'postgres.tf',
   'redis.tf',

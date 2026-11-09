@@ -20,11 +20,3 @@ resource "azurerm_role_assignment" "vault_secrets_user" {
   role_definition_name = "Key Vault Secrets User"
   principal_id         = azurerm_user_assigned_identity.platform.principal_id
 }
-
-# The permission that pushes the images of the deployment to the
-# registry of the deployment.
-resource "azurerm_role_assignment" "registry_push" {
-  scope                = azurerm_container_registry.platform.id
-  role_definition_name = "AcrPush"
-  principal_id         = azurerm_user_assigned_identity.platform.principal_id
-}

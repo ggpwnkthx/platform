@@ -16,6 +16,29 @@ const REGISTRY = 'registry-1.docker.io'
 /** The service that answers with the token of the registry. */
 const AUTH = 'auth.docker.io'
 
+/**
+ * The names of the registry of Docker that a reference of an image may
+ * carry. The reference of an image names the registry it is in, and the
+ * name of the repository of Docker is the name of the image without the
+ * name of the registry.
+ */
+const DOCKER_HOSTS: readonly string[] = ['docker.io/', 'index.docker.io/', 'registry-1.docker.io/']
+
+/**
+ * The repository of Docker Hub that an image is in.
+ *
+ * The name of an image is `postgres`, `library/postgres` or
+ * `docker.io/library/postgres`: the three name the same image of Docker
+ * Hub, and the repository of Docker Hub is `library/postgres`.
+ *
+ * @param name the name of the image, without the tag and the digest.
+ */
+export function repositoryOf(name: string): string {
+  const host = DOCKER_HOSTS.find((candidate) => name.startsWith(candidate))
+  const path = host === undefined ? name : name.slice(name.indexOf('/') + 1)
+  return path.includes('/') ? path : `library/${path}`
+}
+
 /** The shapes of a manifest the registry may answer with. */
 const MANIFESTS = [
   'application/vnd.oci.image.index.v1+json',
