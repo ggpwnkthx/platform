@@ -546,7 +546,12 @@ export async function startPostgres(options: PostgresOptions = {}): Promise<Star
       { encoding: 'utf8', env: { ...process.env, LANG: 'C', LC_ALL: 'C' } }
     )
     if (init.status !== 0) {
-      throw new Error(`initdb failed: ${init.stderr}`)
+      // A process that is killed says nothing on its standard error:
+      // the reason of the failure is the signal, and a machine that is
+      // out of memory kills it.
+      const reason = init.error?.message ?? init.signal ?? `the exit code ${init.status}`
+      const said = init.stderr.trim()
+      throw new Error(`initdb failed: ${reason}${said === '' ? '' : `: ${said}`}`)
     }
   } else if (major !== null) {
     // A data directory of another major is not a data directory of this

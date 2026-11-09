@@ -329,7 +329,11 @@ jobs:
 
       - name: the database, the transactions and the worker
         if: matrix.workspace == 'data'
-        run: bun test --cwd packages/data test/integration
+        # The suite builds a PostgreSQL cluster and applies the schema of
+        # Data in a hook, and a hook has the timeout of a test: the five
+        # seconds of the default are less than the work of the setup,
+        # and the suite fails on its own setup when the runner is slow.
+        run: bun test --cwd packages/data test/integration --timeout 120000
         env:
           TEST_DATABASE_URL: postgres://platform:platform@127.0.0.1:5432/platform
 
@@ -882,11 +886,15 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: the fuzzing of the trust boundary
+        # The two suites of the integration build the database of the
+        # tests, and the build is the work of a hook: the timeout of the
+        # tests is the timeout of the build, and it is longer than the
+        # five seconds of the default.
         run: |
           for seed in 1 2 3 4 5 6 7 8; do
             FUZZ_SEED=$seed FUZZ_CASES=5000 bun test --cwd packages/data test/unit/fuzz.test.ts
-            FILTER_PROPERTY_SEED=$seed FILTER_PROPERTY_CASES=1500 FILTER_PROPERTY_ROWS=40 bun test --cwd packages/data test/integration/filter.property.test.ts
-            WRITE_GUARD_SEED=$seed WRITE_GUARD_CASES=40 WRITE_GUARD_ROWS=6 bun test --cwd packages/data test/integration/write-guard.test.ts
+            FILTER_PROPERTY_SEED=$seed FILTER_PROPERTY_CASES=1500 FILTER_PROPERTY_ROWS=40 bun test --cwd packages/data test/integration/filter.property.test.ts --timeout 120000
+            WRITE_GUARD_SEED=$seed WRITE_GUARD_CASES=40 WRITE_GUARD_ROWS=6 bun test --cwd packages/data test/integration/write-guard.test.ts --timeout 120000
           done
         env:
           TEST_DATABASE_URL: postgres://platform:platform@127.0.0.1:5432/platform
