@@ -236,19 +236,6 @@ resource "azurerm_container_app" "gateway" {
         name  = "GATEWAY_OIDC_REDIRECT_URI"
         value = local.gateway_redirect_uri
       }
-      # The scopes the gateway asks Access for.
-      #
-      # The gateway asks for the groups of a caller by default, and
-      # Entra ID does not know that scope: the scopes of a provider are
-      # the ones its discovery document names, and a scope it does not
-      # know is a scope the authorization of the provider refuses. The
-      # deployment that holds the tenant of Entra ID asks for the three
-      # scopes that every provider knows, and a deployment whose tenant
-      # has another provider asks for none and lets the gateway ask.
-      env {
-        name  = "GATEWAY_OIDC_SCOPES"
-        value = var.entra_tenant_enabled ? "openid,profile,email" : ""
-      }
       env {
         name  = "GATEWAY_ACCESS_URL"
         value = local.access_issuer

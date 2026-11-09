@@ -407,13 +407,12 @@ not the first: the discovery document of the first version names another
 issuer, and Access refuses a provider whose document names an issuer
 that is not the issuer of the tenant.
 
-The scopes of the provider are the three that every provider knows —
-`openid`, `profile` and `email` — and the deployment tells the gateway
-so (`GATEWAY_OIDC_SCOPES`). The gateway asks for the groups of a caller
-by default, and Entra ID does not know that scope: the scopes of a
-provider are the ones its discovery document names, and a scope it does
-not know is a scope its authorization refuses. The groups of a caller
-are read in the grants of Access, and not in the directory.
+The scopes of the provider are the ones its discovery document names:
+`openid`, `profile` and `email`. The gateway asks for the groups of a
+caller as well, and Entra ID does not name that scope: a scope a
+provider does not name is a scope it ignores, and the token of the
+caller carries no group. The groups of a caller are read in the grants
+of Access, and not in the directory.
 
 The secret of the client is rotated by the operator: the value of
 `entra_secret_rotation` is the key of the secret, and a change of the
