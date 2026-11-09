@@ -18,6 +18,12 @@ The tenant of the deployment provisions the identities that sign in now. The fir
 
 The CLI says the flag in the words of the operator: `platformctl access tenants create --auto-provision` registers a tenant that provisions its identities, and `--no-auto-provision` says the opposite. The upsert changes the flags the body names and resets the ones it does not, so the call carries the whole tenant.
 
+### The provider of a tenant is asked for the scopes it knows
+
+Access sent the browser to the provider of the tenant with the scopes the client had asked for, and the scopes of a client are the scopes of the **platform**: `groups` is one of them. The scopes of a **provider** are the ones its registration carries, and a scope a provider does not name is a scope its authorization refuses: Entra ID refused the whole login with `AADSTS650053`, and the sign-in of the console and of the gateway never completed.
+
+Access asks the provider for the scopes of the tenant now — the scopes of its registration, limited to the ones the client asked for — and keeps the two lists apart. The platform asks for the groups of a caller, and the groups of a caller are read in the grants of Access and not in the directory.
+
 ### The tenant of the deployment is registered with the slug of its workspace
 
 The wizard of a deployment on Azure registers the tenant of the deployment at Access, with the application of Access at Entra ID as its provider. It read the slug of the tenant in the values of the wizard, and the wizard never collected that value: the slug of the workspace of the deployment is a value of the templates, and the wizard does not ask for it. The value was empty, the wizard refused the registration, and the tenant of the deployment was never created.
@@ -42,7 +48,7 @@ The templates create the application of Access at Entra ID now: a confidential c
 
 The tenant of the deployment is registered with that application as its provider. The wizard of the deployment reads the tenant among the tenants of Access — the tenant the values name — and registers it again at every apply, keeping the flags of the tenant: the auto-provisioning of the principals, the shared client and the default of the platform are the work of the operator of the platform. The registration is a call to the administration API of Access, and Access is a service of the deployment that has to be up: a deployment whose Access is not up yet is a deployment whose tenant is registered by hand, and the wizard says so.
 
-The gateway asks for the groups of a caller as well, and the provider does not grant them. The scopes of a provider are the ones its discovery document names, and the document of Entra ID names `openid`, `profile` and `email`: a scope a provider does not name is a scope it ignores, and the token of the caller carries no group. The groups of a caller are read in the grants of Access, and not in the directory.
+The gateway asks for the groups of a caller as well, and the provider does not grant them. The scopes of a provider are the ones its discovery document names, and the document of Entra ID names `openid`, `profile` and `email`: a scope a provider does not name is a scope its authorization refuses, and the whole login is refused with it. Access asks the provider for the scopes of the tenant, and the groups of a caller are read in the grants of Access, and not in the directory.
 
 The tenant of the deployment is created by the wizard and not by the operator. The wizard waits for Access — Access cannot answer before the job of the migration has created the roles of the deployment — and it creates the tenant of the deployment when the tenant is not there yet, with the slug of the workspace of the deployment. The identifier of the tenant it created is written in the file of the values, and the deployment goes on again: the access context of the deployment is scoped to that identifier, and a scope that names no tenant asks about nothing.
 

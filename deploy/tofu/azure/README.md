@@ -412,11 +412,13 @@ issuer, and Access refuses a provider whose document names an issuer
 that is not the issuer of the tenant.
 
 The scopes of the provider are the ones its discovery document names:
-`openid`, `profile` and `email`. The gateway asks for the groups of a
-caller as well, and Entra ID does not name that scope: a scope a
-provider does not name is a scope it ignores, and the token of the
-caller carries no group. The groups of a caller are read in the grants
-of Access, and not in the directory.
+`openid`, `profile` and `email`. The gateway and the console ask for
+the groups of a caller as well, and Entra ID does not name that scope:
+a scope a provider does not name is a scope its authorization refuses,
+and the whole login is refused with it. Access asks the provider for
+the scopes of the tenant — the scopes of its registration, limited to
+the ones the client asked for — and the groups of a caller are read in
+the grants of Access, and not in the directory.
 
 The secret of the client is rotated by the operator: the value of
 `entra_secret_rotation` is the key of the secret, and a change of the

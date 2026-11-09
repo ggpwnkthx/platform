@@ -8,6 +8,7 @@ import {
   LoginStateError,
   mapIdentity,
   MappingError,
+  providerScopesOf,
   resolveTenant,
   TenantResolutionError,
   validateProviderToken,
@@ -51,6 +52,31 @@ function lookup(tenants: TenantOfLogin[]) {
     findDefault: async () => tenants.find((row) => row.isDefault) ?? null,
   }
 }
+
+describe('the scopes of a provider', () => {
+  test('the provider is asked for the scopes it knows', () => {
+    // The scopes of a request are the scopes of the platform, and the
+    // platform asks for the groups of a caller. The provider of the
+    // tenant has no directory of groups, and a scope it does not name
+    // is a scope its authorization refuses.
+    expect(providerScopesOf(tenant(), ['openid', 'profile', 'email', 'groups'])).toEqual([
+      'openid',
+      'profile',
+      'email',
+    ])
+  })
+
+  test('a tenant whose provider knows no scope is asked for the scopes of the request', () => {
+    expect(providerScopesOf(tenant({ scopes: [] }), ['openid', 'email'])).toEqual([
+      'openid',
+      'email',
+    ])
+  })
+
+  test('a client that asks for nothing the provider knows is asked for everything it knows', () => {
+    expect(providerScopesOf(tenant(), ['groups'])).toEqual(['openid', 'email', 'profile'])
+  })
+})
 
 describe('the tenant of a login', () => {
   test('the client of the request names the tenant', async () => {

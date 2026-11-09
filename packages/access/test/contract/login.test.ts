@@ -110,6 +110,30 @@ describe('the login of Access', () => {
     expect(location.searchParams.get('state')).toBe('the-state-of-the-gateway')
   })
 
+  test('the provider is asked for the scopes it knows', async () => {
+    // The scopes of a request are the scopes of the platform, and the
+    // platform asks for the groups of a caller. The scopes of a provider
+    // are the ones its registration carries, and a scope a provider does
+    // not name is a scope its authorization refuses: the whole login is
+    // refused with it.
+    const query = new URLSearchParams({
+      client_id: 'gateway-acme',
+      redirect_uri: GATEWAY_REDIRECT,
+      response_type: 'code',
+      scope: 'openid profile email groups',
+      state: 'the-state-of-the-gateway',
+      nonce: 'the-nonce-of-the-gateway',
+      code_challenge: CHALLENGE,
+      code_challenge_method: 'S256',
+    })
+    const response = await fetch(`${service.base}/oauth/authorize?${query.toString()}`, {
+      redirect: 'manual',
+    })
+    expect(response.status).toBe(302)
+    const atProvider = new URL(response.headers.get('location') ?? '')
+    expect(atProvider.searchParams.get('scope')).toBe('openid profile email')
+  })
+
   test('a redirect uri that is not registered is refused', async () => {
     // The url the browser comes back to is a value the caller controls:
     // one that is not registered for the client is never sent a code, and

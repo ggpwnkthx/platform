@@ -156,7 +156,7 @@ export class LoginService {
         state: this.providerStateOf(state),
         nonce,
         challenge: createHash('sha256').update(verifier, 'ascii').digest('base64url'),
-        scopes: request.scopes,
+        scopes: providerScopesOf(tenant, request.scopes),
       })
     } catch (error) {
       throw this.refusalOf(error)
@@ -417,4 +417,32 @@ export class LoginService {
   private sameProviderState(state: LoginState, received: string): boolean {
     return this.providerStateOf(state) === received
   }
+}
+
+/**
+ * The scopes Access asks the provider for.
+ *
+ * The scopes of a request are the scopes of the **platform**: `groups` is
+ * one of them, and the groups of a caller are read in the grants of
+ * Access. The scopes of a **provider** are the ones its registration
+ * carries, and the ones its discovery document names: a scope a provider
+ * does not name is a scope its authorization refuses, and the whole
+ * login is refused with it.
+ *
+ * The two lists are not the same list, and Access keeps them apart: the
+ * platform asks for the groups of a caller, and the provider of a tenant
+ * that has no directory of groups is not asked for them.
+ *
+ * A tenant whose registration carries no scope is asked for the scopes
+ * of the request: a provider that knows no scope is a provider that is
+ * asked what the caller asked for.
+ *
+ * @param tenant the tenant of the login.
+ * @param requested the scopes the client asked for.
+ */
+export function providerScopesOf(tenant: TenantOfLogin, requested: readonly string[]): string[] {
+  const known = tenant.scopes
+  if (known.length === 0) return [...requested]
+  const asked = requested.filter((scope) => known.includes(scope))
+  return asked.length > 0 ? asked : [...known]
 }

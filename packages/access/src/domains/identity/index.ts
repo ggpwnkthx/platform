@@ -20,6 +20,7 @@ export type {
   CompletedLogin,
 } from './service'
 export { LoginError, LoginService } from './service'
+export { providerScopesOf } from './service'
 export type { LoginState } from './state'
 export {
   aChallenge,
