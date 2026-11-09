@@ -154,7 +154,7 @@ tofu -chdir=deploy/tofu/azure output -raw entra_client_secret
 tofu -chdir=deploy/tofu/azure output -raw entra_redirect_uri
 ```
 
-The wizard of the deployment makes the call itself when the deployment is applied: it waits for Access, it creates the tenant of the deployment when the tenant is not there yet, and it registers it again at every apply. The identifier of the tenant it created is written in the file of the values of the deployment, and the deployment goes on again — the access context of the deployment is scoped to that identifier. The procedure is in [The deployment of the platform on Azure](../../deploy/tofu/azure/README.md#7-the-tenant).
+The wizard of the deployment makes the call itself when the deployment is applied: it waits for Access, it creates the tenant of the deployment when the tenant is not there yet, and it registers it again at every apply. The tenant is created with the slug of the workspace of the deployment — the wizard asks the operator for that slug, and the workspace of Data carries the same one. The identifier of the tenant it created is written in the file of the values of the deployment, and the deployment goes on again — the access context of the deployment is scoped to that identifier. The procedure is in [The deployment of the platform on Azure](../../deploy/tofu/azure/README.md#7-the-tenant).
 
 Keep the `id` from the answer: it is the tenant UUID that Data's workspace registry and the access context credential refer to. Then register each principal by the provider's `sub` and grant it a permission on the workspace and on the route the gateway will check (`data-api` in `deploy/config/routes.json`).
 

@@ -187,6 +187,10 @@ const REFUSES_DOWNLOAD = new Set(['0', 'off', 'false', 'no'])
  * one of the platform (`tooling/redaction.ts`): the processes of the
  * platform hold the same names back, and the check of the redaction
  * refuses the one that does not.
+ *
+ * The redaction holds a value back where the answers are drawn: the
+ * tool reads the truth of the deployment, and the command that shows it
+ * holds the credential back.
  */
 const SENSITIVE_NAMES = new Set([
   'accessToken',
@@ -843,7 +847,14 @@ export class TofuInfrastructure implements InfrastructurePort {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return {}
     }
-    return redact(valuesOf(parsed)) as Record<string, unknown>
+    // The outputs are the truth of the deployment, credentials
+    // included: the wizard of the deployment registers the tenant of
+    // the deployment at Access with the token of the administration and
+    // with the secrets of the client, and a held-back value is a
+    // refusal the wizard cannot read. The credential is held back
+    // where the answers are drawn, and not here: a line of a terminal
+    // never carries one.
+    return valuesOf(parsed) as Record<string, unknown>
   }
 
   /**

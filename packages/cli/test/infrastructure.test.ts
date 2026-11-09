@@ -694,7 +694,11 @@ describe('the tool that writes the infrastructure', () => {
 
       const outputs = await tool.output(templates, {})
       expect(outputs.gateway_url).toBe('https://api.example.com')
-      expect(outputs.access_admin_token).toBe('(sensitive value)')
+      // The tool reads the truth of the deployment: the wizard of the
+      // deployment registers the tenant of the deployment with the
+      // token of the administration, and a held-back value is a
+      // refusal it cannot read.
+      expect(outputs.access_admin_token).toBe('the-token-of-the-deployment')
     } finally {
       await rm(directory, { recursive: true, force: true })
     }

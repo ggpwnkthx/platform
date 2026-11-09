@@ -365,6 +365,15 @@ describe('the environment of a deployment', () => {
     expect(asked?.kind).toBe('given')
   })
 
+  test('the provider of Azure asks for the slug of the workspace', () => {
+    // The tenant of the deployment is created with the slug of its
+    // workspace, and the wizard writes the slug in the values of the
+    // deployment: a question the wizard does not ask is a slug the
+    // wizard does not know.
+    const asked = azureProvider().questions.find((one) => one.name === 'data_workspace_slug')
+    expect(asked?.kind).toBe('required')
+  })
+
   test('a default the deployment cannot use is not offered', () => {
     // A deployment that is already there holds the answers of an
     // earlier run, and an answer of an earlier run that the templates
@@ -2808,6 +2817,35 @@ describe('the certificate of the public names', () => {
     }
   })
 
+  test('the provider reads the names of the deployment in the answers of the templates', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-certificate-'))
+    try {
+      const binary = join(directory, 'az')
+      const calls = join(directory, 'calls')
+      await writeFile(binary, CLIENT_BINDING(calls))
+      await chmod(binary, 0o755)
+      const provider = azureProvider([], { PATH: process.env.PATH ?? '', AZURE_CLI: binary })
+      const notes = await provider.afterApply?.({
+        // The values of the wizard hold no setting: the settings of the
+        // deployment are the values of the templates, and the wizard
+        // reads them in the answers of the templates.
+        values: {},
+        outputs: {
+          container_apps: { gateway: 'platform-production-gateway' },
+          container_app_environment: 'platform-production-environment',
+          resource_group_name: 'platform-production',
+          public_names: { api: 'api.example.com' },
+          public_names_enabled: true,
+        },
+      })
+      expect(notes?.join('\n')).toContain(
+        'the certificate of the name api.example.com is bound to the gateway'
+      )
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
   test('a client that refuses is told what it refused', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'platformctl-certificate-'))
     try {
@@ -3134,6 +3172,107 @@ describe('the tenant of the deployment', () => {
       expect(notes?.join('\n')).toContain(
         'the identifier of the tenant 22222222-2222-4222-8222-222222222222 is written in the file of the values'
       )
+    } finally {
+      globalThis.fetch = real
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the provider reads the slug of the workspace in the answers of the templates', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-tenant-'))
+    const real = globalThis.fetch
+    try {
+      const binary = join(directory, 'az')
+      await writeFile(binary, CLIENT_BINDING(join(directory, 'calls')))
+      await chmod(binary, 0o755)
+      const calls: { body: unknown; authorization: string }[] = []
+      globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+        const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined
+        const headers = (init?.headers ?? {}) as Record<string, string>
+        if (init?.method === 'POST') {
+          calls.push({ body, authorization: headers.authorization ?? '' })
+          return new Response(
+            JSON.stringify({ id: '22222222-2222-4222-8222-222222222222', slug: 'esquire' }),
+            { status: 201, headers: { 'content-type': 'application/json' } }
+          )
+        }
+        return new Response(JSON.stringify({ tenants: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }) as typeof globalThis.fetch
+      const provider = azureProvider([], { PATH: process.env.PATH ?? '', AZURE_CLI: binary })
+      const notes = await provider.afterApply?.({
+        // The values of the wizard hold no slug: the wizard collects the
+        // values it asks for, and the slug of the workspace is a value
+        // of the templates.
+        values: { public_names_enabled: 'false' },
+        outputs: {
+          resource_group_name: 'platform-production',
+          access_issuer: 'https://access.example.com',
+          access_admin_token: 'the-token-of-the-administration',
+          client_id: 'platform',
+          client_secret: 'the-secret-of-the-client',
+          client_redirect_uris: ['https://api.example.com/auth/callback'],
+          access_tenant_id: '11111111-1111-4111-8111-111111111111',
+          data_workspace_slug: 'esquire',
+          entra_tenant_enabled: true,
+          entra_issuer:
+            'https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0',
+          entra_client_id: 'the-client-of-access-at-entra',
+          entra_client_secret: 'the-secret-of-the-client-at-entra',
+          entra_redirect_uri: 'https://access.example.com/oauth/tenant/callback',
+        },
+      })
+      expect(notes?.join('\n')).toContain(
+        'the tenant esquire of the deployment is registered with the application of Access at Entra ID as its provider'
+      )
+      expect(calls[0]?.body).toMatchObject({ slug: 'esquire' })
+      // The tenant of the deployment provisions the identities that sign
+      // in: the operator of the deployment is the first one to sign in,
+      // and the principal it needs is created at that login.
+      expect(calls[0]?.body).toMatchObject({ autoProvision: true })
+      // The wizard presents the token of the administration of Access:
+      // the outputs of the deployment carry the credentials it needs,
+      // and a credential that is held back is a refusal it cannot read.
+      expect(calls[0]?.authorization).toBe('Bearer the-token-of-the-administration')
+    } finally {
+      globalThis.fetch = real
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('a deployment whose templates name no tenant of Entra ID registers no tenant', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-tenant-'))
+    const real = globalThis.fetch
+    try {
+      const binary = join(directory, 'az')
+      await writeFile(binary, CLIENT_BINDING(join(directory, 'calls')))
+      await chmod(binary, 0o755)
+      let asked = false
+      globalThis.fetch = (async (_input: string | URL | Request, _init?: RequestInit) => {
+        asked = true
+        return new Response('{}', { status: 200 })
+      }) as typeof globalThis.fetch
+      const provider = azureProvider([], { PATH: process.env.PATH ?? '', AZURE_CLI: binary })
+      const notes = await provider.afterApply?.({
+        values: { public_names_enabled: 'false' },
+        outputs: {
+          resource_group_name: 'platform-production',
+          access_issuer: 'https://access.example.com',
+          access_admin_token: 'the-token-of-the-administration',
+          client_id: 'platform',
+          client_secret: 'the-secret-of-the-client',
+          client_redirect_uris: ['https://api.example.com/auth/callback'],
+          access_tenant_id: '11111111-1111-4111-8111-111111111111',
+          data_workspace_slug: 'esqads',
+          // The application of Access at Entra ID is not there: the
+          // tenant is the work of the operator.
+          entra_tenant_enabled: false,
+        },
+      })
+      expect(asked).toBe(false)
+      expect(notes?.join('\n')).not.toContain('is registered with the application of Access')
     } finally {
       globalThis.fetch = real
       await rm(directory, { recursive: true, force: true })

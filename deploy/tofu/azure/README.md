@@ -471,11 +471,52 @@ tenant. The registration is repeated at every apply.
 A deployment whose tenant is not there yet gets one: the tenant of the
 deployment is created with the slug of the **workspace** of the
 deployment, because the deployment holds one tenant and one workspace
-and they belong to the same customer. The identifier of the tenant that
-the answer carries is written in the file of the values, and the
+and they belong to the same customer. The slug is the value
+`data_workspace_slug` of the deployment, and the wizard asks the
+operator for it: the workspace of Data carries the same slug, and a
+tenant whose slug is not the slug of its workspace names a workspace
+that the platform does not have. The identifier of the tenant that the
+answer carries is written in the file of the values, and the
 deployment goes on again: the access context of the deployment is
 scoped to that identifier, and a scope that names no tenant asks about
 nothing.
+
+The wizard reads the values of the deployment in the answers of the
+templates: the slug of the workspace, the identifier of the tenant, the
+provider of the tenant and the public names are outputs of the
+deployment, and the outputs are the values the deployment runs with. A
+value that is written in the templates and in the code of the wizard is
+a value that drifts.
+
+```bash
+tofu -chdir=deploy/tofu/azure output -raw data_workspace_slug
+```
+
+#### The first account of the tenant
+
+The tenant of the deployment **provisions the identities that sign in**:
+the first person who signs in at Entra ID with the application of the
+deployment gets a principal, and the principal is created at that login.
+The operator of the deployment is the first one to sign in, and the
+principal it needs is created at that moment: nobody has to read the
+`sub` of the identity in the directory to register it by hand.
+
+A principal that is created has **no grant at all**: the login succeeds
+and every request is still refused until the operator gives that
+principal a right. The principal is read out of the administration:
+
+```bash
+tofu -chdir=deploy/tofu/azure output -raw access_admin_token
+platformctl access principals list --tenant esquire
+platformctl access grants put --tenant esquire --user-id <the-principal> \
+  --permission console.admin --workspace-id esquire --route-id console
+```
+
+Every identity of the tenant that signs in afterwards is provisioned as
+well: the flag provisions the identities of the tenant, and not only the
+first one. A deployment whose tenant provisions no identity is a tenant
+whose principals are registered by hand, and the wizard keeps the flag
+of a tenant that is already there.
 
 Access is a service of the deployment, and it cannot answer before the
 job of the migration has created the roles of the deployment: the

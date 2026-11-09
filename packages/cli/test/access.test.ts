@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test'
+import { run, type CliRuntime } from '../src/app/cli'
+import type { Services } from '../src/app/commands'
 import {
   decide,
   listGrants,
@@ -9,7 +11,56 @@ import {
   writePrincipal,
   writeTenant,
 } from '../src/domains/access'
-import { FakeHttp } from './support'
+import { accessGroup } from '../src/runtime/commands/access'
+import { FakeHttp, FakeInfrastructure } from './support'
+
+/**
+ * The runtime of the tests of the administration.
+ *
+ * @param http the transport of the calls.
+ */
+function runtimeOf(http: FakeHttp): { runtime: CliRuntime; out: string[] } {
+  const out: string[] = []
+  const services: Services = {
+    http,
+    profiles: { read: async () => ({ profiles: {} }), write: async () => undefined },
+    credentials: {
+      read: async () => null,
+      write: async () => undefined,
+      clear: async () => undefined,
+    },
+    browser: { open: async () => undefined },
+    callback: {
+      start: async () => {
+        throw new Error('the commands of the administration do not open a browser')
+      },
+    },
+    crypto: {
+      randomBytes: (size: number) => new Uint8Array(size).fill(7),
+      sha256: (value: Uint8Array) => new Uint8Array(value.length).fill(9),
+    },
+    infrastructure: new FakeInfrastructure(),
+    files: { profiles: '/tmp/profiles.json', credentials: '/tmp/credentials.json' },
+    progress: () => undefined,
+  }
+  return {
+    out,
+    runtime: {
+      name: 'platformctl',
+      commands: [],
+      groups: [accessGroup],
+      environment: {},
+      services: () => services,
+      contextOf: async () => ({
+        name: 'default',
+        accessUrl: 'https://access.example.com',
+        adminToken: 'the-admin-token',
+      }),
+      out: (text) => out.push(text),
+      err: () => undefined,
+    },
+  }
+}
 
 /**
  * The parameters of a call to Access.
@@ -83,5 +134,71 @@ describe('the administration of Access', () => {
     const http = new FakeHttp(FakeHttp.json(200, { allow: false }))
     await decide(callOf(http), { subject: '00u1' }, 'the-decision-token')
     expect(http.last.token).toBe('the-decision-token')
+  })
+})
+
+/**
+ * The tenants of the administration.
+ *
+ * The tenant is the unit of the access: it holds the provider of the
+ * identity, the client of the gateway and the flags of the platform.
+ */
+describe('the tenants of the administration', () => {
+  test('a tenant that provisions its identities is written with the flag', async () => {
+    const http = new FakeHttp(FakeHttp.json(200, { slug: 'acme' }))
+    const { runtime } = runtimeOf(http)
+    const status = await run(runtime, [
+      'access',
+      'tenants',
+      'create',
+      '--slug',
+      'acme',
+      '--display-name',
+      'Acme Inc',
+      '--issuer',
+      'https://login.acme.example',
+      '--idp-client-id',
+      'access-acme',
+      '--idp-client-secret',
+      'the-secret',
+      '--client-id',
+      'gateway-acme',
+      '--client-secret',
+      'the-secret',
+      '--auto-provision',
+    ])
+    expect(status).toBe(0)
+    expect(http.last.method).toBe('POST')
+    expect(http.last.url).toBe('https://access.example.com/v1/admin/tenants')
+    const body = JSON.parse(http.last.body ?? '{}') as Record<string, unknown>
+    expect(body.autoProvision).toBe(true)
+  })
+
+  test('a tenant that provisions no identity is written with the flag', async () => {
+    const http = new FakeHttp(FakeHttp.json(200, { slug: 'acme' }))
+    const { runtime } = runtimeOf(http)
+    const status = await run(runtime, [
+      'access',
+      'tenants',
+      'create',
+      '--slug',
+      'acme',
+      '--display-name',
+      'Acme Inc',
+      '--issuer',
+      'https://login.acme.example',
+      '--idp-client-id',
+      'access-acme',
+      '--idp-client-secret',
+      'the-secret',
+      '--client-id',
+      'gateway-acme',
+      '--client-secret',
+      'the-secret',
+      '--no-auto-provision',
+    ])
+    expect(status).toBe(0)
+    const body = JSON.parse(http.last.body ?? '{}') as Record<string, unknown>
+    expect(body.autoProvision).toBe(false)
   })
 })

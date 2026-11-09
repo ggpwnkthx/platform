@@ -71,6 +71,21 @@ In the console, a platform operator creates the tenant from **Operators** ([cons
 
 Keep the defaults unless you have a reason: `autoProvision` stays `false`, so nobody gets a principal just by signing in, and `sharedClient` stays `false`, so the tenant's gateway logs in only this tenant's people. Note the `id` in the answer: it is the tenant UUID that Data and the access context credentials use. A `201` means created, a `200` means an existing slug was updated.
 
+A tenant that provisions its identities is a tenant whose first account needs no registration by hand: `--auto-provision` creates the principal at the first login, and every identity of the tenant that signs in afterwards is provisioned as well. The principal that is created has **no grant at all**: the login succeeds and every request is refused until the operator gives that principal a right ([the first grant](#6-give-the-first-grant)).
+
+```bash
+platformctl access tenants create --slug acme --display-name "Acme Inc" \
+  --issuer https://login.acme.example \
+  --idp-client-id access-acme --idp-client-secret "$IDP_CLIENT_SECRET" \
+  --idp-redirect-uri https://access.example.com/oauth/tenant/callback \
+  --email-domain acme.example \
+  --client-id gateway-acme --client-secret "$GATEWAY_CLIENT_SECRET" \
+  --client-redirect-uri https://gateway-acme.example.com/auth/callback \
+  --auto-provision
+```
+
+The upsert changes the flags the body names and resets the ones it does not: repeating the call without `--auto-provision` turns the provisioning of the tenant off, and `--no-auto-provision` says it in the words of the operator.
+
 A wrong issuer, client id or callback can be fixed by repeating the call, but Access keeps the provider client for ten minutes ([Access spec §6.6](../access/spec.md#66-provider-key-rotation)), so wait that long or roll the replicas.
 
 ### 3. Configure the tenant's gateway

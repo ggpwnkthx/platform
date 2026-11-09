@@ -142,8 +142,8 @@ export const AZURE_QUESTIONS: readonly Question[] = [
   },
   {
     name: 'data_workspace_slug',
-    summary: 'the slug of the workspace of Data',
-    kind: 'given',
+    summary: 'the slug of the workspace of Data, and of the tenant of the deployment',
+    kind: 'required',
   },
   {
     name: 'gateway_image',
@@ -1154,6 +1154,25 @@ function answerOf(outputs: Readonly<Record<string, unknown>>, path: readonly str
 }
 
 /**
+ * Reads a setting of the deployment.
+ *
+ * The setting is read in the answers of the templates first: the
+ * answers are the values the deployment runs with, and they are the
+ * truth of the deployment. The values of the wizard are the fallback:
+ * a deployment whose templates are older answers nothing, and the
+ * values of the wizard are the values it holds.
+ *
+ * @param context what the deployment applied.
+ * @param name the name of the setting.
+ */
+function settingOf(context: AfterApply, name: string): string {
+  const answered = context.outputs[name]
+  if (typeof answered === 'string') return answered
+  if (typeof answered === 'boolean') return answered ? 'true' : 'false'
+  return context.values[name] ?? ''
+}
+
+/**
  * Reads the names of the answers of the templates.
  *
  * @param outputs the answers of the templates.
@@ -1196,7 +1215,7 @@ function namesOf(outputs: Readonly<Record<string, unknown>>, name: string): stri
  */
 async function certificatesOf(binary: string, context: AfterApply): Promise<string[]> {
   const notes: string[] = []
-  if (context.values.public_names_enabled !== 'true') return notes
+  if (settingOf(context, 'public_names_enabled') !== 'true') return notes
 
   const application = answerOf(context.outputs, ['container_apps', 'gateway'])
   const environment = answerOf(context.outputs, ['container_app_environment'])
@@ -1485,7 +1504,7 @@ function registeredOf(answer: unknown): { id: string; slug: string } | undefined
 async function tenantWithEntra(context: AfterApply, waits: Waits): Promise<string[]> {
   // A deployment whose tenant has another provider creates no
   // application, and the registration is the work of the operator.
-  if (context.values.entra_tenant_enabled === 'false') return []
+  if (settingOf(context, 'entra_tenant_enabled') === 'false') return []
 
   const access = answerOf(context.outputs, ['access_issuer'])
   const admin = answerOf(context.outputs, ['access_admin_token'])
@@ -1512,10 +1531,10 @@ async function tenantWithEntra(context: AfterApply, waits: Waits): Promise<strin
   // The tenant of the deployment is created with the slug of the
   // workspace of the deployment: the deployment holds one tenant and
   // one workspace, and they belong to the same customer.
-  const slug = context.values.data_workspace_slug ?? ''
+  const slug = settingOf(context, 'data_workspace_slug')
   if (slug === '') {
     return [
-      'the tenant of the deployment is not registered with Entra ID: the values of the deployment name no workspace',
+      'the tenant of the deployment is not registered with Entra ID: the deployment names no workspace: the slug of the workspace of Data is a value of the deployment, and the wizard reads it in the answers of the templates',
     ]
   }
 
@@ -1528,7 +1547,7 @@ async function tenantWithEntra(context: AfterApply, waits: Waits): Promise<strin
     ]
   }
 
-  const id = context.values.access_tenant_id ?? ''
+  const id = settingOf(context, 'access_tenant_id')
   const existing = tenantOf(answer, id)
   const body = {
     slug: existing?.slug ?? slug,
@@ -1546,7 +1565,12 @@ async function tenantWithEntra(context: AfterApply, waits: Waits): Promise<strin
     clientId,
     clientSecret,
     clientRedirectUris: callbacks,
-    autoProvision: existing?.autoProvision ?? false,
+    // The tenant of the deployment provisions the identities that sign
+    // in for the first time: the operator of the deployment is the
+    // first one to sign in, and the principal it needs is created at
+    // that login. The flag of a tenant that is already there is the
+    // work of the operator of the platform, and it is kept.
+    autoProvision: existing?.autoProvision ?? true,
     sharedClient: existing?.sharedClient ?? false,
     default: existing?.default ?? false,
     enabled: existing?.enabled ?? true,

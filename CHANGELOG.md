@@ -10,6 +10,30 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The tenant of the deployment provisions the identities that sign in
+
+The tenant of a deployment was created with the auto-provisioning of the principals off: a person who signed in at Entra ID was refused by Access with `identity_unknown`, and the operator of the deployment had to read the `sub` of the identity in the directory and to register the principal by hand before anybody could sign in.
+
+The tenant of the deployment provisions the identities that sign in now. The first person who signs in at the provider of the tenant gets a principal, and the principal is created at that login: the operator of the deployment is the first one to sign in, and the account it needs is there when it arrives. A principal that is created has **no grant at all** — the login succeeds and every request is refused until the operator gives that principal a right — and the flag of a tenant that is already there is the work of the operator of the platform, and it is kept.
+
+The CLI says the flag in the words of the operator: `platformctl access tenants create --auto-provision` registers a tenant that provisions its identities, and `--no-auto-provision` says the opposite. The upsert changes the flags the body names and resets the ones it does not, so the call carries the whole tenant.
+
+### The tenant of the deployment is registered with the slug of its workspace
+
+The wizard of a deployment on Azure registers the tenant of the deployment at Access, with the application of Access at Entra ID as its provider. It read the slug of the tenant in the values of the wizard, and the wizard never collected that value: the slug of the workspace of the deployment is a value of the templates, and the wizard does not ask for it. The value was empty, the wizard refused the registration, and the tenant of the deployment was never created.
+
+A deployment without a tenant has no login. Access resolves the tenant of a login from the identifier of the client, and a client that names no tenant is an `invalid_request`: the console sends its callers to Access with the client of the deployment, and every page behind the login of the console answers that the request is not valid.
+
+The wizard reads the values of the deployment in the answers of the templates now. The slug of the workspace, the identifier of the tenant, the provider of the tenant and the public names are outputs of the deployment, and the outputs are the values the deployment runs with — a value that is written in the templates and in the code of the wizard is a value that drifts. The public names are the same story: the wizard binds the certificate of a name only when the deployment names it, and it read that value in the values it never collected, so it bound no certificate at all.
+
+The slug of the workspace is a question of the wizard as well, and the operator names it: the tenant of the deployment is created with it, and the workspace of Data carries the same slug.
+
+### The outputs of the deployment carry the credentials the wizard reads
+
+The tool that writes the infrastructure held the credentials of the deployment back when it read the outputs: a name that carries a credential was replaced with `(sensitive value)`, so that a credential never reaches a line of a terminal. The wizard of the deployment needs those credentials: it registers the tenant of the deployment at Access with the token of the administration and with the secrets of the client, and it presented the value of the redaction to Access. Access refused it, the wizard waited for an administration that answered nothing, and the tenant of the deployment was never registered.
+
+The tool reads the truth of the deployment now, and the credential is held back where the answers are drawn: the command that shows the outputs of the deployment holds them back, and a line of a terminal still carries none of them.
+
 ### The deployment on Azure holds the provider of the identity of its tenant
 
 A deployment on Azure had no identity provider of its own. The tenant of the deployment was registered at Access with an issuer and with a client that the operator held somewhere else, and the templates of the deployment said nothing about it: a deployment that runs in a tenant of Entra ID and that asks its operator for the credentials of a provider outside of it is a deployment with a step that is not in the templates.

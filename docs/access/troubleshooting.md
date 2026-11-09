@@ -42,6 +42,19 @@ curl -sS "$ACCESS/v1/admin/users?tenant=acme" -H "authorization: Bearer $ACCESS_
 
 **Fix.** Register the principal with the provider's `sub` as `externalSubject` ([`POST /v1/admin/users`](api.md#post-v1adminusers)), then give it grants. Turning on `autoProvision` creates principals at first login, but with no grant: the login succeeds and every request is still denied until you grant something.
 
+```bash
+platformctl access tenants create --slug acme --display-name "Acme Inc" \
+  --issuer https://login.acme.example \
+  --idp-client-id access-acme --idp-client-secret "$IDP_CLIENT_SECRET" \
+  --idp-redirect-uri https://access.example.com/oauth/tenant/callback \
+  --email-domain acme.example \
+  --client-id gateway-acme --client-secret "$GATEWAY_CLIENT_SECRET" \
+  --client-redirect-uri https://gateway-acme.example.com/auth/callback \
+  --auto-provision
+```
+
+The upsert changes the flags the body names and resets the ones it does not, so the call carries the whole tenant: the credentials of the provider and of the gateway are part of it.
+
 ## Decisions denied
 
 The gateway hides the reason and refuses the caller; the reason and its code are in the Access decision log line, with subject, workspace and route (§8.7). The gateway's metric counts `missing_role` apart from `access_denied`.

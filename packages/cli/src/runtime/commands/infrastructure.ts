@@ -457,8 +457,9 @@ export const infrastructureGroup: GroupSpec = {
         const runtime = runtimeOf(input)
         // The outputs carry the credentials of the deployment, and a
         // credential never reaches a line of a terminal: the answer is
-        // held back here, where it is drawn, and not only in the tool
-        // that reads it.
+        // held back here, where it is drawn. The tool reads the truth
+        // of the deployment, and the wizard of the deployment needs
+        // the credentials it reads.
         const outputs = redact(
           await port.output(directoryOf(input), { backendConfig: backendOf(runtime) })
         ) as Record<string, unknown>

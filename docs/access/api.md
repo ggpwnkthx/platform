@@ -250,7 +250,7 @@ curl -sS -X POST https://access.example.com/v1/admin/tenants \
 | `clientId` | Required. The client id of the tenant's gateway at Access. Unique across tenants. |
 | `clientSecret` | Required. Encrypted at rest, never returned. On replacement, the old secret stays valid for 24 hours alongside the new one. |
 | `clientRedirectUris` | Optional. Default `[]`. The gateway's callback URLs; a tenant with none refuses every login. |
-| `autoProvision` | Optional. Default `false`. |
+| `autoProvision` | Optional. Default `false`. A tenant that provisions its identities creates a principal at the first login of an identity it does not know (§6.4). |
 | `sharedClient` | Optional. Default `false`. Platform operators only (§10.1). |
 | `default` | Optional. Default `false`. At most one tenant. Platform operators only. |
 | `enabled` | Optional. Default `true`. |

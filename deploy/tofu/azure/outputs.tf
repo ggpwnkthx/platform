@@ -133,6 +133,36 @@ output "client_redirect_uris" {
   value       = [local.gateway_redirect_uri, local.console_redirect_uri]
 }
 
+# The values of the deployment that the wizard reads after the apply.
+#
+# The wizard of the deployment binds what the templates cannot write:
+# the tenant of the deployment is registered at Access with the
+# application of Entra ID as its provider, and the certificates of the
+# public names are bound with the client of Azure. The wizard reads the
+# values of the deployment in the answers of the templates, and not in
+# the code of the wizard: a value that is written in the templates and
+# in the code of the wizard is a value that drifts, and the wizard
+# reads the values the deployment runs with.
+output "access_tenant_id" {
+  description = "The identifier of the tenant of Access: the scope of the access context of the deployment."
+  value       = var.access_tenant_id
+}
+
+output "data_workspace_slug" {
+  description = "The slug of the workspace of Data: the slug of the tenant of the deployment."
+  value       = var.data_workspace_slug
+}
+
+output "entra_tenant_enabled" {
+  description = "Whether the deployment created the application of Access at Entra ID."
+  value       = var.entra_tenant_enabled
+}
+
+output "public_names_enabled" {
+  description = "Whether the public names of the deployment are bound to the gateway."
+  value       = var.public_names_enabled
+}
+
 # The credential of the access context of Data. The operator commands
 # that read the data of a workspace take it.
 output "data_access_context_token" {
