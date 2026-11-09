@@ -240,12 +240,12 @@ curl -sS -X POST https://access.example.com/v1/admin/tenants \
 | --- | --- |
 | `slug` | Required. `[a-z0-9-]{2,63}`. The row key. |
 | `displayName` | Required. |
-| `issuer` | Required. The tenant's provider issuer. |
-| `idpClientId` | Required. |
-| `idpClientSecret` | Required. Encrypted at rest, never returned. |
-| `idpRedirectUri` | Optional. Default `https://{ACCESS_PUBLIC_URL}/oauth/tenant/callback`. |
-| `idpScopes` | Optional. Default `["openid","email","profile"]`. |
-| `idpAlgorithms` | Optional. Default `["RS256"]`. |
+| `issuer` | Required to create a tenant. The tenant's provider issuer. A change that leaves it out keeps the issuer the tenant has. |
+| `idpClientId` | Required to create a tenant. A change that leaves it out keeps the client the tenant has. |
+| `idpClientSecret` | Required to create a tenant. Encrypted at rest, never returned. A change that leaves it out keeps the secret the tenant has. |
+| `idpRedirectUri` | Optional. Default `https://{ACCESS_PUBLIC_URL}/oauth/tenant/callback` when the tenant is created. A change that leaves it out keeps the callback the tenant has. |
+| `idpScopes` | Optional. Default `["openid","email","profile"]` when the tenant is created. A change that leaves it out keeps the scopes the tenant has. |
+| `idpAlgorithms` | Optional. Default `["RS256"]` when the tenant is created. A change that leaves it out keeps the algorithms the tenant has. |
 | `emailDomain` | Optional. Unique when set. |
 | `clientId` | Required. The client id of the tenant's gateway at Access. Unique across tenants. |
 | `clientSecret` | Required. Encrypted at rest, never returned. On replacement, the old secret stays valid for 24 hours alongside the new one. |
@@ -255,12 +255,13 @@ curl -sS -X POST https://access.example.com/v1/admin/tenants \
 | `default` | Optional. Default `false`. At most one tenant. Platform operators only. |
 | `enabled` | Optional. Default `true`. |
 
-`409 conflict` when the client id belongs to another tenant or a second default would appear; `403 forbidden` when a tenant credential changes `sharedClient` or `default`.
+`409 conflict` when the client id belongs to another tenant or a second default would appear; `403 forbidden` when a tenant credential changes `sharedClient` or `default`; `400 invalid_request` when the call creates a tenant and names no provider of its identity, and when the call changes the provider of a tenant — the issuer or the client — and names no secret of it. The secret of a provider belongs to that provider.
 
 ```json
 {
   "id": "6f0f…", "slug": "acme", "displayName": "Acme Inc",
-  "issuer": "https://login.acme.example", "emailDomain": "acme.example",
+  "issuer": "https://login.acme.example", "idpClientId": "access-acme",
+  "emailDomain": "acme.example",
   "clientId": "gateway-acme",
   "clientRedirectUris": ["https://gateway-acme.example.com/auth/callback"],
   "autoProvision": false, "sharedClient": false,
@@ -283,7 +284,8 @@ curl -sS https://access.example.com/v1/admin/tenants \
   "tenants": [
     {
       "id": "6f0f…", "slug": "acme", "displayName": "Acme Inc",
-      "issuer": "https://login.acme.example", "emailDomain": "acme.example",
+      "issuer": "https://login.acme.example", "idpClientId": "access-acme",
+      "emailDomain": "acme.example",
       "clientId": "gateway-acme", "autoProvision": false, "sharedClient": false,
       "default": false, "enabled": true,
       "userCount": 42, "grantCount": 57,

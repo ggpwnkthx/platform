@@ -90,6 +90,82 @@ describe('the administration of Access', () => {
     expect(response.body.displayName).toBe('Acme Incorporated')
   })
 
+  test('a change that names no secret keeps the provider of the tenant', async () => {
+    // The provider of a tenant is the tenant's own: a change that names
+    // no secret keeps the one the tenant has, and the caller that
+    // changes the name of a tenant does not have to know it.
+    const response = await call('/v1/admin/tenants', 'POST', {
+      slug: 'acme',
+      displayName: 'Acme Incorporated',
+      issuer: 'https://login.acme.example',
+      idpClientId: 'access-acme',
+      clientId: 'gateway-acme',
+      clientSecret: 'the-secret-of-the-gateway',
+      clientRedirectUris: ['https://gateway-acme.example.com/auth/callback'],
+    })
+    expect(response.status).toBe(200)
+    expect(response.body.issuer).toBe('https://login.acme.example')
+    expect(JSON.stringify(response.body)).not.toContain('the-secret-of-the-provider')
+  })
+
+  test('a tenant that is created without a provider is refused', async () => {
+    const response = await call('/v1/admin/tenants', 'POST', {
+      slug: 'without-provider',
+      displayName: 'Without a provider',
+      clientId: 'gateway-without-provider',
+      clientSecret: 'the-secret-of-the-gateway',
+    })
+    expect(response.status).toBe(400)
+    expect(response.body.error).toBe('invalid_request')
+  })
+
+  test('a change of the provider that names no secret is refused', async () => {
+    // The secret of a provider belongs to that provider: a change that
+    // names another issuer and no secret is refused.
+    const response = await call('/v1/admin/tenants', 'POST', {
+      slug: 'acme',
+      displayName: 'Acme Incorporated',
+      issuer: 'https://login.acme.example',
+      idpClientId: 'access-another',
+      clientId: 'gateway-acme',
+      clientSecret: 'the-secret-of-the-gateway',
+      clientRedirectUris: ['https://gateway-acme.example.com/auth/callback'],
+    })
+    expect(response.status).toBe(400)
+    expect(response.body.error).toBe('invalid_request')
+  })
+
+  test('a tenant names a provider of its own, and not the one of another tenant', async () => {
+    // The provider of a tenant is the tenant's own: it names the
+    // provider its people sign in at, and the change is the work of
+    // the operator of the tenant.
+    const response = await call('/v1/admin/tenants', 'POST', {
+      slug: 'acme',
+      displayName: 'Acme Incorporated',
+      issuer: 'https://login.another.example',
+      idpClientId: 'access-another',
+      idpClientSecret: 'the-secret-of-the-other-provider',
+      clientId: 'gateway-acme',
+      clientSecret: 'the-secret-of-the-gateway',
+      clientRedirectUris: ['https://gateway-acme.example.com/auth/callback'],
+    })
+    expect(response.status).toBe(200)
+    expect(response.body.issuer).toBe('https://login.another.example')
+    // The tenant goes back to the provider it had.
+    const back = await call('/v1/admin/tenants', 'POST', {
+      slug: 'acme',
+      displayName: 'Acme Incorporated',
+      issuer: 'https://login.acme.example',
+      idpClientId: 'access-acme',
+      idpClientSecret: 'the-secret-of-the-provider',
+      clientId: 'gateway-acme',
+      clientSecret: 'the-secret-of-the-gateway',
+      clientRedirectUris: ['https://gateway-acme.example.com/auth/callback'],
+    })
+    expect(back.status).toBe(200)
+    expect(back.body.issuer).toBe('https://login.acme.example')
+  })
+
   test('a client id that belongs to another tenant is a conflict', async () => {
     const response = await call('/v1/admin/tenants', 'POST', {
       slug: 'another',

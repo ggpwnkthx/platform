@@ -87,6 +87,7 @@ class FakeTenants implements TenantStore {
       slug: string
       displayName: string
       issuer: string
+      idpClientId?: string
       emailDomain: string | null
       clientId: string
       clientRedirectUris: string[]
@@ -102,6 +103,7 @@ class FakeTenants implements TenantStore {
       slug: registration.slug,
       displayName: registration.displayName,
       issuer: registration.issuer,
+      idpClientId: registration.idpClientId ?? '',
       emailDomain: registration.emailDomain,
       clientId: registration.clientId,
       clientRedirectUris: registration.clientRedirectUris,
@@ -118,7 +120,12 @@ class FakeTenants implements TenantStore {
   async update(id: string, changes: Partial<Tenant>, _audit?: ChangeAudit): Promise<Tenant | null> {
     const tenant = this.rows.find((row) => row.id === id)
     if (!tenant) return null
-    Object.assign(tenant, changes)
+    // A field that is absent is a field that does not change: the
+    // tenant keeps the value it has.
+    for (const [field, value] of Object.entries(changes)) {
+      if (value === undefined) continue
+      Object.assign(tenant, { [field]: value })
+    }
     return tenant
   }
 }

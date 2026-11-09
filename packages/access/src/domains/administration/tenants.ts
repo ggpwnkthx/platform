@@ -9,9 +9,60 @@
 import type { AdminScope } from './credentials'
 import { AdministrationError } from './errors'
 import type { AdministrationOptions } from './options'
-import type { AuditContext, Tenant, TenantRegistration, TenantSummary } from './ports'
+import type {
+  AuditContext,
+  Tenant,
+  TenantCreation,
+  TenantRegistration,
+  TenantSummary,
+} from './ports'
 import { change, type AuditEntry } from './audit'
 import { refuseOutsideScope } from './scope'
+
+/**
+ * The registration of a tenant that is created.
+ *
+ * A tenant is created with the provider of its identity: the issuer,
+ * the client and the secret of the provider are needed, and a
+ * registration that names none of them is a registration that creates
+ * no tenant. The callback of the provider and the scopes it is asked
+ * for have their defaults.
+ *
+ * @param options what the administration is built with.
+ * @param registration the registration of the call.
+ */
+function creationOf(
+  options: AdministrationOptions,
+  registration: TenantRegistration
+): TenantCreation {
+  if (registration.issuer === undefined || registration.issuer === '') {
+    throw new AdministrationError(
+      'invalid_request',
+      'a tenant is created with the provider of its identity: the issuer of the provider is needed'
+    )
+  }
+  if (registration.idpClientId === undefined || registration.idpClientId === '') {
+    throw new AdministrationError(
+      'invalid_request',
+      'a tenant is created with the provider of its identity: the client of Access at the provider is needed'
+    )
+  }
+  if (registration.idpClientSecret === undefined || registration.idpClientSecret === '') {
+    throw new AdministrationError(
+      'invalid_request',
+      'a tenant is created with the provider of its identity: the secret of Access at the provider is needed'
+    )
+  }
+  return {
+    ...registration,
+    issuer: registration.issuer,
+    idpClientId: registration.idpClientId,
+    idpClientSecret: registration.idpClientSecret,
+    idpRedirectUri: registration.idpRedirectUri ?? `${options.publicUrl}/oauth/tenant/callback`,
+    idpScopes: registration.idpScopes ?? ['openid', 'email', 'profile'],
+    idpAlgorithms: registration.idpAlgorithms ?? ['RS256'],
+  }
+}
 
 /**
  * Creates a tenant, or updates the tenant of that slug.
@@ -19,6 +70,11 @@ import { refuseOutsideScope } from './scope'
  * The slug is the key of the row: the call is an upsert. A client id
  * belongs to one tenant and a default belongs to one tenant: both are
  * a conflict.
+ *
+ * The provider of the identity of the tenant is the provider the
+ * registration names, and it is the provider the tenant has when the
+ * registration names none: a call that changes the name of a tenant
+ * does not change the provider its people sign in at.
  *
  * The context carries the facts of the call that the domain cannot
  * know: the operator, the address and the request. The row of the audit
@@ -77,9 +133,29 @@ export async function upsertTenant(
     }
   }
 
+  // The provider of a tenant is the tenant's own, and the secret of a
+  // provider belongs to that provider: a change that names another
+  // provider and no secret of it is a change that leaves the tenant
+  // with the secret of the old one, and the login at the new provider
+  // is refused. A change that names the same provider keeps the secret
+  // the tenant has.
+  if (existing && registration.idpClientSecret === undefined) {
+    const otherIssuer = registration.issuer !== undefined && registration.issuer !== existing.issuer
+    const otherClient =
+      registration.idpClientId !== undefined &&
+      registration.idpClientId !== '' &&
+      registration.idpClientId !== existing.idpClientId
+    if (otherIssuer || otherClient) {
+      throw new AdministrationError(
+        'invalid_request',
+        'the provider of the tenant changed, and the change names no secret of it: the secret of a provider belongs to its provider'
+      )
+    }
+  }
+
   if (!existing) {
     const tenant = await options.tenants.create(
-      registration,
+      creationOf(options, registration),
       change('tenant.created', registration.slug, context)
     )
     return {

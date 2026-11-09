@@ -17,7 +17,7 @@ deployment are in [`../runtime/`](../README.md#the-templates-and-the-files-of-a-
 | The secrets | A Key Vault, behind a private endpoint, with the access of Entra ID |
 | The ingress that terminates TLS | The ingress of the environment of the container apps, with one custom domain per public name and the managed certificate of Azure |
 | The logs | A Log Analytics workspace, that keeps the logs for ninety days |
-| The identity of the callers | An application registration of Entra ID: the client of Access at the provider of the tenant |
+| The identity of the callers | An application registration of Entra ID: the client of Access at the provider of the tenant the deployment creates |
 | The state of the deployment | A storage account, created by the bootstrap |
 
 The names of the environment, the ports and the names of the secrets are
@@ -388,13 +388,22 @@ https://<the-console>/auth/callback
 
 #### The provider of the tenant
 
-The provider of the identity of the tenant of the deployment is **Entra
-ID**, and the templates create the client of Access at it: the
+The provider of the identity of the tenant the deployment **creates** is
+**Entra ID**, and the templates create the client of Access at it: the
 application of Access, a confidential client with a secret of its own,
 and with the callback of Access as its only redirect URI. The
 application is in the tenant of the deployment and in no other, and it
 asks for no permission of any other application: it is a client and not
 a resource.
+
+The application belongs to that tenant and to no other tenant of the
+platform. **The provider of a tenant is the tenant's own**: every tenant
+names the provider its people sign in at, and a tenant that names
+another one — a broker of another vendor, a directory of another cloud —
+is registered with it, and the deployment has nothing to do with it. The
+deployment takes no provider back either: a tenant of the deployment
+that has a provider of its own keeps it, and the wizard registers the
+tenant without naming a provider.
 
 The outputs of the deployment carry what the registration of the tenant
 needs of the provider:
@@ -469,6 +478,13 @@ applied. It reads the tenant among the tenants of Access — the tenant
 the values name as `access_tenant_id` — and registers it again with the
 application of Entra ID as its provider, keeping the flags of the
 tenant. The registration is repeated at every apply.
+
+A tenant that has a provider of its own is registered **without** a
+provider: the wizard names the client of the deployment and the flags of
+the tenant, and the provider the tenant has is kept by Access. The
+secret of the provider is the one thing the wizard does not know and
+does not need: a change of a tenant that names no secret keeps the one
+the tenant has.
 
 A deployment whose tenant is not there yet gets one: the tenant of the
 deployment is created with the slug of the **workspace** of the

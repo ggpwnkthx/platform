@@ -93,7 +93,7 @@ export const accessGroup: GroupSpec = {
       name: 'tenants create',
       summary: 'register a tenant, or change it',
       description:
-        'The call is an upsert by slug: a tenant that exists is changed, and a tenant that does not exist is created.',
+        "The call is an upsert by slug: a tenant that exists is changed, and a tenant that does not exist is created. The provider of a tenant is the tenant's own: a call that names no issuer and no client keeps the provider the tenant has, and a tenant that is created is created with the provider it is given.",
       options: [
         { name: 'slug', kind: 'string', summary: 'the slug of the tenant' },
         { name: 'display-name', kind: 'string', summary: 'the name of the tenant' },

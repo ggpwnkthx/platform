@@ -15,6 +15,8 @@ export interface Tenant {
   displayName: string
   /** The issuer of the provider of the tenant. */
   issuer: string
+  /** The client id of Access at the provider of the tenant. */
+  idpClientId: string
   emailDomain: string | null
   /** The client id of the gateway of the tenant at access. */
   clientId: string
@@ -41,13 +43,24 @@ export interface TenantSummary extends Tenant {
 export interface TenantRegistration {
   slug: string
   displayName: string
-  issuer: string
-  idpClientId: string
+  /**
+   * The provider of the identity of the tenant.
+   *
+   * A field that is absent is a field that does not change: a call
+   * that names no provider keeps the one the tenant has, and a tenant
+   * that is created is created with the provider it is given.
+   */
+  issuer?: string
+  /** The client id of Access at the provider. */
+  idpClientId?: string
   /** The client secret of Access at the provider, in clear. */
-  idpClientSecret: string
-  idpRedirectUri: string
-  idpScopes: string[]
-  idpAlgorithms: string[]
+  idpClientSecret?: string
+  /** The callback of Access at the provider. */
+  idpRedirectUri?: string
+  /** The scopes Access asks the provider for. */
+  idpScopes?: string[]
+  /** The algorithms a token of the provider may be signed with. */
+  idpAlgorithms?: string[]
   emailDomain: string | null
   clientId: string
   /**
@@ -64,6 +77,23 @@ export interface TenantRegistration {
   enabled: boolean
 }
 
+/**
+ * The registration of a tenant that is created.
+ *
+ * A tenant is created with the provider of its identity: the issuer,
+ * the client and the secret of the provider are needed, and the
+ * callback of the provider and the scopes it is asked for have their
+ * defaults.
+ */
+export interface TenantCreation extends TenantRegistration {
+  issuer: string
+  idpClientId: string
+  idpClientSecret: string
+  idpRedirectUri: string
+  idpScopes: string[]
+  idpAlgorithms: string[]
+}
+
 /** The storage of the tenants. */
 export interface TenantStore {
   /** The tenant of a slug: the slug is the key of the row. */
@@ -78,7 +108,7 @@ export interface TenantStore {
    * The row of the audit of the change is written by the same statement
    * as the tenant: a tenant that is not audited does not exist.
    */
-  create(registration: TenantRegistration, audit: ChangeAudit): Promise<Tenant>
+  create(registration: TenantCreation, audit: ChangeAudit): Promise<Tenant>
   /** Changes a tenant, and writes the row of its audit with it. */
   update(
     id: string,

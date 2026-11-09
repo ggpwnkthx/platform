@@ -31,4 +31,10 @@ export type {
   PrincipalRegistration,
   PrincipalStore,
 } from './principals'
-export type { Tenant, TenantRegistration, TenantStore, TenantSummary } from './tenants'
+export type {
+  Tenant,
+  TenantCreation,
+  TenantRegistration,
+  TenantStore,
+  TenantSummary,
+} from './tenants'

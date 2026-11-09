@@ -1340,11 +1340,17 @@ async function migrationOf(binary: string, context: AfterApply): Promise<string[
  * kept: the auto-provisioning of the principals, the shared client and
  * the default of the platform are the work of the operator of the
  * platform, and a registration that does not carry them resets them.
+ *
+ * The issuer of the tenant is read as well: a tenant that has a
+ * provider of its own keeps it, and the deployment takes no provider
+ * back.
  */
 interface TenantOfAccess {
   readonly id: string
   readonly slug: string
   readonly displayName: string
+  /** The issuer of the provider of the tenant. */
+  readonly issuer: string
   readonly emailDomain: string | null
   readonly autoProvision: boolean
   readonly sharedClient: boolean
@@ -1355,29 +1361,36 @@ interface TenantOfAccess {
 /**
  * Reads a tenant of Access out of the answer of the administration API.
  *
+ * The tenant of the deployment is the one its identifier names, and it
+ * is the one its slug names as well: the identifier is written in the
+ * values of the deployment the first time the tenant is created, and
+ * a deployment whose identifier is stale finds its tenant by its slug.
+ *
  * @param answer the answer of the administration API.
  * @param id the identifier of the tenant of the deployment.
+ * @param slug the slug of the tenant of the deployment.
  */
-function tenantOf(answer: unknown, id: string): TenantOfAccess | undefined {
+function tenantOf(answer: unknown, id: string, slug: string): TenantOfAccess | undefined {
   if (!answer || typeof answer !== 'object') return undefined
   const tenants = (answer as { tenants?: unknown }).tenants
   if (!Array.isArray(tenants)) return undefined
+  const rows: TenantOfAccess[] = []
   for (const entry of tenants) {
     if (!entry || typeof entry !== 'object') continue
     const tenant = entry as Record<string, unknown>
-    if (tenant.id !== id) continue
-    return {
-      id: typeof tenant.id === 'string' ? tenant.id : id,
+    rows.push({
+      id: typeof tenant.id === 'string' ? tenant.id : '',
       slug: typeof tenant.slug === 'string' ? tenant.slug : '',
       displayName: typeof tenant.displayName === 'string' ? tenant.displayName : '',
+      issuer: typeof tenant.issuer === 'string' ? tenant.issuer : '',
       emailDomain: typeof tenant.emailDomain === 'string' ? tenant.emailDomain : null,
       autoProvision: tenant.autoProvision === true,
       sharedClient: tenant.sharedClient === true,
       default: tenant.default === true,
       enabled: tenant.enabled !== false,
-    }
+    })
   }
-  return undefined
+  return rows.find((tenant) => tenant.id === id) ?? rows.find((tenant) => tenant.slug === slug)
 }
 
 /**
@@ -1515,6 +1528,12 @@ function registeredOf(answer: unknown): { id: string; slug: string } | undefined
  * the platform creates the tenants through the administration API of
  * Access.
  *
+ * The provider of the deployment belongs to the tenant the deployment
+ * creates, and to no other: a tenant that has a provider of its own
+ * keeps it, and the registration of such a tenant names no provider
+ * at all. A tenant names the provider its people sign in at, and the
+ * deployment takes no provider back.
+ *
  * The flags of the tenant are kept: the auto-provisioning of the
  * principals, the shared client and the default of the platform are
  * the work of the operator of the platform, and a registration that
@@ -1573,19 +1592,33 @@ async function tenantWithEntra(context: AfterApply, waits: Waits): Promise<strin
   }
 
   const id = settingOf(context, 'access_tenant_id')
-  const existing = tenantOf(answer, id)
+  const existing = tenantOf(answer, id, slug)
+  // The provider of the identity of the tenant of the deployment is
+  // the one the deployment creates: Entra ID, and the application of
+  // Access at it. A tenant that has a provider of its own keeps it: a
+  // tenant names the provider its people sign in at, and the
+  // deployment takes no provider back. The registration of such a
+  // tenant names no provider at all, and Access keeps the one the
+  // tenant has.
+  const keepsProvider =
+    existing !== undefined && existing.issuer !== '' && existing.issuer !== entraIssuer
   const body = {
     slug: existing?.slug ?? slug,
     displayName: existing?.displayName ?? slug,
-    issuer: entraIssuer,
-    idpClientId: entraClient,
-    idpClientSecret: entraSecret,
-    idpRedirectUri: entraCallback,
-    // The scopes of the provider of the tenant: the three that every
-    // provider knows. The groups of a caller are read in the grants of
-    // Access, and not in the directory of the provider.
-    idpScopes: ['openid', 'profile', 'email'],
-    idpAlgorithms: ['RS256'],
+    ...(keepsProvider
+      ? {}
+      : {
+          issuer: entraIssuer,
+          idpClientId: entraClient,
+          idpClientSecret: entraSecret,
+          idpRedirectUri: entraCallback,
+          // The scopes of the provider of the tenant: the three that
+          // every provider knows. The groups of a caller are read in
+          // the grants of Access, and not in the directory of the
+          // provider.
+          idpScopes: ['openid', 'profile', 'email'],
+          idpAlgorithms: ['RS256'],
+        }),
     emailDomain: existing?.emailDomain ?? null,
     clientId,
     clientSecret,
@@ -1636,7 +1669,9 @@ async function tenantWithEntra(context: AfterApply, waits: Waits): Promise<strin
     )
   }
   notes.push(
-    `the tenant ${body.slug} of the deployment is registered with the application of Access at Entra ID as its provider: the callers of the tenant sign in at Entra ID`
+    keepsProvider
+      ? `the tenant ${body.slug} of the deployment keeps the provider of its identity it has: ${existing?.issuer ?? ''}: the provider of the deployment belongs to the tenant the deployment creates, and the deployment takes no provider back`
+      : `the tenant ${body.slug} of the deployment is registered with the application of Access at Entra ID as its provider: the callers of the tenant sign in at Entra ID`
   )
 
   // The identifier of the tenant is the scope of the access context of

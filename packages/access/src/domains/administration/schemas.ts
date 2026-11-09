@@ -19,9 +19,13 @@ const PERMISSION_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/
 export const TenantBody = z.object({
   slug: z.string().regex(SLUG_PATTERN, 'the slug is [a-z0-9-] and is 2 to 63 characters long'),
   displayName: z.string().min(1, 'the name of the tenant is required'),
-  issuer: z.string().url('the issuer of the provider must be a url'),
-  idpClientId: z.string().min(1, 'the client id at the provider is required'),
-  idpClientSecret: z.string().min(1, 'the client secret at the provider is required'),
+  // The provider of the identity of the tenant. A field that is absent
+  // is a field that does not change: a call that names no provider
+  // keeps the one the tenant has. A tenant that is created is created
+  // with a provider, and a call that names none is refused.
+  issuer: z.string().url('the issuer of the provider must be a url').optional(),
+  idpClientId: z.string().min(1, 'the client id at the provider is required').optional(),
+  idpClientSecret: z.string().min(1, 'the client secret at the provider is required').optional(),
   idpRedirectUri: z.string().url('the callback at the provider must be a url').optional(),
   idpScopes: z.array(z.string().min(1)).optional(),
   idpAlgorithms: z.array(z.string().min(1)).optional(),

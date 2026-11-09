@@ -10,6 +10,14 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The provider of the deployment belongs to the tenant the deployment creates
+
+A deployment on Azure held the provider of the identity of its tenant as the provider of the platform: the wizard registered the tenant of the deployment with the application of Access at Entra ID at every apply, and it took the provider back from a tenant that had been given another one. A tenant whose people sign in at a provider of their own — Auth0, Okta, a directory of another cloud — was pushed back to Entra ID the next time the deployment went on, and the deployment was the only place where a provider could be named.
+
+The provider of the deployment belongs to the tenant the deployment creates now, and to no other. A tenant that has a provider of its own keeps it: the registration of the tenant of the deployment names no provider, and Access keeps the one the tenant has. The application of Entra ID is still the provider of the tenant the deployment creates, and a deployment whose tenant names another provider turns it off with `entra_tenant_enabled = false`.
+
+Access keeps the provider of a tenant as well: a change of a tenant that names no secret of its provider keeps the secret the tenant has, and a tenant that is created is created with the provider it is given — a registration that names none of it is refused with `invalid_request`. The secret of a provider belongs to that provider: a change that names another issuer or another client and no secret is refused as well. The console asks for the secret of the provider only when the operator wants to change it, the CLI registers a tenant with any provider it names, and the answer of a tenant carries the client of Access at its provider.
+
 ### The provisioning of the tenant of a deployment is a value of the deployment
 
 The tenant of a deployment was registered with the auto-provisioning of the principals as the work of the platform: the wizard created the tenant with the flag off and kept the flag of the tenant that was already there. An operator whose tenant was created before the wizard provisioned it had to register the first principal by hand — and the way to turn the provisioning on was an upsert that carries the whole tenant, with the secret of the provider and the secret of the client in it.

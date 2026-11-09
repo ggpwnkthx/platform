@@ -97,7 +97,7 @@ Open **Operators**. Platform operators see every tenant and can create one; an o
 
 | Page | What you do there |
 | --- | --- |
-| Tenant | See counts and recent changes; edit the tenant's settings. |
+| Tenant | See counts and recent changes; edit the tenant's settings. The tenant names the provider its people sign in at, and the provider is the tenant's own: name another issuer, another client and another secret and the tenant signs in there from then on. Leave the secret of the provider empty to keep the one the tenant has. |
 | Users | Filter by exact e-mail and status. Register one user by provider identity, e-mail and name, or register a team: one user per line as `identity, e-mail, name`, at most 1 000 lines; a failing line does not stop the others. |
 | A user | See what the user can do in effect: every live permission with roles expanded and where it comes from (directly, through a group, through a chain of roles). See and grant their direct rights and the rights of their groups; check one workspace and route against Access; edit their name and e-mail; disable or enable them with a confirmation. |
 | Groups | Create a group by key and name, then add members. A right granted to a group is held by every member. |

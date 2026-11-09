@@ -210,6 +210,8 @@ export interface Tenant {
   readonly slug: string
   readonly displayName: string
   readonly issuer: string
+  /** The client id of Access at the provider of the tenant. */
+  readonly idpClientId: string
   readonly emailDomain: string | null
   readonly clientId: string
   readonly clientRedirectUris?: readonly string[]
@@ -228,7 +230,15 @@ export interface TenantInput {
   readonly displayName: string
   readonly issuer: string
   readonly idpClientId: string
-  readonly idpClientSecret: string
+  /**
+   * The secret of Access at the provider.
+   *
+   * A tenant that is created is created with a secret, and a tenant
+   * that is changed keeps the secret it has when the change names
+   * none: the caller that changes the name of a tenant does not have
+   * to know the secret of its provider.
+   */
+  readonly idpClientSecret?: string
   readonly idpRedirectUri?: string
   readonly idpScopes?: readonly string[]
   readonly emailDomain?: string

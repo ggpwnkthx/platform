@@ -14,7 +14,9 @@ Bring a new customer onto the platform: register it and its identity provider in
 | The workspace UUID the tenant will use, and the gateway route id that serves it | Grants name both. |
 | The provider's `sub` for the first person to sign in | Principals are keyed by it, never by e-mail ([Access spec §6.2](../access/spec.md#62-mapping-key)). |
 
-On Azure the provider of the tenant is Entra ID, and the deployment holds the client of Access at it: the application of Access, with a secret of its own and with the callback of Access as its only redirect URI. The outputs of the deployment carry the issuer of the directory, the identifier of the application, its secret and the callback of Access, and the registration of the tenant carries the four of them ([The deployment of the platform on Azure](../../deploy/tofu/azure/README.md#the-provider-of-the-tenant)).
+On Azure the provider of the tenant the deployment creates is Entra ID, and the deployment holds the client of Access at it: the application of Access, with a secret of its own and with the callback of Access as its only redirect URI. The outputs of the deployment carry the issuer of the directory, the identifier of the application, its secret and the callback of Access, and the registration of the tenant carries the four of them ([The deployment of the platform on Azure](../../deploy/tofu/azure/README.md#the-provider-of-the-tenant)).
+
+The provider of Entra ID belongs to that tenant and to no other one. **The provider of a tenant is the tenant's own**: the tenant below is registered with the provider it names, and a tenant of the platform that signs in at another provider — a broker of another vendor, a directory of another cloud — is registered with that provider. The deployment takes no provider back: a tenant of the deployment that has a provider of its own keeps it, and the wizard registers the tenant without naming a provider.
 | `curl` and `jq`, or the CLI (`platformctl`) with `PLATFORMCTL_ADMIN_TOKEN` and an Access address in its profile | Every step below is an administration call ([CLI usage](../cli/usage.md#credentials)). |
 
 The examples use the tenant `acme`, Access at `https://access.example.com` and the tenant's gateway at `https://gateway-acme.example.com`:
@@ -87,6 +89,8 @@ platformctl access tenants create --slug acme --display-name "Acme Inc" \
 The upsert changes the flags the body names and resets the ones it does not: repeating the call without `--auto-provision` turns the provisioning of the tenant off, and `--no-auto-provision` says it in the words of the operator.
 
 A wrong issuer, client id or callback can be fixed by repeating the call, but Access keeps the provider client for ten minutes ([Access spec §6.6](../access/spec.md#66-provider-key-rotation)), so wait that long or roll the replicas.
+
+The secret of the provider is the one field a change may leave out: a call that names no `idpClientSecret` keeps the secret the tenant has, and the caller that changes the name of a tenant does not have to know it. A tenant that is **created** is created with a provider — a call that names no issuer, no client and no secret of the provider is refused with `400 invalid_request`.
 
 ### 3. Configure the tenant's gateway
 

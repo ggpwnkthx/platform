@@ -3065,6 +3065,92 @@ describe('the tenant of the deployment', () => {
     }
   })
 
+  test('a tenant that has a provider of its own keeps it', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-tenant-'))
+    const real = globalThis.fetch
+    try {
+      const binary = join(directory, 'az')
+      await writeFile(binary, CLIENT_BINDING(join(directory, 'calls')))
+      await chmod(binary, 0o755)
+      const calls: { url: string; body: unknown }[] = []
+      globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined
+        calls.push({ url, body })
+        if (init?.method === 'POST') {
+          return new Response(JSON.stringify({ id: '11111111-1111-4111-8111-111111111111' }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+        }
+        return new Response(
+          JSON.stringify({
+            tenants: [
+              {
+                id: '11111111-1111-4111-8111-111111111111',
+                slug: 'acme',
+                displayName: 'Acme Inc',
+                issuer: 'https://login.acme.example',
+                emailDomain: 'acme.example',
+                autoProvision: true,
+                sharedClient: false,
+                default: false,
+                enabled: true,
+              },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
+      }) as typeof globalThis.fetch
+      const provider = azureProvider([], { PATH: process.env.PATH ?? '', AZURE_CLI: binary })
+      const notes = await provider.afterApply?.({
+        values: {
+          public_names_enabled: 'false',
+          entra_tenant_enabled: 'true',
+          access_tenant_id: '11111111-1111-4111-8111-111111111111',
+          data_workspace_slug: 'acme',
+        },
+        outputs: {
+          resource_group_name: 'platform-production',
+          access_issuer: 'https://access.example.com',
+          access_admin_token: 'the-token-of-the-administration',
+          client_id: 'platform',
+          client_secret: 'the-secret-of-the-client',
+          client_redirect_uris: ['https://api.example.com/auth/callback'],
+          entra_issuer:
+            'https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0',
+          entra_client_id: 'the-client-of-access-at-entra',
+          entra_client_secret: 'the-secret-of-the-client-at-entra',
+          entra_redirect_uri: 'https://access.example.com/oauth/tenant/callback',
+        },
+      })
+      // The provider of the deployment belongs to the tenant the
+      // deployment creates: a tenant that has a provider of its own
+      // keeps it, and the deployment takes no provider back.
+      expect(notes?.join('\n')).toContain(
+        'the tenant acme of the deployment keeps the provider of its identity it has: https://login.acme.example'
+      )
+      const written = calls.find((call) => call.body !== undefined)
+      expect(written?.body).not.toHaveProperty('issuer')
+      expect(written?.body).not.toHaveProperty('idpClientId')
+      expect(written?.body).not.toHaveProperty('idpClientSecret')
+      expect(written?.body).not.toHaveProperty('idpRedirectUri')
+      expect(written?.body).not.toHaveProperty('idpScopes')
+      // The client of the tenant is the work of the deployment, and it
+      // is written again.
+      expect(written?.body).toMatchObject({
+        slug: 'acme',
+        displayName: 'Acme Inc',
+        clientId: 'platform',
+        clientSecret: 'the-secret-of-the-client',
+        clientRedirectUris: ['https://api.example.com/auth/callback'],
+      })
+    } finally {
+      globalThis.fetch = real
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
   test('a deployment whose tenant has another provider registers no tenant', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'platformctl-tenant-'))
     const real = globalThis.fetch

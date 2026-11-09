@@ -222,16 +222,21 @@ variable "client_id" {
 
 # Whether the deployment creates the application of Access at Entra ID.
 #
-# The provider of the identity of the tenant of the deployment is Entra
-# ID, and the application is the client of Access at it: a confidential
-# client, with a secret of its own, and with the callback of Access as
-# its only redirect URI. The tenant of the deployment is registered with
-# the application as its provider.
+# The provider of the identity of the tenant the deployment creates is
+# Entra ID, and the application is the client of Access at it: a
+# confidential client, with a secret of its own, and with the callback
+# of Access as its only redirect URI. The tenant of the deployment is
+# registered with the application as its provider.
+#
+# The application belongs to that tenant and to no other: every tenant
+# of the platform names the provider its people sign in at, and a tenant
+# that names another one — a broker of another vendor, a directory of
+# another cloud — is registered with it by hand.
 #
 # A deployment that holds a tenant whose provider is another one turns
 # the application off, and the tenant is registered by hand.
 variable "entra_tenant_enabled" {
-  description = "Whether the deployment creates the application of Access at Entra ID and registers the tenant of the deployment with it as its provider."
+  description = "Whether the deployment creates the application of Access at Entra ID and registers the tenant the deployment creates with it as its provider."
   type        = bool
   default     = true
 }

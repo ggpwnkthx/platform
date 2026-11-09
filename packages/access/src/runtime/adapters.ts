@@ -61,6 +61,7 @@ function toTenant(row: TenantRow): {
   slug: string
   displayName: string
   issuer: string
+  idpClientId: string
   emailDomain: string | null
   clientId: string
   clientRedirectUris: string[]
@@ -75,6 +76,7 @@ function toTenant(row: TenantRow): {
     slug: row.slug,
     displayName: row.displayName,
     issuer: row.idpIssuer,
+    idpClientId: row.idpClientId,
     emailDomain: row.emailDomain,
     clientId: row.clientId,
     clientRedirectUris: row.clientRedirectUris,

@@ -19,6 +19,7 @@ function tenantBody(tenant: Tenant): Record<string, unknown> {
     slug: tenant.slug,
     displayName: tenant.displayName,
     issuer: tenant.issuer,
+    idpClientId: tenant.idpClientId,
     emailDomain: tenant.emailDomain,
     clientId: tenant.clientId,
     clientRedirectUris: tenant.clientRedirectUris,
@@ -42,12 +43,16 @@ export async function tenantHandler(
     const registration = {
       slug: body.slug,
       displayName: body.displayName,
+      // The provider of the identity of the tenant: a field the body
+      // does not name is a field that does not change, and the tenant
+      // keeps the provider it has. The domain gives the defaults of a
+      // tenant that is created.
       issuer: body.issuer,
       idpClientId: body.idpClientId,
       idpClientSecret: body.idpClientSecret,
-      idpRedirectUri: body.idpRedirectUri ?? `${dependencies.publicUrl}/oauth/tenant/callback`,
-      idpScopes: body.idpScopes ?? ['openid', 'email', 'profile'],
-      idpAlgorithms: body.idpAlgorithms ?? ['RS256'],
+      idpRedirectUri: body.idpRedirectUri,
+      idpScopes: body.idpScopes,
+      idpAlgorithms: body.idpAlgorithms,
       emailDomain: body.emailDomain ?? null,
       clientId: body.clientId,
       clientSecret: body.clientSecret,

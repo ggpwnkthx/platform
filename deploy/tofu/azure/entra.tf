@@ -5,6 +5,13 @@
 # secret of its own, and with the callback of Access as its only
 # redirect URI.
 #
+# The application belongs to the tenant the deployment creates, and to
+# no other tenant: the provider of a tenant is the tenant's own, and
+# every tenant names the provider its people sign in at. A tenant of
+# the platform that signs in at another provider — a directory of
+# another cloud, a broker of another vendor — is registered with that
+# provider, and the deployment has nothing to do with it.
+#
 # The application lives in the tenant of the deployment and in no
 # other: the provider of Entra ID is bound to the tenant of the
 # deployment, and the application of Access is an object of that

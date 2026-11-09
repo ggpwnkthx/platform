@@ -909,6 +909,8 @@ Creates a tenant, or updates the tenant with that slug: an **upsert** keyed by s
 
 A slug that belongs to another tenant of the same client id → `409 conflict`. A `clientId` that belongs to another tenant → `409 conflict`. A `default` that would make a second tenant the default → `409 conflict`.
 
+**The provider of a tenant is the tenant's own.** A tenant is created with the provider of its identity: a call that creates a tenant and names no `issuer`, no `idpClientId` and no `idpClientSecret` → `400 invalid_request`. A call that **changes** a tenant and names none of them keeps the ones the tenant has: the issuer, the client, the secret, the callback, the scopes and the algorithms of the provider are kept, and the caller that changes the name of a tenant does not have to know the secret of its provider. A call that changes the **issuer** or the **client** of the provider and names no secret of it → `400 invalid_request`: the secret of a provider belongs to that provider.
+
 Both client secrets are encrypted at rest and never returned.
 
 ### 10.3 `GET /v1/admin/tenants`

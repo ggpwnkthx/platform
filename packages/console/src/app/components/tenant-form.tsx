@@ -1,9 +1,14 @@
 /**
  * The form of a tenant: its creation, and its change.
  *
- * Access never answers a secret: a change of a tenant
- * carries the secrets of its provider and of its client again, and a
- * secret that replaces another one is accepted beside it for a day.
+ * Access never answers a secret: a change of a tenant carries the
+ * secrets of its provider and of its client again, and a secret that
+ * replaces another one is accepted beside it for a day.
+ *
+ * The secret of the provider is the one exception: a change that
+ * leaves it empty keeps the secret the tenant has, and a tenant that
+ * names another provider keeps the secret of that provider until it
+ * names one of its own.
  */
 
 import type { Tenant, TenantInput } from '../../domains/access'
@@ -17,12 +22,16 @@ export function tenantInputOf(form: SentForm, platform: boolean, current?: Tenan
     return value === '' ? undefined : value
   }
   const flag = (name: string) => form.get(name) === 'true'
+  // The secret of the provider is sent when it is written, and a
+  // tenant that is created is created with one. A change that leaves
+  // it empty keeps the secret the tenant has.
+  const providerSecret = form.get('idpClientSecret')
   return {
     slug: current?.slug ?? form.get('slug').trim(),
     displayName: form.get('displayName').trim(),
     issuer: form.get('issuer').trim(),
     idpClientId: form.get('idpClientId').trim(),
-    idpClientSecret: form.get('idpClientSecret'),
+    ...(providerSecret === '' ? {} : { idpClientSecret: providerSecret }),
     ...(optional('idpRedirectUri') ? { idpRedirectUri: optional('idpRedirectUri') } : {}),
     ...(optional('idpScopes') ? { idpScopes: listOf(form.get('idpScopes')) } : {}),
     ...(optional('emailDomain') ? { emailDomain: optional('emailDomain') } : {}),
@@ -109,12 +118,27 @@ export function TenantForm(props: {
         </label>
         <label class="field">
           <span>Client at the provider</span>
-          <input name="idpClientId" required value={value('idpClientId', '')} />
+          <input
+            name="idpClientId"
+            required
+            value={value('idpClientId', tenant?.idpClientId ?? '')}
+          />
+          <span class="hint">
+            the client of Access at the provider: another one needs the secret of that provider
+          </span>
         </label>
         <label class="field">
           <span>Secret at the provider</span>
-          <input name="idpClientSecret" type="password" required autocomplete="new-password" />
-          <span class="hint">never answered by the service: send it with every change</span>
+          <input
+            name="idpClientSecret"
+            type="password"
+            required={tenant === undefined}
+            autocomplete="new-password"
+          />
+          <span class="hint">
+            never answered by the service: send it with every change, or leave it empty to keep the
+            secret the tenant has
+          </span>
         </label>
         <label class="field">
           <span>Redirect at the provider</span>

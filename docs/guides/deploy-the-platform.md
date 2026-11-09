@@ -145,7 +145,7 @@ curl -sS -X POST $ACCESS/v1/admin/tenants \
        "clientRedirectUris":["https://api.example.com/auth/callback"]}'
 ```
 
-On Azure the provider of the tenant is Entra ID, and the deployment creates the client of Access at it: the application of Access, with a secret of its own and with the callback of Access as its only redirect URI. The registration of the tenant then carries the issuer of that directory, the identifier of the application, its secret and the callback of Access, and the outputs of the deployment carry the four of them:
+On Azure the provider of the tenant the deployment creates is Entra ID, and the deployment creates the client of Access at it: the application of Access, with a secret of its own and with the callback of Access as its only redirect URI. The registration of the tenant then carries the issuer of that directory, the identifier of the application, its secret and the callback of Access, and the outputs of the deployment carry the four of them:
 
 ```bash
 tofu -chdir=deploy/tofu/azure output -raw entra_issuer
@@ -155,6 +155,8 @@ tofu -chdir=deploy/tofu/azure output -raw entra_redirect_uri
 ```
 
 The wizard of the deployment makes the call itself when the deployment is applied: it waits for Access, it creates the tenant of the deployment when the tenant is not there yet, and it registers it again at every apply. The tenant is created with the slug of the workspace of the deployment — the wizard asks the operator for that slug, and the workspace of Data carries the same one. The identifier of the tenant it created is written in the file of the values of the deployment, and the deployment goes on again — the access context of the deployment is scoped to that identifier. The procedure is in [The deployment of the platform on Azure](../../deploy/tofu/azure/README.md#7-the-tenant).
+
+The provider of Entra ID belongs to that tenant and to no other one: **the provider of a tenant is the tenant's own**, and a tenant that signs in at another provider — a broker of another vendor, a directory of another cloud — is registered with that provider. The wizard takes no provider back: a tenant of the deployment that has a provider of its own is registered without one, and Access keeps the provider the tenant has. A deployment whose tenant names another provider from the start turns the application of Entra ID off with `entra_tenant_enabled = false`.
 
 Keep the `id` from the answer: it is the tenant UUID that Data's workspace registry and the access context credential refer to. Then register each principal by the provider's `sub` and grant it a permission on the workspace and on the route the gateway will check (`data-api` in `deploy/config/routes.json`).
 
