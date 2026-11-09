@@ -775,6 +775,42 @@ details.disclosure[open] > summary {
 
 /* ------------------------------------------------------------ the buttons */
 
+/*
+ * The theme button: a moon in the light theme, a sun in the dark one.
+ * The choice is drawn by the sheet itself, so that the button is right
+ * before the browser hydrates it.
+ */
+
+.button.theme-toggle {
+  padding: 0.2rem 0.45rem;
+}
+
+.theme-toggle .theme-icon {
+  display: block;
+}
+
+.theme-toggle .sun {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-toggle .sun {
+    display: block;
+  }
+
+  :root:not([data-theme="light"]) .theme-toggle .moon {
+    display: none;
+  }
+}
+
+:root[data-theme="dark"] .theme-toggle .sun {
+  display: block;
+}
+
+:root[data-theme="dark"] .theme-toggle .moon {
+  display: none;
+}
+
 .button,
 button.button {
   font: inherit;
