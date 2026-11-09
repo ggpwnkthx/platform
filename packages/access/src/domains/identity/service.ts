@@ -104,6 +104,14 @@ export interface CompletedLogin {
   scopes: string[]
   /** True when the principal was created by this login. */
   created: boolean
+  /**
+   * True when the principal is the first of its tenant.
+   *
+   * The tenant had no principal at all before this login: a tenant that
+   * hands its administration to its first identity gives it to that
+   * principal (spec §6.4).
+   */
+  first: boolean
 }
 
 export interface LoginOptions {
@@ -175,6 +183,11 @@ export class LoginService {
     cookie: string | undefined
     providerState: string
     code: string
+    /**
+     * The facts of the call, for the audit of the principal that the
+     * login creates (spec §10.1).
+     */
+    facts?: { address: string; requestId?: string }
   }): Promise<CompletedLogin> {
     if (!options.cookie) {
       throw new LoginError('login_state_invalid', 'the state of the login is missing')
@@ -218,7 +231,7 @@ export class LoginService {
 
     let mapping: Mapping
     try {
-      mapping = await mapIdentity(this.options.principals, tenant, identity)
+      mapping = await mapIdentity(this.options.principals, tenant, identity, options.facts)
     } catch (error) {
       if (error instanceof MappingError) {
         throw new LoginError(error.code, error.message)
@@ -239,6 +252,7 @@ export class LoginService {
       nonce: state.nonce,
       scopes: state.scopes,
       created: mapping.created,
+      first: mapping.first,
     }
   }
 
@@ -252,6 +266,18 @@ export class LoginService {
   async redirectUriOf(cookie: string | undefined): Promise<string | null> {
     const state = this.readState(cookie)
     return state?.redirectUri ?? null
+  }
+
+  /**
+   * The tenant of the state of a login.
+   *
+   * It is read when the login is refused: the metric of the logins
+   * counts the refusals per tenant, and the tenant of the login is what
+   * the state cookie holds.
+   */
+  async tenantOf(cookie: string | undefined): Promise<string | null> {
+    const state = this.readState(cookie)
+    return state?.tenant ?? null
   }
 
   /** The state of the gateway of the state of a login. */

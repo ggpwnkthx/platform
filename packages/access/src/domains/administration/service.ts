@@ -53,6 +53,7 @@ import {
   type PrincipalQuery,
 } from './principals'
 import { listTenants, upsertTenant } from './tenants'
+import { bootstrapAdministrator } from './bootstrap'
 
 export type { AdministrationOptions } from './options'
 export type { AuditEntry } from './audit'
@@ -106,6 +107,22 @@ export class AdministrationService {
   /** The tenants of the platform, with their numbers. */
   async listTenants(scope: AdminScope): Promise<TenantSummary[]> {
     return await listTenants(this.options, scope)
+  }
+
+  /**
+   * Hands the administration of a tenant to its first principal.
+   *
+   * A tenant that provisions the identities that sign in may hand the
+   * administration of the tenant to the first one of them: the grant is
+   * written when the tenant asks for it, when the tenant has no
+   * administrator yet, and when the principal is of the tenant. Nothing
+   * is written otherwise, and the answer is null (spec §6.4).
+   */
+  async bootstrapAdministrator(
+    principal: { id: string; tenant: string; operator?: string },
+    context: AuditContext
+  ): Promise<Grant | null> {
+    return await bootstrapAdministrator(this.options, principal, context)
   }
 
   /**

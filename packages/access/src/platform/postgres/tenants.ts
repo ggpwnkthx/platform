@@ -26,6 +26,14 @@ export interface TenantRow {
   enabled: boolean
   isDefault: boolean
   autoProvision: boolean
+  /**
+   * Whether the first principal of the tenant administers the tenant.
+   *
+   * The flag is the work of the operator of the tenant: a tenant that
+   * provisions its identities may hand the administration of the tenant
+   * to the first one of them (spec §6.4).
+   */
+  autoProvisionAdmin: boolean
   emailDomain: string | null
   idpIssuer: string
   idpClientId: string
@@ -84,6 +92,7 @@ export interface NewTenant {
   /** The urls the gateway of the tenant is registered with. */
   clientRedirectUris?: string[]
   autoProvision?: boolean
+  autoProvisionAdmin?: boolean
   sharedClient?: boolean
   isDefault?: boolean
   enabled?: boolean
@@ -103,6 +112,7 @@ export interface TenantUpdate {
   clientSecret?: string
   clientRedirectUris?: string[]
   autoProvision?: boolean
+  autoProvisionAdmin?: boolean
   sharedClient?: boolean
   isDefault?: boolean
   enabled?: boolean
@@ -116,6 +126,7 @@ interface TenantRecord {
   enabled: boolean
   is_default: boolean
   auto_provision: boolean
+  auto_provision_admin: boolean
   email_domain: string | null
   idp_issuer: string
   idp_client_id: string
@@ -134,7 +145,8 @@ interface TenantRecord {
 }
 
 /** The columns of a tenant. */
-const COLUMNS = `id, slug, display_name, enabled, is_default, auto_provision, email_domain,
+const COLUMNS = `id, slug, display_name, enabled, is_default, auto_provision,
+  auto_provision_admin, email_domain,
   idp_issuer, idp_client_id, idp_client_secret, idp_redirect_uri, idp_scopes, idp_algorithms,
   client_id, client_secret, client_redirect_uris, previous_client_secret,
   previous_client_secret_until, shared_client, created_at, updated_at`
@@ -158,6 +170,7 @@ function toRow(record: TenantRecord): TenantRow {
     enabled: record.enabled,
     isDefault: record.is_default,
     autoProvision: record.auto_provision,
+    autoProvisionAdmin: record.auto_provision_admin,
     emailDomain: record.email_domain,
     idpIssuer: record.idp_issuer,
     idpClientId: record.idp_client_id,
@@ -296,6 +309,7 @@ export class TenantRepository {
       this.encrypted(input.clientSecret),
       input.clientRedirectUris ?? [],
       input.autoProvision ?? false,
+      input.autoProvisionAdmin ?? false,
       input.sharedClient ?? false,
       input.isDefault ?? false,
       input.enabled ?? true,
@@ -308,8 +322,9 @@ export class TenantRepository {
           `with inserted as (
          insert into tenants (slug, display_name, idp_issuer, idp_client_id, idp_client_secret,
            idp_redirect_uri, idp_scopes, idp_algorithms, email_domain, client_id, client_secret,
-           client_redirect_uris, auto_provision, shared_client, is_default, enabled)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+           client_redirect_uris, auto_provision, auto_provision_admin, shared_client, is_default,
+           enabled)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
          returning ${COLUMNS}
        )${audited}
        select ${COLUMNS} from inserted`,
@@ -370,6 +385,8 @@ export class TenantRepository {
         set('client_secret', this.encrypted(input.clientSecret))
       }
       if (input.autoProvision !== undefined) set('auto_provision', input.autoProvision)
+      if (input.autoProvisionAdmin !== undefined)
+        set('auto_provision_admin', input.autoProvisionAdmin)
       if (input.sharedClient !== undefined) set('shared_client', input.sharedClient)
       if (input.isDefault !== undefined) set('is_default', input.isDefault)
       if (input.enabled !== undefined) set('enabled', input.enabled)

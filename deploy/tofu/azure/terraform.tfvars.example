@@ -147,6 +147,14 @@ data_workspace_slug = "acme"
 # the deployment gives it one.
 tenant_auto_provision = true
 
+# Whether the first identity that signs in administers the tenant of the
+# deployment. The principal that is created first is given the right to
+# administer the tenant: it may add the users and the rights of the
+# tenant. The flag is off by default: the first person who signs in at
+# Entra ID is not the administrator of the tenant unless the deployment
+# says so.
+tenant_auto_provision_admin = false
+
 # --------------------------------------------------------------------------
 # The size of the services
 # --------------------------------------------------------------------------

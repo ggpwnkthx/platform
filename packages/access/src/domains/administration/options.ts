@@ -52,6 +52,14 @@ export interface AdministrationOptions {
   /** The public url of Access, for the default callback of a tenant. */
   publicUrl: string
   /**
+   * The key of the permission that opens the administration of a tenant.
+   *
+   * The key is the one of the console, and the deployment may name
+   * another one: the key is what the console reads in the context of its
+   * caller.
+   */
+  tenantAdminPermission?: string
+  /**
    * The limiter of the failed authentications.
    *
    * It is required: the composition root holds the count of the failures

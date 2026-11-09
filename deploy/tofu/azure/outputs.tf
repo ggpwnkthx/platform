@@ -158,6 +158,11 @@ output "tenant_auto_provision" {
   value       = var.tenant_auto_provision
 }
 
+output "tenant_auto_provision_admin" {
+  description = "Whether the first identity that signs in administers the tenant of the deployment."
+  value       = var.tenant_auto_provision_admin
+}
+
 output "entra_tenant_enabled" {
   description = "Whether the deployment created the application of Access at Entra ID."
   value       = var.entra_tenant_enabled

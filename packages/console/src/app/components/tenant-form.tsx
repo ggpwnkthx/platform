@@ -39,6 +39,7 @@ export function tenantInputOf(form: SentForm, platform: boolean, current?: Tenan
     clientSecret: form.get('clientSecret'),
     clientRedirectUris: listOf(form.get('clientRedirectUris')),
     autoProvision: flag('autoProvision'),
+    autoProvisionAdmin: flag('autoProvisionAdmin'),
     enabled: flag('enabled'),
     // The flags of the platform are sent by the operator of the platform
     // only: Access refuses a tenant credential that changes
@@ -185,6 +186,12 @@ export function TenantForm(props: {
           name="autoProvision"
           label="Registers unknown people"
           value={tenant?.autoProvision ?? false}
+        />
+        <Flag
+          name="autoProvisionAdmin"
+          label="The first one administers the tenant"
+          value={tenant?.autoProvisionAdmin ?? false}
+          hint="the first person who signs in may add the users and the rights of the tenant"
         />
         <Flag
           name="sharedClient"

@@ -152,6 +152,11 @@ export const AZURE_QUESTIONS: readonly Question[] = [
     kind: 'given',
   },
   {
+    name: 'tenant_auto_provision_admin',
+    summary: 'whether the first identity that signs in administers the tenant of the deployment',
+    kind: 'given',
+  },
+  {
     name: 'gateway_image',
     summary: 'the image of the gateway, by digest',
     kind: 'required',
@@ -1198,6 +1203,25 @@ function provisioningOf(context: AfterApply, existing: TenantOfAccess | undefine
 }
 
 /**
+ * Whether the first identity that signs in administers the tenant of the
+ * deployment.
+ *
+ * The deployment answers the value: the first principal of the tenant is
+ * given the administration of the tenant, and the operator of the
+ * deployment says so in the values of the deployment. A deployment whose
+ * templates do not answer keeps the flag of the tenant that is already
+ * there, and a tenant that is not there yet administers nothing.
+ *
+ * @param context what the deployment applied.
+ * @param existing the tenant that is already there.
+ */
+function administrationOf(context: AfterApply, existing: TenantOfAccess | undefined): boolean {
+  const answered = settingOf(context, 'tenant_auto_provision_admin')
+  if (answered === '') return existing?.autoProvisionAdmin ?? false
+  return answered === 'true'
+}
+
+/**
  * Reads the names of the answers of the templates.
  *
  * @param outputs the answers of the templates.
@@ -1353,6 +1377,7 @@ interface TenantOfAccess {
   readonly issuer: string
   readonly emailDomain: string | null
   readonly autoProvision: boolean
+  readonly autoProvisionAdmin: boolean
   readonly sharedClient: boolean
   readonly default: boolean
   readonly enabled: boolean
@@ -1385,6 +1410,7 @@ function tenantOf(answer: unknown, id: string, slug: string): TenantOfAccess | u
       issuer: typeof tenant.issuer === 'string' ? tenant.issuer : '',
       emailDomain: typeof tenant.emailDomain === 'string' ? tenant.emailDomain : null,
       autoProvision: tenant.autoProvision === true,
+      autoProvisionAdmin: tenant.autoProvisionAdmin === true,
       sharedClient: tenant.sharedClient === true,
       default: tenant.default === true,
       enabled: tenant.enabled !== false,
@@ -1629,6 +1655,9 @@ async function tenantWithEntra(context: AfterApply, waits: Waits): Promise<strin
     // that login. The value is the one of the deployment, and the
     // deployment holds it.
     autoProvision: provisioningOf(context, existing),
+    // The first identity that signs in may administer the tenant: the
+    // flag is a value of the deployment, and it is off by default.
+    autoProvisionAdmin: administrationOf(context, existing),
     sharedClient: existing?.sharedClient ?? false,
     default: existing?.default ?? false,
     enabled: existing?.enabled ?? true,

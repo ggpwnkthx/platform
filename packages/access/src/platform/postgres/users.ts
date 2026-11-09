@@ -184,6 +184,27 @@ export class UserRepository {
   }
 
   /**
+   * The number of principals of a tenant.
+   *
+   * The count is what tells the first principal of a tenant from the
+   * ones that come after it: a tenant that provisions its identities may
+   * hand the administration of the tenant to the first one of them
+   * (spec §6.4).
+   */
+  async countByTenant(tenantId: string): Promise<number> {
+    const rows = await withTenantScope(
+      this.db,
+      tenantId,
+      async (client) =>
+        await client.query<{ count: number }>(
+          `select count(*)::int as count from users where tenant_id = $1`,
+          [tenantId]
+        )
+    )
+    return rows[0]?.count ?? 0
+  }
+
+  /**
    * The principals that match a filter, and their number.
    *
    * The order is the newest first and it is stable: two pages never show

@@ -216,6 +216,14 @@ export interface Tenant {
   readonly clientId: string
   readonly clientRedirectUris?: readonly string[]
   readonly autoProvision: boolean
+  /**
+   * Whether the first principal of the tenant administers the tenant.
+   *
+   * The flag is the work of the operator of the tenant: the first
+   * person who signs in at the provider of the tenant is given the
+   * administration of the tenant when the flag is on.
+   */
+  readonly autoProvisionAdmin: boolean
   readonly sharedClient: boolean
   readonly default: boolean
   readonly enabled: boolean
@@ -246,6 +254,7 @@ export interface TenantInput {
   readonly clientSecret: string
   readonly clientRedirectUris?: readonly string[]
   readonly autoProvision?: boolean
+  readonly autoProvisionAdmin?: boolean
   readonly sharedClient?: boolean
   readonly default?: boolean
   readonly enabled?: boolean

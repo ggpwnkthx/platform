@@ -325,6 +325,7 @@ describe('the mapping of an identity', () => {
     const mapping = await mapIdentity(
       {
         findByExternalSubject: async () => principal,
+        countByTenant: async () => 1,
         create: async () => {
           throw new Error('the principal should not be created')
         },
@@ -341,6 +342,7 @@ describe('the mapping of an identity', () => {
       mapIdentity(
         {
           findByExternalSubject: async () => null,
+          countByTenant: async () => 1,
           create: async () => principal,
         },
         tenant(),
@@ -353,6 +355,7 @@ describe('the mapping of an identity', () => {
     const mapping = await mapIdentity(
       {
         findByExternalSubject: async () => null,
+        countByTenant: async () => 0,
         create: async () => principal,
       },
       tenant({ autoProvision: true }),
@@ -360,6 +363,23 @@ describe('the mapping of an identity', () => {
     )
     expect(mapping.created).toBe(true)
     expect(mapping.principal.status).toBe('active')
+    // The tenant had no principal at all: the principal is the first of
+    // its tenant.
+    expect(mapping.first).toBe(true)
+  })
+
+  test('a principal that is not the first of its tenant is not the first', async () => {
+    const mapping = await mapIdentity(
+      {
+        findByExternalSubject: async () => null,
+        countByTenant: async () => 3,
+        create: async () => principal,
+      },
+      tenant({ autoProvision: true }),
+      { subject: 'the-subject', email: 'alice@acme.example' }
+    )
+    expect(mapping.created).toBe(true)
+    expect(mapping.first).toBe(false)
   })
 
   test('a disabled principal is refused', async () => {
@@ -367,6 +387,7 @@ describe('the mapping of an identity', () => {
       mapIdentity(
         {
           findByExternalSubject: async () => ({ ...principal, status: 'disabled' }),
+          countByTenant: async () => 1,
           create: async () => principal,
         },
         tenant(),

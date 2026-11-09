@@ -1,0 +1,11 @@
+-- Whether the first principal of a tenant administers the tenant.
+--
+-- A tenant that provisions the identities that sign in may hand the
+-- administration of the tenant to the first one of them: the principal
+-- that is created first is given the right to administer the tenant, and
+-- the ones that come after are given nothing (spec §6.4).
+--
+-- The flag is off by default: the first person who signs in at the
+-- provider of a tenant is not its administrator unless the tenant says
+-- so.
+alter table tenants add column auto_provision_admin boolean not null default false;

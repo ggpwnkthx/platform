@@ -138,6 +138,9 @@ export default createRoute(async (c) => {
                     <Badge tone="error">disabled</Badge>
                   )}
                   {tenant.autoProvision ? <Badge plain>registers unknown people</Badge> : null}
+                  {tenant.autoProvisionAdmin ? (
+                    <Badge plain>the first one administers it</Badge>
+                  ) : null}
                   {tenant.default ? (
                     <Badge tone="accent" plain>
                       default

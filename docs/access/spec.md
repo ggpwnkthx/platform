@@ -111,6 +111,7 @@ One row per customer, with the registration of the tenant's provider and of its 
 | `enabled` | `boolean` | Default `true`. A disabled tenant denies every decision and refuses every login. |
 | `is_default` | `boolean` | Default `false`. At most one tenant is the default (§5.2). |
 | `auto_provision` | `boolean` | Default `false`. Whether an unknown external identity gets a principal row on its first login (§6.4). |
+| `auto_provision_admin` | `boolean` | Default `false`. Whether the first principal of the tenant administers the tenant (§6.4). |
 | `email_domain` | `text` | The tenant's domain, or `null`. Unique when set. A **hint**, never an authorization (§5.2, §6.3). |
 | `idp_issuer` | `text` | The provider's issuer. A token whose `iss` does not match it exactly is refused. |
 | `idp_client_id` | `text` | The client id of Access at the provider. |
@@ -392,7 +393,7 @@ Production also refuses to start when:
 
 The log level is the only value that never stops the service: a typo in it must not keep a deployment down.
 
-**Optional:** `ACCESS_DECISION_TOKEN`, which is deprecated and unscoped; keep it only while a gateway (such as the reference gateway) still sends it (§8.8). `ACCESS_CONTEXT_TOKENS`, needed only by a deployment that serves a data backend (§9).
+**Optional:** `ACCESS_DECISION_TOKEN`, which is deprecated and unscoped; keep it only while a gateway (such as the reference gateway) still sends it (§8.8). `ACCESS_CONTEXT_TOKENS`, needed only by a deployment that serves a data backend (§9). `ACCESS_TENANT_ADMIN_PERMISSION` names the key of the permission that opens the administration of a tenant, and it is `console.admin` by default: the key is what the console reads in the context of its caller, and it is what a tenant hands to its first identity when it lets it administer the tenant (§6.4).
 
 ### 4.5 Secrets in files
 
@@ -560,10 +561,29 @@ The token's e-mail is stored on the principal row and published in the tokens Ac
 
 When the mapping finds no row:
 
-- `auto_provision = true` → the row is created with status `active` **and no grant at all**. The caller authenticates and reaches nothing: the login succeeds and §8 denies the first request.
+- `auto_provision = true` → the row is created with status `active` **and no grant at all**. The caller authenticates and reaches nothing: the login succeeds and §8 denies the first request. The row is audited like every other change: the operator of the audit is the identity that signed in, and the address and the request are the ones of the call.
 - `auto_provision = false` → the login is refused with `403 identity_unknown` (§5.6).
 
 The default is `false`: an identity nobody registered does not get an account just because it logged in somewhere.
+
+**The auto-provisioning is a risk the operator of the tenant takes.** The row it creates holds no grant, so the identity reaches nothing: the risk is not the access but the *rows* and the *signal*. An identity that signs in at the provider of a tenant gets a principal in that tenant, and in no other one, and the principal is a shell until the operator of the tenant grants something. Three things follow:
+
+- The provider of the tenant is the trust boundary of the auto-provisioning: a provider that lets anybody in creates a principal for anybody. The row is audited and the login is counted (`access_logins_total`, §11), so the rows are visible.
+- The e-mail of a principal is a display value and never a key (§6.2): a provider that lets a caller choose its address may create a principal whose address is the one of a colleague. The grants name the principal by its id, and the two principals are never the same row.
+- The tenant that turns the auto-provisioning off gets a hand-made roster: no identity signs in before the operator registers it, and the login is refused with `identity_unknown`.
+
+**The first identity of a tenant may be given the administration of the tenant.** A tenant that sets `auto_provision_admin = true` hands the administration of the tenant to the identity that signs in first: the principal that is created first is given the grant that opens the administration of the tenant, and the ones that come after are given nothing. The grant is the one of the key of `ACCESS_TENANT_ADMIN_PERMISSION` (`console.admin`), on the tenant itself as the workspace, and it is written by the same statement as the row of its audit.
+
+The rules of the grant:
+
+- The tenant that already has an administrator keeps it: the first identity of a tenant that has one is not its administrator, and the grant is not written.
+- The principal is the one of the tenant: a principal of another tenant is given nothing.
+- The tenant that **shares its provider** with another tenant is given nothing: the provider of a shared directory is the provider of several tenants, and the first identity that signs in at it is the first identity of the directory and not of the tenant. The operator of the platform grants the administration of such a tenant by hand.
+- The flag is off by default, and it is the work of the operator of the tenant: the first person who signs in at the provider of a tenant is not its administrator unless the tenant says so.
+
+Two identities that sign in at the same moment in a tenant that has no principal may both be given the administration: the grant is written by the login that finds the tenant empty, and two logins may find it empty at the same time.
+
+**A principal belongs to one tenant, and a person may hold several of them.** The mapping key is the pair `(tenant, subject)`: the same identity at the same provider is one principal in each tenant that signs it in, and the two principals know nothing of each other (account linking is deferred, §13). The auto-provisioning is per tenant as well: it creates the principal of the tenant that the login belongs to, and it creates it with no grant at all.
 
 ### 6.5 Principal of a decision
 
@@ -910,6 +930,8 @@ Creates a tenant, or updates the tenant with that slug: an **upsert** keyed by s
 A slug that belongs to another tenant of the same client id → `409 conflict`. A `clientId` that belongs to another tenant → `409 conflict`. A `default` that would make a second tenant the default → `409 conflict`.
 
 **The provider of a tenant is the tenant's own.** A tenant is created with the provider of its identity: a call that creates a tenant and names no `issuer`, no `idpClientId` and no `idpClientSecret` → `400 invalid_request`. A call that **changes** a tenant and names none of them keeps the ones the tenant has: the issuer, the client, the secret, the callback, the scopes and the algorithms of the provider are kept, and the caller that changes the name of a tenant does not have to know the secret of its provider. A call that changes the **issuer** or the **client** of the provider and names no secret of it → `400 invalid_request`: the secret of a provider belongs to that provider.
+
+The flags of a tenant are the work of its operator: `autoProvision` says whether the tenant provisions the identities that sign in, and `autoProvisionAdmin` says whether the first of them administers the tenant (§6.4).
 
 Both client secrets are encrypted at rest and never returned.
 

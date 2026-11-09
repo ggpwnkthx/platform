@@ -53,3 +53,5 @@ export {
   AdministrationService,
   type AuditEntry,
 } from './service'
+export { change } from './audit'
+export { TENANT_ADMIN_PERMISSION } from './bootstrap'

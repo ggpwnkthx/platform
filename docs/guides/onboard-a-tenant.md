@@ -88,6 +88,23 @@ platformctl access tenants create --slug acme --display-name "Acme Inc" \
 
 The upsert changes the flags the body names and resets the ones it does not: repeating the call without `--auto-provision` turns the provisioning of the tenant off, and `--no-auto-provision` says it in the words of the operator.
 
+A tenant that hands its administration to its first identity is a tenant whose first account needs no operator at all: `--auto-provision-admin` gives the administration of the tenant to the first identity that signs in, and that identity may then add the users and the rights of the tenant ([Access spec §6.4](../access/spec.md#64-unknown-identity)). The flag is off by default, and the identities that come after the first one are given nothing.
+
+A tenant that **shares its provider** with another tenant is given nothing: the provider of a shared directory is the provider of several tenants, and the first identity that signs in at it is the first identity of the directory and not of the tenant. Give such a tenant its own provider, or grant the administration of the tenant by hand.
+
+```bash
+platformctl access tenants create --slug acme --display-name "Acme Inc" \
+  --issuer https://login.acme.example \
+  --idp-client-id access-acme --idp-client-secret "$IDP_CLIENT_SECRET" \
+  --idp-redirect-uri https://access.example.com/oauth/tenant/callback \
+  --email-domain acme.example \
+  --client-id gateway-acme --client-secret "$GATEWAY_CLIENT_SECRET" \
+  --client-redirect-uri https://gateway-acme.example.com/auth/callback \
+  --auto-provision --auto-provision-admin
+```
+
+Two things are needed for that identity to administer the tenant in the console: the console must hold a credential of the tenant (or of the platform), and the credential of the access context that the console reads must be allowed to ask about the tenant. The first identity of a tenant is the administrator of **its** tenant, and not of the platform: the console opens the pages of the tenant of the caller and no other.
+
 A wrong issuer, client id or callback can be fixed by repeating the call, but Access keeps the provider client for ten minutes ([Access spec §6.6](../access/spec.md#66-provider-key-rotation)), so wait that long or roll the replicas.
 
 The secret of the provider is the one field a change may leave out: a call that names no `idpClientSecret` keeps the secret the tenant has, and the caller that changes the name of a tenant does not have to know it. A tenant that is **created** is created with a provider — a call that names no issuer, no client and no secret of the provider is refused with `400 invalid_request`.

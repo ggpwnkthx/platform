@@ -549,6 +549,26 @@ about keeps the flag it has: the wizard reads the values of the
 deployment, and a deployment whose templates are older knows nothing
 about the provisioning of its tenant.
 
+The tenant of the deployment may also hand the **administration of the
+tenant** to the first identity that signs in: the principal that is
+created first is given the right to administer the tenant, and it may
+then add the users and the rights of the tenant by itself. The flag is
+a value of the deployment as well, and it is `false` by default: the
+first person who signs in at Entra ID is not the administrator of the
+tenant unless the deployment says so.
+
+```hcl
+tenant_auto_provision_admin = true
+```
+
+With the flag on, the grant of the administration of the tenant is
+written at the first login, and the operator of the deployment reads it
+out of the administration like any other:
+
+```bash
+platformctl access grants list --tenant esquire
+```
+
 Access is a service of the deployment, and it cannot answer before the
 job of the migration has created the roles of the deployment: the
 wizard waits for it, and a deployment whose Access never answers is a

@@ -23,7 +23,7 @@ import {
 } from '../platform/redis/store'
 import type { AccessDependencies } from '../app/dependencies'
 import { createAdministrationService } from './adapters'
-import { platformScope } from '../domains/administration'
+import { change, platformScope } from '../domains/administration'
 import { createLogger, MetricsStore, type Logger, type Observer } from '../observability'
 import { startListener, type StartedListener } from '../platform/bun/listener'
 import {
@@ -289,8 +289,21 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
           status: principal.status,
         }
       },
-      create: async (principal) => {
-        const created = await repositories.users.create(principal)
+      countByTenant: async (tenantId: string) => await repositories.users.countByTenant(tenantId),
+      create: async (principal, facts) => {
+        // A principal that a login creates is audited like every other
+        // change: the row of the audit is written by the same statement
+        // as the row of the principal (spec §10.1).
+        const created = await repositories.users.create(
+          principal,
+          facts
+            ? change('principal.created', facts.tenant, {
+                operator: facts.operator,
+                address: facts.address,
+                requestId: facts.requestId ?? null,
+              })
+            : undefined
+        )
         return {
           id: created.id,
           tenantId: created.tenantId,
@@ -425,6 +438,9 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
       previousToken: settings.admin.previousToken,
       credentials: readAdminCredentials(settings.admin.credentials),
       publicUrl: settings.public.publicUrl,
+      // The key that opens the administration of a tenant: the key the
+      // console reads in the context of its caller (spec §6.4).
+      tenantAdminPermission: settings.admin.tenantAdminPermission,
       // The registration of a tenant changed: its client of the provider
       // is dropped, so that the next login builds a new one (spec §6.6).
       onTenantChanged: (tenantId: string) => {

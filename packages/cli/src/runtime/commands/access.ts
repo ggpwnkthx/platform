@@ -124,6 +124,12 @@ export const accessGroup: GroupSpec = {
           summary:
             'the tenant provisions the identities that sign in for the first time: a principal is created at the first login',
         },
+        {
+          name: 'auto-provision-admin',
+          kind: 'boolean',
+          summary:
+            'the first identity that signs in administers the tenant: it may add the users and the rights of the tenant',
+        },
         { name: 'default', kind: 'boolean', summary: 'the tenant is the default one' },
         { name: 'enabled', kind: 'boolean', summary: 'the tenant is enabled' },
       ],
@@ -157,6 +163,8 @@ export const accessGroup: GroupSpec = {
         if (input.options['shared-client'] === true) body.sharedClient = true
         if (input.options['auto-provision'] === true) body.autoProvision = true
         if (input.options['auto-provision'] === false) body.autoProvision = false
+        if (input.options['auto-provision-admin'] === true) body.autoProvisionAdmin = true
+        if (input.options['auto-provision-admin'] === false) body.autoProvisionAdmin = false
         if (input.options.default === true) body.default = true
         if (input.options.enabled === true) body.enabled = true
         const written = await writeTenant(accessCall(input), body)

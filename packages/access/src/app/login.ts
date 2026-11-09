@@ -104,6 +104,9 @@ export async function authorizeHandler(
       },
     })
   } catch (error) {
+    // The authorization is the beginning of a login: a refusal there is
+    // a refused login, and the metric counts it.
+    dependencies.observer.recordLogin('refused', 'unknown')
     return refusalOf(error, dependencies)
   }
 }
@@ -128,6 +131,10 @@ export async function callbackHandler(
   // The provider refuses the login: its own answer is passed to the
   // browser, unchanged.
   if (query.error) {
+    dependencies.observer.recordLogin(
+      'refused',
+      (await dependencies.login.tenantOf(cookie)) ?? 'unknown'
+    )
     const redirectUri = await dependencies.login.redirectUriOf(cookie)
     if (!redirectUri) {
       return refusalPage('login_state_invalid', 'the login has to start again', 400)
@@ -144,6 +151,10 @@ export async function callbackHandler(
   }
 
   if (!query.code) {
+    dependencies.observer.recordLogin(
+      'refused',
+      (await dependencies.login.tenantOf(cookie)) ?? 'unknown'
+    )
     return refusalPage('invalid_request', 'the callback carries no code', 400)
   }
 
@@ -152,7 +163,54 @@ export async function callbackHandler(
       cookie,
       providerState: query.state ?? '',
       code: query.code,
+      // The facts of the call, for the audit of the principal that the
+      // login creates (spec §10.1).
+      facts: {
+        address: dependencies.peerAddress(context.req.raw),
+        requestId: context.get('requestId'),
+      },
     })
+    // A tenant that hands its administration to its first identity gives
+    // it to the principal that signed in first (spec §6.4). The login
+    // does not fail when the grant does not go through: the principal is
+    // there, and the operator of the tenant grants the administration by
+    // hand.
+    if (completed.created && completed.first) {
+      try {
+        const operator = completed.principal.email ?? completed.principal.externalSubject
+        await dependencies.administration.bootstrapAdministrator(
+          {
+            id: completed.principal.id,
+            tenant: completed.principal.tenantSlug,
+            operator,
+          },
+          {
+            operator,
+            address: dependencies.peerAddress(context.req.raw),
+            requestId: context.get('requestId'),
+          }
+        )
+      } catch (error) {
+        dependencies.logger.error('the administration of the tenant was not given', {
+          error,
+          tenant: completed.principal.tenantSlug,
+        })
+      }
+    }
+    // The login is a fact of the tenant: the metric counts it, the log
+    // tells it, and the principal it created is a row of the audit of
+    // the tenant.
+    dependencies.observer.recordLogin('success', completed.principal.tenantSlug)
+    dependencies.logger.info('the login succeeded', {
+      tenant: completed.principal.tenantSlug,
+      subject: completed.principal.externalSubject,
+    })
+    if (completed.created) {
+      dependencies.logger.info('a principal was created by a login', {
+        tenant: completed.principal.tenantSlug,
+        subject: completed.principal.externalSubject,
+      })
+    }
     const code = await dependencies.codes.issue({
       // The client that began the login, and not necessarily the tenant
       // of the login: with a shared client, the gateway presents the
@@ -175,14 +233,18 @@ export async function callbackHandler(
       headers: { ...deleted, location: url.toString() },
     })
   } catch (error) {
-    return refusalOf(error, dependencies)
+    dependencies.observer.recordLogin(
+      error instanceof LoginError ? 'refused' : 'error',
+      (await dependencies.login.tenantOf(cookie)) ?? 'unknown'
+    )
+    return refusalOf(error, dependencies, (await dependencies.login.tenantOf(cookie)) ?? 'unknown')
   }
 }
 
 /** Turns the failure of the login into the page of the refusal. */
-function refusalOf(error: unknown, dependencies: AccessDependencies): Response {
+function refusalOf(error: unknown, dependencies: AccessDependencies, tenant = 'unknown'): Response {
   if (error instanceof LoginError) {
-    dependencies.logger.warn('the login was refused', { code: error.code })
+    dependencies.logger.warn('the login was refused', { code: error.code, tenant })
     const status =
       error.code === 'invalid_request' || error.code === 'login_state_invalid'
         ? 400

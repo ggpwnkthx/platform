@@ -251,6 +251,7 @@ curl -sS -X POST https://access.example.com/v1/admin/tenants \
 | `clientSecret` | Required. Encrypted at rest, never returned. On replacement, the old secret stays valid for 24 hours alongside the new one. |
 | `clientRedirectUris` | Optional. Default `[]`. The gateway's callback URLs; a tenant with none refuses every login. |
 | `autoProvision` | Optional. Default `false`. A tenant that provisions its identities creates a principal at the first login of an identity it does not know (§6.4). |
+| `autoProvisionAdmin` | Optional. Default `false`. A tenant that hands its administration to its first identity gives the grant that opens the administration of the tenant to the principal that signs in first (§6.4). |
 | `sharedClient` | Optional. Default `false`. Platform operators only (§10.1). |
 | `default` | Optional. Default `false`. At most one tenant. Platform operators only. |
 | `enabled` | Optional. Default `true`. |
@@ -264,7 +265,8 @@ curl -sS -X POST https://access.example.com/v1/admin/tenants \
   "emailDomain": "acme.example",
   "clientId": "gateway-acme",
   "clientRedirectUris": ["https://gateway-acme.example.com/auth/callback"],
-  "autoProvision": false, "sharedClient": false,
+  "autoProvision": false, "autoProvisionAdmin": false,
+  "sharedClient": false,
   "default": false, "enabled": true,
   "createdAt": "2026-01-08T10:00:00.000Z"
 }
@@ -286,7 +288,8 @@ curl -sS https://access.example.com/v1/admin/tenants \
       "id": "6f0f…", "slug": "acme", "displayName": "Acme Inc",
       "issuer": "https://login.acme.example", "idpClientId": "access-acme",
       "emailDomain": "acme.example",
-      "clientId": "gateway-acme", "autoProvision": false, "sharedClient": false,
+      "clientId": "gateway-acme", "autoProvision": false, "autoProvisionAdmin": false,
+      "sharedClient": false,
       "default": false, "enabled": true,
       "userCount": 42, "grantCount": 57,
       "createdAt": "2026-01-08T10:00:00.000Z"

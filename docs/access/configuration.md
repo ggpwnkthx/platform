@@ -71,6 +71,12 @@ In production the credentials of the access context are credentials of the deplo
 
 Integer variables must be whole numbers; an empty or non-numeric value stops the service.
 
+### The administration of a tenant
+
+| Variable | Default | Production | Meaning |
+| --- | --- | --- | --- |
+| `ACCESS_TENANT_ADMIN_PERMISSION` | `console.admin` | optional | The key of the permission that opens the administration of a tenant (§6.4). It is what a tenant hands to its first identity when it lets it administer the tenant, and what the console reads in the context of its caller. |
+
 ## Secrets in files
 
 Set `ACCESS_<NAME>_FILE` to a path, and Access reads the value of `ACCESS_<NAME>` from that file (§4.5). These variables accept a file:

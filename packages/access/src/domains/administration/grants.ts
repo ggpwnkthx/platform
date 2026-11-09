@@ -289,8 +289,12 @@ export async function revokeGrant(
  * unique index is on `(tenant, key)`, and a key that another tenant
  * owns never becomes a permission of this one — the tenant creates
  * its own row, and the grant names that row.
+ *
+ * @param options what the administration is built with.
+ * @param tenantId the id of the tenant.
+ * @param key the key of the permission.
  */
-async function resolvePermission(
+export async function resolvePermission(
   options: AdministrationOptions,
   tenantId: string,
   key: string

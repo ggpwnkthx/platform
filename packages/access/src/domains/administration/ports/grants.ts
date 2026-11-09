@@ -101,6 +101,18 @@ export interface GrantStore {
     routeId: string | null
   ): Promise<Grant | null>
   /**
+   * The live grants that hold a permission, in a workspace.
+   *
+   * The grants that hold a role are not among them: the permissions of
+   * a role are read when the decision expands it, and a grant of a role
+   * is not a grant of the permission of the role.
+   */
+  findLiveByPermission(
+    tenantId: string,
+    permission: string,
+    workspaceId: string | null
+  ): Promise<Grant[]>
+  /**
    * Creates a grant.
    *
    * The row of the audit of the change is written by the same statement

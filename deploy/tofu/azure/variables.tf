@@ -312,6 +312,23 @@ variable "tenant_auto_provision" {
   default     = true
 }
 
+# Whether the first identity that signs in administers the tenant of
+# the deployment.
+#
+# A tenant that provisions the identities that sign in may hand the
+# administration of the tenant to the first one of them: the principal
+# that is created first is given the right to administer the tenant, and
+# the ones that come after are given nothing.
+#
+# The flag is off by default: the first person who signs in at the
+# provider of the deployment is not its administrator unless the
+# deployment says so.
+variable "tenant_auto_provision_admin" {
+  description = "Whether the first identity that signs in administers the tenant of the deployment."
+  type        = bool
+  default     = false
+}
+
 # --------------------------------------------------------------------------
 # The size of the services
 # --------------------------------------------------------------------------

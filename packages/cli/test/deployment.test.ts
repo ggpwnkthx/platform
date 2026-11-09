@@ -3381,6 +3381,62 @@ describe('the tenant of the deployment', () => {
     }
   })
 
+  test('a deployment whose tenant hands its administration to its first identity says so', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-tenant-'))
+    const real = globalThis.fetch
+    try {
+      const binary = join(directory, 'az')
+      await writeFile(binary, CLIENT_BINDING(join(directory, 'calls')))
+      await chmod(binary, 0o755)
+      const calls: { body: unknown }[] = []
+      globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+        const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined
+        if (init?.method === 'POST') {
+          calls.push({ body })
+          return new Response(
+            JSON.stringify({ id: '22222222-2222-4222-8222-222222222222', slug: 'esquire' }),
+            { status: 201, headers: { 'content-type': 'application/json' } }
+          )
+        }
+        return new Response(JSON.stringify({ tenants: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }) as typeof globalThis.fetch
+      const provider = azureProvider([], { PATH: process.env.PATH ?? '', AZURE_CLI: binary })
+      await provider.afterApply?.({
+        values: { public_names_enabled: 'false' },
+        outputs: {
+          resource_group_name: 'platform-production',
+          access_issuer: 'https://access.example.com',
+          access_admin_token: 'the-token-of-the-administration',
+          client_id: 'platform',
+          client_secret: 'the-secret-of-the-client',
+          client_redirect_uris: ['https://api.example.com/auth/callback'],
+          access_tenant_id: '11111111-1111-4111-8111-111111111111',
+          data_workspace_slug: 'esquire',
+          // The deployment says the first identity that signs in
+          // administers the tenant of the deployment.
+          tenant_auto_provision: true,
+          tenant_auto_provision_admin: true,
+          entra_tenant_enabled: true,
+          entra_issuer:
+            'https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0',
+          entra_client_id: 'the-client-of-access-at-entra',
+          entra_client_secret: 'the-secret-of-the-client-at-entra',
+          entra_redirect_uri: 'https://access.example.com/oauth/tenant/callback',
+        },
+      })
+      expect(calls[0]?.body).toMatchObject({
+        autoProvision: true,
+        autoProvisionAdmin: true,
+      })
+    } finally {
+      globalThis.fetch = real
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
   test('a deployment whose templates name no tenant of Entra ID registers no tenant', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'platformctl-tenant-'))
     const real = globalThis.fetch

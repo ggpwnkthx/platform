@@ -174,6 +174,7 @@ describe('the tenants of the administration', () => {
         clientSecret: TENANT.clientSecret,
         clientRedirectUris: TENANT.clientRedirectUris,
         autoProvision: false,
+        autoProvisionAdmin: false,
         sharedClient: false,
         isDefault: false,
         enabled: true,

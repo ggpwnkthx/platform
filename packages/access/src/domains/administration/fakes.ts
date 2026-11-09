@@ -61,6 +61,7 @@ export const TENANT = {
   clientSecret: 'the-secret-of-the-gateway',
   clientRedirectUris: ['https://gateway-acme.example.com/auth/callback'],
   autoProvision: false,
+  autoProvisionAdmin: false,
   sharedClient: false,
   isDefault: false,
   enabled: true,
@@ -92,6 +93,7 @@ class FakeTenants implements TenantStore {
       clientId: string
       clientRedirectUris: string[]
       autoProvision: boolean
+      autoProvisionAdmin?: boolean
       sharedClient: boolean
       isDefault: boolean
       enabled: boolean
@@ -108,6 +110,7 @@ class FakeTenants implements TenantStore {
       clientId: registration.clientId,
       clientRedirectUris: registration.clientRedirectUris,
       autoProvision: registration.autoProvision,
+      autoProvisionAdmin: registration.autoProvisionAdmin ?? false,
       sharedClient: registration.sharedClient,
       isDefault: registration.isDefault,
       enabled: registration.enabled,
@@ -288,6 +291,20 @@ class FakeGrants implements GrantStore {
           row.routeId === routeId &&
           row.revokedAt === null
       ) ?? null
+    )
+  }
+
+  async findLiveByPermission(
+    tenantId: string,
+    permission: string,
+    workspaceId: string | null
+  ): Promise<Grant[]> {
+    return this.rows.filter(
+      (row) =>
+        row.tenant === this.tenants.rows.find((t) => t.id === tenantId)?.slug &&
+        row.permission === permission &&
+        row.workspaceId === workspaceId &&
+        row.revokedAt === null
     )
   }
 

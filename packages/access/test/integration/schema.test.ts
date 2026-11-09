@@ -82,6 +82,7 @@ describe('the schema of Access', () => {
       '0011_roles.sql',
       '0012_roles_scope.sql',
       '0013_explicit_scope.sql',
+      '0014_tenant_auto_provision_admin.sql',
     ])
 
     const second = await runMigrations({
@@ -104,6 +105,7 @@ describe('the schema of Access', () => {
       '0011_roles.sql',
       '0012_roles_scope.sql',
       '0013_explicit_scope.sql',
+      '0014_tenant_auto_provision_admin.sql',
     ])
   })
 

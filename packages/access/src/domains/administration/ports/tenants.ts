@@ -27,6 +27,14 @@ export interface Tenant {
    */
   clientRedirectUris: string[]
   autoProvision: boolean
+  /**
+   * Whether the first principal of the tenant administers the tenant.
+   *
+   * The flag is the work of the operator of the tenant: a tenant that
+   * provisions its identities may hand the administration of the tenant
+   * to the first one of them (spec §6.4).
+   */
+  autoProvisionAdmin: boolean
   sharedClient: boolean
   isDefault: boolean
   enabled: boolean
@@ -72,6 +80,14 @@ export interface TenantRegistration {
   /** The secret of the gateway of the tenant, in clear. */
   clientSecret: string
   autoProvision: boolean
+  /**
+   * Whether the first principal of the tenant administers the tenant.
+   *
+   * The flag is the work of the operator of the tenant: a tenant that
+   * provisions its identities may hand the administration of the tenant
+   * to the first one of them (spec §6.4).
+   */
+  autoProvisionAdmin: boolean
   sharedClient: boolean
   isDefault: boolean
   enabled: boolean

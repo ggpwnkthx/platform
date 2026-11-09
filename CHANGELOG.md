@@ -10,6 +10,24 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The logins are counted and the principals they create are audited
+
+The metric of the logins was never written: `access_logins_total` stayed at zero, and the four documents that tell the operator to watch it — the operations, the monitoring, the incident-response and the rotate-secrets guides — were watching a line that never moved. A login that was refused, a provider that was down and a tenant that was disabled left no count anywhere.
+
+The logins are counted now: a login that succeeds, a login that is refused and a login that fails are counted per tenant, and the refusal carries the tenant of the login. The logs carry the login as well, with the tenant and the outcome.
+
+A principal that a login creates is audited like every other change: the operator of the audit is the identity that signed in, and the address and the request are the ones of the call. The auto-provisioning of a tenant was the one change of the platform that was not audited, and the rows it writes are the ones an operator watches when a tenant provisions its identities.
+
+### The first identity of a tenant may be given the administration of the tenant
+
+A tenant that provisions the identities that sign in created a principal with **no grant at all**: the login succeeded, every request was refused, and an operator of the platform had to read the principal out of the administration and to give it a right. A tenant that wanted its first account to run on its own — the first employee to sign in, and not an operator of the platform — had to wait for one.
+
+A tenant may now hand the administration of the tenant to the first identity that signs in. The flag `autoProvisionAdmin` is the work of the operator of the tenant and it is off by default: the first person who signs in at the provider of a tenant is not its administrator unless the tenant says so. With the flag on, the principal that is created first is given the grant that opens the administration of the tenant — the `console.admin` key, on the tenant itself as the workspace — and it may add the users and the rights of the tenant by itself. The identities that come after it are given nothing, and a tenant that already has an administrator keeps it.
+
+The grant is written by Access, at the login, and it is audited like every other change. The key of the permission is a value of the deployment, `ACCESS_TENANT_ADMIN_PERMISSION`, and it is `console.admin` by default. The CLI registers a tenant with `--auto-provision-admin`, the console says **The first one administers the tenant**, and the deployment on Azure registers the tenant it creates with the value of `tenant_auto_provision_admin`.
+
+A tenant that **shares its provider** with another tenant is given no administrator by its first identity: the provider of a shared directory is the provider of several tenants, and the first identity that signs in at it is the first identity of the directory and not of the tenant. The operator of the platform grants the administration of such a tenant by hand.
+
 ## 1.0.12
 
 ### The provider of the deployment belongs to the tenant the deployment creates

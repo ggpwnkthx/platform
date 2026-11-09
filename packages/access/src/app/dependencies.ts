@@ -22,9 +22,13 @@ interface LoginPort {
     cookie: string | undefined
     providerState: string
     code: string
+    /** The facts of the call, for the audit of the principal it creates. */
+    facts?: { address: string; requestId?: string }
   }) => Promise<CompletedLogin>
   /** The redirect uri of the state of a login. */
   redirectUriOf: (cookie: string | undefined) => Promise<string | null>
+  /** The tenant of the state of a login. */
+  tenantOf: (cookie: string | undefined) => Promise<string | null>
   /** The state of the gateway of the state of a login. */
   stateOf: (cookie: string | undefined) => Promise<string | null>
 }

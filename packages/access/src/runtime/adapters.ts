@@ -66,6 +66,7 @@ function toTenant(row: TenantRow): {
   clientId: string
   clientRedirectUris: string[]
   autoProvision: boolean
+  autoProvisionAdmin: boolean
   sharedClient: boolean
   isDefault: boolean
   enabled: boolean
@@ -81,6 +82,7 @@ function toTenant(row: TenantRow): {
     clientId: row.clientId,
     clientRedirectUris: row.clientRedirectUris,
     autoProvision: row.autoProvision,
+    autoProvisionAdmin: row.autoProvisionAdmin,
     sharedClient: row.sharedClient,
     isDefault: row.isDefault,
     enabled: row.enabled,
@@ -247,6 +249,13 @@ export interface AdministrationDependencies {
   credentials?: AdminCredential[]
   /** The public url of Access. */
   publicUrl: string
+  /**
+   * The key of the permission that opens the administration of a tenant.
+   *
+   * The key is the one of the console, and the deployment may name
+   * another one (spec §6.4).
+   */
+  tenantAdminPermission?: string
   /**
    * Called when the registration of a tenant changes.
    *
@@ -521,6 +530,13 @@ export function createAdministrationService(
           )
       )
       return row ? toGrant(row) : null
+    },
+    findLiveByPermission: async (tenantId, permission, workspaceId) => {
+      const rows = await run(
+        async () =>
+          await dependencies.grants.findLiveByPermission(tenantId, permission, workspaceId)
+      )
+      return rows.map(toGrant)
     },
     create: async (registration, audit) => {
       const row = await run(async () => await dependencies.grants.create(registration, audit))

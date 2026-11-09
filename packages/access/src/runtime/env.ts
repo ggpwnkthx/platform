@@ -13,6 +13,7 @@
 
 import { readFileSync } from 'node:fs'
 import { z } from 'zod'
+import { TENANT_ADMIN_PERMISSION } from '../domains/administration'
 import type { LogLevel } from '../observability'
 import { parseLogLevel } from '../observability'
 import {
@@ -82,6 +83,15 @@ interface AdminSettings {
    * carry the name of its operator.
    */
   credentials?: string
+  /**
+   * The key of the permission that opens the administration of a tenant.
+   *
+   * The key is the one of the console, and the deployment may name
+   * another one: the key is what the console reads in the context of its
+   * caller, and it is what a tenant hands to its first identity when it
+   * lets it administer the tenant (spec §6.4).
+   */
+  tenantAdminPermission: string
 }
 
 /** The settings of the decision contract of the gateway. */
@@ -301,6 +311,7 @@ const EnvSchema = z.object({
   ACCESS_ADMIN_TOKEN: z.string().optional(),
   ACCESS_PREVIOUS_ADMIN_TOKEN: z.string().optional(),
   ACCESS_ADMIN_TOKENS: z.string().optional(),
+  ACCESS_TENANT_ADMIN_PERMISSION: z.string().optional(),
   ACCESS_DECISION_TOKEN: z.string().optional(),
   ACCESS_PREVIOUS_DECISION_TOKEN: z.string().optional(),
   ACCESS_CONTEXT_TOKENS: z.string().optional(),
@@ -695,6 +706,7 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
       token: parsed.ACCESS_ADMIN_TOKEN,
       previousToken: parsed.ACCESS_PREVIOUS_ADMIN_TOKEN,
       credentials: parsed.ACCESS_ADMIN_TOKENS,
+      tenantAdminPermission: parsed.ACCESS_TENANT_ADMIN_PERMISSION ?? TENANT_ADMIN_PERMISSION,
     },
     access: {
       token: parsed.ACCESS_DECISION_TOKEN,

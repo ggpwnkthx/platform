@@ -55,6 +55,21 @@ platformctl access tenants create --slug acme --display-name "Acme Inc" \
 
 The upsert changes the flags the body names and resets the ones it does not, so the call carries the whole tenant: the credentials of the provider and of the gateway are part of it.
 
+## A tenant that provisions its identities
+
+**You see** principals in a tenant that nobody registered, or a login that succeeds and reaches nothing.
+
+**Cause.** The tenant has `autoProvision: true`: an identity that signs in at its provider and that the platform does not know gets a principal at that login (§6.4). The principal holds **no grant at all**, so the login succeeds and every request is refused until the operator of the tenant grants something.
+
+**Check.** The principals a login created are audited: the audit of the tenant holds a `principal.created` row for each of them, with the identity that signed in as the operator. The logins are counted per tenant in `access_logins_total`.
+
+```bash
+curl -sS "$ACCESS/v1/admin/audit?tenant=acme&action=principal.created" \
+  -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
+```
+
+**Fix.** Grant the principal what it needs, or turn the provisioning off and register the principals by hand. The provisioning is the risk the operator of the tenant takes: the provider of the tenant is its trust boundary, and a provider that lets anybody in creates a principal for anybody (§6.4).
+
 ## Decisions denied
 
 The gateway hides the reason and refuses the caller; the reason and its code are in the Access decision log line, with subject, workspace and route (§8.7). The gateway's metric counts `missing_role` apart from `access_denied`.
@@ -75,6 +90,7 @@ Other surprises:
 | The token's `roles` claim and the decision disagree | The claim is a snapshot taken at login; the decision reads the grants table (§7.3, §8.4). | Expected. A new login refreshes the claim. |
 | The `roles` claim lacks some permissions | The claim is capped at 64 entries; the log counts the ones left out (§7.3). | Expected. Decisions still read every grant. |
 | An auto-provisioned principal is denied everywhere | Auto-provisioning creates no grant (§6.4). | Grant it something. |
+| The first identity of a tenant is not an administrator | The tenant does not hand its administration to its first identity (§6.4). | Set `autoProvisionAdmin` on the tenant. |
 
 ## Decision timeouts and outages
 

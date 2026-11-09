@@ -201,4 +201,61 @@ describe('the tenants of the administration', () => {
     const body = JSON.parse(http.last.body ?? '{}') as Record<string, unknown>
     expect(body.autoProvision).toBe(false)
   })
+
+  test('a tenant that hands its administration to its first identity is written with the flag', async () => {
+    const http = new FakeHttp(FakeHttp.json(200, { slug: 'acme' }))
+    const { runtime } = runtimeOf(http)
+    const status = await run(runtime, [
+      'access',
+      'tenants',
+      'create',
+      '--slug',
+      'acme',
+      '--display-name',
+      'Acme Inc',
+      '--issuer',
+      'https://login.acme.example',
+      '--idp-client-id',
+      'access-acme',
+      '--idp-client-secret',
+      'the-secret',
+      '--client-id',
+      'gateway-acme',
+      '--client-secret',
+      'the-secret',
+      '--auto-provision',
+      '--auto-provision-admin',
+    ])
+    expect(status).toBe(0)
+    const body = JSON.parse(http.last.body ?? '{}') as Record<string, unknown>
+    expect(body.autoProvisionAdmin).toBe(true)
+  })
+
+  test('a tenant that hands its administration to nobody is written with the flag', async () => {
+    const http = new FakeHttp(FakeHttp.json(200, { slug: 'acme' }))
+    const { runtime } = runtimeOf(http)
+    const status = await run(runtime, [
+      'access',
+      'tenants',
+      'create',
+      '--slug',
+      'acme',
+      '--display-name',
+      'Acme Inc',
+      '--issuer',
+      'https://login.acme.example',
+      '--idp-client-id',
+      'access-acme',
+      '--idp-client-secret',
+      'the-secret',
+      '--client-id',
+      'gateway-acme',
+      '--client-secret',
+      'the-secret',
+      '--no-auto-provision-admin',
+    ])
+    expect(status).toBe(0)
+    const body = JSON.parse(http.last.body ?? '{}') as Record<string, unknown>
+    expect(body.autoProvisionAdmin).toBe(false)
+  })
 })
