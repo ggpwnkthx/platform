@@ -10,6 +10,8 @@ in the same commit as the code.
 
 ## Unreleased
 
+## 1.0.11
+
 ### The console of the deployment holds the credential of the administration
 
 The console of a deployment on Azure held no credential of the administration of Access: it read the scope of the people who sign in through the credential of the access context, and it had no way to act for them. The pages of the administration of the console — the tenants, their users, their groups and their rights — are opened with the credential of the administration, and a console that holds none of them refuses them to every operator, grant or not.
@@ -69,6 +71,7 @@ The images are pulled from the registry of GitHub now, and the deployment holds 
 A block of a registry that names a server and no credential is refused by the provider — the credential of a registry is either an identity or a name of an account and a name of a secret — and a deployment whose images are public needs none of them. The block was left behind when the images moved, and the applications of the deployment were refused one after the other.
 
 The image of the client of PostgreSQL is the one image of a deployment that the platform does not publish, and it names the registry of Docker: the wizard reads its digest from the registry of Docker Hub, and the name of the repository of an image is the name of the image without the name of the registry. The reference of the image names `docker.io/library/postgres`, and the repository of Docker Hub is `library/postgres`.
+
 
 ## 1.0.10
 
