@@ -191,6 +191,16 @@ export interface AfterApply {
    * of the deployment where they are written.
    */
   readonly outputs: Readonly<Record<string, unknown>>
+  /**
+   * The file of the values of the deployment.
+   *
+   * A deployment learns some of its answers after the apply: the
+   * identifier of a tenant that the system of the provider created is
+   * one of them, and the values of the deployment name it. The
+   * provider writes it in the file of the values, and the deployment
+   * goes on with it.
+   */
+  readonly file?: string
 }
 
 /** A resource of the system that a failed apply left behind. */

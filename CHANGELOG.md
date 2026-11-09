@@ -20,6 +20,8 @@ The tenant of the deployment is registered with that application as its provider
 
 The gateway asks for the groups of a caller as well, and the provider does not grant them. The scopes of a provider are the ones its discovery document names, and the document of Entra ID names `openid`, `profile` and `email`: a scope a provider does not name is a scope it ignores, and the token of the caller carries no group. The groups of a caller are read in the grants of Access, and not in the directory.
 
+The tenant of the deployment is created by the wizard and not by the operator. The wizard waits for Access — Access cannot answer before the job of the migration has created the roles of the deployment — and it creates the tenant of the deployment when the tenant is not there yet, with the slug of the workspace of the deployment. The identifier of the tenant it created is written in the file of the values, and the deployment goes on again: the access context of the deployment is scoped to that identifier, and a scope that names no tenant asks about nothing.
+
 The secret of the client belongs to the tenant, and the tenant holds it: a rotation of the secret is a change of the registration of the tenant, and the registration is repeated with the new value. The value of `entra_secret_rotation` is the key of the secret, and a change of the key is a new secret. A deployment whose tenant has another provider turns the application off with `entra_tenant_enabled`.
 
 ### The deployment holds no registry of its own

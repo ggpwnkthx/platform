@@ -12,6 +12,7 @@
  */
 
 import { existsSync } from 'node:fs'
+import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { CliFailure } from '../domains/failure'
 import {
@@ -1336,6 +1337,124 @@ function tenantOf(answer: unknown, id: string): TenantOfAccess | undefined {
 }
 
 /**
+ * The waits of the wizard for the administration of Access.
+ *
+ * Access is a service of the deployment, and it cannot answer before
+ * the job of the migration has run: the job creates the roles of the
+ * deployment, and Access reads the database with a role of its own. The
+ * wizard waits for Access, and a wait that ends without an answer is a
+ * note and not a failure.
+ */
+export interface Waits {
+  /** The number of times the wizard asks Access for its tenants. */
+  readonly attempts: number
+  /** The time between two of them, in milliseconds. */
+  readonly intervalMs: number
+  /** The time one call to Access may take, in milliseconds. */
+  readonly callMs: number
+}
+
+/** The waits of the wizard, when it is not told otherwise. */
+const WAITS: Waits = { attempts: 30, intervalMs: 10_000, callMs: 5_000 }
+
+/**
+ * Asks Access for the tenants of the platform.
+ *
+ * @param access the address of Access.
+ * @param admin the token of the administration of Access.
+ */
+async function tenantsOf(
+  access: string,
+  admin: string,
+  callMs: number
+): Promise<{ status: number; answer: unknown }> {
+  try {
+    const answer = await fetch(`${access}/v1/admin/tenants`, {
+      headers: { authorization: `Bearer ${admin}`, accept: 'application/json' },
+      signal: AbortSignal.timeout(callMs),
+    })
+    if (answer.status !== 200) return { status: answer.status, answer: undefined }
+    return { status: answer.status, answer: await answer.json() }
+  } catch {
+    return { status: 0, answer: undefined }
+  }
+}
+
+/**
+ * Waits for the administration of Access to answer.
+ *
+ * Access is a service of the deployment that has to be up before the
+ * tenant of the deployment can be registered: the job of the migration
+ * creates the roles of the deployment, and Access reads the database
+ * with a role of its own. A deployment whose Access answers is a
+ * deployment whose tenant is registered; a deployment whose Access
+ * never answers is a deployment whose tenant is registered by hand.
+ *
+ * @param access the address of Access.
+ * @param admin the token of the administration of Access.
+ */
+async function waitForAccess(
+  access: string,
+  admin: string,
+  waits: Waits
+): Promise<{ answer: unknown; waited: number }> {
+  for (let attempt = 0; attempt < waits.attempts; attempt++) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, waits.intervalMs))
+    const { status, answer } = await tenantsOf(access, admin, waits.callMs)
+    if (status === 200) return { answer, waited: attempt }
+  }
+  return { answer: undefined, waited: waits.attempts }
+}
+
+/**
+ * Writes the identifier of the tenant of the deployment in the file of
+ * the values.
+ *
+ * The tenant of the deployment is created by the administration of
+ * Access, and the values of the deployment name it: the access context
+ * of the deployment is scoped to it, and a scope that names no tenant
+ * asks about nothing. The identifier is written in the file of the
+ * values, and the deployment goes on with it.
+ *
+ * @param file the file of the values of the deployment.
+ * @param id the identifier of the tenant.
+ */
+async function writeTenantId(file: string, id: string): Promise<boolean> {
+  let content: string
+  try {
+    content = await readFile(file, 'utf8')
+  } catch {
+    return false
+  }
+  const line = `access_tenant_id = "${id}"`
+  if (/^access_tenant_id\s*=/m.test(content)) {
+    const written = content.replace(/^access_tenant_id\s*=.*$/m, line)
+    if (written === content) return false
+    await writeFile(file, written)
+    return true
+  }
+  await writeFile(file, `${content.trimEnd()}\n${line}\n`)
+  return true
+}
+
+/**
+ * Reads the tenant that the administration of Access answered with.
+ *
+ * The answer of an upsert is the tenant itself: its identifier and
+ * its slug are the two things the wizard needs.
+ *
+ * @param answer the answer of the administration API.
+ */
+function registeredOf(answer: unknown): { id: string; slug: string } | undefined {
+  if (!answer || typeof answer !== 'object') return undefined
+  const tenant = answer as Record<string, unknown>
+  const id = tenant.id
+  const slug = tenant.slug
+  if (typeof id !== 'string' || id === '') return undefined
+  return { id, slug: typeof slug === 'string' ? slug : '' }
+}
+
+/**
  * Registers the tenant of the deployment with the application of Entra
  * ID as its provider.
  *
@@ -1347,7 +1466,15 @@ function tenantOf(answer: unknown, id: string): TenantOfAccess | undefined {
  * The tenant of the deployment is the one the values name, and the
  * wizard reads it among the tenants of Access: the registration is an
  * upsert by the slug of the tenant, and the slug is the name the
- * tenant is known by.
+ * tenant is known by. A deployment whose tenant is not there yet gets
+ * one: the tenant of a deployment is the work of the deployment, and
+ * the platform creates the tenants through the administration API of
+ * Access.
+ *
+ * The flags of the tenant are kept: the auto-provisioning of the
+ * principals, the shared client and the default of the platform are
+ * the work of the operator of the platform, and a registration that
+ * does not carry them resets them.
  *
  * The step is not a failure of the deployment when it does not go
  * through: the deployment is applied, and the registration is written
@@ -1355,7 +1482,7 @@ function tenantOf(answer: unknown, id: string): TenantOfAccess | undefined {
  *
  * @param context what the deployment applied.
  */
-async function tenantWithEntra(context: AfterApply): Promise<string[]> {
+async function tenantWithEntra(context: AfterApply, waits: Waits): Promise<string[]> {
   // A deployment whose tenant has another provider creates no
   // application, and the registration is the work of the operator.
   if (context.values.entra_tenant_enabled === 'false') return []
@@ -1382,37 +1509,30 @@ async function tenantWithEntra(context: AfterApply): Promise<string[]> {
     ]
   }
 
-  const id = context.values.access_tenant_id ?? ''
-  if (id === '') {
+  // The tenant of the deployment is created with the slug of the
+  // workspace of the deployment: the deployment holds one tenant and
+  // one workspace, and they belong to the same customer.
+  const slug = context.values.data_workspace_slug ?? ''
+  if (slug === '') {
     return [
-      'the tenant of the deployment is not registered with Entra ID: the values of the deployment name no tenant',
-    ]
-  }
-  let tenant: TenantOfAccess | undefined
-  try {
-    const answer = await fetch(`${access}/v1/admin/tenants`, {
-      headers: { authorization: `Bearer ${admin}`, accept: 'application/json' },
-    })
-    if (answer.status !== 200) {
-      return [
-        `the tenant of the deployment is not registered with Entra ID: the administration of Access answered ${answer.status}`,
-      ]
-    }
-    tenant = tenantOf(await answer.json(), id)
-  } catch (error) {
-    return [
-      `the tenant of the deployment is not registered with Entra ID: ${error instanceof Error ? error.message : String(error)}`,
-    ]
-  }
-  if (tenant === undefined) {
-    return [
-      `the tenant of the deployment is not registered with Entra ID: Access holds no tenant with the identifier ${id}`,
+      'the tenant of the deployment is not registered with Entra ID: the values of the deployment name no workspace',
     ]
   }
 
+  // Access is a service of the deployment, and it cannot answer before
+  // the job of the migration has created the roles of the deployment.
+  const { answer, waited } = await waitForAccess(access, admin, waits)
+  if (answer === undefined) {
+    return [
+      'the tenant of the deployment is not registered with Entra ID: the administration of Access did not answer, and the tenant is registered by hand',
+    ]
+  }
+
+  const id = context.values.access_tenant_id ?? ''
+  const existing = tenantOf(answer, id)
   const body = {
-    slug: tenant.slug,
-    displayName: tenant.displayName,
+    slug: existing?.slug ?? slug,
+    displayName: existing?.displayName ?? slug,
     issuer: entraIssuer,
     idpClientId: entraClient,
     idpClientSecret: entraSecret,
@@ -1422,15 +1542,16 @@ async function tenantWithEntra(context: AfterApply): Promise<string[]> {
     // Access, and not in the directory of the provider.
     idpScopes: ['openid', 'profile', 'email'],
     idpAlgorithms: ['RS256'],
-    emailDomain: tenant.emailDomain,
+    emailDomain: existing?.emailDomain ?? null,
     clientId,
     clientSecret,
     clientRedirectUris: callbacks,
-    autoProvision: tenant.autoProvision,
-    sharedClient: tenant.sharedClient,
-    default: tenant.default,
-    enabled: tenant.enabled,
+    autoProvision: existing?.autoProvision ?? false,
+    sharedClient: existing?.sharedClient ?? false,
+    default: existing?.default ?? false,
+    enabled: existing?.enabled ?? true,
   }
+  let registered: { id: string; slug: string } | undefined
   try {
     const answer = await fetch(`${access}/v1/admin/tenants`, {
       method: 'POST',
@@ -1440,20 +1561,46 @@ async function tenantWithEntra(context: AfterApply): Promise<string[]> {
         'content-type': 'application/json',
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(waits.callMs),
     })
     if (answer.status !== 200 && answer.status !== 201) {
       return [
         `the tenant of the deployment is not registered with Entra ID: the administration of Access answered ${answer.status}: the registration is repeated the next time the deployment goes on`,
       ]
     }
+    registered = registeredOf(await answer.json())
   } catch (error) {
     return [
       `the tenant of the deployment is not registered with Entra ID: ${error instanceof Error ? error.message : String(error)}`,
     ]
   }
-  return [
-    `the tenant ${tenant.slug} of the deployment is registered with the application of Access at Entra ID as its provider: the callers of the tenant sign in at Entra ID`,
-  ]
+  if (registered === undefined) {
+    return [
+      'the tenant of the deployment is not registered with Entra ID: the administration of Access answered with no tenant',
+    ]
+  }
+
+  const notes: string[] = []
+  if (waited > 0) {
+    notes.push(
+      `the administration of Access answered after ${Math.round((waited * waits.intervalMs) / 1000)} seconds: the job of the migration created the roles of the deployment, and Access came up`
+    )
+  }
+  notes.push(
+    `the tenant ${body.slug} of the deployment is registered with the application of Access at Entra ID as its provider: the callers of the tenant sign in at Entra ID`
+  )
+
+  // The identifier of the tenant is the scope of the access context of
+  // the deployment, and the values of the deployment name it.
+  if (registered.id !== id && context.file !== undefined) {
+    const written = await writeTenantId(context.file, registered.id)
+    if (written) {
+      notes.push(
+        `the identifier of the tenant ${registered.id} is written in the file of the values: the deployment goes on again, and the access context of the tenant is scoped to it`
+      )
+    }
+  }
+  return notes
 }
 
 /**
@@ -1463,7 +1610,8 @@ async function tenantWithEntra(context: AfterApply): Promise<string[]> {
  */
 export function azureProvider(
   questions: readonly Question[] = AZURE_QUESTIONS,
-  environment: Readonly<Record<string, string | undefined>> = process.env
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+  waits: Waits = WAITS
 ): DeploymentProvider {
   return {
     name: 'azure',
@@ -1498,7 +1646,7 @@ export function azureProvider(
         )
       }
       try {
-        notes.push(...(await tenantWithEntra(context)))
+        notes.push(...(await tenantWithEntra(context, waits)))
       } catch (error) {
         // The deployment is applied, and Access is not there yet: the
         // registration of the tenant is repeated the next time the

@@ -1316,13 +1316,15 @@ function addressOf(reason: string): string | undefined {
  * @param directory the directory of the templates.
  * @param backend the configuration of the backend of the state.
  * @param values the values of the deployment.
+ * @param file the file of the values of the deployment.
  */
 async function boundAfter(
   provider: DeploymentProvider,
   tool: InfrastructurePort,
   directory: string,
   backend: string,
-  values: Values
+  values: Values,
+  file: string
 ): Promise<string[]> {
   if (provider.afterApply === undefined) return []
   let outputs: Record<string, unknown>
@@ -1334,7 +1336,7 @@ async function boundAfter(
     ]
   }
   try {
-    const lines = await provider.afterApply({ values, outputs })
+    const lines = await provider.afterApply({ values, outputs, file })
     return lines.map((line) => `\n${line}`)
   } catch (error) {
     return [`\n${error instanceof Error ? error.message : String(error)}`]
@@ -1754,7 +1756,7 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
           // the binding of a name waits for the records of DNS of the
           // name, and the records of a name are not always in place
           // when the deployment goes on.
-          const bound = await boundAfter(provider, tool, directory, backend, values)
+          const bound = await boundAfter(provider, tool, directory, backend, values, file)
           return {
             value,
             lines: bound,
@@ -1786,7 +1788,7 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
           // The deployment is applied, and the system of the provider
           // is told what it needs after the apply: the certificate of
           // the public names is one of those things.
-          const bound = await boundAfter(provider, tool, directory, backend, values)
+          const bound = await boundAfter(provider, tool, directory, backend, values, file)
           return {
             value: {
               ...value,

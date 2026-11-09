@@ -2973,6 +2973,7 @@ describe('the tenant of the deployment', () => {
           public_names_enabled: 'false',
           entra_tenant_enabled: 'true',
           access_tenant_id: '11111111-1111-4111-8111-111111111111',
+          data_workspace_slug: 'acme',
         },
         outputs: {
           resource_group_name: 'platform-production',
@@ -3062,24 +3063,106 @@ describe('the tenant of the deployment', () => {
     }
   })
 
-  test('a tenant that is not there is told', async () => {
+  test('a tenant that is not there is created, and its identifier is written in the values', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'platformctl-tenant-'))
     const real = globalThis.fetch
     try {
       const binary = join(directory, 'az')
       await writeFile(binary, CLIENT_BINDING(join(directory, 'calls')))
       await chmod(binary, 0o755)
-      globalThis.fetch = (async (_input: string | URL | Request, _init?: RequestInit) =>
-        new Response(JSON.stringify({ tenants: [] }), {
+      const file = join(directory, 'terraform.tfvars')
+      await writeFile(
+        file,
+        '# The values of the deployment.\n\naccess_tenant_id = "11111111-1111-4111-8111-111111111111"\n'
+      )
+      const calls: { body: unknown }[] = []
+      globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+        const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined
+        if (init?.method === 'POST') {
+          calls.push({ body })
+          return new Response(
+            JSON.stringify({ id: '22222222-2222-4222-8222-222222222222', slug: 'acme' }),
+            { status: 201, headers: { 'content-type': 'application/json' } }
+          )
+        }
+        return new Response(JSON.stringify({ tenants: [] }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
-        })) as typeof globalThis.fetch
+        })
+      }) as typeof globalThis.fetch
       const provider = azureProvider([], { PATH: process.env.PATH ?? '', AZURE_CLI: binary })
       const notes = await provider.afterApply?.({
         values: {
           public_names_enabled: 'false',
           entra_tenant_enabled: 'true',
           access_tenant_id: '11111111-1111-4111-8111-111111111111',
+          data_workspace_slug: 'acme',
+        },
+        outputs: {
+          resource_group_name: 'platform-production',
+          access_issuer: 'https://access.example.com',
+          access_admin_token: 'the-token-of-the-administration',
+          client_id: 'platform',
+          client_secret: 'the-secret-of-the-client',
+          client_redirect_uris: ['https://api.example.com/auth/callback'],
+          entra_issuer:
+            'https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0',
+          entra_client_id: 'the-client-of-access-at-entra',
+          entra_client_secret: 'the-secret-of-the-client-at-entra',
+          entra_redirect_uri: 'https://access.example.com/oauth/tenant/callback',
+        },
+        file,
+      })
+      expect(notes?.join('\n')).toContain(
+        'the tenant acme of the deployment is registered with the application of Access at Entra ID as its provider'
+      )
+
+      // The tenant of a deployment is created with the slug of the
+      // workspace of the deployment, and it is created with the
+      // provider of the deployment.
+      expect(calls[0]?.body).toMatchObject({
+        slug: 'acme',
+        displayName: 'acme',
+        issuer: 'https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0',
+        idpClientId: 'the-client-of-access-at-entra',
+      })
+
+      // The identifier of the tenant is the scope of the access context
+      // of the deployment, and the values of the deployment name it.
+      const values = await readFile(file, 'utf8')
+      expect(values).toContain('access_tenant_id = "22222222-2222-4222-8222-222222222222"')
+      expect(notes?.join('\n')).toContain(
+        'the identifier of the tenant 22222222-2222-4222-8222-222222222222 is written in the file of the values'
+      )
+    } finally {
+      globalThis.fetch = real
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('an administration of Access that does not answer is waited for', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-tenant-'))
+    const real = globalThis.fetch
+    try {
+      const binary = join(directory, 'az')
+      await writeFile(binary, CLIENT_BINDING(join(directory, 'calls')))
+      await chmod(binary, 0o755)
+      let asked = 0
+      globalThis.fetch = (async (_input: string | URL | Request, _init?: RequestInit) => {
+        asked++
+        return new Response('the gateway timed out', { status: 504 })
+      }) as typeof globalThis.fetch
+      const provider = azureProvider(
+        [],
+        { PATH: process.env.PATH ?? '', AZURE_CLI: binary },
+        { attempts: 3, intervalMs: 1, callMs: 1 }
+      )
+      const notes = await provider.afterApply?.({
+        values: {
+          public_names_enabled: 'false',
+          entra_tenant_enabled: 'true',
+          access_tenant_id: '11111111-1111-4111-8111-111111111111',
+          data_workspace_slug: 'acme',
         },
         outputs: {
           resource_group_name: 'platform-production',
@@ -3092,14 +3175,12 @@ describe('the tenant of the deployment', () => {
           entra_redirect_uri: 'https://access.example.com/oauth/tenant/callback',
         },
       })
-      // The deployment is applied, and the registration is repeated the
-      // next time the deployment goes on: the refusal is told and not
-      // thrown.
+      // The wizard waits for Access: Access is a service of the
+      // deployment, and it cannot answer before the job of the
+      // migration has created the roles of the deployment.
+      expect(asked).toBe(3)
       expect(notes?.join('\n')).toContain(
-        'the tenant of the deployment is not registered with Entra ID'
-      )
-      expect(notes?.join('\n')).toContain(
-        'Access holds no tenant with the identifier 11111111-1111-4111-8111-111111111111'
+        'the administration of Access did not answer, and the tenant is registered by hand'
       )
     } finally {
       globalThis.fetch = real

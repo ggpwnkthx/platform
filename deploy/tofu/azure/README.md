@@ -360,8 +360,12 @@ database of Data.
 The tenant is created through the administration API of Access, and the
 templates do not create it: the platform creates the tenants through
 that API, and the identifiers it carries are the ones the deployment
-tells the templates about. The credentials the registration needs are
-the outputs of the deployment:
+tells the templates about. The **wizard** of the deployment makes that
+call when the deployment is applied — it waits for Access, it creates
+the tenant of the deployment when the tenant is not there yet, and it
+registers it again with the provider of the deployment at every apply —
+and the credentials the registration needs are the outputs of the
+deployment:
 
 ```bash
 tofu -chdir=deploy/tofu/azure output -raw access_admin_token
@@ -459,17 +463,24 @@ curl -sS -X POST $ACCESS/v1/admin/tenants \
 ```
 
 The wizard of the deployment makes that call when the deployment is
-applied: it reads the tenant among the tenants of Access — the tenant
+applied. It reads the tenant among the tenants of Access — the tenant
 the values name as `access_tenant_id` — and registers it again with the
 application of Entra ID as its provider, keeping the flags of the
-tenant. The registration is repeated at every apply, and a deployment
-whose Access is not up yet is a deployment whose tenant is registered by
-hand.
+tenant. The registration is repeated at every apply.
 
-The identifier of the tenant that the answer carries is the one the
-values of the deployment name as `access_tenant_id`: the access context
-credentials of Data and of the console ask about that tenant, and a
-placeholder names no tenant.
+A deployment whose tenant is not there yet gets one: the tenant of the
+deployment is created with the slug of the **workspace** of the
+deployment, because the deployment holds one tenant and one workspace
+and they belong to the same customer. The identifier of the tenant that
+the answer carries is written in the file of the values, and the
+deployment goes on again: the access context of the deployment is
+scoped to that identifier, and a scope that names no tenant asks about
+nothing.
+
+Access is a service of the deployment, and it cannot answer before the
+job of the migration has created the roles of the deployment: the
+wizard waits for it, and a deployment whose Access never answers is a
+deployment whose tenant is registered by hand.
 
 The console reads the scope of the people who sign in through the
 credential of the access context, and it opens nothing without the
