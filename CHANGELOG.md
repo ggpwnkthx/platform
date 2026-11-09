@@ -10,6 +10,8 @@ in the same commit as the code.
 
 ## Unreleased
 
+## 1.0.13
+
 ### The logins are counted and the principals they create are audited
 
 The metric of the logins was never written: `access_logins_total` stayed at zero, and the four documents that tell the operator to watch it — the operations, the monitoring, the incident-response and the rotate-secrets guides — were watching a line that never moved. A login that was refused, a provider that was down and a tenant that was disabled left no count anywhere.
@@ -27,6 +29,7 @@ A tenant may now hand the administration of the tenant to the first identity tha
 The grant is written by Access, at the login, and it is audited like every other change. The key of the permission is a value of the deployment, `ACCESS_TENANT_ADMIN_PERMISSION`, and it is `console.admin` by default. The CLI registers a tenant with `--auto-provision-admin`, the console says **The first one administers the tenant**, and the deployment on Azure registers the tenant it creates with the value of `tenant_auto_provision_admin`.
 
 A tenant that **shares its provider** with another tenant is given no administrator by its first identity: the provider of a shared directory is the provider of several tenants, and the first identity that signs in at it is the first identity of the directory and not of the tenant. The operator of the platform grants the administration of such a tenant by hand.
+
 
 ## 1.0.12
 
