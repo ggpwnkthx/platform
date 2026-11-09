@@ -10,6 +10,12 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The console of the deployment holds the credential of the administration
+
+The console of a deployment on Azure held no credential of the administration of Access: it read the scope of the people who sign in through the credential of the access context, and it had no way to act for them. The pages of the administration of the console — the tenants, their users, their groups and their rights — are opened with the credential of the administration, and a console that holds none of them refuses them to every operator, grant or not.
+
+The console holds the token of the platform now, and the deployment holds one tenant. The credential is the one of the vault of the deployment, and the console reads it the way it reads its other secrets: as a reference to the secret, never as a value.
+
 ### The tenant of the deployment provisions the identities that sign in
 
 The tenant of a deployment was created with the auto-provisioning of the principals off: a person who signed in at Entra ID was refused by Access with `identity_unknown`, and the operator of the deployment had to read the `sub` of the identity in the directory and to register the principal by hand before anybody could sign in.

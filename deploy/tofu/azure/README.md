@@ -541,13 +541,14 @@ curl -sS -X PUT $ACCESS/v1/admin/grants \
 
 The steps of the console are in [Console operations](../../../docs/console/operations.md#set-up-access).
 
-The console holds no credential of the administration of Access: the
-deployment gives the platform's token to Access, and the console reads
-the scope of the people who sign in through the credential of the
-access context. An operator who administers the tenants from the
-console gives the console a credential of the administration — the
-token of the platform, or the token of a tenant — and the steps are in
-[Console operations](../../../docs/console/operations.md#credentials-it-holds).
+The console reads the scope of the people who sign in through the
+credential of the access context, and it acts for them with the
+credential of the administration: the deployment gives the console the
+token of the platform, and the console administers the tenant of the
+deployment with it. A console that holds no credential of the
+administration opens nothing: the scope of the caller says that it
+administers the tenant, and the console has no way to act for it. The
+steps are in [Console operations](../../../docs/console/operations.md#credentials-it-holds).
 
 The secret of the client is a credential of the deployment, and the
 templates generate it. An apply that changes it is an apply that

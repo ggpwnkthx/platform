@@ -129,6 +129,14 @@ locals {
     CONSOLE_CLIENT_SECRET        = "client-secret"
     CONSOLE_SESSION_SECRET       = "console-session-secret"
     CONSOLE_ACCESS_CONTEXT_TOKEN = "console-access-context-token"
+    # The credential of the administration of Access.
+    #
+    # The console opens the pages of the administration with it, and a
+    # console that holds no credential of the administration opens
+    # nothing: the scope of the caller says that it administers the
+    # tenant, and the console has no way to act for it. The credential
+    # is the one of the platform, and the deployment holds one tenant.
+    CONSOLE_ADMIN_TOKEN = "access-admin-token"
   }
 
   # Every secret that a service reads: the ones it reads from a file
