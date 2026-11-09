@@ -72,11 +72,6 @@ export const AZURE_QUESTIONS: readonly Question[] = [
     kind: 'given',
   },
   {
-    name: 'registry_name',
-    summary: 'the name of the registry of the images of the deployment',
-    kind: 'given',
-  },
-  {
     name: 'dns_zone_name',
     summary:
       'the zone of DNS that holds the public names of the deployment, for example example.com',
@@ -110,6 +105,16 @@ export const AZURE_QUESTIONS: readonly Question[] = [
   {
     name: 'client_id',
     summary: "the identifier of the tenant's client at Access",
+    kind: 'given',
+  },
+  {
+    name: 'entra_tenant_enabled',
+    summary: 'whether the deployment creates the application of Access at Entra ID',
+    kind: 'given',
+  },
+  {
+    name: 'entra_secret_rotation',
+    summary: 'the key of the rotation of the secret of the client of Access at Entra ID',
     kind: 'given',
   },
   {
@@ -681,14 +686,12 @@ async function leftoverOf(
  * The names of the resources of Azure that are unique in Azure, and
  * the value that names them.
  *
- * The name of a vault and the name of a registry are unique in the
- * whole of Azure, and the operator names them when the default name is
- * taken: a deployment that cannot take the name of the resource it
- * wants names it differently.
+ * The name of a vault is unique in the whole of Azure, and the operator
+ * names it when the default name is taken: a deployment that cannot
+ * take the name of the resource it wants names it differently.
  */
 const NAMED: { readonly kind: string; readonly value: string; readonly length: number }[] = [
   { kind: 'Key Vault', value: 'key_vault_name', length: 24 },
-  { kind: 'Container Registry', value: 'registry_name', length: 50 },
 ]
 
 /**
@@ -1284,6 +1287,176 @@ async function migrationOf(binary: string, context: AfterApply): Promise<string[
 }
 
 /**
+ * A tenant of Access, as the administration API answers with it.
+ *
+ * The registration of a tenant is an upsert by its slug, and the
+ * wizard writes the tenant of the deployment again with the
+ * application of Entra ID as its provider. The flags of the tenant are
+ * kept: the auto-provisioning of the principals, the shared client and
+ * the default of the platform are the work of the operator of the
+ * platform, and a registration that does not carry them resets them.
+ */
+interface TenantOfAccess {
+  readonly id: string
+  readonly slug: string
+  readonly displayName: string
+  readonly emailDomain: string | null
+  readonly autoProvision: boolean
+  readonly sharedClient: boolean
+  readonly default: boolean
+  readonly enabled: boolean
+}
+
+/**
+ * Reads a tenant of Access out of the answer of the administration API.
+ *
+ * @param answer the answer of the administration API.
+ * @param id the identifier of the tenant of the deployment.
+ */
+function tenantOf(answer: unknown, id: string): TenantOfAccess | undefined {
+  if (!answer || typeof answer !== 'object') return undefined
+  const tenants = (answer as { tenants?: unknown }).tenants
+  if (!Array.isArray(tenants)) return undefined
+  for (const entry of tenants) {
+    if (!entry || typeof entry !== 'object') continue
+    const tenant = entry as Record<string, unknown>
+    if (tenant.id !== id) continue
+    return {
+      id: typeof tenant.id === 'string' ? tenant.id : id,
+      slug: typeof tenant.slug === 'string' ? tenant.slug : '',
+      displayName: typeof tenant.displayName === 'string' ? tenant.displayName : '',
+      emailDomain: typeof tenant.emailDomain === 'string' ? tenant.emailDomain : null,
+      autoProvision: tenant.autoProvision === true,
+      sharedClient: tenant.sharedClient === true,
+      default: tenant.default === true,
+      enabled: tenant.enabled !== false,
+    }
+  }
+  return undefined
+}
+
+/**
+ * Registers the tenant of the deployment with the application of Entra
+ * ID as its provider.
+ *
+ * The templates of the deployment create the application of Access at
+ * Entra ID and its secret, and they cannot register the tenant: the
+ * registration is a call to the administration API of Access, and
+ * Access is a service of the deployment that has to be up.
+ *
+ * The tenant of the deployment is the one the values name, and the
+ * wizard reads it among the tenants of Access: the registration is an
+ * upsert by the slug of the tenant, and the slug is the name the
+ * tenant is known by.
+ *
+ * The step is not a failure of the deployment when it does not go
+ * through: the deployment is applied, and the registration is written
+ * again the next time the deployment goes on.
+ *
+ * @param context what the deployment applied.
+ */
+async function tenantWithEntra(context: AfterApply): Promise<string[]> {
+  // A deployment whose tenant has another provider creates no
+  // application, and the registration is the work of the operator.
+  if (context.values.entra_tenant_enabled === 'false') return []
+
+  const access = answerOf(context.outputs, ['access_issuer'])
+  const admin = answerOf(context.outputs, ['access_admin_token'])
+  const entraIssuer = answerOf(context.outputs, ['entra_issuer'])
+  const entraClient = answerOf(context.outputs, ['entra_client_id'])
+  const entraSecret = answerOf(context.outputs, ['entra_client_secret'])
+  const entraCallback = answerOf(context.outputs, ['entra_redirect_uri'])
+  const clientId = answerOf(context.outputs, ['client_id'])
+  const clientSecret = answerOf(context.outputs, ['client_secret'])
+  const callbacks = namesOf(context.outputs, 'client_redirect_uris')
+  if (
+    access === '' ||
+    admin === '' ||
+    entraIssuer === '' ||
+    entraClient === '' ||
+    entraSecret === '' ||
+    entraCallback === ''
+  ) {
+    return [
+      'the tenant of the deployment is not registered with Entra ID: the templates did not answer the application of Access at Entra ID',
+    ]
+  }
+
+  const id = context.values.access_tenant_id ?? ''
+  if (id === '') {
+    return [
+      'the tenant of the deployment is not registered with Entra ID: the values of the deployment name no tenant',
+    ]
+  }
+  let tenant: TenantOfAccess | undefined
+  try {
+    const answer = await fetch(`${access}/v1/admin/tenants`, {
+      headers: { authorization: `Bearer ${admin}`, accept: 'application/json' },
+    })
+    if (answer.status !== 200) {
+      return [
+        `the tenant of the deployment is not registered with Entra ID: the administration of Access answered ${answer.status}`,
+      ]
+    }
+    tenant = tenantOf(await answer.json(), id)
+  } catch (error) {
+    return [
+      `the tenant of the deployment is not registered with Entra ID: ${error instanceof Error ? error.message : String(error)}`,
+    ]
+  }
+  if (tenant === undefined) {
+    return [
+      `the tenant of the deployment is not registered with Entra ID: Access holds no tenant with the identifier ${id}`,
+    ]
+  }
+
+  const body = {
+    slug: tenant.slug,
+    displayName: tenant.displayName,
+    issuer: entraIssuer,
+    idpClientId: entraClient,
+    idpClientSecret: entraSecret,
+    idpRedirectUri: entraCallback,
+    // The scopes of the provider of the tenant: the three that every
+    // provider knows. The groups of a caller are read in the grants of
+    // Access, and not in the directory of the provider.
+    idpScopes: ['openid', 'profile', 'email'],
+    idpAlgorithms: ['RS256'],
+    emailDomain: tenant.emailDomain,
+    clientId,
+    clientSecret,
+    clientRedirectUris: callbacks,
+    autoProvision: tenant.autoProvision,
+    sharedClient: tenant.sharedClient,
+    default: tenant.default,
+    enabled: tenant.enabled,
+  }
+  try {
+    const answer = await fetch(`${access}/v1/admin/tenants`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${admin}`,
+        accept: 'application/json',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    })
+    if (answer.status !== 200 && answer.status !== 201) {
+      return [
+        `the tenant of the deployment is not registered with Entra ID: the administration of Access answered ${answer.status}: the registration is repeated the next time the deployment goes on`,
+      ]
+    }
+  } catch (error) {
+    return [
+      `the tenant of the deployment is not registered with Entra ID: ${error instanceof Error ? error.message : String(error)}`,
+    ]
+  }
+  return [
+    `the tenant ${tenant.slug} of the deployment is registered with the application of Access at Entra ID as its provider: the callers of the tenant sign in at Entra ID`,
+  ]
+}
+
+/**
  * The provider of a deployment on Microsoft Azure.
  *
  * @param questions the questions of the deployment.
@@ -1322,6 +1495,16 @@ export function azureProvider(
         // there: the job is started by hand.
         notes.push(
           `the migration of the schema is not started: ${error instanceof Error ? error.message : String(error)}`
+        )
+      }
+      try {
+        notes.push(...(await tenantWithEntra(context)))
+      } catch (error) {
+        // The deployment is applied, and Access is not there yet: the
+        // registration of the tenant is repeated the next time the
+        // deployment goes on.
+        notes.push(
+          `the tenant of the deployment is not registered with Entra ID: ${error instanceof Error ? error.message : String(error)}`
         )
       }
       return notes

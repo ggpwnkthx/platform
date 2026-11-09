@@ -217,6 +217,40 @@ variable "client_id" {
 }
 
 # --------------------------------------------------------------------------
+# The provider of the identity of the tenant
+# --------------------------------------------------------------------------
+
+# Whether the deployment creates the application of Access at Entra ID.
+#
+# The provider of the identity of the tenant of the deployment is Entra
+# ID, and the application is the client of Access at it: a confidential
+# client, with a secret of its own, and with the callback of Access as
+# its only redirect URI. The tenant of the deployment is registered with
+# the application as its provider.
+#
+# A deployment that holds a tenant whose provider is another one turns
+# the application off, and the tenant is registered by hand.
+variable "entra_tenant_enabled" {
+  description = "Whether the deployment creates the application of Access at Entra ID and registers the tenant of the deployment with it as its provider."
+  type        = bool
+  default     = true
+}
+
+# The key of the rotation of the secret of the client of Access at
+# Entra ID.
+#
+# The secret belongs to the tenant of the deployment, and the tenant
+# holds it: a rotation of the secret is a change of the registration of
+# the tenant, and the registration is repeated with the new value. The
+# value of this variable is the key of the secret, and a change of the
+# key is a new secret.
+variable "entra_secret_rotation" {
+  description = "The key of the rotation of the secret of the client of Access at Entra ID. A change of the value is a new secret."
+  type        = string
+  default     = ""
+}
+
+# --------------------------------------------------------------------------
 # The route table
 # --------------------------------------------------------------------------
 

@@ -145,6 +145,17 @@ curl -sS -X POST $ACCESS/v1/admin/tenants \
        "clientRedirectUris":["https://api.example.com/auth/callback"]}'
 ```
 
+On Azure the provider of the tenant is Entra ID, and the deployment creates the client of Access at it: the application of Access, with a secret of its own and with the callback of Access as its only redirect URI. The registration of the tenant then carries the issuer of that directory, the identifier of the application, its secret and the callback of Access, and the outputs of the deployment carry the four of them:
+
+```bash
+tofu -chdir=deploy/tofu/azure output -raw entra_issuer
+tofu -chdir=deploy/tofu/azure output -raw entra_client_id
+tofu -chdir=deploy/tofu/azure output -raw entra_client_secret
+tofu -chdir=deploy/tofu/azure output -raw entra_redirect_uri
+```
+
+The wizard of the deployment makes the call itself when the deployment is applied, and it repeats it at every apply. The procedure is in [The deployment of the platform on Azure](../../deploy/tofu/azure/README.md#7-the-tenant).
+
 Keep the `id` from the answer: it is the tenant UUID that Data's workspace registry and the access context credential refer to. Then register each principal by the provider's `sub` and grant it a permission on the workspace and on the route the gateway will check (`data-api` in `deploy/config/routes.json`).
 
 The CLI does the same with `platformctl access tenants create`, `access principals create` and `access grants put`, using `PLATFORMCTL_ADMIN_TOKEN` ([CLI spec §5.5](../cli/spec.md#55-access)). The full procedure, including batches and the hand-off to the tenant's administrators, is in [Onboard a tenant](onboard-a-tenant.md); the endpoints are in [Access first tenant](../access/operations.md#first-tenant).

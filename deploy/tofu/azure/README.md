@@ -17,6 +17,7 @@ deployment are in [`../runtime/`](../README.md#the-templates-and-the-files-of-a-
 | The secrets | A Key Vault, behind a private endpoint, with the access of Entra ID |
 | The ingress that terminates TLS | The ingress of the environment of the container apps, with one custom domain per public name and the managed certificate of Azure |
 | The logs | A Log Analytics workspace, that keeps the logs for ninety days |
+| The identity of the callers | An application registration of Entra ID: the client of Access at the provider of the tenant |
 | The state of the deployment | A storage account, created by the bootstrap |
 
 The names of the environment, the ports and the names of the secrets are
@@ -32,6 +33,7 @@ runs the same platform wherever it runs it.
 | A checkout of the tag of the release | The templates and the images of a deployment come from the same tag |
 | The images of the release, published at `ghcr.io` by the release | The deployment runs the bytes that the gates of the release proved, and it runs them by digest. The packages are public, and the pull needs no credential |
 | A network of the deployment that the operator can reach | The database and the cache are private, and the operator commands of the platform run against them |
+| The right to register an application in the tenant of Entra ID of the deployment | The templates create the application of Access at Entra ID, and the creation of an application is a permission in the directory |
 
 The resource providers of the deployment are not registered by the
 templates: a deployment of the platform does not have the permission to
@@ -380,6 +382,58 @@ https://<the-gateway>/auth/callback
 https://<the-console>/auth/callback
 ```
 
+#### The provider of the tenant
+
+The provider of the identity of the tenant of the deployment is **Entra
+ID**, and the templates create the client of Access at it: the
+application of Access, a confidential client with a secret of its own,
+and with the callback of Access as its only redirect URI. The
+application is in the tenant of the deployment and in no other, and it
+asks for no permission of any other application: it is a client and not
+a resource.
+
+The outputs of the deployment carry what the registration of the tenant
+needs of the provider:
+
+```bash
+tofu -chdir=deploy/tofu/azure output -raw entra_issuer
+tofu -chdir=deploy/tofu/azure output -raw entra_client_id
+tofu -chdir=deploy/tofu/azure output -raw entra_client_secret
+tofu -chdir=deploy/tofu/azure output -raw entra_redirect_uri
+```
+
+The issuer is the second version of the endpoint of the directory, and
+not the first: the discovery document of the first version names another
+issuer, and Access refuses a provider whose document names an issuer
+that is not the issuer of the tenant.
+
+The scopes of the provider are the three that every provider knows —
+`openid`, `profile` and `email` — and the deployment tells the gateway
+so (`GATEWAY_OIDC_SCOPES`). The gateway asks for the groups of a caller
+by default, and Entra ID does not know that scope: the scopes of a
+provider are the ones its discovery document names, and a scope it does
+not know is a scope its authorization refuses. The groups of a caller
+are read in the grants of Access, and not in the directory.
+
+The secret of the client is rotated by the operator: the value of
+`entra_secret_rotation` is the key of the secret, and a change of the
+key is a new secret. A rotation is a change of the registration of the
+tenant — the tenant holds the secret of its provider — and the
+registration is repeated with the new value. The registration takes
+effect at once: a change of the registration of a tenant drops the
+client of the provider that Access built for it, and the next login
+builds a new one.
+
+The identity of a caller is the subject of the directory, and it is the
+key of the principal: the e-mail of the directory is published by Entra
+ID for the users that carry a mail attribute, and it is not an identity
+in any case. The principal of a caller is registered by its subject, and
+the grants of the tenant are the work of the operator of the platform.
+
+A deployment whose tenant has another provider turns the application
+off with `entra_tenant_enabled = false`, and the registration of the
+tenant is the work of the operator.
+
 The procedure is in [Onboard a tenant](../../../docs/guides/onboard-a-tenant.md).
 The registration of the tenant of the deployment is one call:
 
@@ -389,17 +443,29 @@ ADMIN=$(tofu -chdir=deploy/tofu/azure output -raw access_admin_token)
 CLIENT=$(tofu -chdir=deploy/tofu/azure output -raw client_id)
 SECRET=$(tofu -chdir=deploy/tofu/azure output -raw client_secret)
 CALLBACKS=$(tofu -chdir=deploy/tofu/azure output -json client_redirect_uris)
+ISSUER=$(tofu -chdir=deploy/tofu/azure output -raw entra_issuer)
+IDP_CLIENT=$(tofu -chdir=deploy/tofu/azure output -raw entra_client_id)
+IDP_SECRET=$(tofu -chdir=deploy/tofu/azure output -raw entra_client_secret)
+IDP_CALLBACK=$(tofu -chdir=deploy/tofu/azure output -raw entra_redirect_uri)
 
 curl -sS -X POST $ACCESS/v1/admin/tenants \
   -H "authorization: Bearer $ADMIN" -H "content-type: application/json" \
   -d '{"slug":"<the-slug-of-the-tenant>","displayName":"<the-name-of-the-tenant>",
-       "issuer":"<the-issuer-of-the-identity-provider-of-Access>",
-       "idpClientId":"<the-client-of-the-identity-provider-of-Access>",
-       "idpClientSecret":"<the-secret-of-the-identity-provider-of-Access>",
-       "idpRedirectUri":"<the-callback-of-the-identity-provider-of-Access>",
+       "issuer":"'"$ISSUER"'",
+       "idpClientId":"'"$IDP_CLIENT"'","idpClientSecret":"'"$IDP_SECRET"'",
+       "idpRedirectUri":"'"$IDP_CALLBACK"'",
+       "idpScopes":["openid","profile","email"],
        "clientId":"'"$CLIENT"'","clientSecret":"'"$SECRET"'",
        "clientRedirectUris":'"$CALLBACKS"'}'
 ```
+
+The wizard of the deployment makes that call when the deployment is
+applied: it reads the tenant among the tenants of Access — the tenant
+the values name as `access_tenant_id` — and registers it again with the
+application of Entra ID as its provider, keeping the flags of the
+tenant. The registration is repeated at every apply, and a deployment
+whose Access is not up yet is a deployment whose tenant is registered by
+hand.
 
 The identifier of the tenant that the answer carries is the one the
 values of the deployment name as `access_tenant_id`: the access context

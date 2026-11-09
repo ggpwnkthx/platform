@@ -108,6 +108,19 @@ console_name = "console"
 client_id = "platform"
 
 # --------------------------------------------------------------------------
+# The provider of the identity of the tenant
+# --------------------------------------------------------------------------
+
+# Whether the deployment creates the application of Access at Entra ID.
+# The tenant of the deployment is registered with it as its provider.
+entra_tenant_enabled = true
+
+# The key of the rotation of the secret of the client of Access at
+# Entra ID. Change the value to rotate the secret, and repeat the
+# registration of the tenant with the new one.
+entra_secret_rotation = ""
+
+# --------------------------------------------------------------------------
 # The route table
 # --------------------------------------------------------------------------
 

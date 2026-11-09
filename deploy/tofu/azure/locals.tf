@@ -53,6 +53,23 @@ locals {
   # it registers the callback with the tenant.
   console_redirect_uri = "${local.console_url}/auth/callback"
 
+  # The issuer of the provider of the identity of the tenant of the
+  # deployment.
+  #
+  # The provider is Entra ID, and the tenant of the deployment is the
+  # directory of the identity of its callers. The issuer is the second
+  # version of the endpoint of the directory, and not the first: the
+  # discovery document of the first version names another issuer, and
+  # Access refuses a provider whose document names an issuer that is
+  # not the issuer of the tenant.
+  entra_issuer = "https://login.microsoftonline.com/${var.tenant_id}/v2.0"
+
+  # The callback of Access at Entra ID: the address Entra ID sends the
+  # browser back to, with the code of the login. It is the redirect URI
+  # of the application of Access, and the tenant of the deployment
+  # registers it as its callback at the provider.
+  entra_redirect_uri = "${local.access_issuer}/oauth/tenant/callback"
+
   # The zone of the names of the deployment.
   #
   # The records of the names are the records of the zone, and the

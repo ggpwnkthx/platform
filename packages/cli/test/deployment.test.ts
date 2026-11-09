@@ -2923,6 +2923,192 @@ describe('the migration of the schema', () => {
 })
 
 /**
+ * The tenant of the deployment.
+ *
+ * The templates create the application of Access at Entra ID and its
+ * secret, and they cannot register the tenant: the registration is a
+ * call to the administration API of Access, and Access is a service of
+ * the deployment that has to be up.
+ */
+describe('the tenant of the deployment', () => {
+  test('the provider registers the tenant with the application of Entra ID', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-tenant-'))
+    const real = globalThis.fetch
+    try {
+      const binary = join(directory, 'az')
+      await writeFile(binary, CLIENT_BINDING(join(directory, 'calls')))
+      await chmod(binary, 0o755)
+      const calls: { url: string; body: unknown }[] = []
+      globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined
+        calls.push({ url, body })
+        if (init?.method === 'POST') {
+          return new Response(JSON.stringify({ id: '11111111-1111-4111-8111-111111111111' }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+        }
+        return new Response(
+          JSON.stringify({
+            tenants: [
+              {
+                id: '11111111-1111-4111-8111-111111111111',
+                slug: 'acme',
+                displayName: 'Acme Inc',
+                emailDomain: 'acme.example',
+                autoProvision: true,
+                sharedClient: false,
+                default: false,
+                enabled: true,
+              },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
+      }) as typeof globalThis.fetch
+      const provider = azureProvider([], { PATH: process.env.PATH ?? '', AZURE_CLI: binary })
+      const notes = await provider.afterApply?.({
+        values: {
+          public_names_enabled: 'false',
+          entra_tenant_enabled: 'true',
+          access_tenant_id: '11111111-1111-4111-8111-111111111111',
+        },
+        outputs: {
+          resource_group_name: 'platform-production',
+          access_issuer: 'https://access.example.com',
+          access_admin_token: 'the-token-of-the-administration',
+          client_id: 'platform',
+          client_secret: 'the-secret-of-the-client',
+          client_redirect_uris: [
+            'https://api.example.com/auth/callback',
+            'https://console.example.com/auth/callback',
+          ],
+          entra_issuer:
+            'https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0',
+          entra_client_id: 'the-client-of-access-at-entra',
+          entra_client_secret: 'the-secret-of-the-client-at-entra',
+          entra_redirect_uri: 'https://access.example.com/oauth/tenant/callback',
+        },
+      })
+      expect(notes?.join('\n')).toContain(
+        'the tenant acme of the deployment is registered with the application of Access at Entra ID as its provider'
+      )
+
+      // The registration carries the application of Entra ID as the
+      // provider of the tenant, and it keeps the flags of the tenant:
+      // the auto-provisioning of the principals and the default of the
+      // platform are the work of the operator of the platform.
+      const written = calls.find((call) => call.body !== undefined)
+      expect(written?.url).toBe('https://access.example.com/v1/admin/tenants')
+      expect(written?.body).toMatchObject({
+        slug: 'acme',
+        displayName: 'Acme Inc',
+        issuer: 'https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0',
+        idpClientId: 'the-client-of-access-at-entra',
+        idpClientSecret: 'the-secret-of-the-client-at-entra',
+        idpRedirectUri: 'https://access.example.com/oauth/tenant/callback',
+        idpScopes: ['openid', 'profile', 'email'],
+        clientId: 'platform',
+        clientSecret: 'the-secret-of-the-client',
+        clientRedirectUris: [
+          'https://api.example.com/auth/callback',
+          'https://console.example.com/auth/callback',
+        ],
+        autoProvision: true,
+        sharedClient: false,
+        default: false,
+        enabled: true,
+      })
+    } finally {
+      globalThis.fetch = real
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('a deployment whose tenant has another provider registers no tenant', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-tenant-'))
+    const real = globalThis.fetch
+    try {
+      const binary = join(directory, 'az')
+      await writeFile(binary, CLIENT_BINDING(join(directory, 'calls')))
+      await chmod(binary, 0o755)
+      let asked = false
+      globalThis.fetch = (async (_input: string | URL | Request, _init?: RequestInit) => {
+        asked = true
+        return new Response('{}', { status: 200 })
+      }) as typeof globalThis.fetch
+      const provider = azureProvider([], { PATH: process.env.PATH ?? '', AZURE_CLI: binary })
+      const notes = await provider.afterApply?.({
+        values: { public_names_enabled: 'false', entra_tenant_enabled: 'false' },
+        outputs: {
+          resource_group_name: 'platform-production',
+          access_issuer: 'https://access.example.com',
+          access_admin_token: 'the-token-of-the-administration',
+          entra_issuer:
+            'https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0',
+          entra_client_id: 'the-client-of-access-at-entra',
+          entra_client_secret: 'the-secret-of-the-client-at-entra',
+          entra_redirect_uri: 'https://access.example.com/oauth/tenant/callback',
+        },
+      })
+      // The application of Entra ID is not there, and the tenant is
+      // the work of the operator.
+      expect(asked).toBe(false)
+      expect(notes?.join('\n')).not.toContain('is registered with the application of Access')
+    } finally {
+      globalThis.fetch = real
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('a tenant that is not there is told', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-tenant-'))
+    const real = globalThis.fetch
+    try {
+      const binary = join(directory, 'az')
+      await writeFile(binary, CLIENT_BINDING(join(directory, 'calls')))
+      await chmod(binary, 0o755)
+      globalThis.fetch = (async (_input: string | URL | Request, _init?: RequestInit) =>
+        new Response(JSON.stringify({ tenants: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })) as typeof globalThis.fetch
+      const provider = azureProvider([], { PATH: process.env.PATH ?? '', AZURE_CLI: binary })
+      const notes = await provider.afterApply?.({
+        values: {
+          public_names_enabled: 'false',
+          entra_tenant_enabled: 'true',
+          access_tenant_id: '11111111-1111-4111-8111-111111111111',
+        },
+        outputs: {
+          resource_group_name: 'platform-production',
+          access_issuer: 'https://access.example.com',
+          access_admin_token: 'the-token-of-the-administration',
+          entra_issuer:
+            'https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0',
+          entra_client_id: 'the-client-of-access-at-entra',
+          entra_client_secret: 'the-secret-of-the-client-at-entra',
+          entra_redirect_uri: 'https://access.example.com/oauth/tenant/callback',
+        },
+      })
+      // The deployment is applied, and the registration is repeated the
+      // next time the deployment goes on: the refusal is told and not
+      // thrown.
+      expect(notes?.join('\n')).toContain(
+        'the tenant of the deployment is not registered with Entra ID'
+      )
+      expect(notes?.join('\n')).toContain(
+        'Access holds no tenant with the identifier 11111111-1111-4111-8111-111111111111'
+      )
+    } finally {
+      globalThis.fetch = real
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+})
+
+/**
  * The client of Azure, as the tests answer with it.
  *
  * The client writes the words of the commands it is given in a file of

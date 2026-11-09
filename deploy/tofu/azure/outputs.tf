@@ -141,6 +141,33 @@ output "data_access_context_token" {
   sensitive   = true
 }
 
+# The provider of the identity of the tenant of the deployment.
+#
+# The application of Access at Entra ID is the client of Access at the
+# provider of the tenant, and the registration of the tenant carries
+# the issuer, the identifier of the client, its secret and the callback
+# of Access at the provider.
+output "entra_issuer" {
+  description = "The issuer of the provider of the identity of the tenant of the deployment."
+  value       = local.entra_issuer
+}
+
+output "entra_client_id" {
+  description = "The identifier of the client of Access at Entra ID."
+  value       = one(azuread_application.access[*].client_id)
+}
+
+output "entra_client_secret" {
+  description = "The secret of the client of Access at Entra ID."
+  value       = one(azuread_application_password.access[*].value)
+  sensitive   = true
+}
+
+output "entra_redirect_uri" {
+  description = "The callback of Access at Entra ID."
+  value       = local.entra_redirect_uri
+}
+
 # The names of the services of the deployment.
 output "container_apps" {
   description = "The names of the container apps of the deployment."

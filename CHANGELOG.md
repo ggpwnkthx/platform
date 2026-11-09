@@ -10,6 +10,18 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The deployment on Azure holds the provider of the identity of its tenant
+
+A deployment on Azure had no identity provider of its own. The tenant of the deployment was registered at Access with an issuer and with a client that the operator held somewhere else, and the templates of the deployment said nothing about it: a deployment that runs in a tenant of Entra ID and that asks its operator for the credentials of a provider outside of it is a deployment with a step that is not in the templates.
+
+The templates create the application of Access at Entra ID now: a confidential client in the tenant of the deployment, with a secret of its own, with the callback of Access as its only redirect URI, and with no permission of any other application — it is a client and not a resource, and the identity of a caller is the only thing it reads of the directory. The outputs of the deployment carry the issuer of the directory, the identifier of the application, its secret and the callback of Access.
+
+The tenant of the deployment is registered with that application as its provider. The wizard of the deployment reads the tenant among the tenants of Access — the tenant the values name — and registers it again at every apply, keeping the flags of the tenant: the auto-provisioning of the principals, the shared client and the default of the platform are the work of the operator of the platform. The registration is a call to the administration API of Access, and Access is a service of the deployment that has to be up: a deployment whose Access is not up yet is a deployment whose tenant is registered by hand, and the wizard says so.
+
+The gateway asks for three scopes and not four. The gateway asks for the groups of a caller by default, and the scopes of a provider are the ones its discovery document names: the document of Entra ID names `openid`, `profile` and `email`, and a scope it does not name is a scope its authorization refuses. The groups of a caller are read in the grants of Access, and not in the directory.
+
+The secret of the client belongs to the tenant, and the tenant holds it: a rotation of the secret is a change of the registration of the tenant, and the registration is repeated with the new value. The value of `entra_secret_rotation` is the key of the secret, and a change of the key is a new secret. A deployment whose tenant has another provider turns the application off with `entra_tenant_enabled`.
+
 ### The deployment holds no registry of its own
 
 The deployment of the platform on Azure held a container registry of its own: the packages of the release were pushed into it, and the applications of the deployment pulled them from it. The registry was a mirror of packages that are public, and it was paid for.

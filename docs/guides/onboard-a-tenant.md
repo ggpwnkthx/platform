@@ -13,6 +13,8 @@ Bring a new customer onto the platform: register it and its identity provider in
 | A gateway deployment for this tenant, and the public URL it is reached under | One gateway deployment serves one tenant ([Access spec §1.4](../access/spec.md#14-one-gateway-client-per-tenant)); see [Deploy the platform](deploy-the-platform.md). |
 | The workspace UUID the tenant will use, and the gateway route id that serves it | Grants name both. |
 | The provider's `sub` for the first person to sign in | Principals are keyed by it, never by e-mail ([Access spec §6.2](../access/spec.md#62-mapping-key)). |
+
+On Azure the provider of the tenant is Entra ID, and the deployment holds the client of Access at it: the application of Access, with a secret of its own and with the callback of Access as its only redirect URI. The outputs of the deployment carry the issuer of the directory, the identifier of the application, its secret and the callback of Access, and the registration of the tenant carries the four of them ([The deployment of the platform on Azure](../../deploy/tofu/azure/README.md#the-provider-of-the-tenant)).
 | `curl` and `jq`, or the CLI (`platformctl`) with `PLATFORMCTL_ADMIN_TOKEN` and an Access address in its profile | Every step below is an administration call ([CLI usage](../cli/usage.md#credentials)). |
 
 The examples use the tenant `acme`, Access at `https://access.example.com` and the tenant's gateway at `https://gateway-acme.example.com`:

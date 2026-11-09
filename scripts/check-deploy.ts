@@ -156,6 +156,7 @@ export const TEMPLATE_FILES: readonly string[] = [
   'redis.tf',
   'keyvault.tf',
   'identity.tf',
+  'entra.tf',
   'containerapps.tf',
   'edge.tf',
   'dns.tf',

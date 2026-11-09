@@ -22,6 +22,7 @@ deploy/tofu/
     redis.tf                      the cache
     keyvault.tf                   the vault of the credentials
     identity.tf                   the identity of the deployment
+    entra.tf                      the application of Access at Entra ID
     containerapps.tf              the services and the migration
     edge.tf                       the edge that terminates TLS
     outputs.tf                    what the operator needs after the apply
