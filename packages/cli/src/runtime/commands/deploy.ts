@@ -1408,10 +1408,46 @@ function addressOf(reason: string): string | undefined {
 }
 
 /**
- * The command of a provider of the infrastructure of a deployment.
+ * Checks what the system of the provider needs before the plan of the
+ * deployment is applied.
+ *
+ * Some systems of the provider need something the templates of the
+ * deployment cannot write: the delegation of a zone of DNS is one of
+ * those things, and the operator writes it at the registrar of the
+ * domain. The check is made before the plan is applied, and a refusal
+ * is a refusal of the deployment: the apply that follows would fail in
+ * the cloud with a reason that names the symptom and not the cause.
+ *
+ * The answers of the templates are read from the state of the
+ * deployment: the state of a deployment that was never applied holds
+ * none, and the check is made with the values of the deployment alone.
  *
  * @param provider the provider of the deployment.
+ * @param tool the tool that writes the infrastructure.
+ * @param directory the directory of the templates.
+ * @param backend the configuration of the backend of the state.
+ * @param values the values of the deployment.
+ * @param tell what the operator is told while the check is made.
  */
+async function checkedBefore(
+  provider: DeploymentProvider,
+  tool: InfrastructurePort,
+  directory: string,
+  backend: string,
+  values: Values,
+  tell: (text: string) => void
+): Promise<void> {
+  if (provider.beforeApply === undefined) return
+  let outputs: Record<string, unknown> = {}
+  try {
+    outputs = await tool.output(directory, { backendConfig: backend })
+  } catch {
+    // The state of the deployment is empty: there is nothing to check,
+    // and the check is made with the values of the deployment alone.
+  }
+  for (const note of await provider.beforeApply({ values, outputs, tell })) tell(note)
+}
+
 /**
  * Binds what the system of the provider needs after the apply.
  *
@@ -1852,6 +1888,14 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
           if (!unlocked) throw error
           plan = await tool.plan(directory, { varFile: file, planFile: join(runtime, PLAN) })
         }
+        // The system of the provider is checked before the plan is
+        // applied: the delegation of the zone of the names is written at
+        // the registrar by the operator, and an apply that binds the
+        // names without it fails in the cloud with a reason that names
+        // the symptom and not the cause.
+        await checkedBefore(provider, tool, directory, backend, values, (text) =>
+          input.services.progress(text)
+        )
         // The plan is what the operator answers about: it is shown
         // before the question, and the question names what the plan
         // does, counted.

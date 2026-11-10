@@ -22,6 +22,22 @@ resource "azurerm_dns_zone" "platform" {
   resource_group_name = azurerm_resource_group.platform.name
 
   tags = local.tags
+
+  # The zone of the names outlives the deployment.
+  #
+  # The zone is delegated at the registrar of the domain, and the
+  # delegation names the name servers of the zone: a zone that is
+  # created again is served by other name servers, and the delegation
+  # names a zone that is not there anymore. The records of the names
+  # are then in a zone the public DNS does not read, and the
+  # environment of the container apps proves the ownership of no name.
+  #
+  # The zone is not destroyed with the deployment: the operator
+  # delegates the zone once, and the delegation holds as long as the
+  # zone is there.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # The zone of the operator.

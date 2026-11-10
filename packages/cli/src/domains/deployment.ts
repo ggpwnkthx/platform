@@ -241,6 +241,21 @@ export interface DeploymentProvider {
    */
   release?(leftover: Leftover): Promise<void>
   /**
+   * Checks what the system of the provider needs before the plan of
+   * the deployment is applied.
+   *
+   * Some systems of the provider need something the templates of the
+   * deployment cannot write: the delegation of a zone of DNS is one of
+   * those things, and the operator writes it at the registrar of the
+   * domain. The check is made before the plan is applied, and a
+   * refusal is a refusal of the deployment: the apply that follows
+   * would fail in the cloud with a reason that names the symptom and
+   * not the cause.
+   *
+   * @param context what the deployment is about to apply.
+   */
+  beforeApply?(context: BeforeApply): Promise<readonly string[]>
+  /**
    * Binds what the system of the provider needs after the apply.
    *
    * Some systems of the provider hold a binding that the templates of
@@ -257,6 +272,36 @@ export interface DeploymentProvider {
    * templates answered.
    */
   afterApply?(context: AfterApply): Promise<readonly string[]>
+}
+
+/**
+ * What a deployment is about to apply, as the provider of the
+ * deployment reads it.
+ *
+ * The values of the deployment are the answers of the operator, and
+ * the answers of the templates are the facts the deployment applied
+ * before: the zone of the names of the deployment is a zone of Azure
+ * that the templates created, and the name servers it is served by are
+ * among the answers of the templates.
+ */
+export interface BeforeApply {
+  /** The values of the deployment. */
+  readonly values: Readonly<Record<string, string>>
+  /**
+   * What the templates answered.
+   *
+   * The answers of the templates are the names of the resources of the
+   * deployment: a name that is written in the templates and in the
+   * code of the provider is a name that drifts, and the provider reads
+   * the names of the deployment where they are written.
+   */
+  readonly outputs: Readonly<Record<string, unknown>>
+  /**
+   * Tells the operator what the deployment is doing.
+   *
+   * @param text the line of the progress.
+   */
+  readonly tell?: (text: string) => void
 }
 
 /**

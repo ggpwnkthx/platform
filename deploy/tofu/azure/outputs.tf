@@ -45,12 +45,17 @@ output "dns_records" {
 # registrar, and the delegation is the only record the operator writes:
 # the names of the deployment are the records of the zone, and the
 # deployment writes them.
+#
+# The name servers are the ones of the zone, whichever zone it is: the
+# zone the deployment creates, or the zone of the operator. A zone that
+# is created again is served by other name servers, and the delegation
+# is written again with them.
 output "dns_name_servers" {
   description = "The name servers of the zone of the public names of the deployment."
-  value = local.dns_zone_enabled ? tolist(one(concat(
+  value = flatten(concat(
     azurerm_dns_zone.platform[*].name_servers,
     data.azurerm_dns_zone.platform[*].name_servers,
-  ))) : []
+  ))
 }
 
 # The zone of the names of the deployment.

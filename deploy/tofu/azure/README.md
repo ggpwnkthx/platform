@@ -284,8 +284,12 @@ zone of Azure. The deployment writes the records of the names itself, and
 the operator writes one thing only: the delegation of the zone.
 
 The zone the deployment creates lives in the group of the deployment and
-dies with it. A zone that is named in the group the operator names
-outlives the deployment, and the operator owns it:
+outlives it: the delegation at the registrar names the name servers of
+the zone, and a zone that is created again is served by other name
+servers, so the delegation would name a zone that is not there anymore.
+The zone is therefore not destroyed with the deployment, and the operator
+delegates the zone once. A zone that is named in the group the operator
+names outlives the deployment as well, and the operator owns it:
 
 ```hcl
 dns_zone_name = "platform.example.com"
@@ -307,10 +311,27 @@ be live:
 tofu -chdir=deploy/tofu/azure output dns_name_servers
 ```
 
+The wizard of the deployment says which records to write, and it checks
+the delegation before it applies the plan that binds the names: the
+environment of the container apps proves the ownership of a name with a
+record of DNS, and the record is read in the public DNS. A zone that is
+delegated to other name servers has no record in the public DNS, and the
+environment refuses the name with a refusal that names the record it did
+not find and not the delegation that hides it. The wizard refuses the
+deployment before the plan is applied, and it names the name servers the
+delegation has to hold.
+
 The delegation moves the names of the zone and nothing else, when the zone
 is a subdomain of the domain of the operator. A zone that is the domain of
 the operator moves every record of the domain, and the records of the
 domain that the operator keeps elsewhere have to move with it.
+
+One zone of a name is delegated once: two zones of the same name are
+served by two sets of name servers — the same name in two groups of
+resources, or in two subscriptions, is two zones — and only one of them
+can be delegated at the registrar. The deployments of the platform that
+answer under the same names of the same zone write the same records in
+it: the zone is shared, and the labels of the names are not.
 
 The order of the two halves is the same with a zone of Azure: the zone and
 the records are written by the first apply, the delegation is written by

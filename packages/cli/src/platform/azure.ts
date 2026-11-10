@@ -19,6 +19,7 @@ import {
   ACCOUNT,
   type Account,
   type AfterApply,
+  type BeforeApply,
   ENVIRONMENTS,
   type Asker,
   type DeploymentProvider,
@@ -28,6 +29,7 @@ import {
   type SignIn,
   type Values,
 } from '../domains/deployment'
+import { listOf, type Nameservers, serversOf, SYSTEM_NAMESERVERS } from './dns'
 import { run } from './process'
 
 /** The questions of a deployment on Azure. */
@@ -1251,7 +1253,7 @@ function answerOf(outputs: Readonly<Record<string, unknown>>, path: readonly str
  * @param context what the deployment applied.
  * @param name the name of the setting.
  */
-function settingOf(context: AfterApply, name: string): string {
+function settingOf(context: BeforeApply, name: string): string {
   const answered = context.outputs[name]
   if (typeof answered === 'string') return answered
   if (typeof answered === 'boolean') return answered ? 'true' : 'false'
@@ -1386,6 +1388,145 @@ async function certificatesOf(binary: string, context: AfterApply): Promise<stri
     )
   }
   return notes
+}
+
+/**
+ * The delegation of the zone of the names of the deployment.
+ *
+ * The zone of the names is a zone of Azure, and the delegation of the
+ * zone is the one record the operator writes at the registrar of the
+ * domain: the delegation names the name servers of the zone, and only
+ * they. The environment of the container apps proves the ownership of
+ * a name with a record of DNS, and the record is read in the public
+ * DNS: the records of a zone that is delegated to other name servers
+ * are not in the public DNS, and the environment refuses the name with
+ * a refusal that names the record and not the delegation.
+ */
+interface Delegation {
+  /** The name of the zone of the names. */
+  readonly zone: string
+  /** The name servers the zone is served by. */
+  readonly servers: readonly string[]
+  /** The name servers the zone is delegated to. */
+  readonly delegated: readonly string[]
+  /** True when the delegation names the name servers of the zone. */
+  readonly right: boolean
+}
+
+/**
+ * The delegation of the zone of the names, as the deployment and the
+ * public DNS hold it.
+ *
+ * The zone of the names is named by the operator, and the name servers
+ * it is served by are among the answers of the templates: the zone is
+ * a zone of Azure, and Azure names the name servers it is served by.
+ *
+ * The delegation is read in the public DNS: it is the name servers of
+ * the zone that is the closest one above it when the zone is delegated
+ * to none. A zone that is not delegated is a zone whose records are
+ * not in the public DNS.
+ *
+ * The delegation is unknown when the zone is not there yet — the apply
+ * that creates it is the first half of the deployment — and when the
+ * resolver of the machine cannot answer: the check of the delegation
+ * is a check of the deployment, and it never refuses a deployment on a
+ * question it cannot answer.
+ *
+ * @param context what the deployment applied.
+ * @param nameservers the name servers of the machine.
+ */
+async function delegationOf(
+  context: BeforeApply,
+  nameservers: Nameservers
+): Promise<Delegation | undefined> {
+  const zone = answerOf(context.outputs, ['dns_zone_name']) || context.values.dns_zone_name || ''
+  if (zone === '') return undefined
+  const servers = namesOf(context.outputs, 'dns_name_servers')
+  if (servers.length === 0) return undefined
+  let delegated: readonly string[]
+  try {
+    delegated = await nameservers.resolve(zone)
+  } catch {
+    return undefined
+  }
+  if (delegated.length === 0) return undefined
+  const wanted = serversOf(servers)
+  const found = serversOf(delegated)
+  const right = [...wanted].every((server) => found.has(server))
+  return { zone, servers, delegated, right }
+}
+
+/**
+ * The delegation the operator has to write at the registrar.
+ *
+ * The delegation of the zone is the one record the operator writes, and
+ * the record is a record of NS of the name of the zone, holding the
+ * name servers the zone is served by. The zone is a zone of Azure, and
+ * Azure names the name servers it is served by: a zone that is created
+ * again is served by other name servers, and the delegation is written
+ * again with them.
+ *
+ * @param delegation the delegation of the zone of the names.
+ */
+function recordsOf(delegation: Delegation): string {
+  return `write the records of NS of the name ${delegation.zone} at the registrar of the domain, with the name servers ${listOf(delegation.servers)}`
+}
+
+/**
+ * Refuses a deployment whose zone of the names is delegated to other
+ * name servers.
+ *
+ * The names of the deployment are bound to the gateway as custom
+ * domains, and the environment of the container apps proves the
+ * ownership of a name with a record of DNS. The record is read in the
+ * public DNS, and the public DNS reads the records of the zone the
+ * delegation names: a zone that is delegated to other name servers has
+ * no record in the public DNS, and the environment refuses the name
+ * with a refusal that names the record it did not find and not the
+ * delegation that hides it.
+ *
+ * The refusal is made before the plan of the deployment is applied: an
+ * apply that binds the names takes minutes, and it fails at its end
+ * with a reason the operator cannot act on.
+ *
+ * @param context what the deployment is about to apply.
+ * @param nameservers the name servers of the machine.
+ */
+async function checkedDelegation(context: BeforeApply, nameservers: Nameservers): Promise<void> {
+  const delegation = await delegationOf(context, nameservers)
+  if (delegation === undefined || delegation.right) return
+  throw new CliFailure(
+    `the zone of the names of the deployment is not delegated to the zone that holds its records: the zone ${delegation.zone} is served by ${listOf(delegation.servers)}, and the delegation of the zone names ${listOf(delegation.delegated)}. The environment of the container apps proves the ownership of a name with a record of DNS, and it reads the record in the public DNS: the records of a zone that is delegated to other name servers are not there`,
+    1,
+    'not_delegated',
+    undefined,
+    recordsOf(delegation)
+  )
+}
+
+/**
+ * Tells the operator the delegation of the zone of the names.
+ *
+ * The delegation of the zone is the one thing the operator writes, and
+ * the deployment says which records to write: the zone is a zone of
+ * Azure, and the name servers it is served by are named by Azure. A
+ * zone that is created again is served by other name servers, and the
+ * delegation is written again with them.
+ *
+ * @param context what the deployment applied.
+ * @param nameservers the name servers of the machine.
+ */
+async function delegationNotes(context: AfterApply, nameservers: Nameservers): Promise<string[]> {
+  const delegation = await delegationOf(context, nameservers)
+  if (delegation === undefined) return []
+  if (delegation.right) {
+    return [
+      `the zone of the names of the deployment is ${delegation.zone}, and the delegation of the zone names the name servers that serve it`,
+    ]
+  }
+  return [
+    `the zone of the names of the deployment is ${delegation.zone}, and it is served by ${listOf(delegation.servers)}, while the delegation of the zone names ${listOf(delegation.delegated)}: ${recordsOf(delegation)}`,
+  ]
 }
 
 /**
@@ -1809,11 +1950,15 @@ async function tenantWithEntra(context: AfterApply, waits: Waits): Promise<strin
  * The provider of a deployment on Microsoft Azure.
  *
  * @param questions the questions of the deployment.
+ * @param environment the environment of the process.
+ * @param waits the waits of the wizard.
+ * @param nameservers the name servers of the machine.
  */
 export function azureProvider(
   questions: readonly Question[] = AZURE_QUESTIONS,
   environment: Readonly<Record<string, string | undefined>> = process.env,
-  waits: Waits = WAITS
+  waits: Waits = WAITS,
+  nameservers: Nameservers = SYSTEM_NAMESERVERS
 ): DeploymentProvider {
   return {
     name: 'azure',
@@ -1826,6 +1971,15 @@ export function azureProvider(
       leftoverOf(azureCli(environment), reason, region),
     importablesOf: (reason: string) => importablesOf(reason),
     release: async (leftover: Leftover) => releaseOf(azureCli(environment), leftover),
+    beforeApply: async (context: BeforeApply) => {
+      // The delegation of the zone of the names is checked before the
+      // plan of the deployment is applied: the operator writes the
+      // delegation at the registrar of the domain, and an apply that
+      // binds the names without it fails in the cloud with a reason
+      // that names the symptom and not the cause.
+      await checkedDelegation(context, nameservers)
+      return []
+    },
     afterApply: async (context: AfterApply) => {
       const binary = azureCli(environment)
       const notes: string[] = []
@@ -1843,6 +1997,16 @@ export function azureProvider(
         // deployment goes on.
         notes.push(
           `the certificate of the public names is not bound: ${error instanceof Error ? error.message : String(error)}`
+        )
+      }
+      try {
+        notes.push(...(await delegationNotes(context, nameservers)))
+      } catch (error) {
+        // The deployment is applied, and the resolver of the machine
+        // cannot answer: the delegation is read by the operator at the
+        // registrar of the domain.
+        notes.push(
+          `the delegation of the zone of the names is not read: ${error instanceof Error ? error.message : String(error)}`
         )
       }
       try {

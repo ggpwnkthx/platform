@@ -2931,6 +2931,181 @@ describe('the certificate of the public names', () => {
 })
 
 /**
+ * The delegation of the zone of the names.
+ *
+ * The zone of the names of a deployment is delegated at the registrar of
+ * the domain, and the delegation names the name servers of the zone.
+ * The environment of the container apps proves the ownership of a name
+ * with a record of DNS, and the record is read in the public DNS: a
+ * zone that is delegated to other name servers has no record there,
+ * and the environment refuses the name with a refusal that names the
+ * record it did not find and not the delegation that hides it.
+ */
+describe('the delegation of the zone of the names', () => {
+  /** The name servers the zone of the names of the deployment is served by. */
+  const SERVERS = [
+    'ns1-05.azure-dns.com.',
+    'ns2-05.azure-dns.net.',
+    'ns3-05.azure-dns.org.',
+    'ns4-05.azure-dns.info.',
+  ]
+
+  /** The answers of the templates of a deployment whose zone is there. */
+  const OUTPUTS = {
+    dns_zone_name: 'platform.esqads.com',
+    dns_name_servers: SERVERS,
+    resource_group_name: 'platform-development',
+    public_names_enabled: true,
+  }
+
+  test('the deployment is refused when the zone is delegated to other name servers', async () => {
+    const provider = azureProvider([], {}, undefined, {
+      resolve: async () => ['ns1-01.azure-dns.com', 'ns2-01.azure-dns.net'],
+    })
+    const failure = await provider
+      .beforeApply?.({ values: { public_names_enabled: 'true' }, outputs: OUTPUTS })
+      .then(() => undefined)
+      .catch((error: unknown) => error)
+    expect(failure).toBeInstanceOf(CliFailure)
+    const refusal = failure as CliFailure
+    expect(refusal.message).toContain(
+      'the zone of the names of the deployment is not delegated to the zone that holds its records'
+    )
+    expect(refusal.message).toContain('platform.esqads.com')
+    expect(refusal.message).toContain('ns1-05.azure-dns.com')
+    expect(refusal.message).toContain('ns1-01.azure-dns.com')
+    // The refusal tells the operator the records to write: the
+    // delegation is the one thing the operator writes.
+    expect(refusal.hint).toContain(
+      'write the records of NS of the name platform.esqads.com at the registrar of the domain'
+    )
+    expect(refusal.hint).toContain('ns4-05.azure-dns.info')
+    // The names the operator writes at the registrar carry no stroke.
+    expect(refusal.hint).not.toContain('ns1-05.azure-dns.com.')
+  })
+
+  test('the deployment goes on when the delegation names the name servers of the zone', async () => {
+    // The zone of Azure names its name servers with the stroke that
+    // ends them, and the resolver of the machine answers without it:
+    // the two are the same names.
+    const provider = azureProvider([], {}, undefined, {
+      resolve: async () => SERVERS.map((server) => server.replace(/\.$/, '')),
+    })
+    await expect(
+      provider.beforeApply?.({ values: { public_names_enabled: 'true' }, outputs: OUTPUTS })
+    ).resolves.toEqual([])
+  })
+
+  test('the deployment goes on when the zone of the names is not there yet', async () => {
+    // The first apply creates the zone, and the delegation is written
+    // at the registrar after it: there is nothing to check before it.
+    const provider = azureProvider([], {}, undefined, { resolve: async () => SERVERS })
+    await expect(
+      provider.beforeApply?.({ values: { public_names_enabled: 'true' }, outputs: {} })
+    ).resolves.toEqual([])
+  })
+
+  test('the deployment goes on when the resolver of the machine cannot answer', async () => {
+    const provider = azureProvider([], {}, undefined, {
+      resolve: async () => {
+        throw new Error('the query of the resolver failed')
+      },
+    })
+    await expect(
+      provider.beforeApply?.({ values: { public_names_enabled: 'true' }, outputs: OUTPUTS })
+    ).resolves.toEqual([])
+  })
+
+  test('the operator is told the delegation of the zone after the apply', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-delegation-'))
+    try {
+      const binary = join(directory, 'az')
+      await writeFile(binary, CLIENT_BINDING(join(directory, 'calls')))
+      await chmod(binary, 0o755)
+      const provider = azureProvider(
+        [],
+        { PATH: process.env.PATH ?? '', AZURE_CLI: binary },
+        undefined,
+        { resolve: async () => ['ns1-01.azure-dns.com'] }
+      )
+      const notes = await provider.afterApply?.({
+        values: { public_names_enabled: 'true' },
+        outputs: { ...OUTPUTS },
+      })
+      expect(notes?.join('\n')).toContain(
+        'the zone of the names of the deployment is platform.esqads.com'
+      )
+      expect(notes?.join('\n')).toContain(
+        'write the records of NS of the name platform.esqads.com at the registrar of the domain'
+      )
+      expect(notes?.join('\n')).toContain('ns1-05.azure-dns.com')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the deployment is refused before the plan of the deployment is applied', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-delegation-'))
+    try {
+      const templates = join(directory, 'templates')
+      const runtime = join(directory, 'runtime')
+      await bootstrapOf(templates)
+      await writeFile(join(templates, 'terraform.tfvars.example'), EXAMPLE)
+
+      const provider = providerOf([
+        { name: 'name_prefix', summary: 'the prefix of the names', kind: 'chosen' },
+      ])
+      provider.beforeApply = async () => {
+        throw new CliFailure(
+          'the zone of the names of the deployment is not delegated to the zone that holds its records',
+          1,
+          'not_delegated'
+        )
+      }
+      const tool = new FakeInfrastructure()
+      tool.plan_ = {
+        directory: '/templates',
+        changes: [
+          {
+            address: 'azurerm_container_app_custom_domain.gateway',
+            action: 'create',
+            kind: 'azurerm_container_app_custom_domain',
+            name: 'gateway',
+            provider: 'registry.terraform.io/hashicorp/azurerm',
+          },
+        ],
+        drift: [],
+        summary: { create: 1, update: 0, delete: 0, replace: 0 },
+        errored: false,
+      }
+      const { runtime: cli } = runtimeOf([provider], tool)
+      await expect(
+        run(cli, [
+          'deploy',
+          'azure',
+          '--yes',
+          '--directory',
+          templates,
+          '--runtime',
+          runtime,
+          '--answers',
+          await answersFileOf(
+            directory,
+            'name_prefix = "platform"\noperator_addresses = "203.0.113.4/32"\n'
+          ),
+        ])
+      ).rejects.toThrow('the zone of the names of the deployment is not delegated')
+      // The plan was written, and the apply was not run: the
+      // deployment is refused before it takes the minutes of the
+      // apply, and not at its end.
+      expect(tool.applied).toHaveLength(0)
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+})
+
+/**
  * The migration of the schema.
  *
  * The job of the migration creates the roles of the deployment, and the

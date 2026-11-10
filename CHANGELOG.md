@@ -10,6 +10,16 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The deployment says that the zone of the names is not delegated
+
+The deployment of the platform on Azure binds the public names to the gateway as custom domains of its application, and the environment of the container apps proves the ownership of a name with a record of DNS. The record is read in the public DNS, and the public DNS reads the records of the zone the delegation of the zone names — the delegation at the registrar of the domain, which names the name servers of the zone.
+
+The deployment wrote the record in the zone it manages and bound the names anyway, and the environment refused the name with a refusal that names the record it did not find: `InvalidCustomHostNameValidation: A TXT record pointing from asuid.api.example.com to <the code> was not found`. The record was there, in the zone of Azure, with the right name and the right value: the zone was delegated to other name servers, and the records of a zone that is delegated elsewhere are not in the public DNS. A zone that is created again is served by other name servers, and the delegation of a zone that is not there anymore names nothing.
+
+The wizard checks the delegation before it applies the plan that binds the names, and it refuses the deployment with the reason: the zone of the names is served by `ns1-05.azure-dns.com` and the delegation of the zone names `ns1-01.azure-dns.com`, and the records to write at the registrar are named. The refusal is made before the apply and not at its end: an apply that binds the names takes minutes, and it fails at its end with a reason the operator cannot act on. The wizard tells the delegation after every apply as well — the delegation is the one record the operator writes — and the zone of the names is not destroyed with the deployment: a zone that dies with it is a zone that is created again, and a zone that is created again is served by other name servers.
+
+A zone of a name is delegated once: the same name in two groups of resources, or in two subscriptions, is two zones with two sets of name servers, and only one of them can be delegated at the registrar. **Contract:** [CLI spec §5.8](docs/cli/spec.md#58-deploy).
+
 ## 1.2.1
 
 ### The caller of the console signs in once
