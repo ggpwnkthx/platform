@@ -10,6 +10,14 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The certificate of a name is validated with the record of the name
+
+The deployment binds the certificate of every public name after the apply, with the client of Azure. The client asked the environment of the container apps to validate the name over HTTP: the validation asks the name for a challenge, and the answer comes from the application behind the name. The gateway of the deployment answers the calls of the callers and nothing else — the challenge is not a call of a caller — and the environment refused the certificate of every name.
+
+The certificate of a name is validated with the record of the name: every public name of the deployment is a record of `CNAME` at the application of the gateway, and the environment proves the ownership of the name with it. The validation of the certificate is the validation of the record.
+
+The reason of a refusal is told, and not the traceback of the client of Azure. The client caught the refusal of the environment and wrote a traceback of its own, and the traceback was in the log of the deployment where the reason of the refusal should have been: the reason is the line of the exception that refused, and the traceback around it is the client of Azure talking about itself. **Contract:** [CLI spec §5.8](docs/cli/spec.md#58-deploy).
+
 ### The deployment says that the zone of the names is not delegated
 
 The deployment of the platform on Azure binds the public names to the gateway as custom domains of its application, and the environment of the container apps proves the ownership of a name with a record of DNS. The record is read in the public DNS, and the public DNS reads the records of the zone the delegation of the zone names — the delegation at the registrar of the domain, which names the name servers of the zone.

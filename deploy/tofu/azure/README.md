@@ -241,8 +241,15 @@ az containerapp hostname bind \
   --name platform-production-gateway \
   --resource-group platform-production \
   --environment platform-production-environment \
-  --validation-method HTTP
+  --validation-method CNAME
 ```
+
+The validation of a name is the validation of its record: every name of
+the deployment is a record of `CNAME` at the application of the gateway,
+and the certificate of the name is validated with that record. The
+validation of `HTTP` asks the name for a challenge, and the answer comes
+from the application behind the name — the gateway answers the calls of
+the callers and nothing else.
 
 The binding waits for the records of DNS of the name: the environment
 proves the ownership of a name with them, and a name whose records are

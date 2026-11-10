@@ -43,7 +43,12 @@
 #     --name <the-application-of-the-gateway> \
 #     --resource-group <the-group-of-the-deployment> \
 #     --environment <the-environment-of-the-container-apps> \
-#     --validation-method HTTP
+#     --validation-method CNAME
+#
+# The validation of a name is the validation of its record, and the
+# record of every name of the deployment is a record of CNAME: the
+# certificate is validated with the record that points at the
+# application of the gateway.
 resource "azurerm_container_app_custom_domain" "gateway" {
   count = var.public_names_enabled ? 1 : 0
 

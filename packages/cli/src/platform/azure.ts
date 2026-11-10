@@ -1373,8 +1373,22 @@ async function certificatesOf(binary: string, context: AfterApply): Promise<stri
         group,
         '--environment',
         environment,
+        // The validation of a name is the validation of its record.
+        //
+        // The names of the deployment are records of CNAME: the
+        // record of every name points at the application of the
+        // gateway, and the environment proves the ownership of the name
+        // with it. The certificate of the name is validated with the
+        // same record.
+        //
+        // The validation of HTTP is the validation of a name at the
+        // root of a domain: it asks the name for a challenge, and the
+        // answer comes from the application behind the name. The
+        // gateway of the deployment answers the calls of the callers
+        // and nothing else, and the challenge is not a call of a
+        // caller.
         '--validation-method',
-        'HTTP',
+        'CNAME',
       ],
       { timeoutMs: BINDING_TIMEOUT_MS }
     )
@@ -1382,12 +1396,46 @@ async function certificatesOf(binary: string, context: AfterApply): Promise<stri
       notes.push(`the certificate of the name ${hostname} is bound to the gateway`)
       continue
     }
-    const reason = answer.stderr.trim() || answer.stdout.trim() || 'the client of Azure refused'
+    const reason =
+      reasonOf(answer.stderr) || reasonOf(answer.stdout) || 'the client of Azure refused'
     notes.push(
       `the certificate of the name ${hostname} is not bound to the gateway: ${reason}: the binding is written again the next time the deployment goes on`
     )
   }
   return notes
+}
+
+/**
+ * The reason of a refusal of the client of Azure.
+ *
+ * The client of Azure writes a traceback when it refuses, and the
+ * traceback holds the reason of the refusal in the line of the
+ * exception that refused: the line is the reason, and the traceback
+ * around it is the client of Azure talking about itself. A reader
+ * cannot act on a traceback, and the reason of a refusal is the one
+ * thing they can act on.
+ *
+ * The first exception of a traceback is the refusal itself: the client
+ * of Azure caught it and wrote a traceback of its own, and the
+ * traceback of the refusal comes first.
+ *
+ * @param output what the client of Azure wrote.
+ */
+function reasonOf(output: string): string {
+  const lines = output
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '')
+  const exception = lines.find((line) =>
+    /^[A-Za-z_][A-Za-z0-9_.]*(Error|Exception)\b\s*:/.test(line)
+  )
+  if (exception !== undefined) return exception
+  const reported = lines.find((line) => /^\(?ERROR\b/.test(line))
+  if (reported !== undefined) {
+    const message = reported.replace(/^\(?ERROR(:\s*[^)]*)?\)?\s*/, '')
+    if (message !== '') return message
+  }
+  return lines[lines.length - 1] ?? ''
 }
 
 /**

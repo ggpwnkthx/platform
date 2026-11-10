@@ -2810,6 +2810,9 @@ describe('the certificate of the public names', () => {
       expect(written).toContain('--name platform-production-gateway')
       expect(written).toContain('--resource-group platform-production')
       expect(written).toContain('--environment platform-production-environment')
+      // The certificate of a name is validated with the record of the
+      // name: every name of the deployment is a record of CNAME.
+      expect(written).toContain('--validation-method CNAME')
     } finally {
       await rm(directory, { recursive: true, force: true })
     }
@@ -2924,6 +2927,35 @@ describe('the certificate of the public names', () => {
       expect(notes?.join('\n')).toContain(
         'Please configure the DNS records before adding the hostname.'
       )
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('a client that crashes while it refuses is told the reason of the refusal', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-certificate-'))
+    try {
+      const binary = join(directory, 'az')
+      await writeFile(binary, CLIENT_THAT_CRASHES)
+      await chmod(binary, 0o755)
+      const provider = azureProvider([], { PATH: process.env.PATH ?? '', AZURE_CLI: binary })
+      const notes = await provider.afterApply?.({
+        values: { public_names_enabled: 'true' },
+        outputs: {
+          container_apps: { gateway: 'platform-production-gateway' },
+          container_app_environment: 'platform-production-environment',
+          resource_group_name: 'platform-production',
+          public_names: { api: 'api.example.com' },
+        },
+      })
+      // The client of Azure caught the refusal and wrote a traceback of
+      // its own: the reason of the refusal is the line of the exception
+      // that refused, and a traceback is not a reason an operator can
+      // act on.
+      expect(notes?.join('\n')).toContain(
+        'the certificate of the name api.example.com is not bound to the gateway: azure.core.exceptions.HttpResponseError: (InvalidRequest) The domain ownership validation failed.'
+      )
+      expect(notes?.join('\n')).not.toContain('Traceback')
     } finally {
       await rm(directory, { recursive: true, force: true })
     }
@@ -3778,6 +3810,32 @@ const CLIENT_THAT_REFUSES = `#!/bin/sh
 case "$1 $2" in
   "containerapp hostname")
     echo "Please configure the DNS records before adding the hostname." >&2
+    exit 1
+    ;;
+esac
+exit 0
+`
+
+/**
+ * The client of Azure, when it crashes while it refuses.
+ *
+ * The client of Azure writes a traceback when it refuses, and the
+ * traceback holds the reason of the refusal in the line of the
+ * exception that refused: the client caught the refusal and wrote a
+ * traceback of its own, and the traceback of the refusal comes first.
+ */
+const CLIENT_THAT_CRASHES = `#!/bin/sh
+case "$1 $2" in
+  "containerapp hostname")
+    echo "Traceback (most recent call last):" >&2
+    echo "  File azure/cli/core/commands/__init__.py, line 789, in _run_job" >&2
+    echo "    result = cmd_copy(params)" >&2
+    echo "azure.core.exceptions.HttpResponseError: (InvalidRequest) The domain ownership validation failed." >&2
+    echo "During handling of the above exception, another exception occurred:" >&2
+    echo "Traceback (most recent call last):" >&2
+    echo "  File azure/cli/command_modules/containerapp/_client_factory.py, line 48, in handle_raw_exception" >&2
+    echo "    jsonError = json.loads(jsonError)" >&2
+    echo "json.decoder.JSONDecodeError: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)" >&2
     exit 1
     ;;
 esac
