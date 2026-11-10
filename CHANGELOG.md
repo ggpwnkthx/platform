@@ -10,6 +10,14 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The interface reads the credential of the deployment when the shell holds another one
+
+The interface of the operator asks the administration of Access with the credential of the shell, and the credential of the shell comes first: a shell that names a deployment means it. A shell that holds the credential of *another* deployment was refused by this one, and the interface showed the refusal of the service — `GET /users: a valid administration token is required` — and stopped there. The interface holds the credential of the deployment it works on, in the state of the deployment, and it asks again with it: the credential of the shell is refused, the interface says so, and the page is read.
+
+The outputs of a deployment are the outputs of its state, and the tool reads the outputs of the state the templates are initialized against — one deployment at a time. The CLI read the outputs of the deployment it was initialized against, and not the deployment it was asked about: `infra output --runtime <the runtime of a deployment>` answered with the outputs of another deployment, and the interface could read the credential of a deployment that was not the one of the profile. The templates are now read against the state of the deployment they are named after, and the state of the other deployment is left where it is.
+
+The address of Access names a deployment when it names one. Two deployments of the platform may answer under the same names — the zone of the names is shared, and the labels of the names are not — and the credential of one of them is not the credential of another: the interface reads the credential of the deployment the profile names, and refuses to read one when the address names two. **Contract:** [CLI spec §9.1](docs/cli/spec.md#91-what-it-needs).
+
 ### The certificate of a name is validated with the record of the name
 
 The deployment binds the certificate of every public name after the apply, with the client of Azure. The client asked the environment of the container apps to validate the name over HTTP: the validation asks the name for a challenge, and the answer comes from the application behind the name. The gateway of the deployment answers the calls of the callers and nothing else — the challenge is not a call of a caller — and the environment refused the certificate of every name.

@@ -48,21 +48,34 @@ export async function heldOf(
 ): Promise<Held> {
   const existing = await existingOf(undefined, templates)
   let environment: string | undefined
+  const byAddress: string[] = []
   for (const [name, values] of existing) {
     const deployment = profileOfDeployment(values, {
       public_names_enabled: values.public_names_enabled ?? '',
     })
-    const sameAccess =
-      context.accessUrl !== undefined &&
-      plain(deployment.profile.accessUrl) === plain(context.accessUrl)
-    if (deployment.name === context.name || sameAccess) {
+    // The name of the deployment is its name: the credential of a
+    // deployment is the credential of the deployment, and the address
+    // of Access is not a name of a deployment — two deployments of the
+    // platform may answer under the same names.
+    if (deployment.name === context.name) {
       environment = name
       break
     }
+    const sameAccess =
+      context.accessUrl !== undefined &&
+      plain(deployment.profile.accessUrl) === plain(context.accessUrl)
+    if (sameAccess) byAddress.push(name)
   }
+  // The address of Access names a deployment when it names one: a
+  // machine that holds two deployments that answer at the same address
+  // holds no credential that may be sent to it.
+  if (environment === undefined && byAddress.length === 1) environment = byAddress[0]
   if (environment === undefined) {
     return {
-      note: `this machine holds no files of a deployment named ${context.name}: its credential is not read`,
+      note:
+        byAddress.length > 1
+          ? `this machine holds ${byAddress.length} deployments that answer at ${context.accessUrl ?? 'the address of the profile'}: the credential of one of them is not the credential of another`
+          : `this machine holds no files of a deployment named ${context.name}: its credential is not read`,
     }
   }
   const backendConfig = join(dirname(templates), 'runtime', environment, 'backend.hcl')

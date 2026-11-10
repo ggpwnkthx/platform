@@ -704,6 +704,41 @@ describe('the tool that writes the infrastructure', () => {
     }
   })
 
+  test('the outputs of a deployment are read in the state of that deployment', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-tool-'))
+    try {
+      const binary = join(directory, 'tofu')
+      const argumentsFile = join(directory, 'arguments.txt')
+      const templates = join(directory, 'templates')
+      await mkdir(templates, { recursive: true })
+      await writeFile(binary, TOOL)
+      await chmod(binary, 0o755)
+
+      const tool = new TofuInfrastructure({
+        PATH: process.env.PATH ?? '',
+        TOFU_BINARY: binary,
+        ARGS_FILE: argumentsFile,
+        OUTPUT_JSON: JSON.stringify({ access_admin_token: 'the-token-of-the-deployment' }),
+      })
+
+      const outputs = await tool.output(templates, {
+        backendConfig: '/runtime/development/backend.hcl',
+      })
+      expect(outputs.access_admin_token).toBe('the-token-of-the-deployment')
+      // The outputs of a deployment are the outputs of its state, and
+      // the tool reads the state it is initialized against: the
+      // templates are initialized against the backend of the deployment
+      // before its outputs are read, and the state of the other
+      // deployment is left where it is.
+      const words = await Bun.file(argumentsFile).text()
+      expect(words).toContain('-backend-config=/runtime/development/backend.hcl')
+      expect(words).toContain('-reconfigure')
+      expect(words).toContain(`-chdir=${templates} output`)
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
   test('the tool is asked to write a resource in the state', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'platformctl-tool-'))
     try {

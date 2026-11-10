@@ -1141,6 +1141,65 @@ describe('the credential of a deployment of the machine', () => {
     expect(frame).toContain('holds no files of a deployment named production')
     expect(frame).toContain('PLATFORMCTL_ADMIN_TOKEN')
   })
+
+  test('two deployments that answer at the same address hold no credential that may be sent to either', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'platformctl-held-'))
+    try {
+      // Two deployments of the platform that answer under the same
+      // names: the zone of the names is shared, and the labels of the
+      // names are not.
+      for (const environment of ['development', 'production']) {
+        const directory = join(root, 'runtime', environment)
+        await mkdir(directory, { recursive: true })
+        await writeFile(
+          join(directory, 'terraform.tfvars'),
+          [
+            'name_prefix = "platform"',
+            `environment = "${environment}"`,
+            'dns_zone_name = "platform.example.com"',
+            'access_name = "access"',
+          ].join('\n')
+        )
+      }
+      const held = await heldOf(tool('https://access.platform.example.com'), join(root, 'azure'), {
+        name: 'the-deployment-of-the-reader',
+        accessUrl: 'https://access.platform.example.com',
+      })
+      // The address of Access names two deployments, and the
+      // credential of one of them is not the credential of another.
+      expect(held.adminToken).toBeUndefined()
+      expect(held.note).toContain('2 deployments that answer at')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('the credential of the deployment is used when the credential of the shell is refused', async () => {
+    // The shell holds the credential of another deployment: the
+    // deployment refuses it, and the interface holds the credential of
+    // the deployment it works on.
+    const http = new FakeHttp(
+      FakeHttp.json(401, {
+        error: 'unauthorized',
+        message: 'a valid administration token is required',
+      }),
+      FakeHttp.json(200, ONE_TENANT)
+    )
+    const screen = new FakeScreen({ kind: 'char', char: 't' })
+    await new Interface({
+      screen,
+      services: servicesOf(http),
+      environment: { PLATFORMCTL_ADMIN_TOKEN: 'the-token-of-another-deployment' },
+      held: async () => ({ adminToken: SECRET }),
+    }).start()
+    // The shell's credential is tried first, and the credential of the
+    // deployment is the one the deployment answers.
+    expect(http.requests[0]?.token).toBe('the-token-of-another-deployment')
+    expect(http.requests[1]?.token).toBe(SECRET)
+    const frame = screen.frames[screen.frames.length - 1] ?? ''
+    expect(frame).toContain('the credential of the shell was refused')
+    expect(frame).toContain('acme')
+  })
 })
 
 describe('a principal and its grants', () => {

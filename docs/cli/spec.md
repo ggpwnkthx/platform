@@ -399,6 +399,7 @@ The tool that writes the infrastructure writes its own files: the working direct
 - A terminal: the interface reads the keys of the reader, and it refuses to start without one.
 - The credentials of the shell: the administration of Access, the control plane of the gateway and the caller. A profile holds none of them (§3), and the interface reads none of them from a profile.
 - The credential of the administration of a deployment of the machine, when the shell holds none: the deployment created it, and the interface reads it in the outputs of the deployment (§5.7), the first time a page needs it. The credential is held in the memory of the interface: it is written nowhere, and it is never drawn (§1.1). The deployment of a profile is the one whose files are on the machine and whose name, or whose address of Access, is the one of the profile; the address of Access the templates answer is checked against the profile, and a credential the templates answer for another deployment is refused.
+- The credential of the deployment, when the credential of the shell is refused: the credential of the shell comes first, and a shell that holds the credential of another deployment is refused by this one. The interface reads the credential of the deployment it works on and asks again, and it says that the credential of the shell was refused.
 
 ### 9.2 The pages
 

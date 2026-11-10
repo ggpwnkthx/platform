@@ -825,8 +825,40 @@ export class TofuInfrastructure implements InfrastructurePort {
     return { directory, applied: plan.changes, summary: plan.summary }
   }
 
-  /** The outputs of the deployment. */
+  /**
+   * The outputs of the deployment.
+   *
+   * The outputs are the outputs of the state of the deployment, and the
+   * tool reads the outputs of the state the templates are initialized
+   * against: the templates are initialized against the backend of the
+   * deployment before its outputs are read. A machine holds the
+   * templates of every deployment, and the state of one deployment is
+   * not the state of another.
+   *
+   * The state is not moved: the backend is reconfigured, and the
+   * reconfiguration leaves the state of the other backend where it is.
+   */
   async output(directory: string, run: InfrastructureRun): Promise<Record<string, unknown>> {
+    if (run.backendConfig !== undefined) {
+      const initialized = await this.#run(
+        [
+          `-chdir=${directory}`,
+          'init',
+          `-backend-config=${run.backendConfig}`,
+          '-reconfigure',
+          '-input=false',
+          '-no-color',
+        ],
+        process.cwd()
+      )
+      if (initialized.status !== 0) {
+        throw new CliFailure(
+          `the outputs of the deployment cannot be read: the templates cannot be read against the state of the deployment: ${initialized.stderr.trim()}`,
+          8,
+          'not_initialized'
+        )
+      }
+    }
     const answer = await this.#run(
       [`-chdir=${directory}`, 'output', '-json', '-no-color'],
       process.cwd()

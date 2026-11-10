@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Services } from '../app/commands'
+import type { AccessCall } from '../domains/access'
 import type { Environment, ResolvedContext } from '../domains/context'
 import { resolveContext } from '../domains/context'
 import {
@@ -511,8 +512,7 @@ export class Interface {
         return
       case 'revoke-grant':
         await this.at(async () => {
-          const call = accessCallOf(this.services.http, await this.credentialed())
-          await revokeOf(call, pending.id ?? '')
+          await this.administration(false, async (call) => await revokeOf(call, pending.id ?? ''))
           await this.loadGrants()
           this.dispatch({ type: 'message', message: { text: 'the grant is revoked', kind: 'ok' } })
         })
@@ -1018,24 +1018,23 @@ export class Interface {
   }
 
   /**
-   * The deployment the interface works on, with the credential of its
-   * administration.
+   * The credential of the administration of the deployment.
    *
-   * The credential of the shell is the credential: the operator named
-   * it. A shell that holds none leaves the question to the deployment,
-   * which created one: the interface reads it in the state of the
-   * deployment, once, and keeps it while it runs. A deployment that
-   * does not answer is asked again when the reader asks for the page
-   * again, and not by the clock.
+   * The deployment created it, and the state of the deployment holds
+   * it: the interface reads it in the state of the deployment the
+   * first time a page needs it, and it keeps it while it runs. The
+   * credential is written nowhere and it is never drawn.
+   *
+   * A deployment that does not answer is asked again when the reader
+   * asks for the page again, and not by the clock.
    *
    * @param quiet true when the clock asked, and not the reader.
    */
-  private async credentialed(quiet = false): Promise<ResolvedContext> {
-    const context = this.context()
-    if (context.adminToken || !this.held) return context
-    const name = context.name
+  private async ownCredential(quiet = false): Promise<Held | undefined> {
+    if (!this.held) return undefined
+    const name = this.context().name
     if (!this.credentials.has(name) && !(quiet && this.refused.has(name))) {
-      const read = await this.held(this.templates, context)
+      const read = await this.held(this.templates, this.context())
       if (read.adminToken) {
         this.credentials.set(name, read)
         this.refused.delete(name)
@@ -1043,24 +1042,81 @@ export class Interface {
         this.refused.set(name, read.note ?? 'the deployment answered no credential')
       }
     }
-    const read = this.credentials.get(name)
-    if (!read) {
+    return this.credentials.get(name)
+  }
+
+  /**
+   * The deployment the interface works on, with the credential of its
+   * administration.
+   *
+   * The credential of the shell is the credential: the operator named
+   * it. A shell that holds none leaves the question to the deployment,
+   * which created one: the interface reads it in the state of the
+   * deployment, once, and keeps it while it runs.
+   *
+   * @param quiet true when the clock asked, and not the reader.
+   */
+  private async credentialed(quiet = false): Promise<ResolvedContext> {
+    const context = this.context()
+    if (context.adminToken || !this.held) return context
+    const own = await this.ownCredential(quiet)
+    if (!own) {
       throw new CliFailure(
-        `the credential of the administration is missing: ${this.refused.get(name) ?? ''}: set PLATFORMCTL_ADMIN_TOKEN`,
+        `the credential of the administration is missing: ${this.refused.get(context.name) ?? ''}: set PLATFORMCTL_ADMIN_TOKEN`,
         3,
         'not_authenticated'
       )
     }
     const resolved = {
       ...context,
-      accessUrl: context.accessUrl ?? read.accessUrl,
-      adminToken: read.adminToken,
+      accessUrl: context.accessUrl ?? own.accessUrl,
+      adminToken: own.adminToken,
     }
     // The page of the deployment says that the credential is there.
-    if (this.state.context?.name === name && !this.state.context.adminToken) {
+    if (this.state.context?.name === context.name && !this.state.context.adminToken) {
       this.dispatch({ type: 'context', context: resolved })
     }
     return resolved
+  }
+
+  /**
+   * Asks the administration of Access a question.
+   *
+   * The credential of the shell comes first, and the credential of the
+   * deployment is the one the interface falls back to: a shell that
+   * holds the credential of another deployment is refused by this one,
+   * and the interface holds the credential of this one in the state of
+   * the deployment. The reader is told that the credential of the
+   * shell was refused: the shell names the credential of another
+   * deployment, and the reader may want to know it.
+   *
+   * @param quiet true when the clock asked, and not the reader.
+   * @param ask the question.
+   */
+  private async administration<T>(
+    quiet: boolean,
+    ask: (call: AccessCall) => Promise<T>
+  ): Promise<T> {
+    const context = await this.credentialed(quiet)
+    try {
+      return await ask(accessCallOf(this.services.http, context))
+    } catch (error) {
+      const own = await this.ownCredential(quiet)
+      // The credential of the deployment is the fallback: a refusal of
+      // the credential of the deployment is a refusal of the
+      // deployment, and there is nothing to fall back to.
+      if (own === undefined || own.adminToken === context.adminToken || !refusedCredential(error)) {
+        throw error
+      }
+      this.dispatch({
+        type: 'message',
+        message: {
+          text: `the credential of the shell was refused by ${context.accessUrl ?? 'the deployment'}: the interface reads the credential of the deployment`,
+          kind: 'info',
+        },
+      })
+      return await ask(accessCallOf(this.services.http, { ...context, adminToken: own.adminToken }))
+    }
   }
 
   /**
@@ -1205,8 +1261,7 @@ export class Interface {
    */
   private async loadTenants(quiet = false): Promise<void> {
     await this.reading('tenants', quiet, async () => {
-      const call = accessCallOf(this.services.http, await this.credentialed(quiet))
-      const body = await tenantsOf(call)
+      const body = await this.administration(quiet, async (call) => await tenantsOf(call))
       this.slugs = valuesIn(body, 'tenants', 'slug')
       return await this.list('tenants', body, HEADS.tenants, tenantRows(body))
     })
@@ -1219,8 +1274,9 @@ export class Interface {
    */
   private async loadPrincipals(quiet = false): Promise<void> {
     await this.reading('principals', quiet, async () => {
-      const call = accessCallOf(this.services.http, await this.credentialed(quiet))
-      const body = await principalsOf(call, { limit: PAGE, tenant: this.scope.tenant })
+      const body = await this.administration(quiet, async (call) =>
+        principalsOf(call, { limit: PAGE, tenant: this.scope.tenant })
+      )
       for (const person of peopleOf(body)) this.people.set(person.id, person)
       return await this.list('principals', body, HEADS.principals, principalRows(body))
     })
@@ -1233,12 +1289,13 @@ export class Interface {
    */
   private async loadGrants(quiet = false): Promise<void> {
     await this.reading('grants', quiet, async () => {
-      const call = accessCallOf(this.services.http, await this.credentialed(quiet))
-      const body = await grantsOf(call, {
-        limit: PAGE,
-        tenant: this.scope.tenant,
-        userId: this.scope.principal?.id,
-      })
+      const body = await this.administration(quiet, async (call) =>
+        grantsOf(call, {
+          limit: PAGE,
+          tenant: this.scope.tenant,
+          userId: this.scope.principal?.id,
+        })
+      )
       for (const name of ['permission', 'workspaceId', 'routeId', 'grantedBy']) {
         this.seen[name] ??= new Set()
         for (const value of valuesIn(body, 'grants', name)) this.seen[name].add(value)
@@ -1248,7 +1305,9 @@ export class Interface {
       // once, beside the grants, and the list shows the addresses.
       if (!quiet && this.unnamed(body)) {
         try {
-          const principals = await principalsOf(call, { limit: PAGE, tenant: this.scope.tenant })
+          const principals = await this.administration(quiet, async (call) =>
+            principalsOf(call, { limit: PAGE, tenant: this.scope.tenant })
+          )
           for (const person of peopleOf(principals)) this.people.set(person.id, person)
         } catch {
           // The grants are read, and they are shown with the identifiers.
@@ -1325,12 +1384,13 @@ export class Interface {
     if (this.slugs.length > 0 && (!principals || peopled)) return
     this.dispatch({ type: 'busy', busy: true })
     try {
-      const call = accessCallOf(this.services.http, await this.credentialed())
-      if (this.slugs.length === 0) this.slugs = valuesIn(await tenantsOf(call), 'tenants', 'slug')
-      if (principals && !peopled) {
-        const body = await principalsOf(call, { limit: PAGE, tenant })
-        for (const person of peopleOf(body)) this.people.set(person.id, person)
-      }
+      await this.administration(false, async (call) => {
+        if (this.slugs.length === 0) this.slugs = valuesIn(await tenantsOf(call), 'tenants', 'slug')
+        if (principals && !peopled) {
+          const body = await principalsOf(call, { limit: PAGE, tenant })
+          for (const person of peopleOf(body)) this.people.set(person.id, person)
+        }
+      })
     } catch {
       // The form opens without the offers.
     } finally {
@@ -1631,24 +1691,25 @@ export class Interface {
    */
   private async onSaveTenant(form: Form): Promise<void> {
     await this.at(async () => {
-      const call = accessCallOf(this.services.http, await this.credentialed())
-      await tenantOf(call, {
-        slug: fieldValue(form, 'slug'),
-        displayName: fieldValue(form, 'displayName'),
-        issuer: fieldValue(form, 'issuer'),
-        idpClientId: fieldValue(form, 'idpClientId'),
-        idpClientSecret: fieldValue(form, 'idpClientSecret'),
-        idpRedirectUri: fieldValue(form, 'idpRedirectUri'),
-        emailDomain: fieldValue(form, 'emailDomain'),
-        clientId: fieldValue(form, 'clientId'),
-        clientSecret: fieldValue(form, 'clientSecret'),
-        clientRedirectUris: listOf(fieldValue(form, 'clientRedirectUris')),
-        autoProvision: fieldValue(form, 'autoProvision') === 'true',
-        autoProvisionAdmin: fieldValue(form, 'autoProvisionAdmin') === 'true',
-        sharedClient: fieldValue(form, 'sharedClient') === 'true',
-        default: fieldValue(form, 'default') === 'true',
-        enabled: fieldValue(form, 'enabled') !== 'false',
-      })
+      await this.administration(false, async (call) =>
+        tenantOf(call, {
+          slug: fieldValue(form, 'slug'),
+          displayName: fieldValue(form, 'displayName'),
+          issuer: fieldValue(form, 'issuer'),
+          idpClientId: fieldValue(form, 'idpClientId'),
+          idpClientSecret: fieldValue(form, 'idpClientSecret'),
+          idpRedirectUri: fieldValue(form, 'idpRedirectUri'),
+          emailDomain: fieldValue(form, 'emailDomain'),
+          clientId: fieldValue(form, 'clientId'),
+          clientSecret: fieldValue(form, 'clientSecret'),
+          clientRedirectUris: listOf(fieldValue(form, 'clientRedirectUris')),
+          autoProvision: fieldValue(form, 'autoProvision') === 'true',
+          autoProvisionAdmin: fieldValue(form, 'autoProvisionAdmin') === 'true',
+          sharedClient: fieldValue(form, 'sharedClient') === 'true',
+          default: fieldValue(form, 'default') === 'true',
+          enabled: fieldValue(form, 'enabled') !== 'false',
+        })
+      )
       await this.closeForm()
       await this.loadTenants()
       this.dispatch({ type: 'message', message: { text: 'the tenant is written', kind: 'ok' } })
@@ -1662,13 +1723,14 @@ export class Interface {
    */
   private async onSavePrincipal(form: Form): Promise<void> {
     await this.at(async () => {
-      const call = accessCallOf(this.services.http, await this.credentialed())
-      const written = await principalOf(call, {
-        tenant: fieldValue(form, 'tenant'),
-        externalSubject: fieldValue(form, 'externalSubject'),
-        email: fieldValue(form, 'email'),
-        displayName: fieldValue(form, 'displayName'),
-      })
+      const written = await this.administration(false, async (call) =>
+        principalOf(call, {
+          tenant: fieldValue(form, 'tenant'),
+          externalSubject: fieldValue(form, 'externalSubject'),
+          email: fieldValue(form, 'email'),
+          displayName: fieldValue(form, 'displayName'),
+        })
+      )
       await this.closeForm()
       await this.loadPrincipals()
       // A principal with no grant is refused everywhere: the reader
@@ -1702,7 +1764,6 @@ export class Interface {
    */
   private async onSaveGrant(form: Form): Promise<void> {
     await this.at(async () => {
-      const call = accessCallOf(this.services.http, await this.credentialed())
       // The reader names the principal by its address, and the grant
       // names it by its identifier.
       const named = fieldValue(form, 'userId').trim()
@@ -1712,15 +1773,17 @@ export class Interface {
       )
       const person = people.find((one) => one.tenant === tenant) ?? people[0]
       if (fieldValue(form, 'grantedBy') !== '') this.giver = fieldValue(form, 'grantedBy')
-      await grantOf(call, {
-        tenant,
-        userId: person?.id ?? named,
-        permission: fieldValue(form, 'permission'),
-        workspaceId: fieldValue(form, 'workspaceId'),
-        routeId: fieldValue(form, 'routeId'),
-        expiresAt: fieldValue(form, 'expiresAt') || null,
-        grantedBy: fieldValue(form, 'grantedBy'),
-      })
+      await this.administration(false, async (call) =>
+        grantOf(call, {
+          tenant,
+          userId: person?.id ?? named,
+          permission: fieldValue(form, 'permission'),
+          workspaceId: fieldValue(form, 'workspaceId'),
+          routeId: fieldValue(form, 'routeId'),
+          expiresAt: fieldValue(form, 'expiresAt') || null,
+          grantedBy: fieldValue(form, 'grantedBy'),
+        })
+      )
       await this.closeForm()
       await this.loadGrants()
       this.dispatch({ type: 'message', message: { text: 'the grant is written', kind: 'ok' } })
@@ -1892,6 +1955,20 @@ export class Interface {
       if (lines.length > 0) this.dispatch({ type: 'log', lines })
     }
   }
+}
+
+/**
+ * Reports whether a failure is the refusal of a credential.
+ *
+ * The services refuse a call that presents no credential, or a
+ * credential they do not know, with the status of a caller that is not
+ * authenticated: the reader gave a credential, and the service did not
+ * take it.
+ *
+ * @param error what failed.
+ */
+function refusedCredential(error: unknown): boolean {
+  return error instanceof CliFailure && error.exit === 3
 }
 
 /** The pages that hold a list. */
