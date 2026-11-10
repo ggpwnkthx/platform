@@ -330,7 +330,7 @@ Deferred features (SAML, console, SCIM, directory sync, account linking) are in 
 | Group membership is a `uuid[]` | Not paginated, one row. A constraint trigger refuses foreign members (§3.5); a GIN index avoids walking groups, but many groups still cost containment checks per decision. |
 | The pool's `statement_timeout` is the tightest deadline | PostgreSQL stops the statement and frees the connection. Embedded PostgreSQL cannot interrupt, so locally the statement holds its connection until it answers. |
 | Unscoped decision bearer token | See [open finding 2](#open-findings). |
-| No refresh token | Tokens live five minutes, then the gateway re-authenticates (§7.2). |
+| No refresh token for the gateway | Tokens live five minutes, then the gateway re-authenticates. The gateway holds no session of the caller, and it is given no refresh token (§7.6). |
 | The audit is a table, not a report | Queryable and exportable as `csv` or `jsonl` (§10.15). No summary, no retention policy: it grows while the deployment keeps it, and operators read it with `curl` and SQL. |
 | Capacity from a development machine | See [Capacity](#capacity). |
 | The suite needs the reference | Offline, use `COMPAT_MIRROR` or `GATEWAY_REPOSITORY`. |

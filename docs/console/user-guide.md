@@ -23,7 +23,7 @@ The documentation and the basic status page need no sign-in at all.
 
 To sign out, choose **Sign out** in the page header. Your session also ends on its own after 8 hours without use or 24 hours in total (the deployment can change both).
 
-Your access to data is shorter-lived than your session: the badge in the page header counts down your **data access** and turns into **renew data access** when it runs out. Choose it to renew; the provider usually answers without asking you again, and the workspaces you had opened stay listed. If a form was sent after your data access expired, nothing was changed: send it again.
+Your access to data is shorter-lived than your session: the badge in the page header counts down your **data access**. The console renews it for you before it runs out, so you read the data for as long as your session lasts. When the console cannot renew it, the badge turns into **renew data access**: choose it to sign in again, and the workspaces you had opened stay listed. If a form was sent after your data access expired, nothing was changed: send it again.
 
 A sign-in that was begun in another browser, or more than ten minutes ago, cannot complete. Start a new one.
 

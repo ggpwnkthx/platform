@@ -160,6 +160,24 @@ describe('the login of Access', () => {
     expect(cookie).toContain('Max-Age=0')
   })
 
+  test('the provider is never asked for the scope of the refresh tokens', async () => {
+    // The scope of the refresh tokens is a scope of the platform: a
+    // provider that does not know it refuses the login.
+    const query = new URLSearchParams({
+      client_id: 'gateway-acme',
+      redirect_uri: GATEWAY_REDIRECT,
+      response_type: 'code',
+      scope: 'openid profile email offline_access',
+      state: 'the-state-of-the-gateway',
+    })
+    const response = await fetch(`${service.base}/oauth/authorize?${query.toString()}`, {
+      redirect: 'manual',
+    })
+    expect(response.status).toBe(302)
+    const atProvider = new URL(response.headers.get('location') ?? '')
+    expect(atProvider.searchParams.get('scope') ?? '').not.toContain('offline_access')
+  })
+
   test('the gateway exchanges the code for the tokens', async () => {
     const { response } = await startLogin()
     const location = new URL(response.headers.get('location') ?? '')

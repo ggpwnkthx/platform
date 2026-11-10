@@ -446,6 +446,15 @@ export class LoginService {
 }
 
 /**
+ * The scopes that belong to the platform and not to the provider.
+ *
+ * `offline_access` asks for a refresh token of Access (§7.6): no
+ * provider of a tenant knows it, and a provider that is asked for a
+ * scope it does not know refuses the whole login.
+ */
+const PLATFORM_SCOPES = ['offline_access']
+
+/**
  * The scopes Access asks the provider for.
  *
  * The scopes of a request are the scopes of the **platform**: `groups` is
@@ -467,8 +476,9 @@ export class LoginService {
  * @param requested the scopes the client asked for.
  */
 export function providerScopesOf(tenant: TenantOfLogin, requested: readonly string[]): string[] {
+  const asked = requested.filter((scope) => !PLATFORM_SCOPES.includes(scope))
   const known = tenant.scopes
-  if (known.length === 0) return [...requested]
-  const asked = requested.filter((scope) => known.includes(scope))
-  return asked.length > 0 ? asked : [...known]
+  if (known.length === 0) return [...asked]
+  const named = asked.filter((scope) => known.includes(scope))
+  return named.length > 0 ? named : [...known]
 }

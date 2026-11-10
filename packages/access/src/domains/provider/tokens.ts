@@ -43,6 +43,13 @@ export interface TokenPair {
   expiresIn: number
   /** The type of the access token. */
   tokenType: 'Bearer'
+  /**
+   * The refresh token of the login, when it asked for one.
+   *
+   * It is absent when the client asked for no refresh token: the gateway
+   * holds no session of the caller, and it is given none (§7.6).
+   */
+  refreshToken?: string
 }
 
 export interface IssueOptions {

@@ -78,6 +78,10 @@ export default createRoute(async (c) => {
       },
       accessToken: tokens.accessToken,
       accessTokenExpiresAt: tokens.expiresAt,
+      // The refresh token of the login stays on the server: the console
+      // renews the token of the caller with it, and the caller does not
+      // sign in again every five minutes.
+      refreshToken: tokens.refreshToken,
     })
     // The workspaces the caller opened before survive a renewal.
     if (previous && previous.principal.id === session.principal.id) {

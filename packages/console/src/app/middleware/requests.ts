@@ -4,14 +4,52 @@
  * session of the caller.
  */
 
-import type { MiddlewareHandler } from 'hono'
+import type { Context, MiddlewareHandler } from 'hono'
 import { createMiddleware } from 'hono/factory'
 import { secureHeaders } from 'hono/secure-headers'
+import { LoginError } from '../../domains/authentication'
 import { callerAddress } from '../../domains/forwarding'
+import { needsRenewal, type Session } from '../../domains/session'
 import { services } from '../../runtime/services'
 import { readSession, writeSessionCookie } from './session'
 
 const REQUEST_ID = /^[A-Za-z0-9._-]{1,128}$/
+
+/**
+ * Renews the token of the caller when it is about to expire.
+ *
+ * The renewal is a call to Access with the refresh token of the login:
+ * the browser is never sent to the provider of the tenant, and it never
+ * sees a token. A renewal that Access refuses leaves the session as it
+ * is, and the caller signs in again when the token expires.
+ */
+async function renewToken(c: Context, session: Session): Promise<void> {
+  const composed = c.get('services')
+  if (!needsRenewal(session)) return
+  const refreshToken = session.refreshToken
+  if (!refreshToken) return
+  try {
+    await composed.sessions.renew(session, async () => {
+      const tokens = await composed.provider.renew(refreshToken)
+      return {
+        accessToken: tokens.accessToken,
+        accessTokenExpiresAt: tokens.expiresAt,
+        refreshToken: tokens.refreshToken,
+      }
+    })
+  } catch (error) {
+    // A refused refresh token is spent: the session cannot renew itself
+    // any more, and the caller signs in again. A call that failed is not
+    // a refusal: the token is kept, and the next request tries again.
+    if (error instanceof LoginError && error.code === 'invalid_grant') {
+      session.refreshToken = null
+    }
+    composed.log.warn('the token of the caller was not renewed', {
+      requestId: c.get('requestId'),
+      code: error instanceof LoginError ? error.code : 'unknown',
+    })
+  }
+}
 
 /** The identifier, the services and the log line of a request. */
 export const requestContext: MiddlewareHandler = createMiddleware(async (c, next) => {
@@ -91,6 +129,7 @@ export const sameOrigin: MiddlewareHandler = createMiddleware(async (c, next) =>
 export const sessionCookie: MiddlewareHandler = createMiddleware(async (c, next) => {
   const session = readSession(c)
   c.set('session', session)
+  if (session) await renewToken(c, session)
   await next()
   const current = c.get('session')
   if (current && current === session) writeSessionCookie(c, current)

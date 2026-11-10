@@ -131,6 +131,7 @@ Errors are `{"error": "<code>", "message": "<text>"}` (§10.1). Every refusal is
 | The gateway refuses a bearer token as an id token | A token with a nonce was sent as a bearer token (`GATEWAY_OIDC_REJECT_NONCE_TOKEN`, §7.2). | Send the access token, not the id token. |
 | Stored client secrets are unreadable after the encryption key changed | `ACCESS_SECRET_ENCRYPTION_KEY` was replaced without re-encrypting (§4.3). | Run `scripts/cli/rotate-secrets.ts` with the old and new keys ([Rotating secrets](operations.md#rotating-secrets)). |
 | A tenant's logins fail after its provider rotated keys | The provider no longer publishes the key that signed the token; an uncached key is re-read at most once every thirty seconds per tenant (§6.6). | Wait for the provider's JWKS to publish the key; a key the provider does not publish stays refused. |
+| `POST /oauth/token` answers `400 invalid_grant` for a refresh token | The token is spent, expired, or bound to another client (§7.6). | Sign in again: the client asks for a new token. |
 
 ## Access context refusals
 

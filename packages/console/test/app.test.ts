@@ -30,12 +30,16 @@ const seen: {
   bearers: string[]
   adminCalls: string[]
   contextChecks: string[]
+  refreshes: string[]
 } = {
   idempotencyKeys: [],
   bearers: [],
   adminCalls: [],
   contextChecks: [],
+  refreshes: [],
 }
+/** The life of the first token of the login, in seconds. */
+let firstTokenLives = 300
 let consoleKeys = ['console.admin', 'console.status']
 
 /** What the fake Access holds of the administration of acme. */
@@ -132,25 +136,41 @@ beforeAll(async () => {
       }
       if (url.pathname === '/oauth/token') {
         const form = new URLSearchParams(await request.text())
-        const nonce = codes.get(form.get('code') ?? '')
-        codes.delete(form.get('code') ?? '')
-        if (nonce === undefined || !form.get('code_verifier')) {
-          return Response.json({ error: 'invalid_grant' }, { status: 400 })
-        }
-        const sign = (claims: Record<string, unknown>) =>
+        const sign = (claims: Record<string, unknown>, life: string) =>
           new SignJWT(claims)
             .setProtectedHeader({ alg: 'RS256', kid: 'test' })
             .setIssuer(issuer)
             .setAudience(CLIENT)
             .setSubject(PRINCIPAL)
             .setIssuedAt()
-            .setExpirationTime('5m')
+            .setExpirationTime(life)
             .sign(privateKey)
+        // The renewal of the console: the refresh token of the login is
+        // exchanged for new tokens, and the answer holds a new one.
+        if (form.get('grant_type') === 'refresh_token') {
+          seen.refreshes.push(form.get('refresh_token') ?? '')
+          return Response.json({
+            access_token: await sign({ tid: 'acme', roles: ['content.reader'] }, '5m'),
+            id_token: await sign({ tid: 'acme', email: 'alice@acme.test', name: 'Alice' }, '5m'),
+            token_type: 'Bearer',
+            expires_in: 300,
+            refresh_token: 'the-refresh-token-of-the-renewal',
+          })
+        }
+        const nonce = codes.get(form.get('code') ?? '')
+        codes.delete(form.get('code') ?? '')
+        if (nonce === undefined || !form.get('code_verifier')) {
+          return Response.json({ error: 'invalid_grant' }, { status: 400 })
+        }
         return Response.json({
-          access_token: await sign({ tid: 'acme', roles: ['content.reader'] }),
-          id_token: await sign({ tid: 'acme', nonce, email: 'alice@acme.test', name: 'Alice' }),
+          access_token: await sign({ tid: 'acme', roles: ['content.reader'] }, '5m'),
+          id_token: await sign(
+            { tid: 'acme', nonce, email: 'alice@acme.test', name: 'Alice' },
+            '5m'
+          ),
           token_type: 'Bearer',
-          expires_in: 300,
+          expires_in: firstTokenLives,
+          refresh_token: 'the-refresh-token-of-the-login',
         })
       }
       if (url.pathname === '/v1/access-context') {
@@ -470,6 +490,37 @@ describe('the console', () => {
     const html = await page.text()
     expect(html).toContain('The Acme workspace')
     expect(html).not.toContain('eyJ')
+  })
+
+  test('the token of the caller is renewed before it dies', async () => {
+    // The token of the login lives one second: the console renews it
+    // before it dies, and the caller reads the data without signing in
+    // again.
+    firstTokenLives = 1
+    seen.refreshes.length = 0
+    try {
+      const browser = new Browser()
+      await browser.signIn()
+      const page = await browser.request(`/workspaces/${WORKSPACE}/collections/articles`)
+      expect(page.status).toBe(200)
+      expect(await page.text()).toContain('Launch notes')
+      expect(seen.refreshes).toEqual(['the-refresh-token-of-the-login'])
+    } finally {
+      firstTokenLives = 300
+    }
+  })
+
+  test('the browser asks the console to renew the token, and it answers when it ends', async () => {
+    const browser = new Browser()
+    await browser.signIn()
+    const answer = await browser.post('/auth/renew', {})
+    expect(answer.status).toBe(200)
+    const text = await answer.text()
+    const body = JSON.parse(text) as Record<string, unknown>
+    expect(typeof body.expiresAt).toBe('number')
+    expect(body.renewable).toBe(true)
+    // The answer holds no token: the browser never sees one.
+    expect(text).not.toContain('eyJ')
   })
 
   test('a code that comes back to another browser is refused', async () => {

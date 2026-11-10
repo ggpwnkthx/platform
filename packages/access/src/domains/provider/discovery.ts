@@ -23,8 +23,13 @@ export interface DiscoveryDocument {
   token_endpoint_auth_methods_supported: string[]
 }
 
-/** The scopes Access accepts (§7.4): a scope it does not know is ignored. */
-export const SUPPORTED_SCOPES = ['openid', 'profile', 'email', 'groups']
+/**
+ * The scopes Access accepts (§7.4): a scope it does not know is ignored.
+ *
+ * `offline_access` is the scope of a client that wants a refresh token
+ * (§7.6). The gateway names no scope, and it is given no refresh token.
+ */
+export const SUPPORTED_SCOPES = ['openid', 'profile', 'email', 'groups', 'offline_access']
 
 /** Builds the discovery document of the service. */
 export function discoveryDocument(options: {
@@ -41,7 +46,7 @@ export function discoveryDocument(options: {
     response_types_supported: ['code'],
     subject_types_supported: ['public'],
     id_token_signing_alg_values_supported: ['RS256'],
-    grant_types_supported: ['authorization_code'],
+    grant_types_supported: ['authorization_code', 'refresh_token'],
     scopes_supported: SUPPORTED_SCOPES,
     code_challenge_methods_supported: ['S256'],
     token_endpoint_auth_methods_supported: ['client_secret_basic'],

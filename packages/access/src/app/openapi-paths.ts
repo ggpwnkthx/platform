@@ -204,7 +204,7 @@ export function apiPaths(): Record<string, unknown> {
       post: {
         summary: 'The exchange of the code for the tokens.',
         description:
-          'The client authenticates with its secret, and the code for the tokens of the caller.',
+          'The client authenticates with its secret, and the code for the tokens of the caller. A client that holds a refresh token exchanges it for new ones.',
         responses: {
           200: jsonResponse('The tokens of the caller.'),
           400: errorResponse('The grant is not valid.'),

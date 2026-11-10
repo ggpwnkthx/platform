@@ -25,6 +25,7 @@ function dependencies(): AccessDependencies {
     accessContextCredentials: [],
     login: {} as AccessDependencies['login'],
     codes: {} as AccessDependencies['codes'],
+    refresh: {} as AccessDependencies['refresh'],
     tenants: {} as AccessDependencies['tenants'],
     cookieSecure: false,
     publicUrl: 'https://access.example.com',

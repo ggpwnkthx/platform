@@ -11,15 +11,17 @@ import { createAccessApp, createAccessHandler } from '../app/app'
 import type { AdminCredential } from '../domains/administration'
 import { LoginService, ProviderClient, createStateCipher } from '../domains/identity'
 import type { TenantOfLogin } from '../domains/identity'
-import { CodeService, ProviderService } from '../domains/provider'
+import { CodeService, ProviderService, RefreshService } from '../domains/provider'
 import { resolveCallableAddress } from '../platform/bun/address'
 import { createFetchTransport } from '../platform/bun/http'
 import {
   createStoreClient,
   MemoryAuthenticationFailures,
   MemoryCodeStore,
+  MemoryRefreshTokenStore,
   RedisAuthenticationFailures,
   RedisCodeStore,
+  RedisRefreshTokenStore,
 } from '../platform/redis/store'
 import type { AccessDependencies } from '../app/dependencies'
 import { createAdministrationService } from './adapters'
@@ -192,6 +194,13 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
     : undefined
   const codes = new MemoryCodeStore()
   const codeStore = storeClient ? new RedisCodeStore(storeClient) : codes
+  // The store of the refresh tokens. It is shared by the replicas of a
+  // deployment for the same reason the codes are: a refresh token that
+  // lives in the memory of one replica is unknown to the others, and the
+  // caller would have to sign in again (spec §7.6).
+  const refreshStore = storeClient
+    ? new RedisRefreshTokenStore(storeClient)
+    : new MemoryRefreshTokenStore()
 
   // The count of the failed authentications of the administration. It is
   // the shared store when the deployment has one: the window of the
@@ -353,23 +362,45 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
   })
 
   // The codes of the logins and their exchange.
-  const codeService = new CodeService({
-    store: codeStore,
-    principals: {
-      findById: async (id: string) => {
-        const principal = await repositories.users.findById(id, platformScope())
-        if (!principal) return null
-        return {
-          id: principal.id,
-          email: principal.email,
-          displayName: principal.displayName,
-          tenantSlug: principal.tenantSlug,
-          status: principal.status,
-        }
-      },
+  const principals = {
+    findById: async (id: string) => {
+      const principal = await repositories.users.findById(id, platformScope())
+      if (!principal) return null
+      return {
+        id: principal.id,
+        email: principal.email,
+        displayName: principal.displayName,
+        tenantSlug: principal.tenantSlug,
+        status: principal.status,
+      }
     },
+  }
+
+  // The refresh tokens of the logins and their exchange (spec §7.6).
+  const refreshService = new RefreshService({
+    store: refreshStore,
+    principals,
     tokens: {
       issueTokens: async (subject) => await provider.issueTokens(subject),
+    },
+  })
+
+  const codeService = new CodeService({
+    store: codeStore,
+    principals,
+    tokens: {
+      issueTokens: async (subject) => await provider.issueTokens(subject),
+      // A login that asked for the scope of the refresh tokens is given
+      // one: the console renews the token of the caller with it, and the
+      // gateway, which asked for no scope, is given none.
+      issueRefreshToken: async (options) =>
+        await refreshService.issue({
+          clientId: options.clientId,
+          subject: options.subject,
+          tenant: options.tenant,
+          audience: options.audience,
+          scopes: options.scopes,
+        }),
     },
   })
 
@@ -396,6 +427,9 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
     provider,
     login,
     codes: codeService,
+    refresh: {
+      exchange: async (options) => await refreshService.exchange(options),
+    },
     tenants: {
       findByClientId: async (clientId: string) => {
         const tenant = await repositories.tenants.findByClientId(clientId)

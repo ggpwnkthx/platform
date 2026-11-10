@@ -14,6 +14,12 @@ export {
   SUPPORTED_SCOPES,
 } from './discovery'
 export { loadSigningKeys } from './keys'
+export {
+  RefreshError,
+  RefreshService,
+  type RefreshRecord,
+  type RefreshTokenStore,
+} from './refresh'
 
 export { ProviderService } from './service'
 export {

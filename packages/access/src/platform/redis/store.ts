@@ -7,7 +7,12 @@
  */
 
 import { createClient, type RedisClientType } from 'redis'
-import type { CodeRecord, CodeStore } from '../../domains/provider'
+import type {
+  CodeRecord,
+  CodeStore,
+  RefreshRecord,
+  RefreshTokenStore,
+} from '../../domains/provider'
 import type { AuthenticationFailures, FailureCount } from '../../domains/administration'
 
 /** The client of the shared store. */
@@ -87,6 +92,60 @@ export class MemoryCodeStore implements CodeStore {
     const found = this.codes.get(hash)
     if (!found) return null
     this.codes.delete(hash)
+    if (found.expiresAt <= this.now()) return null
+    return found.record
+  }
+}
+
+/**
+ * The store of the refresh tokens, in the shared store.
+ *
+ * The tokens are shared by the replicas of a deployment: a token that
+ * lives in the memory of one replica is unknown to the others, and the
+ * caller would have to sign in again.
+ */
+export class RedisRefreshTokenStore implements RefreshTokenStore {
+  constructor(
+    private readonly client: SharedStoreClient,
+    private readonly keyPrefix = 'access'
+  ) {}
+
+  /** The key of a refresh token. */
+  private key(hash: string): string {
+    return `${this.keyPrefix}:refresh:${hash}`
+  }
+
+  async put(hash: string, record: RefreshRecord, ttlSeconds: number): Promise<void> {
+    await this.client.set(this.key(hash), JSON.stringify(record), { EX: ttlSeconds })
+  }
+
+  async take(hash: string): Promise<RefreshRecord | null> {
+    // The read and the delete are one operation: a token that is redeemed
+    // twice is a token that does not exist.
+    const raw = await this.client.getDel(this.key(hash))
+    if (!raw) return null
+    try {
+      return JSON.parse(raw) as RefreshRecord
+    } catch {
+      return null
+    }
+  }
+}
+
+/** The store of the refresh tokens, in the memory of the process. */
+export class MemoryRefreshTokenStore implements RefreshTokenStore {
+  private readonly tokens = new Map<string, { record: RefreshRecord; expiresAt: number }>()
+
+  constructor(private readonly now: () => number = () => Date.now()) {}
+
+  async put(hash: string, record: RefreshRecord, ttlSeconds: number): Promise<void> {
+    this.tokens.set(hash, { record, expiresAt: this.now() + ttlSeconds * 1000 })
+  }
+
+  async take(hash: string): Promise<RefreshRecord | null> {
+    const found = this.tokens.get(hash)
+    if (!found) return null
+    this.tokens.delete(hash)
     if (found.expiresAt <= this.now()) return null
     return found.record
   }

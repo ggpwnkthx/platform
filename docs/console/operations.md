@@ -41,6 +41,7 @@ The mapping from each Access setting to its console variable is in [configuratio
 | `CONSOLE_ADMIN_TOKEN` | Platform administration, for operators holding `console.platform` | Changing every tenant |
 | `CONSOLE_SESSION_SECRET` | Signing console cookies | Nothing outside the console |
 | Callers' access tokens | Data calls through the gateway | Whatever Data's policies allow that caller, for five minutes |
+| Callers' refresh tokens | Renewing those access tokens on the server | Nothing beyond the tokens of the callers |
 
 It never holds:
 

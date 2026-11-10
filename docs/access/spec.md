@@ -424,7 +424,7 @@ A credential is at least 16 characters, and a malformed value stops the service:
 | --- | --- |
 | `GET /oauth/authorize` | Authorization endpoint. The gateway sends the browser here. |
 | `GET /oauth/tenant/callback` | Callback registered at each tenant's provider. The provider sends the browser here. |
-| `POST /oauth/token` | Token endpoint, where the gateway exchanges the code. The client authenticates with `client_secret_basic`; a client without a secret is refused. |
+| `POST /oauth/token` | Token endpoint, where the gateway exchanges the code and the console exchanges a refresh token (§7.6). The client authenticates with `client_secret_basic`; a client without a secret is refused. |
 | `GET /oauth/jwks` | The service's public keys. |
 | `GET /oauth/userinfo` | Claims of a bearer token's principal. |
 | `GET /.well-known/openid-configuration` | Discovery document. |
@@ -640,7 +640,7 @@ The token carries **no nonce** and **no e-mail**. A bearer token with a nonce is
 
 The reference gateway requires an **expiry** on a bearer token and bounds a token's lifetime from its issue time (`GATEWAY_OIDC_MAX_TOKEN_AGE_MS`). The access token carries `exp` and `iat` and lives five minutes, so the gateway accepts it whatever bound the deployment sets.
 
-There is **no refresh token**. The gateway does not use one, and a refresh token is a credential that must be revoked, stored and rotated. A client that needs one asks for it: it is a deferred feature (§14).
+The gateway holds **no refresh token**: it keeps a session of its own and does not read the data with the token of the caller. A client that keeps a session of the caller asks for one (§7.6).
 
 ### 7.3 `roles` claim
 
@@ -652,7 +652,9 @@ The list is sorted and capped at 64 entries. A principal with more permissions g
 
 ### 7.4 Scopes
 
-Access accepts the scopes `openid`, `profile`, `email` and `groups`. An unknown scope is ignored, not refused: the gateway asks for `groups` by default, and refusing unknown scopes would break gateways that never changed.
+Access accepts the scopes `openid`, `profile`, `email`, `groups` and `offline_access`. An unknown scope is ignored, not refused: the gateway asks for `groups` by default, and refusing unknown scopes would break gateways that never changed.
+
+`offline_access` is the scope of a client that wants a refresh token (§7.6). The gateway asks for no scope, and it is given no refresh token.
 
 ### 7.5 Discovery document
 
@@ -668,12 +670,28 @@ Access accepts the scopes `openid`, `profile`, `email` and `groups`. An unknown 
 | `response_types_supported` | `["code"]` |
 | `subject_types_supported` | `["public"]` |
 | `id_token_signing_alg_values_supported` | `["RS256"]` |
-| `grant_types_supported` | `["authorization_code"]` |
-| `scopes_supported` | `["openid","profile","email","groups"]` |
+| `grant_types_supported` | `["authorization_code","refresh_token"]` |
+| `scopes_supported` | `["openid","profile","email","groups","offline_access"]` |
 | `code_challenge_methods_supported` | `["S256"]` |
 | `token_endpoint_auth_methods_supported` | `["client_secret_basic"]` |
 
 The `userinfo_endpoint` returns the bearer token principal's `sub`, `email`, `name` and `roles`. A token that is expired, signed with another key or issued for another audience → `401`.
+
+### 7.6 Refresh token
+
+A refresh token is the credential a client exchanges for new tokens without a new login. The console holds one for the caller: it renews the token of the caller on the server, so the caller signs in once and reads the data for as long as the session lasts.
+
+A refresh token is an opaque random 32-byte string, stored in the shared store under its hash, together with the client id, the principal, the tenant, the audience and the scopes of the login.
+
+- It lives **twelve hours**.
+- It is **spent by its first exchange**: the second exchange of the same token is `invalid_grant`.
+- It is **rotated**: the exchange issues another token, and the client holds it alone.
+- It is bound to the **client it was issued to**. Another client → `invalid_grant`.
+- It never carries the identity in clear.
+
+A login is given a refresh token only when it asks for the scope `offline_access` (§7.4). The gateway asks for no scope and is given none.
+
+`POST /oauth/token` with `grant_type=refresh_token` and the parameter `refresh_token` exchanges it. The client authenticates as it does for a code (§5.1). The answer is the answer of a code exchange: the access token, the id token, `expires_in`, `token_type` and the new `refresh_token`. A refresh token that is unknown, used, expired or bound to another client is `invalid_grant`.
 
 ## 8. Decisions
 

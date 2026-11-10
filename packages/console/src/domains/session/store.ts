@@ -55,11 +55,29 @@ export interface Session {
   /** The access token of the caller: the gateway accepts it as a bearer token. */
   accessToken: string
   accessTokenExpiresAt: number
+  /**
+   * The refresh token of the caller, when Access gave one.
+   *
+   * It is the credential that renews the access token without a new
+   * login. It never reaches the browser: the console keeps it on the
+   * server, in the session.
+   */
+  refreshToken: string | null
   /** The workspaces the caller opened, the latest first. */
   workspaces: string[]
   flash: Flash | null
   /** The last refused form, kept for the next page. */
   draft?: Draft | null
+}
+
+/** The tokens a renewal brings. */
+export interface RenewedTokens {
+  /** The new access token of the caller. */
+  accessToken: string
+  /** The moment the new access token expires, in milliseconds. */
+  accessTokenExpiresAt: number
+  /** The new refresh token, when Access issued one. */
+  refreshToken: string | null
 }
 
 /** The bounds of the sessions. */
@@ -81,6 +99,8 @@ export function newIdentifier(): string {
 /** The store of the sessions. */
 export class SessionStore {
   readonly #sessions = new Map<string, Session>()
+  /** The renewals that are running, one per session. */
+  readonly #renewals = new Map<string, Promise<void>>()
   readonly #bounds: SessionBounds
   readonly #clock: Clock
 
@@ -94,6 +114,7 @@ export class SessionStore {
     principal: SessionPrincipal
     accessToken: string
     accessTokenExpiresAt: number
+    refreshToken?: string | null
   }): Session {
     this.#sweep()
     const now = this.#clock()
@@ -104,6 +125,7 @@ export class SessionStore {
       principal: options.principal,
       accessToken: options.accessToken,
       accessTokenExpiresAt: options.accessTokenExpiresAt,
+      refreshToken: options.refreshToken ?? null,
       workspaces: [],
       flash: null,
     }
@@ -135,6 +157,34 @@ export class SessionStore {
   /** Destroys a session. */
   destroy(id: string): void {
     this.#sessions.delete(id)
+  }
+
+  /**
+   * Renews the tokens of a session, once at a time.
+   *
+   * Two requests of the same browser may ask for a renewal at the same
+   * moment: the refresh token of Access is single use, and the second
+   * exchange of the same token is refused. The store runs one renewal
+   * per session and shares its result, so the token is redeemed once.
+   */
+  async renew(session: Session, renew: () => Promise<RenewedTokens>): Promise<void> {
+    const running = this.#renewals.get(session.id)
+    if (running) {
+      await running
+      return
+    }
+    const task = (async () => {
+      const tokens = await renew()
+      session.accessToken = tokens.accessToken
+      session.accessTokenExpiresAt = tokens.accessTokenExpiresAt
+      session.refreshToken = tokens.refreshToken
+    })()
+    this.#renewals.set(session.id, task)
+    try {
+      await task
+    } finally {
+      this.#renewals.delete(session.id)
+    }
   }
 
   /** The number of the sessions that are alive. */

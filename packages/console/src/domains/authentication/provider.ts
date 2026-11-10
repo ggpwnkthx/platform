@@ -29,6 +29,14 @@ export interface Tokens {
   readonly idToken: string
   /** The moment the access token expires, in milliseconds. */
   readonly expiresAt: number
+  /**
+   * The refresh token of the login, when Access gave one.
+   *
+   * It is the credential that renews the tokens without a new login. It
+   * never reaches the browser: the console keeps it on the server, in the
+   * session of the caller.
+   */
+  readonly refreshToken: string | null
 }
 
 /** The identity the id token names. */
@@ -152,7 +160,7 @@ export class AccessProvider {
     url.searchParams.set('client_id', this.#options.clientId)
     url.searchParams.set('redirect_uri', options.redirectUri)
     url.searchParams.set('response_type', 'code')
-    url.searchParams.set('scope', 'openid profile email groups')
+    url.searchParams.set('scope', 'openid profile email groups offline_access')
     url.searchParams.set('state', options.state)
     url.searchParams.set('nonce', options.nonce)
     url.searchParams.set('code_challenge', challengeOf(options.verifier))
@@ -166,6 +174,45 @@ export class AccessProvider {
     redirectUri: string
     verifier: string
   }): Promise<Tokens> {
+    return await this.#tokens(
+      new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: options.code,
+        redirect_uri: options.redirectUri,
+        code_verifier: options.verifier,
+      }),
+      null
+    )
+  }
+
+  /**
+   * Renews the tokens of a caller with its refresh token.
+   *
+   * The access token of Access lives five minutes. The refresh token is
+   * the credential that asks for another one without a new login, so the
+   * caller reads the data for as long as the session lasts.
+   */
+  async renew(refreshToken: string): Promise<Tokens> {
+    return await this.#tokens(
+      new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+      }),
+      refreshToken
+    )
+  }
+
+  /**
+   * The tokens of an answer of the token endpoint.
+   *
+   * The console authenticates itself with its own credential, and it
+   * reads the tokens of the answer. A refusal is a login error: the
+   * caller signs in again.
+   *
+   * @param form the body of the request.
+   * @param kept the refresh token to keep when Access answers none.
+   */
+  async #tokens(form: URLSearchParams, kept: string | null): Promise<Tokens> {
     const credential = Buffer.from(
       `${encodeURIComponent(this.#options.clientId)}:${encodeURIComponent(this.#options.clientSecret)}`
     ).toString('base64')
@@ -180,12 +227,7 @@ export class AccessProvider {
           'content-type': 'application/x-www-form-urlencoded',
           accept: 'application/json',
         },
-        body: new URLSearchParams({
-          grant_type: 'authorization_code',
-          code: options.code,
-          redirect_uri: options.redirectUri,
-          code_verifier: options.verifier,
-        }).toString(),
+        body: form.toString(),
       },
       this.#options.timeoutMs
     )
@@ -195,7 +237,7 @@ export class AccessProvider {
       const description =
         typeof body?.error_description === 'string'
           ? body.error_description
-          : `Access refused the code with the status ${response.status}`
+          : `Access refused the grant with the status ${response.status}`
       throw new LoginError(code, description)
     }
     if (typeof body?.access_token !== 'string' || typeof body.id_token !== 'string') {
@@ -206,6 +248,7 @@ export class AccessProvider {
       accessToken: body.access_token,
       idToken: body.id_token,
       expiresAt: Date.now() + expiresIn * 1000,
+      refreshToken: typeof body.refresh_token === 'string' ? body.refresh_token : kept,
     }
   }
 

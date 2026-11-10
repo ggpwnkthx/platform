@@ -30,6 +30,7 @@ function dependencies(decide: () => Promise<DecisionFacts>): AccessDependencies 
     provider: {} as AccessDependencies['provider'],
     login: {} as AccessDependencies['login'],
     codes: {} as AccessDependencies['codes'],
+    refresh: {} as AccessDependencies['refresh'],
     tenants: {} as AccessDependencies['tenants'],
     cookieSecure: false,
     decisions: { decide },

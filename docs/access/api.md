@@ -38,7 +38,7 @@ The OpenAPI description of the served paths and response shapes. The repository'
 | `client_id` | Required. Names the tenant (§5.2). |
 | `redirect_uri` | Required. One of the tenant's `clientRedirectUris`; otherwise `400 invalid_request`. |
 | `response_type` | Required. `code`. |
-| `scope` | Optional. `openid profile email groups`. |
+| `scope` | Optional. `openid profile email groups offline_access`. |
 | `state` | Optional. Returned to the gateway. |
 | `nonce` | Optional. Bound to the issued token. |
 | `code_challenge`, `code_challenge_method` | Optional. `S256`. |
@@ -65,27 +65,29 @@ grant_type=authorization_code&code=…&redirect_uri=…&code_verifier=…
 
 | Field | Rule |
 | --- | --- |
-| `grant_type` | Required. `authorization_code`. |
-| `code` | Required. The login code. Single use, 60 seconds. |
-| `redirect_uri` | Required. Same as in the authorization request. |
+| `grant_type` | Required. `authorization_code` or `refresh_token`. |
+| `code` | Required for `authorization_code`. The login code. Single use, 60 seconds. |
+| `redirect_uri` | Required for `authorization_code`. Same as in the authorization request. |
 | `code_verifier` | Required when the request carried a `code_challenge`. |
+| `refresh_token` | Required for `refresh_token`. Single use, twelve hours (§7.6). |
 
 ```json
 {
   "access_token": "eyJ…",
   "token_type": "Bearer",
   "expires_in": 300,
-  "id_token": "eyJ…"
+  "id_token": "eyJ…",
+  "refresh_token": "…"
 }
 ```
 
-No refresh token (§7.2); `cache-control: no-store`.
+The refresh token is in the answer only when the login asked for the scope `offline_access`; `cache-control: no-store`.
 
 | Error | When |
 | --- | --- |
 | `401 invalid_client` | Credentials missing, unreadable or wrong. |
-| `400 invalid_request` | Bad grant type, missing code or redirect URI. |
-| `400 invalid_grant` | Code unknown, expired, already used, or bound to another client, redirect URI or challenge. |
+| `400 invalid_request` | Bad grant type, missing code, redirect URI or refresh token. |
+| `400 invalid_grant` | Code unknown, expired, already used, or bound to another client, redirect URI or challenge; or a refresh token unknown, expired, already used, or bound to another client. |
 
 ### `GET /.well-known/openid-configuration`
 

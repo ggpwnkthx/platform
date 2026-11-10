@@ -76,6 +76,16 @@ describe('the scopes of a provider', () => {
   test('a client that asks for nothing the provider knows is asked for everything it knows', () => {
     expect(providerScopesOf(tenant(), ['groups'])).toEqual(['openid', 'email', 'profile'])
   })
+
+  test('the provider is never asked for a scope of the platform', () => {
+    // The refresh token is a credential of Access: no provider of a
+    // tenant knows the scope, and one that is asked for it refuses the
+    // login.
+    expect(providerScopesOf(tenant({ scopes: [] }), ['openid', 'offline_access'])).toEqual([
+      'openid',
+    ])
+    expect(providerScopesOf(tenant(), ['openid', 'offline_access'])).toEqual(['openid'])
+  })
 })
 
 describe('the tenant of a login', () => {

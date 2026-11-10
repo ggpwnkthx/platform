@@ -1,13 +1,14 @@
 /**
  * The token endpoint of Access (spec §5.1).
  *
- * The gateway exchanges the code of the login for the tokens. The client
+ * The gateway exchanges the code of the login for the tokens, and the
+ * console exchanges a refresh token for new ones (§7.6). The client
  * authenticates itself with `client_secret_basic`; a client without a
  * secret is refused.
  */
 
 import type { Context } from 'hono'
-import { ExchangeError } from '../domains/provider'
+import { ExchangeError, RefreshError } from '../domains/provider'
 import { sameSecret } from '../observability'
 import type { AccessDependencies } from './dependencies'
 import type { AccessEnv } from './state'
@@ -29,7 +30,8 @@ function refusal(code: string, message: string, status = 400): Response {
 }
 
 /**
- * `POST /oauth/token`: the exchange of a code for the tokens.
+ * `POST /oauth/token`: the exchange of a code for the tokens, and the
+ * exchange of a refresh token for new ones (§7.6).
  */
 export async function tokenHandler(
   context: Context<AccessEnv>,
@@ -63,10 +65,14 @@ export async function tokenHandler(
   const code = String(form?.get('code') ?? '')
   const redirectUri = String(form?.get('redirect_uri') ?? '')
   const codeVerifier = form?.get('code_verifier')
-  if (grantType !== 'authorization_code') {
+  const refreshToken = String(form?.get('refresh_token') ?? '')
+  if (grantType !== 'authorization_code' && grantType !== 'refresh_token') {
     return refusal('invalid_request', 'the grant type of the request is not supported')
   }
-  if (!code || !redirectUri) {
+  if (grantType === 'refresh_token' && !refreshToken) {
+    return refusal('invalid_request', 'the refresh token is required')
+  }
+  if (grantType === 'authorization_code' && (!code || !redirectUri)) {
     return refusal('invalid_request', 'the code and the redirect uri are required')
   }
 
@@ -92,24 +98,28 @@ export async function tokenHandler(
   }
 
   try {
-    const pair = await dependencies.codes.exchange({
-      code,
-      clientId,
-      redirectUri,
-      codeVerifier: typeof codeVerifier === 'string' ? codeVerifier : undefined,
-    })
+    const pair =
+      grantType === 'refresh_token'
+        ? await dependencies.refresh.exchange({ refreshToken, clientId })
+        : await dependencies.codes.exchange({
+            code,
+            clientId,
+            redirectUri,
+            codeVerifier: typeof codeVerifier === 'string' ? codeVerifier : undefined,
+          })
     return context.json(
       {
         access_token: pair.accessToken,
         token_type: pair.tokenType,
         expires_in: pair.expiresIn,
         id_token: pair.idToken,
+        ...(pair.refreshToken ? { refresh_token: pair.refreshToken } : {}),
       },
       200,
       NO_STORE
     )
   } catch (error) {
-    if (error instanceof ExchangeError) {
+    if (error instanceof ExchangeError || error instanceof RefreshError) {
       return refusal(error.code, error.message)
     }
     dependencies.logger.error('the exchange failed', { error })

@@ -41,7 +41,7 @@ Every request passes through four middlewares in this order. When one refuses, t
 | Context | Composes services, reads or generates the request ID, writes the log line. | Never. |
 | Headers | Sets response headers: never framed, never sniffed. | Never. |
 | Origin | Requires state-changing requests to come from a console page. | `403`, before the session is read. |
-| Session | Reads the caller's session and refreshes its cookie. | Never: no session means the caller is not signed in. |
+| Session | Reads the caller's session, renews its token when it is about to expire (§3.1) and refreshes its cookie. | Never: no session means the caller is not signed in. |
 
 ### 2.1 Request ID
 
@@ -88,7 +88,23 @@ A session ends after `CONSOLE_SESSION_TTL_MS` without use (8 hours) or `CONSOLE_
 
 **Sessions live in process memory.** Run one replica, or pin each browser to a replica; the console holds no shared state.
 
-### 3.1 Login
+### 3.1 The token of the caller
+
+The access token of Access lives five minutes. The console keeps it on the server, in the session of the caller, and **renews it** with the refresh token of the login, so the caller signs in once and reads the data for as long as the session lasts.
+
+| Rule | Behavior |
+| --- | --- |
+| The margin | The console renews the token when it expires in less than a minute. |
+| Where | On the server: the browser is never sent to the provider of the tenant, and it never sees a token. |
+| One at a time | Two requests of the same browser renew once: the refresh token is single use, and the second exchange of it is refused. |
+| A refusal | A refresh token that Access refuses is spent, and the session cannot renew itself: the caller signs in again when the token expires. |
+| A failure | A call that failed is not a refusal: the refresh token is kept, and the next request tries again. |
+
+A refresh token of Access lives twelve hours ([Access spec §7.6](../access/spec.md#76-refresh-token)): a caller that reads the data for twelve hours is asked to sign in again.
+
+The header of every page counts the token down and asks the console to renew it before it dies. A session that cannot renew itself offers the sign-in again.
+
+### 3.2 Login
 
 Sign-in uses the authorization code flow with PKCE (`S256`), a `state` and a `nonce`.
 
@@ -148,6 +164,7 @@ The ability library has two wildcards, the action `manage` and the subject `all`
 | `GET /readyz` | `200` when Access serves its discovery document, else `503`: a console that cannot sign anyone in is not ready. |
 | `GET /auth/login` | Starts a login. |
 | `GET /auth/callback` | Completes a login. |
+| `POST /auth/renew` | Renews the token of the session and answers when it expires. It holds no token. |
 | `POST /auth/logout` | Ends the session. A `GET` only redirects to `/`. |
 
 ### 6.2 Places

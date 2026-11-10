@@ -55,6 +55,12 @@ interface CodePort {
   }) => Promise<TokenPair>
 }
 
+/** The refresh tokens of the logins, as the application sees them. */
+interface RefreshPort {
+  /** Exchanges a refresh token for new tokens. */
+  exchange: (options: { refreshToken: string; clientId: string }) => Promise<TokenPair>
+}
+
 /** The tenants of the platform, as the application sees them. */
 interface TenantPort {
   /** The tenant of a client id of a gateway. */
@@ -125,6 +131,8 @@ export interface AccessDependencies {
   login: LoginPort
   /** The codes of the logins. */
   codes: CodePort
+  /** The refresh tokens of the logins (spec §7.6). */
+  refresh: RefreshPort
   /** The tenants of the platform. */
   tenants: TenantPort
   /** The `Secure` attribute of the cookies of the login. */

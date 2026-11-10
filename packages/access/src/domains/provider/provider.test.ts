@@ -161,8 +161,14 @@ describe('the discovery document of Access', () => {
     expect(document.response_types_supported).toEqual(['code'])
     expect(document.subject_types_supported).toEqual(['public'])
     expect(document.id_token_signing_alg_values_supported).toEqual(['RS256'])
-    expect(document.grant_types_supported).toEqual(['authorization_code'])
-    expect(document.scopes_supported).toEqual(['openid', 'profile', 'email', 'groups'])
+    expect(document.grant_types_supported).toEqual(['authorization_code', 'refresh_token'])
+    expect(document.scopes_supported).toEqual([
+      'openid',
+      'profile',
+      'email',
+      'groups',
+      'offline_access',
+    ])
     expect(document.code_challenge_methods_supported).toEqual(['S256'])
     expect(document.token_endpoint_auth_methods_supported).toEqual(['client_secret_basic'])
   })

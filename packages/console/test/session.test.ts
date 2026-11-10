@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'bun:test'
 import { safeRedirect } from '../src/domains/authentication'
-import { LoginStore, SessionStore, sign, unsign } from '../src/domains/session'
+import {
+  LoginStore,
+  needsRenewal,
+  RENEWAL_MARGIN_MS,
+  SessionStore,
+  sign,
+  unsign,
+} from '../src/domains/session'
 
 const SECRET = 'a-session-secret-that-is-long-enough-0001'
 const principal = { id: 'p-1', tenant: 'acme', email: 'alice@acme.test', name: null, roles: [] }
@@ -54,6 +61,69 @@ describe('the sessions of the console', () => {
     const session = store.create({ principal, accessToken: 't', accessTokenExpiresAt: 0 })
     store.destroy(session.id)
     expect(store.read(session.id)).toBeNull()
+  })
+
+  test('a renewal replaces the tokens of the session', async () => {
+    const store = new SessionStore({ ttlMs: 1000, maxAgeMs: 10_000 })
+    const session = store.create({
+      principal,
+      accessToken: 'the-first-token',
+      accessTokenExpiresAt: 1000,
+      refreshToken: 'the-first-refresh',
+    })
+    await store.renew(session, async () => ({
+      accessToken: 'the-second-token',
+      accessTokenExpiresAt: 2000,
+      refreshToken: 'the-second-refresh',
+    }))
+    expect(session.accessToken).toBe('the-second-token')
+    expect(session.accessTokenExpiresAt).toBe(2000)
+    expect(session.refreshToken).toBe('the-second-refresh')
+  })
+
+  test('two renewals of the same session run one at a time', async () => {
+    const store = new SessionStore({ ttlMs: 1000, maxAgeMs: 10_000 })
+    const session = store.create({
+      principal,
+      accessToken: 'the-first-token',
+      accessTokenExpiresAt: 1000,
+      refreshToken: 'the-first-refresh',
+    })
+    let calls = 0
+    const renew = async () => {
+      calls += 1
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      return {
+        accessToken: `the-token-${calls}`,
+        accessTokenExpiresAt: 2000,
+        refreshToken: `the-refresh-${calls}`,
+      }
+    }
+    await Promise.all([store.renew(session, renew), store.renew(session, renew)])
+    // The refresh token of Access is single use: the session is renewed
+    // once, and the second caller waits for the result.
+    expect(calls).toBe(1)
+    expect(session.accessToken).toBe('the-token-1')
+  })
+})
+
+describe('the renewal of the tokens of a session', () => {
+  test('a token that expires soon is renewed', () => {
+    const store = new SessionStore({ ttlMs: 1000, maxAgeMs: 10_000 })
+    const session = store.create({
+      principal,
+      accessToken: 't',
+      accessTokenExpiresAt: 100_000,
+      refreshToken: 'r',
+    })
+    expect(needsRenewal(session, 100_000 - RENEWAL_MARGIN_MS - 1)).toBe(false)
+    expect(needsRenewal(session, 100_000 - RENEWAL_MARGIN_MS)).toBe(true)
+  })
+
+  test('a session that holds no refresh token is not renewed', () => {
+    const store = new SessionStore({ ttlMs: 1000, maxAgeMs: 10_000 })
+    const session = store.create({ principal, accessToken: 't', accessTokenExpiresAt: 100_000 })
+    expect(needsRenewal(session, 100_000)).toBe(false)
   })
 })
 

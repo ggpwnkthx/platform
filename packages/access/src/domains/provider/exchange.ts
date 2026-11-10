@@ -53,6 +53,18 @@ export interface TokenIssuer {
     nonce?: string | null
     scopes: string[]
   }) => Promise<TokenPair>
+  /**
+   * The refresh token of a login, when it asked for one.
+   *
+   * A client that holds no refresh token is a client that never renews.
+   */
+  issueRefreshToken?: (options: {
+    clientId: string
+    subject: string
+    tenant: string
+    audience: string
+    scopes: string[]
+  }) => Promise<string | null>
 }
 
 /** The service of the codes. */
@@ -141,7 +153,7 @@ export class CodeService {
       throw new ExchangeError('invalid_grant', 'the principal is disabled')
     }
 
-    return await this.options.tokens.issueTokens({
+    const pair = await this.options.tokens.issueTokens({
       subject: principal.id,
       tenant: principal.tenantSlug,
       audience: record.audience,
@@ -150,5 +162,15 @@ export class CodeService {
       scopes: record.scopes,
       nonce: record.nonce,
     })
+    // A login that asked for the scope of the refresh tokens is given
+    // one: it is the credential the client renews its tokens with (§7.6).
+    const refreshToken = await this.options.tokens.issueRefreshToken?.({
+      clientId: record.clientId,
+      subject: principal.id,
+      tenant: principal.tenantSlug,
+      audience: record.audience,
+      scopes: record.scopes,
+    })
+    return refreshToken ? { ...pair, refreshToken } : pair
   }
 }
