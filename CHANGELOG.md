@@ -10,6 +10,8 @@ in the same commit as the code.
 
 ## Unreleased
 
+## 1.2.1
+
 ### The caller of the console signs in once
 
 The token of Access lives five minutes, and the console kept it on the server: the caller was sent to the provider of the tenant again every five minutes, and the badge of the header offered the renewal as a thing to choose. The platform held no refresh token at all, and the specification deferred the feature.
@@ -17,6 +19,7 @@ The token of Access lives five minutes, and the console kept it on the server: t
 Access issues one now, to a client that asks for it with the scope `offline_access`: an opaque token of thirty-two bytes, kept under its hash, spent by its first exchange and rotated by the exchange that redeems it. The gateway asks for no scope, and it is given none.
 
 The console renews the token of the caller on the server, a minute before it dies: the browser is never sent to the provider of the tenant, and it never sees a token. The badge of the header counts the renewed token down, and a session that cannot renew itself offers the sign-in again. **Contract:** [access spec §7.6](docs/access/spec.md#76-refresh-token), [console spec §3.1](docs/console/spec.md#31-the-token-of-the-caller).
+
 
 ## 1.2.0
 
