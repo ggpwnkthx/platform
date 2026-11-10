@@ -24,6 +24,7 @@ import {
 import type { AccessDependencies } from '../app/dependencies'
 import { createAdministrationService } from './adapters'
 import { change, platformScope } from '../domains/administration'
+import { callerAddress } from '../domains/forwarding'
 import { createLogger, MetricsStore, type Logger, type Observer } from '../observability'
 import { startListener, type StartedListener } from '../platform/bun/listener'
 import {
@@ -449,6 +450,12 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
     }),
     publicUrl: settings.public.publicUrl,
     peerAddress: (request: Request) => peer.address(request),
+    callerAddress: (request: Request) =>
+      callerAddress({
+        peerAddress: peer.address(request),
+        headers: request.headers,
+        ingressOnly: settings.network.ingressOnly,
+      }),
     // The notice of the deprecated bearer token is written once per service.
     sharedTokenNoticeWritten: false,
   }

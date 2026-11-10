@@ -95,3 +95,55 @@ describe('the address of the caller', () => {
     expect(forwarding.clientIp).toBe('203.0.113.7')
   })
 })
+
+describe('a deployment behind an ingress that is the only way in', () => {
+  /** The context of a request of a deployment that trusts its ingress. */
+  function behind(options: { peerAddress?: string; forwardedFor?: string; hops?: number }) {
+    const headers = new Headers()
+    if (options.forwardedFor !== undefined) headers.set('x-forwarded-for', options.forwardedFor)
+    headers.set('host', 'api.example.com')
+    return resolveForwardingContext({
+      peerAddress: options.peerAddress ?? '100.100.0.57',
+      headers,
+      trustedProxies: [],
+      trustedProxyHops: options.hops,
+      ingressOnly: true,
+      externalProto: 'https',
+    })
+  }
+
+  test('the ingress reports the address it observed', () => {
+    const forwarding = behind({ forwardedFor: '203.0.113.7' })
+    expect(forwarding.clientIp).toBe('203.0.113.7')
+    expect(forwarding.chain).toEqual(['203.0.113.7', '100.100.0.57'])
+  })
+
+  test('a client cannot choose the address the gateway attributes to it', () => {
+    // The ingress appends the address it observed to the chain the
+    // client sent, and the entry the client wrote is on the left.
+    const forwarding = behind({ forwardedFor: '192.0.2.66, 203.0.113.7' })
+    expect(forwarding.clientIp).toBe('203.0.113.7')
+    expect(forwarding.chain).toEqual(['203.0.113.7', '100.100.0.57'])
+  })
+
+  test('a request without a chain is the peer', () => {
+    const forwarding = behind({})
+    expect(forwarding.clientIp).toBe('100.100.0.57')
+    expect(forwarding.chain).toEqual(['100.100.0.57'])
+  })
+
+  test('the host of the request is the one the caller used', () => {
+    // The ingress keeps the host of the caller, and a caller that names
+    // another host in a header chooses nothing.
+    const headers = new Headers({ 'x-forwarded-host': 'evil.example.com' })
+    headers.set('host', 'api.example.com')
+    const forwarding = resolveForwardingContext({
+      peerAddress: '100.100.0.57',
+      headers,
+      trustedProxies: [],
+      ingressOnly: true,
+      externalProto: 'https',
+    })
+    expect(forwarding.host).toBe('api.example.com')
+  })
+})

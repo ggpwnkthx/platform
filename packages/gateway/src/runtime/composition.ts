@@ -747,6 +747,7 @@ export async function createRuntime(
     },
     externalProto: settings.network.externalProto,
     trustedProxyHops: settings.network.trustedProxyHops,
+    ingressOnly: settings.network.ingressOnly,
     ...(settings.tls.names.length > 0
       ? {
           tls: {

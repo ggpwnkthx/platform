@@ -68,7 +68,8 @@ export default createRoute(async (c) => {
   let refusal = null
   if (credential) {
     try {
-      tenants = await services.admin(credential).tenants()
+      const caller = c.get('callerAddress')
+      tenants = await services.admin(credential, ...(caller ? [caller] : [])).tenants()
     } catch (error) {
       if (!(error instanceof AccessError) || error.status >= 500) throw error
       refusal = refusalOf(error)

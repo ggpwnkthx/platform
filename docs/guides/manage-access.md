@@ -181,6 +181,8 @@ Revoking grants does not end anyone's session: the person stays signed in and is
 
 Every administration change writes an audit row in the same statement, naming the action, target, tenant, operator, address and request id ([Access spec §10.15](../access/spec.md#1015-get-v1adminaudit)). The operator is the credential's name when it has one, otherwise the first twelve hex characters of its digest, which is why per-operator tenant credentials make the audit readable. A tenant credential sees only its own tenant's rows.
 
+The address of a row is the address of the caller, when the deployment is behind an ingress that is the only way in: the ingress reports it, the gateway resolves it and the console passes it on ([Access spec §10.1](../access/spec.md#101-common-rules)). A deployment that reads the address of the socket instead names the proxy that carried the request, and every change of every operator then carries the same address.
+
 ```bash
 curl -sS "$ACCESS/v1/admin/audit?tenant=acme&action=grant.revoked&limit=50" \
   -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"

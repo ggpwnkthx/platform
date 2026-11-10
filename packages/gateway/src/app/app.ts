@@ -76,6 +76,7 @@ function forwardingOf(
     headers: context.req.raw.headers,
     trustedProxies: snapshot?.trustedProxies ?? [],
     trustedProxyHops: dependencies.trustedProxyHops,
+    ingressOnly: dependencies.ingressOnly,
     externalProto: dependencies.externalProto,
   })
 }

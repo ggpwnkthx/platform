@@ -319,17 +319,40 @@ the operator, and the second apply binds the names.
 ### 5. The address of the caller
 
 The gateway is behind the ingress of the environment, and the ingress is
-the peer of the gateway: the address of the caller is the address of the
+the peer of the gateway: the address of the peer is the address of the
 ingress, and every caller of the deployment shares it. The gateway trusts
 a range of at most sixteen addresses ([gateway spec §7.3](../../../docs/gateway/spec.md#73-forwarding-headers-and-client-address)),
 and the ranges of the ingress of an environment are far more than that, so
-`trusted_proxy_cidrs` is empty and the budgets of the callers are the
-budgets of the deployment.
+`trusted_proxy_cidrs` is empty.
 
-Two things follow, and they are the next work: the address of the caller
-has to reach the gateway through a proxy that proves itself, and the
-gateway has to reach its identity provider at its internal address
-instead of at the public name of the deployment.
+The deployment therefore says that the environment is the only way in:
+`GATEWAY_INGRESS_ONLY`, `ACCESS_INGRESS_ONLY` and `CONSOLE_INGRESS_ONLY`
+are `true`. Every peer of the three services is then the ingress of the
+environment, and the ingress reports the address it observed in
+`x-forwarded-for` and in `x-real-ip`. The gateway reads the address of the
+caller from that chain, the console passes it on to Access, and the audit
+of Access names the operator that made the change instead of the proxy
+that carried the request.
+
+The host and the protocol of the request are not read from the headers in
+that case: the ingress keeps the host the caller used, and a caller that
+names another host chooses nothing.
+
+The budgets of the callers are the budgets of the deployment as long as
+the address of the caller is the address of the ingress, and they are the
+budgets of the callers once the address is resolved: the rate limits of
+the gateway are the limits of the deployment, and they are the limits of
+its callers once the ingress is trusted.
+
+One thing is still the next work: the gateway has to reach its identity
+provider at its internal address instead of at the public name of the
+deployment.
+
+The address of the caller is read from the chain the environment
+forwards, and the chain is what the environment writes in
+`x-forwarded-for`. A deployment whose environment does not write the
+address of the caller there shows the address of the ingress in the
+audit, and the flag changes nothing.
 
 ### 6. The migration of the schema
 

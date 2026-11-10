@@ -381,6 +381,7 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
       trustedProxies: parsed.GATEWAY_TRUSTED_PROXIES,
       trustedProxiesConfigured: env.GATEWAY_TRUSTED_PROXIES !== undefined,
       trustedProxyHops: parsed.GATEWAY_TRUSTED_PROXY_HOPS,
+      ingressOnly: parsed.GATEWAY_INGRESS_ONLY ?? false,
     },
     tls: {
       names: parsed.GATEWAY_TLS_NAMES,

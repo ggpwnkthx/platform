@@ -34,7 +34,7 @@ export interface Services {
   readonly context: ContextClient | null
   readonly credentials: AdminCredentials
   /** The client of the administration, with a credential. */
-  admin: (credential: string) => AdminClient
+  admin: (credential: string, callerAddress?: string) => AdminClient
   /** The client of the data of a workspace, for a caller. */
   data: (workspaceId: string, token: string) => DataClient
   /** The status of the services of the platform. */
@@ -61,11 +61,12 @@ export function compose(config: ConsoleConfig, stores?: Stores): Services {
     tenants: config.tenantAdminTokens,
   }
   const tenantIds = new Map<string, { id: string | null; at: number }>()
-  const admin = (credential: string): AdminClient =>
+  const admin = (credential: string, callerAddress?: string): AdminClient =>
     new AdminClient({
       accessUrl: config.accessUrl,
       credential,
       timeoutMs: config.requestTimeoutMs,
+      ...(callerAddress ? { callerAddress } : {}),
     })
 
   return {

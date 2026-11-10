@@ -864,6 +864,21 @@ The effective host decides the route, the origin compared with the browser's,
 and the value the signature covers. Behind an ingress that rewrites `Host`, the
 ingress must report the public host in `x-forwarded-host`.
 
+**A deployment behind an ingress that is the only way in.** A deployment whose
+ingress cannot be named — the environment of a cloud provider, whose proxies
+are addresses of the platform and not addresses of the deployment — sets
+`GATEWAY_INGRESS_ONLY=true`. Every peer of the gateway is then the ingress of
+the deployment, and the chain of `x-forwarded-for` names the address the
+ingress observed: the address of the caller. The chain is read as it is read
+for a trusted proxy, so a caller that sends the header itself still chooses
+nothing: the ingress appends the address it observed, and the entry the caller
+wrote is on the left of it.
+
+The **host and the protocol of the request are not read from the headers** in
+that case. The ingress keeps the host the caller used, and a caller that names
+another host in `x-forwarded-host` chooses nothing. The trusted ranges remain
+the way to trust the host and the protocol of a request.
+
 ### 7.4 Identity signature
 
 **Key.** Signatures use the deployment's private key,

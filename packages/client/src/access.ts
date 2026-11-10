@@ -43,6 +43,14 @@ export interface AccessClientOptions {
   readonly baseUrl: string
   /** The credential of the call, when the call carries one. */
   readonly credential?: string
+  /**
+   * The address of the caller the call is made for.
+   *
+   * It is reported to Access in `x-real-ip`, and the audit of Access
+   * names it: a change made by the console is made by the operator the
+   * console serves, and not by the console itself.
+   */
+  readonly callerAddress?: string
   /** The transport of the calls. */
   readonly transport: ClientTransport
 }
@@ -88,6 +96,7 @@ export class AccessClient {
     const headers: Record<string, string> = {
       accept: 'application/json',
       ...(this.#options.credential ? { authorization: `Bearer ${this.#options.credential}` } : {}),
+      ...(this.#options.callerAddress ? { 'x-real-ip': this.#options.callerAddress } : {}),
     }
     if (body !== undefined) headers['content-type'] = 'application/json'
     const search = queryOf(query)

@@ -118,6 +118,14 @@ Scope is **read, never assumed**. A context is a snapshot: the console keeps it 
 
 The console acts with the operator's **tenant credential** when it holds one (`CONSOLE_TENANT_ADMIN_TOKENS`), and with the **platform credential** (`CONSOLE_ADMIN_TOKEN`) otherwise. Access's audit names the operator of a tenant credential, so changes to a tenant are better signed by that tenant's own operator.
 
+### 4.1 The address of the caller
+
+The console acts for the operator, and Access's audit names the address the change came from. The console therefore tells Access the address of the caller, in the `x-real-ip` header of its calls.
+
+The address is the one the **gateway** reports: the gateway resolves the address of the caller once, at the edge, and writes it in `x-real-ip` for the services it forwards to. The console passes it on.
+
+The console reads that header only when the deployment is behind an ingress that is the only way in (`CONSOLE_INGRESS_ONLY`): every peer of the console is then the gateway, and the address it reports is the address of the caller. A console that is published reads nothing — a browser that reaches the console directly chooses the header it sends, and an address it chose is not the address of a caller.
+
 ---
 
 ## 5. Ability

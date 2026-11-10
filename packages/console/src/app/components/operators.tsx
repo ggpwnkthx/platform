@@ -63,7 +63,12 @@ export async function adminFor(
   tenant: string
 ): Promise<{ admin: AdminClient } | { refusal: Response | Promise<Response> }> {
   const credential = await tenantCredential(c, tenant)
-  if (credential) return { admin: c.get('services').admin(credential) }
+  // The client acts for the operator, and the audit of Access names the
+  // address the operator came from.
+  const caller = c.get('callerAddress')
+  if (credential) {
+    return { admin: c.get('services').admin(credential, ...(caller ? [caller] : [])) }
+  }
   c.status(403)
   return {
     refusal: c.render(

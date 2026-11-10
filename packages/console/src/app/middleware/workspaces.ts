@@ -32,7 +32,10 @@ async function rightsOfCaller(c: Context): Promise<Right[] | null> {
   const tenant = session.principal.tenant
   const credential = services.credentials.tenants[tenant] ?? services.credentials.platform
   if (!credential) return null
-  const admin = services.admin(credential)
+  // The address of the caller travels with the call: Access writes it in
+  // the log of the call and in the audit of a change.
+  const caller = c.get('callerAddress')
+  const admin = services.admin(credential, ...(caller ? [caller] : []))
   try {
     const grants = await admin.all((page) => admin.grants({ tenant, live: true, ...page }))
     let user: Principal | null = null

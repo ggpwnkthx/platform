@@ -203,7 +203,7 @@ export function auditContext(
 ): AuditContext {
   return {
     operator: scope.operator ?? operatorOf(context),
-    address: dependencies.peerAddress(context.req.raw),
+    address: dependencies.callerAddress(context.req.raw),
     requestId: context.get('requestId'),
   }
 }
@@ -224,7 +224,7 @@ export async function answer(
   body: unknown,
   audit?: AuditEntry
 ): Promise<Response> {
-  const address = dependencies.peerAddress(context.req.raw)
+  const address = dependencies.callerAddress(context.req.raw)
   dependencies.logger.info('the administrative call', {
     endpoint,
     status,

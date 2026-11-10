@@ -31,6 +31,8 @@ declare module 'hono' {
     session: Session | null
     requestId: string
     scope: OperatorScope
+    /** The address of the caller, when the console knows one. */
+    callerAddress: string | undefined
   }
   interface ContextRenderer {
     // biome-ignore lint/style/useShorthandFunctionType: the renderer of Hono is augmented by declaration merging, which a type alias cannot do.

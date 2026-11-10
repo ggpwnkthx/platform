@@ -296,6 +296,16 @@ resource "azurerm_container_app" "gateway" {
         name  = "GATEWAY_TRUSTED_PROXY_HOPS"
         value = "1"
       }
+      # The environment is the edge of the deployment, and it is the only
+      # way in: the peers of the gateway are the proxies of the
+      # environment, and they append the address they observed to the
+      # chain of `x-forwarded-for`. The address of the caller is read
+      # from that chain, and the audit of Access names the operator that
+      # made the change instead of the proxy that carried the request.
+      env {
+        name  = "GATEWAY_INGRESS_ONLY"
+        value = "true"
+      }
       env {
         name  = "GATEWAY_LOG_LEVEL"
         value = "info"
@@ -601,6 +611,14 @@ resource "azurerm_container_app" "access" {
       env {
         name  = "ACCESS_LOG_LEVEL"
         value = "info"
+      }
+      # Access is only reached from inside the environment: the gateway
+      # and the console are the peers of its requests, and they report
+      # the address of the caller in `x-real-ip`. The audit of a change
+      # names the operator that made it.
+      env {
+        name  = "ACCESS_INGRESS_ONLY"
+        value = "true"
       }
       # The secrets of Access are read out of the vault of the
       # deployment: the application binds the name of the secret to the
@@ -991,6 +1009,14 @@ resource "azurerm_container_app" "console" {
       env {
         name  = "CONSOLE_LOG_LEVEL"
         value = "info"
+      }
+      # The console is only reached from inside the environment: the
+      # gateway is the peer of its requests, and it reports the address
+      # of the caller in `x-real-ip`. The console passes it on to Access,
+      # and the audit of Access names the operator that made the change.
+      env {
+        name  = "CONSOLE_INGRESS_ONLY"
+        value = "true"
       }
 
       # The secrets of the console are read out of the vault of the

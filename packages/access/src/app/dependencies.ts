@@ -134,6 +134,14 @@ export interface AccessDependencies {
   /** The address of the peer of a request: the address of the socket. */
   peerAddress: (request: Request) => string
   /**
+   * The address of the caller of a request.
+   *
+   * It is the address of the socket, unless the deployment is behind an
+   * ingress that is the only way in: the ingress reports the address of
+   * the caller, and the audit of a change names it (spec §10.1).
+   */
+  callerAddress: (request: Request) => string
+  /**
    * True when the notice of the deprecated bearer token was written.
    *
    * The notice is written once per service: a warning on every decision

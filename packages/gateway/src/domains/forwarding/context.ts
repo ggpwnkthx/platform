@@ -63,6 +63,19 @@ export interface ForwardingContextOptions {
    * right. The default is one: the deployment behind a single ingress.
    */
   trustedProxyHops?: number
+  /**
+   * True when the deployment is behind an ingress that is the only way in.
+   *
+   * Every peer of the gateway is then the ingress of the deployment, and
+   * the chain of `x-forwarded-for` names the address the ingress
+   * observed: the address of the caller.
+   *
+   * The host of the request is not read from the headers in that case:
+   * the ingress keeps the host the caller used, and a caller that names
+   * another host in `x-forwarded-host` chooses nothing. The same holds
+   * for the protocol of the request.
+   */
+  ingressOnly?: boolean
   /** The protocol the deployment is reached with, when nothing is reported. */
   externalProto: 'http' | 'https'
 }
@@ -88,8 +101,14 @@ export interface ForwardingContextOptions {
  */
 export function resolveForwardingContext(options: ForwardingContextOptions): ForwardingContext {
   const peerTrusted = ipInRanges(options.peerAddress, options.trustedProxies)
+  // The address of the caller is read from the chain when the peer is a
+  // proxy the deployment trusts. A deployment that is behind an ingress
+  // that is the only way in trusts every peer for the address: there is
+  // no other peer, and the ingress appends the address it observed to
+  // the chain it forwards.
+  const addressTrusted = peerTrusted || options.ingressOnly === true
   const forwardedFor = options.headers.get('x-forwarded-for')
-  const received = peerTrusted
+  const received = addressTrusted
     ? (forwardedFor ?? '')
         .split(',')
         .map((part) => part.trim())

@@ -207,6 +207,14 @@ export interface NetworkSettings {
    * injected, and the address of the caller is never one of the latter.
    */
   trustedProxyHops: number
+  /**
+   * True when the deployment is behind an ingress that is the only way in.
+   *
+   * Every peer of the gateway is then the ingress of the deployment, and
+   * the address of the caller is read from the chain of the forwarded
+   * addresses (spec §7.3).
+   */
+  ingressOnly: boolean
 }
 
 /**

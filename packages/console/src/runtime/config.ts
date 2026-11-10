@@ -51,6 +51,14 @@ export interface ConsoleConfig {
   readonly logLevel: LogLevel
   /** Whether the cookies of the console carry `Secure`. */
   readonly cookieSecure: boolean
+  /**
+   * True when the deployment is behind an ingress that is the only way in.
+   *
+   * The console then tells Access the address the gateway reports, and
+   * the audit of Access names the operator that made the change instead
+   * of the ingress that carried the request.
+   */
+  readonly ingressOnly: boolean
 }
 
 /** A configuration that cannot be used. */
@@ -334,6 +342,7 @@ export function readConfig(env: Environment): ConsoleConfig {
     }),
     logLevel,
     cookieSecure: false,
+    ingressOnly: false,
   }
 
   const secure = readValue(env, 'CONSOLE_COOKIE_SECURE')
@@ -342,6 +351,16 @@ export function readConfig(env: Environment): ConsoleConfig {
   }
   config.cookieSecure =
     secure === undefined ? config.publicUrl.protocol === 'https:' : secure === 'true'
+
+  // The deployment that is behind an ingress that is the only way in
+  // says so: the console then tells Access the address the gateway
+  // reports, and the audit of Access names the operator and not the
+  // ingress.
+  const ingressOnly = readValue(env, 'CONSOLE_INGRESS_ONLY')
+  if (ingressOnly !== undefined && ingressOnly !== 'true' && ingressOnly !== 'false') {
+    problems.push('CONSOLE_INGRESS_ONLY is neither true nor false')
+  }
+  config.ingressOnly = ingressOnly === 'true'
 
   // A production console that sends its cookies in the clear sends the
   // session of an operator in the clear.

@@ -30,6 +30,15 @@ interface NetworkSettings {
   host: string
   /** The port the listener binds to. */
   port: number
+  /**
+   * True when the deployment is behind an ingress that is the only way in.
+   *
+   * Every peer of the service is then the ingress of the deployment, and
+   * the address the ingress reports in `x-real-ip` is the address of the
+   * caller. The audit of a change then names the operator that made it
+   * and not the ingress that carried the request (spec §10.1).
+   */
+  ingressOnly: boolean
 }
 
 /** The urls the browser and the gateway use. */
@@ -300,6 +309,7 @@ export type Env = Record<string, string | undefined>
 const EnvSchema = z.object({
   ACCESS_HOST: z.string().default('0.0.0.0'),
   ACCESS_PORT: intEnv(8081, { min: 0, max: 65_535 }),
+  ACCESS_INGRESS_ONLY: boolEnv(),
 
   ACCESS_ISSUER: z.string().optional(),
   ACCESS_PUBLIC_URL: z.string().optional(),
@@ -688,6 +698,7 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
     network: {
       host: parsed.ACCESS_HOST,
       port: parsed.ACCESS_PORT,
+      ingressOnly: parsed.ACCESS_INGRESS_ONLY ?? false,
     },
     public: {
       issuer: issuer!,

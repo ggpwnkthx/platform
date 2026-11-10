@@ -158,7 +158,7 @@ export async function revokeGrantHandler(
     dependencies.logger.info('the administrative call', {
       endpoint,
       status: 204,
-      address: dependencies.peerAddress(context.req.raw),
+      address: dependencies.callerAddress(context.req.raw),
       action: audit.action,
       id: audit.id,
       ...(audit.tenant ? { tenant: audit.tenant } : {}),

@@ -16,6 +16,7 @@
     "@platform/client": "workspace:*",
     "hono": "4.13.13",
     "honox": "0.1.62",
+    "ipaddr.js": "2.5.0",
     "jose": "6.2.12"
   },
   "devDependencies": {

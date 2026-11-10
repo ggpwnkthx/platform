@@ -43,6 +43,20 @@ describe('the configuration of the console', () => {
     }
   })
 
+  test('the deployment behind an ingress says so', () => {
+    expect(readConfig(BASE).ingressOnly).toBe(false)
+    expect(readConfig({ ...BASE, CONSOLE_INGRESS_ONLY: 'true' }).ingressOnly).toBe(true)
+    try {
+      readConfig({ ...BASE, CONSOLE_INGRESS_ONLY: 'yes' })
+      throw new Error('the configuration was accepted')
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigError)
+      expect((error as ConfigError).problems.join('\n')).toContain(
+        'CONSOLE_INGRESS_ONLY is neither true nor false'
+      )
+    }
+  })
+
   test('a production console in the clear has to say so', () => {
     expect(() => readConfig({ ...BASE, CONSOLE_PUBLIC_URL: 'http://console.example.com' })).toThrow(
       ConfigError

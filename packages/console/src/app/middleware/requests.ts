@@ -7,6 +7,7 @@
 import type { MiddlewareHandler } from 'hono'
 import { createMiddleware } from 'hono/factory'
 import { secureHeaders } from 'hono/secure-headers'
+import { callerAddress } from '../../domains/forwarding'
 import { services } from '../../runtime/services'
 import { readSession, writeSessionCookie } from './session'
 
@@ -19,6 +20,15 @@ export const requestContext: MiddlewareHandler = createMiddleware(async (c, next
   const presented = c.req.header('x-request-id')
   const requestId = presented && REQUEST_ID.test(presented) ? presented : crypto.randomUUID()
   c.set('requestId', requestId)
+  // The address of the caller: the gateway resolved it, and the console
+  // tells Access of it when it acts for the operator.
+  c.set(
+    'callerAddress',
+    callerAddress({
+      headers: c.req.raw.headers,
+      ingressOnly: composed.config.ingressOnly,
+    })
+  )
   const started = performance.now()
   await next()
   c.header('x-request-id', requestId)

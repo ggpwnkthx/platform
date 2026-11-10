@@ -166,7 +166,7 @@ export async function callbackHandler(
       // The facts of the call, for the audit of the principal that the
       // login creates (spec §10.1).
       facts: {
-        address: dependencies.peerAddress(context.req.raw),
+        address: dependencies.callerAddress(context.req.raw),
         requestId: context.get('requestId'),
       },
     })
@@ -186,7 +186,7 @@ export async function callbackHandler(
           },
           {
             operator,
-            address: dependencies.peerAddress(context.req.raw),
+            address: dependencies.callerAddress(context.req.raw),
             requestId: context.get('requestId'),
           }
         )

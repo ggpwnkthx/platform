@@ -86,6 +86,14 @@ export interface GatewayDependencies {
    * forwarded addresses from the ones a client injected.
    */
   trustedProxyHops: number
+  /**
+   * True when the deployment is behind an ingress that is the only way in.
+   *
+   * Every peer of the gateway is then the ingress of the deployment, and
+   * the address of the caller is read from the chain of the forwarded
+   * addresses (spec §7.3).
+   */
+  ingressOnly: boolean
   /** The bearer token that guards the metrics endpoint. */
   metricsToken?: string
   /** The observer of the gateway. */

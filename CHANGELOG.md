@@ -16,6 +16,14 @@ The interface of `platformctl tui` went silent while a deployment went on: the h
 
 The work of the interface is named and timed now: the line above the keys says what the interface waits for — the answers of a deployment, the deployment itself — and how long it has been waiting for it, and the frame is drawn again while the work goes on. The wizard tells what it does as it does it, on the standard error, and the words are in the log of the interface: the deployment is applied, the certificate of every public name is bound, the job of the migration is started, and the administration of Access is asked for its tenants. A wait of the client of Azure that goes on too long ends: the client is stopped, and what it did not do is written again the next time the deployment goes on.
 
+### The audit of a change names the operator that made it
+
+The audit of a deployment on Azure named the address of the ingress of the environment and nothing else: every change of every operator of the deployment carried the same two or three addresses of the proxies of the environment, and the reader of the audit could not tell one operator from another.
+
+The address of the caller is resolved once, at the edge, and it is the address of the caller: the gateway reads it from the chain the ingress forwards, the console passes it on to Access, and the audit of a change names the operator that made it. The deployment says that the environment is the only way in — `GATEWAY_INGRESS_ONLY`, `ACCESS_INGRESS_ONLY` and `CONSOLE_INGRESS_ONLY` — and the three services trust the address the ingress reports in `x-real-ip`.
+
+The trust of the header is the trust of the deployment, and it is narrow: a service that is published reads nothing, the host and the protocol of a request are not read from the headers when the ingress cannot be named, and the limiter of the administration keeps the address of the socket — a caller that names another address does not spend the budget of the address it names. **Contract:** [gateway spec §7.3](docs/gateway/spec.md#73-forwarding-headers-and-client-address), [access spec §10.1](docs/access/spec.md#101-common-rules), [console spec §4.1](docs/console/spec.md#41-the-address-of-the-caller).
+
 ## 1.1.0
 
 ### The deployment that is selected is applied again

@@ -193,6 +193,11 @@ List the ingress ranges, as narrowly as possible, in `GATEWAY_TRUSTED_PROXIES`, 
 `GATEWAY_TRUSTED_PROXY_HOPS` to the number of proxies in front (`2` for a load balancer plus an ingress), so
 a client cannot choose its own address ([spec §7.3](spec.md#73-forwarding-headers-and-client-address)).
 
+A deployment whose ingress cannot be named — the environment of a cloud provider, whose proxies are
+addresses of the platform — sets `GATEWAY_INGRESS_ONLY=true` instead. Every peer of the gateway is then
+the ingress of the deployment, and the address of the caller is read from the chain of `x-forwarded-for`
+([spec §7.3](spec.md#73-forwarding-headers-and-client-address)).
+
 > [!IMPORTANT]
 > An ingress that rewrites `Host` must send the public host in `x-forwarded-host`, or no route matches.
 

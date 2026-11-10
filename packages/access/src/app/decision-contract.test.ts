@@ -38,6 +38,7 @@ function dependencies(decide: () => Promise<DecisionFacts>): AccessDependencies 
     accessToken: TOKEN,
     publicUrl: 'https://access.example.com',
     peerAddress: () => '127.0.0.1',
+    callerAddress: () => '127.0.0.1',
     sharedTokenNoticeWritten: false,
   }
 }

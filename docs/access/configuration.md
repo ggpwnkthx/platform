@@ -19,6 +19,7 @@ Development values are in [`packages/access/.env.example`](../../packages/access
 | `ACCESS_ENVIRONMENT` | `development` | — | `development` or `production`. Production turns on the requirements of §4.4; the fixtures refuse to run in production. |
 | `ACCESS_HOST` | `0.0.0.0` | optional | Listener address. |
 | `ACCESS_PORT` | `8081` | optional | Listener port, a whole number from `0` to `65535`. |
+| `ACCESS_INGRESS_ONLY` | `false` | optional | `true`, `false`, `1` or `0`. Says that the deployment is behind an ingress that is the only way in: every peer of the service is then the ingress, and the address it reports in `x-real-ip` is the address of the caller. The audit of a change names the operator that made it and not the ingress that carried the request ([spec §10.1](spec.md#101-common-rules)). |
 | `ACCESS_ISSUER` | `http://localhost:<ACCESS_PORT>` in development; none in production | required | Public issuer URL: the `iss` of every issued token and the issuer the gateway is configured with. Must be an absolute `http` or `https` URL, and the URL the browser and the gateway use. |
 | `ACCESS_PUBLIC_URL` | the issuer | optional | Public URL, when it differs from the issuer. Must be an absolute `http` or `https` URL. The discovery document builds its endpoints from it (§7.5). |
 

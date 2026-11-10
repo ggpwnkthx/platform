@@ -25,6 +25,7 @@ describe('the environment of Access', () => {
     expect(settings.production).toBe(false)
     expect(settings.network.host).toBe('0.0.0.0')
     expect(settings.network.port).toBe(8081)
+    expect(settings.network.ingressOnly).toBe(false)
     expect(settings.public.issuer).toBe('http://localhost:8081')
     expect(settings.public.publicUrl).toBe('http://localhost:8081')
     expect(settings.timeouts.idpTimeoutMs).toBe(5_000)
@@ -33,6 +34,21 @@ describe('the environment of Access', () => {
     expect(settings.observability.logLevel).toBe('info')
     expect(settings.store.allowMemoryState).toBe(false)
     expect(settings.store.url).toBeUndefined()
+  })
+
+  test('a deployment behind an ingress says so', () => {
+    expect(
+      readEnv({
+        ACCESS_DATABASE_URL: 'postgres://localhost:5432/access',
+        ACCESS_INGRESS_ONLY: 'true',
+      }).network.ingressOnly
+    ).toBe(true)
+    expect(
+      readEnv({
+        ACCESS_DATABASE_URL: 'postgres://localhost:5432/access',
+        ACCESS_INGRESS_ONLY: 'false',
+      }).network.ingressOnly
+    ).toBe(false)
   })
 
   test('the public url of Access defaults to the issuer', () => {

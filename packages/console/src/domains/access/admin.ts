@@ -36,6 +36,13 @@ export interface AdminClientOptions {
   readonly credential: string
   readonly timeoutMs: number
   readonly fetch?: Fetch
+  /**
+   * The address of the caller the calls are made for.
+   *
+   * It is the address the gateway reported, and Access writes it in the
+   * audit of the changes the console makes.
+   */
+  readonly callerAddress?: string
 }
 
 /** The client of the administration of Access. */
@@ -47,6 +54,7 @@ export class AdminClient {
       baseUrl: options.accessUrl,
       credential: options.credential,
       transport: transportOf('Access', options.fetch ?? fetch, options.timeoutMs),
+      ...(options.callerAddress ? { callerAddress: options.callerAddress } : {}),
     })
   }
 

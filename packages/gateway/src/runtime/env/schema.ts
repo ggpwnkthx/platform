@@ -360,6 +360,21 @@ export const EnvSchema = z.object({
    * the usual one.
    */
   GATEWAY_TRUSTED_PROXY_HOPS: intEnv(1, { min: 1, max: 16 }),
+  /**
+   * True when the deployment is behind an ingress that is the only way in.
+   *
+   * Every peer of the gateway is then the ingress of the deployment, and
+   * the chain of `x-forwarded-for` names the address the ingress
+   * observed: the address of the caller. A deployment whose ingress
+   * cannot be named — the environment of a cloud provider, whose proxies
+   * are addresses of the platform and not addresses of the deployment —
+   * says so, and the address of the caller is read from the chain.
+   *
+   * The host and the protocol of the request are not read from the
+   * headers in that case: the ingress keeps the host the caller used, and
+   * a caller chooses nothing by naming another host.
+   */
+  GATEWAY_INGRESS_ONLY: boolEnv(),
   GATEWAY_EXTERNAL_PROTO: z.enum(['http', 'https']).default('http'),
   /**
    * The names the certificate of the deployment covers.
