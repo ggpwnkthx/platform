@@ -204,6 +204,8 @@ export class Interface {
   private body?: unknown
   /** True while the interface is at work. */
   private working = false
+  /** The number of the works the interface has begun. */
+  private works = 0
   /** True while the interface runs. */
   private running = true
   /** The timer that refreshes the page. */
@@ -234,6 +236,12 @@ export class Interface {
     await this.loadDeployments()
     this.timer = setInterval(() => {
       void this.refresh()
+      // The work of the interface takes a while — a deployment takes
+      // minutes — and a reader who sees a frame that does not move
+      // cannot tell a long wait from a hang. The frame is drawn again
+      // while the work goes on, and the time it has been going on
+      // moves with it.
+      if (this.state.busy) this.render()
     }, REFRESH)
     try {
       while (this.running) {
@@ -274,20 +282,63 @@ export class Interface {
   /**
    * The work the interface does beside its loop.
    *
+   * The work is named and timed: the reader sees what the interface
+   * waits for, and how long it has been waiting for it.
+   *
    * @param work the work.
+   * @param what what the work is, in one line.
    */
-  private async at(work: () => Promise<void>): Promise<void> {
-    if (this.working) return
+  private async at(work: () => Promise<void>, what?: string): Promise<void> {
+    if (this.working) {
+      // The interface is at work: the work the reader asks for waits
+      // for the work that goes on, and it says so.
+      this.dispatch({
+        type: 'message',
+        message: {
+          text: 'the interface is at work: this waits for the work that goes on',
+          kind: 'info',
+        },
+      })
+      return
+    }
     this.working = true
     this.dispatch({ type: 'busy', busy: true })
+    const begun = what === undefined ? undefined : this.begin(what)
     try {
       await work()
     } catch (error) {
       this.report(error)
     } finally {
       this.working = false
+      if (begun !== undefined) this.end(begun)
       this.dispatch({ type: 'busy', busy: this.reads > 0 })
     }
+  }
+
+  /**
+   * Names the work the interface is at, and times it.
+   *
+   * @param what what the work is, in one line.
+   * @returns the number of the work, and `end` takes it.
+   */
+  private begin(what: string): number {
+    this.works += 1
+    this.dispatch({ type: 'work', work: { what, since: Date.now() } })
+    return this.works
+  }
+
+  /**
+   * Ends a work, when it is the one the interface is at.
+   *
+   * A work that is not the one at the moment does not end the work
+   * that is: the answers of a deployment that the reader stopped
+   * waiting for do not end the deployment that goes on.
+   *
+   * @param work the number of the work.
+   */
+  private end(work: number): void {
+    if (this.works !== work) return
+    this.dispatch({ type: 'work', work: undefined })
   }
 
   /**
@@ -618,6 +669,7 @@ export class Interface {
     const work = async (): Promise<void> => {
       this.reads += 1
       this.dispatch({ type: 'busy', busy: true })
+      const begun = this.begin('the answers of the deployment are read')
       try {
         const found = await answers(this.templates, await this.defaults(), environment)
         // The reader left the form, or asked for the answers of
@@ -643,6 +695,7 @@ export class Interface {
         })
       } finally {
         this.reads -= 1
+        this.end(begun)
         this.dispatch({ type: 'busy', busy: this.working || this.reads > 0 })
       }
     }
@@ -1742,7 +1795,7 @@ export class Interface {
     this.dispatch({ type: 'message', message: undefined })
     await this.at(async () => {
       await this.runDeployment(values)
-    })
+    }, `the deployment of ${provider.name} goes on`)
   }
 
   /**

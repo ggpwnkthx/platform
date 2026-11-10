@@ -107,6 +107,8 @@ When your session of Azure holds more than one subscription, the first field of 
 
 The creation of a deployment is the wizard of the CLI and not a second wizard: the interface collects the answers of the operator, writes them in a file of answers and runs `platformctl deploy` with it. The words of the wizard are the log of the interface, and the deployment is applied with the plan the wizard shows. The operator signs in to the cloud of the provider before the interface runs it, and the wizard asks the cloud for the subscription it uses when the operator holds more than one.
 
+A deployment takes minutes, and the interface says so while it takes them: the line above the keys names the work the interface is at — the answers of a deployment, the deployment itself — and how long it has been going on, and the frame is drawn again while the work goes on. The words of the wizard that come after the apply are in the log too: the binding of the certificates of the public names, the job of the migration of the schema and the wait for Access to come up are said as they happen, and a reader who waits is never left with a screen that does not move and says nothing.
+
 ## What it does not do
 
 The interface is a reader and a writer of the things the commands write. It does not sign anybody in, it does not hold the credential of the caller in the terminal, it writes no credential anywhere, and it leaves no state of its own: the only files it touches are the file of the profiles and the file of the answers of a deployment, and both are files the commands touch as well.

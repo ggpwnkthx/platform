@@ -650,6 +650,11 @@ describe('the wizard of a deployment', () => {
         ]),
         afterApply: async (context) => {
           bound.push({ values: context.values, outputs: context.outputs })
+          // The binding of a name waits for the records of DNS of the
+          // name: the wizard says what it waits for as it waits.
+          context.tell?.(
+            'the certificate of the name api.example.com is bound to the gateway: this waits for the records of DNS of the name'
+          )
           return ['the certificate of the name api.example.com is bound to the gateway']
         },
       }
@@ -676,7 +681,7 @@ describe('the wizard of a deployment', () => {
         errored: false,
         planFile: join(runtime, 'plan.bin'),
       }
-      const { runtime: cli, out } = runtimeOf([provider], tool)
+      const { runtime: cli, out, progress } = runtimeOf([provider], tool)
       const status = await run(cli, [
         'deploy',
         'azure',
@@ -700,6 +705,11 @@ describe('the wizard of a deployment', () => {
       expect(bound[0]?.outputs.public_names).toEqual({ api: 'api.example.com' })
       expect(out.join('\n')).toContain(
         'the certificate of the name api.example.com is bound to the gateway'
+      )
+      // The wizard says what it waits for while it waits for it: the
+      // words are on the standard error, beside the answer.
+      expect(progress.join('\n')).toContain(
+        'the certificate of the name api.example.com is bound to the gateway: this waits for the records of DNS of the name'
       )
     } finally {
       await rm(directory, { recursive: true, force: true })
@@ -2852,6 +2862,38 @@ describe('the certificate of the public names', () => {
       expect(notes?.join('\n')).toContain(
         'the certificate of the name api.example.com is bound to the gateway'
       )
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the deployment tells the operator what it does while it goes on', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-certificate-'))
+    try {
+      const binary = join(directory, 'az')
+      const calls = join(directory, 'calls')
+      await writeFile(binary, CLIENT_BINDING(calls))
+      await chmod(binary, 0o755)
+      const provider = azureProvider([], { PATH: process.env.PATH ?? '', AZURE_CLI: binary })
+      const told: string[] = []
+      await provider.afterApply?.({
+        values: { public_names_enabled: 'true' },
+        outputs: {
+          container_apps: { gateway: 'platform-production-gateway' },
+          container_app_environment: 'platform-production-environment',
+          resource_group_name: 'platform-production',
+          public_names: { api: 'api.example.com' },
+          migration_job: 'platform-production-migrate',
+        },
+        tell: (text) => told.push(text),
+      })
+      // The binding of a name waits for the records of DNS of the
+      // name, and the wait is a wait of minutes: the operator is told
+      // what the deployment waits for, and not left with a silence.
+      expect(told.join('\n')).toContain(
+        'the certificate of the name api.example.com is bound to the gateway'
+      )
+      expect(told.join('\n')).toContain('the job of the migration of the schema is started')
     } finally {
       await rm(directory, { recursive: true, force: true })
     }

@@ -61,7 +61,19 @@ export function hintsOf(state: State): readonly Hint[] {
     ]
   }
   if (state.form) {
-    if (state.busy) return [['', 'the interface waits for the work to end']]
+    if (state.busy) {
+      return [
+        [
+          '',
+          state.work
+            ? `the interface is at work: ${state.work.what}`
+            : 'the interface waits for the work to end',
+        ],
+        // The work of the interface takes a while, and the reader who
+        // waits for it has to be able to leave.
+        ['ctrl+c', 'quit'],
+      ]
+    }
     const field = state.form.fields[state.form.focus]
     const change: Hint[] =
       field?.kind === 'text'
@@ -229,6 +241,11 @@ function statusOf(state: State, width: number, color: boolean): string[] {
     lines = wrapOf(`${mark} ${state.message.text}`, width - 2, 3).map((line) =>
       paint(` ${line}`, kind === 'error' ? 'red' : kind === 'ok' ? 'green' : 'dim', color)
     )
+  } else if (state.work) {
+    // The work of the interface takes a while, and the reader must see
+    // that the interface is alive: the line says what the interface
+    // waits for, and how long it has been waiting for it.
+    lines = [paint(` ${state.work.what} · ${elapsedOf(state.work.since)}`, 'dim', color)]
   }
   // What the interface says comes before where the reader is: the
   // place in the list is drawn when the last line has the room for it.
@@ -238,6 +255,23 @@ function statusOf(state: State, width: number, color: boolean): string[] {
     lines[lines.length - 1] = `${last}${' '.repeat(gap)}${paint(right, 'dim', color)}`
   }
   return lines
+}
+
+/**
+ * The time a work has been going on, as the reader reads it.
+ *
+ * The time is read in the words of the reader: seconds while the work
+ * is short, and minutes when it is long. A work of two minutes and a
+ * half is three minutes, and not a hundred and fifty seconds.
+ *
+ * @param since the moment the work began, in milliseconds.
+ * @param now the moment the time is read, in milliseconds.
+ */
+export function elapsedOf(since: number, now: number = Date.now()): string {
+  const seconds = Math.max(0, Math.round((now - since) / 1000))
+  if (seconds < 60) return `${seconds} ${seconds === 1 ? 'second' : 'seconds'}`
+  const minutes = Math.round(seconds / 60)
+  return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`
 }
 
 /**

@@ -4,6 +4,21 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DryRunHttp, FetchHttp } from '../src/platform/http'
 import { FileCredentialStore, FileProfileStore } from '../src/platform/files'
+import { run } from '../src/platform/process'
+
+describe('the running of a program', () => {
+  test('a program that answers in time is answered', async () => {
+    const answer = await run('/bin/sh', ['-c', 'echo the words'])
+    expect(answer.status).toBe(0)
+    expect(answer.stdout.trim()).toBe('the words')
+  })
+
+  test('a program that does not answer in time is stopped', async () => {
+    const answer = await run('/bin/sh', ['-c', 'sleep 30'], { timeoutMs: 200 })
+    expect(answer.status).toBe(124)
+    expect(answer.stderr).toContain('did not answer in 200 milliseconds')
+  })
+})
 
 describe('the transport of the CLI', () => {
   test('a dry run sends nothing and answers the request it would have sent', async () => {

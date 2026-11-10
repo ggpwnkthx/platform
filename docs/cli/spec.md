@@ -270,6 +270,8 @@ The answer of the wizard is what the apply did: the plan is shown before the que
 
 The wizard binds what the templates of the deployment cannot write. The public names of the deployment are custom domains of the gateway, and the provider of the infrastructure of Azure writes a custom domain without a certificate: it has no resource that binds the certificate of the environment of the container apps to a name of an application. The certificate of a name is bound by the client of Azure, and the environment of the container apps issues it and renews it. The wizard binds the certificate of every public name after the apply, and it says what it bound and what it could not bind: a binding that does not go through is not a failure of the deployment, and it is written again the next time the deployment goes on.
 
+The binding of a name waits for the records of DNS of the name, and the wait is a wait of minutes: the wizard says what it waits for as it waits for it, on the standard error. The job of the migration of the schema and the wait for Access to come up are told the same way: a deployment that goes on says so, and an operator — or an interface that runs the wizard — is never left with a silence that lasts minutes. A wait of the client of Azure that goes on too long ends: the client is stopped, and the binding is written again the next time the deployment goes on.
+
 A question of the wizard is asked in the words of the CLI, in lower case, and the default of the question is written in brackets after it: the operator answers nothing and takes the default. The question is written on one line and the answer is written on the next, after a marker.
 
 A dry run writes nothing, tells the steps the deployment takes in the words of the deployment, and applies nothing. It signs nobody in either: it reads the facts the machine of the operator already holds, and it asks what it cannot read. The steps name what the deployment does and not the commands of the tool: the commands of the tool are the business of the tool.
@@ -428,6 +430,8 @@ The interface reads the keys of the terminal and nothing else: a script that dri
 | `q`, `ctrl` and `c` | Quits, and the terminal is given back the way it was found. |
 
 The forms of a principal and of a grant hold what the interface knows: the tenant and the principal the reader came from, and the workspace of the profile. Their fields offer the tenants of the deployment, the principals of the tenant by their address, and the permissions, the workspaces, the routes and the operators the grants the interface has read name; a field takes any text, and an offer is never the only answer. A principal the reader names by its address is written in the grant by its identifier. A principal that is registered holds no grant, and the interface asks at once whether to give it one: a yes opens the form of a grant of that principal.
+
+The work of the interface is named and timed: the line above the keys says what the interface waits for — the answers of a deployment, the deployment itself — and how long it has been waiting for it, and the frame is drawn again while the work goes on. A reader who sees a frame that does not move knows that the interface is at work, and not that it is hung. The reader who waits for a long work leaves it with `ctrl` and `c` together, and the terminal is given back the way it was found.
 
 ### 9.4 What it refuses
 

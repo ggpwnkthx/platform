@@ -285,6 +285,19 @@ export interface AfterApply {
    * goes on with it.
    */
   readonly file?: string
+  /**
+   * Tells the operator what the deployment is doing.
+   *
+   * A deployment that is applied goes on: it binds the certificates
+   * of the public names, it starts the job of the migration, and it
+   * waits for Access to come up. The wait is a wait of minutes, and
+   * a reader who is told nothing thinks that the deployment is hung.
+   * The provider says what it does as it does it, and the words go
+   * beside the answer of the command.
+   *
+   * @param text the line of the progress.
+   */
+  readonly tell?: (text: string) => void
 }
 
 /** A resource of the system that a failed apply left behind. */

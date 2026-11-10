@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { decode } from '../src/tui/keys'
 import { EMPTY, fieldValue, reduce, visibleRows, type State } from '../src/tui/model'
 import { keybarOf, panelOf, truncate, visibleLength, wrapOf } from '../src/tui/draw'
-import { viewOf } from '../src/tui/views'
+import { elapsedOf, viewOf } from '../src/tui/views'
 import {
   answersFor,
   grantRows,
@@ -627,6 +627,69 @@ describe('the forms of the interface', () => {
     const state: State = { ...EMPTY, page: 'create', log, form }
     expect(viewOf(state, { columns: 80, rows: 24 }, false)).toContain('line 79')
     expect(viewOf(state, { columns: 140, rows: 24 }, false)).toContain('line 79')
+  })
+})
+
+describe('the work of the interface', () => {
+  test('the time of a work is read in seconds and in minutes', () => {
+    expect(elapsedOf(0, 1000)).toBe('1 second')
+    expect(elapsedOf(0, 30_000)).toBe('30 seconds')
+    expect(elapsedOf(0, 60_000)).toBe('1 minute')
+    expect(elapsedOf(0, 120_000)).toBe('2 minutes')
+  })
+
+  test('the status line names the work and the time it has been going on', () => {
+    const state: State = {
+      ...EMPTY,
+      busy: true,
+      work: { what: 'the deployment of azure goes on', since: Date.now() - 120_000 },
+    }
+    const frame = viewOf(state, { columns: 90, rows: 14 }, false)
+    expect(frame).toContain('the deployment of azure goes on')
+    expect(frame).toContain('2 minutes')
+  })
+
+  test('the bar of the keys names the work of the interface', () => {
+    const state: State = {
+      ...EMPTY,
+      busy: true,
+      form: {
+        title: 'a form',
+        action: 'deploy',
+        focus: 0,
+        fields: [{ name: 'name', label: 'the name', value: 'ac', kind: 'text' }],
+      },
+      work: { what: 'the answers of the deployment are read', since: Date.now() },
+    }
+    expect(viewOf(state, { columns: 120, rows: 16 }, false)).toContain(
+      'the answers of the deployment are read'
+    )
+  })
+
+  test('the interface names the work it is at', async () => {
+    let release: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const screen = new FakeScreen({ kind: 'char', char: 'n' })
+    const app = new Interface({
+      screen,
+      services: servicesOf(new FakeHttp()),
+      environment: {},
+      provider: azureProvider(),
+      // The answers of a deployment take a while: the reader must see
+      // that the interface waits for them, and for how long.
+      answers: async () => {
+        await gate
+        return { values: {}, notes: [] }
+      },
+    })
+    const running = app.start()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    const frames = screen.frames.join('\n')
+    expect(frames).toContain('the answers of the deployment are read')
+    release?.()
+    await running
   })
 })
 

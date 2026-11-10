@@ -236,6 +236,23 @@ export const AZURE_QUESTIONS: readonly Question[] = [
   },
 ]
 
+/**
+ * The time the binding of a certificate may take, in milliseconds.
+ *
+ * The binding waits for the records of DNS of the name, and the
+ * records are written by the operator: a delegation that is slow is
+ * a wait of minutes, and the wait is long enough for it. A wait that
+ * goes on past it ends: the client of Azure is stopped, and the
+ * binding is written again the next time the deployment goes on.
+ */
+const BINDING_TIMEOUT_MS = 1_800_000
+
+/**
+ * The time the client of Azure may take to start the job of the
+ * migration, in milliseconds.
+ */
+const JOB_TIMEOUT_MS = 600_000
+
 /** The path of the client of Azure. */
 function azureCli(environment: Readonly<Record<string, string | undefined>>): string {
   const named = environment.AZURE_CLI
@@ -1335,21 +1352,30 @@ async function certificatesOf(binary: string, context: AfterApply): Promise<stri
   }
 
   for (const hostname of names) {
-    const answer = await run(binary, [
-      'containerapp',
-      'hostname',
-      'bind',
-      '--hostname',
-      hostname,
-      '--name',
-      application,
-      '--resource-group',
-      group,
-      '--environment',
-      environment,
-      '--validation-method',
-      'HTTP',
-    ])
+    // The binding waits for the records of DNS of the name: the wait
+    // is a wait of minutes, and the operator is told that it waits.
+    context.tell?.(
+      `the certificate of the name ${hostname} is bound to the gateway: this waits for the records of DNS of the name`
+    )
+    const answer = await run(
+      binary,
+      [
+        'containerapp',
+        'hostname',
+        'bind',
+        '--hostname',
+        hostname,
+        '--name',
+        application,
+        '--resource-group',
+        group,
+        '--environment',
+        environment,
+        '--validation-method',
+        'HTTP',
+      ],
+      { timeoutMs: BINDING_TIMEOUT_MS }
+    )
     if (answer.status === 0) {
       notes.push(`the certificate of the name ${hostname} is bound to the gateway`)
       continue
@@ -1393,15 +1419,14 @@ async function migrationOf(binary: string, context: AfterApply): Promise<string[
     ]
   }
 
-  const answer = await run(binary, [
-    'containerapp',
-    'job',
-    'start',
-    '--name',
-    job,
-    '--resource-group',
-    group,
-  ])
+  context.tell?.(
+    `the job of the migration of the schema is started: the job ${job} creates the roles of the deployment`
+  )
+  const answer = await run(
+    binary,
+    ['containerapp', 'job', 'start', '--name', job, '--resource-group', group],
+    { timeoutMs: JOB_TIMEOUT_MS }
+  )
   if (answer.status === 0) {
     return [
       `the migration of the schema is started: the job ${job} creates the roles of the deployment and applies the migrations of the schema`,
@@ -1537,10 +1562,16 @@ async function tenantsOf(
 async function waitForAccess(
   access: string,
   admin: string,
-  waits: Waits
+  waits: Waits,
+  tell?: (text: string) => void
 ): Promise<{ answer: unknown; waited: number }> {
   for (let attempt = 0; attempt < waits.attempts; attempt++) {
     if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, waits.intervalMs))
+    if (attempt === 0) {
+      tell?.(
+        `the administration of Access is asked for its tenants: the job of the migration has to come up first, and the deployment waits up to ${Math.round((waits.attempts * waits.intervalMs) / 1000)} seconds`
+      )
+    }
     const { status, answer } = await tenantsOf(access, admin, waits.callMs)
     if (status === 200) return { answer, waited: attempt }
   }
@@ -1668,7 +1699,7 @@ async function tenantWithEntra(context: AfterApply, waits: Waits): Promise<strin
 
   // Access is a service of the deployment, and it cannot answer before
   // the job of the migration has created the roles of the deployment.
-  const { answer, waited } = await waitForAccess(access, admin, waits)
+  const { answer, waited } = await waitForAccess(access, admin, waits, context.tell)
   if (answer === undefined) {
     return [
       'the tenant of the deployment is not registered with Entra ID: the administration of Access did not answer, and the tenant is registered by hand',
@@ -1798,6 +1829,12 @@ export function azureProvider(
     afterApply: async (context: AfterApply) => {
       const binary = azureCli(environment)
       const notes: string[] = []
+      // The deployment is applied, and the binding of the system of
+      // the provider is minutes of work: the operator is told that the
+      // deployment goes on, and not that it is done.
+      context.tell?.(
+        'the deployment goes on: the system of the provider is bound to it, and this takes a few minutes'
+      )
       try {
         notes.push(...(await certificatesOf(binary, context)))
       } catch (error) {

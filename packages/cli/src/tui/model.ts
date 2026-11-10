@@ -85,6 +85,20 @@ export interface Form {
   readonly cursor?: number
 }
 
+/**
+ * The work the interface is at.
+ *
+ * A work that takes a while is named and timed: a reader who sees a
+ * screen that does not move knows what the interface waits for, and
+ * how long it has been waiting for it.
+ */
+export interface Work {
+  /** What the interface is doing, in one line. */
+  readonly what: string
+  /** The moment the work began, in milliseconds since the epoch. */
+  readonly since: number
+}
+
 /** A message the interface shows. */
 export interface Message {
   /** The words of the message. */
@@ -129,6 +143,8 @@ export interface State {
   readonly message?: Message
   /** True while the interface is at work. */
   readonly busy: boolean
+  /** The work the interface is at, when it is at one. */
+  readonly work?: Work
   /** The title of the page. */
   readonly title: string
 }
@@ -211,6 +227,8 @@ export type Action =
   | { readonly type: 'message'; readonly message?: Message }
   /** The interface is at work, or it is not. */
   | { readonly type: 'busy'; readonly busy: boolean }
+  /** The work the interface is at, and the moment it began. */
+  | { readonly type: 'work'; readonly work?: Work }
   /** The title of the page. */
   | { readonly type: 'title'; readonly title: string }
 
@@ -320,6 +338,8 @@ export function reduce(state: State, action: Action): State {
       return { ...state, message: action.message }
     case 'busy':
       return { ...state, busy: action.busy }
+    case 'work':
+      return { ...state, work: action.work }
     case 'title':
       return { ...state, title: action.title }
     default:

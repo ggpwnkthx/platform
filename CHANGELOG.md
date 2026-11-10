@@ -10,6 +10,12 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The interface says what it waits for
+
+The interface of `platformctl tui` went silent while a deployment went on: the header said that the interface was at work, the log held the last words of the tool that writes the infrastructure, and the frame did not move for the minutes the deployment took. A reader who applied a deployment again could not tell a long wait from a hang, and the wizard it runs was silent in the same way: the binding of the certificates of the public names, the job of the migration of the schema and the wait for Access to come up were said only when they were over.
+
+The work of the interface is named and timed now: the line above the keys says what the interface waits for — the answers of a deployment, the deployment itself — and how long it has been waiting for it, and the frame is drawn again while the work goes on. The wizard tells what it does as it does it, on the standard error, and the words are in the log of the interface: the deployment is applied, the certificate of every public name is bound, the job of the migration is started, and the administration of Access is asked for its tenants. A wait of the client of Azure that goes on too long ends: the client is stopped, and what it did not do is written again the next time the deployment goes on.
+
 ## 1.1.0
 
 ### The deployment that is selected is applied again
