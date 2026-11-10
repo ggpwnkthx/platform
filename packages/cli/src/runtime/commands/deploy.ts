@@ -16,7 +16,7 @@
  */
 
 import { existsSync } from 'node:fs'
-import { copyFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { CommandInput, CommandResult, CommandSpec, GroupSpec } from '../../app/commands'
 import { stringOf } from '../../app/commands'
@@ -34,7 +34,9 @@ import {
   answerOf,
   defaultsOf,
   type DeploymentProvider,
+  type Found,
   type Importable,
+  PLATFORM_IMAGES,
   problemOf,
   problemsOf,
   type Question,
@@ -197,6 +199,38 @@ export async function existingOf(
     existing.set(environment, values)
   }
   return existing
+}
+
+/**
+ * The environment of the deployment that was written last.
+ *
+ * An operator who deploys again works on the deployment they worked on
+ * last, most of the time: the files of the values say which one it is,
+ * by the moment they were written.
+ *
+ * @param directory the directory of the templates.
+ */
+export async function latestOf(directory: string): Promise<string | undefined> {
+  const root = join(dirname(directory), 'runtime')
+  let entries: string[]
+  try {
+    entries = await readdir(root)
+  } catch {
+    return undefined
+  }
+  let latest: { readonly environment: string; readonly written: number } | undefined
+  for (const entry of entries) {
+    const file = join(root, entry, VALUES)
+    try {
+      const written = (await stat(file)).mtimeMs
+      if (latest !== undefined && latest.written >= written) continue
+      const environment = defaultsOf(await readFile(file, 'utf8')).environment ?? entry
+      latest = { environment, written }
+    } catch {
+      // A directory that holds no values is not a deployment.
+    }
+  }
+  return latest?.environment
 }
 
 /**
@@ -909,13 +943,92 @@ async function templateFilesOf(directory: string): Promise<Record<string, string
 }
 
 /**
- * The images of the platform that a release holds.
+ * The answers of a deployment that are read and not asked.
  *
- * The digests of these four images are the digests of a build that was
- * proved, and the templates of the deployment are the ones of the same
- * release.
+ * The interface of the operator shows the questions of a deployment as
+ * a form, and the form holds what the wizard would have read: the
+ * digests of the images of the latest release, the digest of the image
+ * of the client of PostgreSQL and the range of the public address of
+ * the machine. The three are read together, and what cannot be read is
+ * a note and not a failure: the operator answers that question.
+ *
+ * @param defaults the values of the example of the templates.
+ * @param environment the environment of the process.
  */
-const PLATFORM_IMAGES = ['gateway_image', 'access_image', 'data_image', 'console_image'] as const
+export async function readingsOf(
+  defaults: Readonly<Values>,
+  environment: Readonly<Record<string, string | undefined>>
+): Promise<Found> {
+  const [release, client, address] = await Promise.all([
+    readRelease().catch(() => undefined),
+    readClientImage(defaults),
+    publicAddressOf(undefined, servicesOf(environment)).catch(() => undefined),
+  ])
+  const values: Values = {}
+  const notes: string[] = []
+  if (release === undefined) {
+    notes.push('the release of the platform could not be read: the digests of the images are asked')
+  } else {
+    for (const name of PLATFORM_IMAGES) {
+      const image = release.images[name]
+      if (image !== undefined) values[name] = image
+    }
+    notes.push(`the digests of the images come from the release ${release.tag}`)
+  }
+  if (client === undefined) {
+    notes.push('the digest of the image of the client of PostgreSQL could not be read: it is asked')
+  } else {
+    values.postgres_client_image = client
+    notes.push('the digest of the image of the client of PostgreSQL comes from its registry')
+  }
+  if (address === undefined) {
+    notes.push('the public address of the machine could not be read: the addresses are asked')
+  } else {
+    values[ADDRESSES] = rangeOf(address)
+    notes.push(`the address that reaches the state is the one of this machine, ${rangeOf(address)}`)
+  }
+  return { values, notes, ...(release === undefined ? {} : { release: release.tag }) }
+}
+
+/**
+ * The answers a deployment that is already there offers.
+ *
+ * The values of the deployment of an environment are the defaults of
+ * its questions, exactly as the wizard offers them: an operator who
+ * deploys an environment again confirms its answers and does not type
+ * them. A value the deployment cannot use is no offer at all.
+ *
+ * @param provider the provider of the deployment.
+ * @param defaults the values of the example of the templates.
+ * @param existing the values of the deployments that are already there.
+ * @param environment the environment the operator chose, when one is chosen.
+ */
+export function offersOf(
+  provider: DeploymentProvider,
+  defaults: Readonly<Values>,
+  existing: ReadonlyMap<string, Values>,
+  environment?: string
+): Values {
+  const chosen = environment ?? fallbackOf('environment', {}, defaults, existing)
+  const values: Values = {}
+  for (const question of provider.questions) {
+    if (question.kind === 'given') continue
+    if (question.name === 'environment') {
+      if (chosen !== undefined && problemOf(question, chosen) === undefined) {
+        values.environment = chosen
+      }
+      continue
+    }
+    const held: Values = chosen === undefined ? {} : { environment: chosen }
+    const offered = offeredOf(
+      question,
+      fallbackOf(question.name, held, defaults, existing),
+      defaults
+    )
+    if (offered !== undefined) values[question.name] = offered
+  }
+  return values
+}
 
 /**
  * Whether the operator brought the images of the deployment.
@@ -944,10 +1057,9 @@ function carriesImages(answers: Readonly<Values>): boolean {
  * written in the values of the deployment, so the deployment stays the
  * one that was applied. A reader who wants another release names it.
  *
- * @param input what the command received.
+ * @param named the release the reader named, when the reader named one.
  */
-async function readRelease(input: CommandInput): Promise<Release | undefined> {
-  const named = stringOf(input.options, 'release')
+async function readRelease(named?: string): Promise<Release | undefined> {
   if (named !== undefined) {
     // A release the reader named is one release: it is not there, and
     // the deployment is a failure, and the message says why.
@@ -1412,14 +1524,16 @@ export function deployCommand(provider: DeploymentProvider): CommandSpec {
       // and the digest of a release does not move. The release is read
       // before the provider is asked for a session: a release that is
       // not there is a failure that no browser has to be open for.
-      const release = await readRelease(input)
+      const release = await readRelease(stringOf(input.options, 'release'))
       const known: Values = {}
 
       // The provider is asked for a session after the release: the
       // facts of the provider answer the questions that the release
       // does not. A dry run signs nobody in: it reads the facts the
       // machine of the operator already holds.
-      const signIn = input.globals.dryRun ? await factsOf(provider) : await provider.signIn(ask)
+      const signIn = input.globals.dryRun
+        ? await factsOf(provider)
+        : await provider.signIn(ask, answers)
       input.services.progress(signIn.message)
       Object.assign(known, signIn.facts)
       if (release === undefined) {

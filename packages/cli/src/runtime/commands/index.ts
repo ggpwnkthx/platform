@@ -15,9 +15,18 @@ import { deployGroup } from './deploy'
 import { doctor, login, logout, status, version, whoami } from './identity'
 import { infrastructureGroup } from './infrastructure'
 import { routesGroup, sessionsGroup } from './routes'
+import { tui } from './tui'
 
 /** The commands of the root of the CLI. */
-export const commands: readonly CommandSpec[] = [login, logout, whoami, status, version, doctor]
+export const commands: readonly CommandSpec[] = [
+  login,
+  logout,
+  whoami,
+  status,
+  version,
+  doctor,
+  tui,
+]
 
 /** The groups of the commands. */
 export const groups: readonly GroupSpec[] = [

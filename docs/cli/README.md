@@ -33,7 +33,7 @@ platformctl ──> gateway ──> Data          data commands, with the caller
 | `access` | Access tenants, principals, grants, groups, roles, audit and decisions |
 | `data` | A workspace's records, model and audit |
 
-The root commands are `login`, `logout`, `whoami`, `status`, `version` and `doctor`.
+The root commands are `login`, `logout`, `whoami`, `status`, `version`, `doctor` and `tui`. The last one is the interface of the operator: it draws the deployments of the machine and what they answer ([The interface](tui.md)).
 
 ## Key concepts
 
@@ -48,6 +48,7 @@ The root commands are `login`, `logout`, `whoami`, `status`, `version` and `doct
 | To | Read |
 | --- | --- |
 | Install it, set up a profile, sign in, script it | [Usage](usage.md) |
+| Draw the deployments and administer them by hand | [The interface](tui.md) |
 | Know every command, option, format and exit status | [Specification](spec.md) |
 | Change its code | [Workspace README](../../packages/cli/README.md) |
 

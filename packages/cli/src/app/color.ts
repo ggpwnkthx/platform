@@ -17,6 +17,7 @@ const COLOURS = {
   green: '\u001b[32m',
   red: '\u001b[31m',
   yellow: '\u001b[33m',
+  inverse: '\u001b[7m',
 } as const
 
 /** The name of a colour. */

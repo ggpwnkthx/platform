@@ -2450,6 +2450,17 @@ esac
 `
 
 /**
+ * The client of Azure, when the operator holds two subscriptions.
+ */
+const CLIENT_WITH_TWO_SUBSCRIPTIONS = `#!/bin/sh
+case "$1 $2" in
+  "account show") echo '{"id":"sub-2","name":"the-other-subscription","tenantId":"11111111-1111-4111-8111-111111111111"}' ;;
+  "account list") echo '[{"id":"sub-1","name":"the-subscription","tenantId":"11111111-1111-4111-8111-111111111111","isDefault":false},{"id":"sub-2","name":"the-other-subscription","tenantId":"11111111-1111-4111-8111-111111111111","isDefault":true}]' ;;
+  *) exit 0 ;;
+esac
+`
+
+/**
  * The client of Azure, as the tests answer with it.
  *
  * The account of this one names no identity, and the directory of Entra
@@ -3591,6 +3602,35 @@ describe('the sign in to Azure', () => {
       // The identity of the operator reads and writes the state of the
       // deployment, and the bootstrap needs its identifier.
       expect(signIn.facts.operator_principal_id).toBe('operator-1')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the subscription the answers name is not asked for', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-azure-'))
+    try {
+      const binary = join(directory, 'az')
+      await writeFile(binary, CLIENT_WITH_TWO_SUBSCRIPTIONS)
+      await chmod(binary, 0o755)
+      const provider = azureProvider([], { PATH: process.env.PATH ?? '', AZURE_CLI: binary })
+      const nobody = async (): Promise<string> => {
+        throw new CliFailure('nobody can answer it', 2, 'not_answered')
+      }
+      const signIn = await provider.signIn(nobody, { subscription_id: 'sub-2' })
+      expect(signIn.account).toBe('the-other-subscription')
+      expect(signIn.facts.subscription_id).toBe('sub-2')
+      // A deployment nobody watches is not written in a subscription
+      // nobody chose, and the refusal says how the subscription is named.
+      await expect(provider.signIn(nobody)).rejects.toThrow('subscription_id = ')
+      await expect(provider.signIn(nobody, { subscription_id: 'sub-9' })).rejects.toThrow(
+        'is not one the operator holds'
+      )
+      // The session of the machine names its subscriptions, and the one it works in.
+      expect(await provider.accounts?.()).toEqual([
+        { id: 'sub-1', name: 'the-subscription', current: false },
+        { id: 'sub-2', name: 'the-other-subscription', current: true },
+      ])
     } finally {
       await rm(directory, { recursive: true, force: true })
     }

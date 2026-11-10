@@ -112,6 +112,14 @@ platformctl data items list notes --output json
 
 Every command that changes something asks before it acts. Pass `--yes` when no one is there to answer, and `--dry-run` to see the request without sending it.
 
+## The interface of the operator
+
+```bash
+platformctl tui
+```
+
+The interface draws the deployments of your machine, the state of their services and the tenants, the principals and the grants of the deployment. It reads the credentials of your shell and not the profiles, and it asks before it writes. The keys of the interface are in [The interface](tui.md).
+
 ## Credentials
 
 | Credential | Set with | Used by |

@@ -10,6 +10,38 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The interface of the operator works on the deployment the reader is on
+
+The interface of `platformctl tui` worked on the deployment that was selected when the page of the deployments was drawn, and not on the one the reader moved to: a reader who went down a row and opened the tenants read — and wrote — the tenants of the row above. The selected deployment is the one the other pages work on now, the header names it, and the reader who comes back is on the row they left.
+
+The pages say what they are doing. A page that is opened holds no row of the page before it: it says that it reads, that it was not read and which key reads it again, or that there is nothing yet and which key creates the first one. An answer that comes after the reader left its page is not drawn over another one. The header says when the interface is at work, and the line above the keys holds the messages, the questions and the place of the reader in the list — a message that is longer than the line is read to its end, and the next key takes it away.
+
+The lists are filtered with `/`, and they are moved in by a page, to their ends, and with `j` and `k`. The selected row is a bar across the table, a table that is too wide takes its room from its widest columns and leaves the states and the counts whole, and the panels that are drawn side by side keep both of their sides.
+
+The forms are forms a reader can fill in:
+
+- The field the reader is in is always on the screen, with its whole label and the values it takes under the fields. A form that was longer than the screen lost its last fields, and a label that was longer than its column pushed the value off the screen — every value of the wizard of a deployment.
+- A space is a letter. It was the key that changed a choice in every field, and a name of two words could not be typed.
+- The value has a cursor: the arrows, `home`, `end`, `delete` and `ctrl` and `u` together work in it.
+- The secrets of a tenant are written and not drawn.
+- A form the reader wrote in asks before it is left, and the form of a profile closes when the profile is written.
+- The creation of a deployment asks before it begins, and an answer that is not the shape the deployment needs puts the reader in its field.
+- The log of a deployment shows its last lines. It showed its first ones.
+
+The form of a new deployment holds the answers the wizard finds by itself. It held the placeholders of the example of the templates: the digests of the images, which the wizard of the command line reads from the release, were the reader's to find and to type. The form reads what the wizard reads — the digests of the latest release, the digest of the image of the client of PostgreSQL, the range of the public address of the machine — and it offers what the wizard offers, the answers of the deployment of the environment that is already there. They are read while the reader fills in the form and written in the fields the reader did not write in, they follow the environment the reader names, and the log says where each of them comes from and which could not be read. A deployment whose digests were left to the release runs the release the form showed, and the wizard still proves the templates against it. **Contract:** [CLI spec §9.5](docs/cli/spec.md#95-the-creation-of-a-deployment).
+
+The deployment the interface runs is asked nothing. An operator who holds more than one subscription of Azure was asked which one at the sign in of the wizard, and the wizard the interface runs has no terminal: the deployment failed with *the command asks a question and nobody can answer it*, and it did not say which question. The subscription is a field of the form now — the one the session of the machine works in, until the reader chooses another — and the question before the deployment names it. `deploy` takes the subscription the file of the answers names as `subscription_id` and does not ask; without one, and with nobody to ask, it is refused with the subscriptions the operator holds and the value that chooses one. A question nobody can answer names itself in every refusal. The digest of the image of the client of PostgreSQL that the form holds is written in the answers, and the deployment does not ask the registry again.
+
+A deployment the interface applies is a deployment the interface works on. It was applied and the page of the deployments did not know it: the reader copied its addresses out of the log into `context set`. The profile of the deployment is written when it is applied — named after its prefix and its environment, with the public addresses of the gateway and of Access and the workspace — it becomes the current one when the machine has none, and `esc` goes back to the deployments, on it. The form of a new deployment opens on the answers of the deployment that was written last: with the values of two environments on the machine it opened on the example of the templates.
+
+The interface reads the credential of the administration in the state of the deployment. The deployment creates the credential and the templates answer with it, and the operator who had just deployed was told to set `PLATFORMCTL_ADMIN_TOKEN` before the tenants could be read. With no credential in the shell, the interface reads the one of the deployment the first time a page needs it, keeps it in its memory and writes it nowhere; the credential of the shell still comes first. The answer of the templates is checked against the profile: the templates are initialized against one deployment at a time, and the credential of one deployment is not sent to another. **Contract:** [CLI spec §9.1](docs/cli/spec.md#91-what-it-needs).
+
+A principal is registered and given its first grant in one pass. The form of a grant asked for the identifier of the principal, which was on another page, and for a tenant, a workspace and a route the interface had already read. On a tenant, `p` and `g` are its principals and its grants now, and on a principal `g` is its grants; the forms hold the tenant and the principal the reader came from and the workspace of the profile, and their fields offer the tenants, the principals by their address, and the permissions, the routes and the operators of the grants that are there — `→` takes the offer. A principal that is registered holds no grant, and the interface asks for its first one at once. The grants name their principals by their address, and the reader goes back up the way they came down. **Contract:** [CLI spec §9.3](docs/cli/spec.md#93-the-keys).
+
+A question is answered by `y` or by `n`, and it names what it removes: a key that was neither refused the question, and it leaves it where it is now. The tenant that is selected is described and edited — the record of a tenant was looked for under its slug where Access answers with an identifier, and neither worked.
+
+The frame is drawn over the one before it and the screen is not cleared in between: the interface does not blink at every key and at every reading of the clock. **Contract:** [CLI spec §9.3 and §9.4](docs/cli/spec.md#93-the-keys).
+
 ## 1.0.13
 
 ### The logins are counted and the principals they create are audited

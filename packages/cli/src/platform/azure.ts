@@ -16,6 +16,8 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { CliFailure } from '../domains/failure'
 import {
+  ACCOUNT,
+  type Account,
   type AfterApply,
   ENVIRONMENTS,
   type Asker,
@@ -24,6 +26,7 @@ import {
   type Leftover,
   type Question,
   type SignIn,
+  type Values,
 } from '../domains/deployment'
 import { run } from './process'
 
@@ -255,6 +258,8 @@ interface Subscription {
   readonly id: string
   readonly name: string
   readonly tenantId?: string
+  /** True when the subscription is the one the session works in. */
+  readonly current: boolean
 }
 
 /**
@@ -291,9 +296,31 @@ async function subscriptionsOf(binary: string): Promise<Subscription[]> {
       id: record.id,
       name: typeof record.name === 'string' ? record.name : record.id,
       tenantId: typeof record.tenantId === 'string' ? record.tenantId : undefined,
+      current: record.isDefault === true,
     })
   }
   return subscriptions
+}
+
+/**
+ * The subscriptions the session of the machine holds.
+ *
+ * Nobody is signed in: a machine that holds no session, and a machine
+ * that holds no client of Azure, hold no subscription.
+ *
+ * @param environment the environment of the process.
+ */
+async function accountsOf(
+  environment: Readonly<Record<string, string | undefined>>
+): Promise<readonly Account[]> {
+  try {
+    const binary = azureCli(environment)
+    const current = await run(binary, ['account', 'show', '--output', 'json'])
+    if (current.status !== 0) return []
+    return (await subscriptionsOf(binary)).map(({ id, name, current }) => ({ id, name, current }))
+  } catch {
+    return []
+  }
 }
 
 /**
@@ -1035,11 +1062,19 @@ async function heldElsewhere(binary: string, refused: Refused): Promise<string[]
  * the operator holds no session, and it lets the reader choose the
  * subscription of the deployment when there is more than one.
  *
+ * The subscription the answers of the operator name is the one of the
+ * deployment, and the reader is not asked: a deployment that runs
+ * where nobody can answer — under the interface of the operator, in a
+ * pipeline — names its subscription in the file of the answers.
+ *
  * @param ask asks the operator a question and waits for the answer.
+ * @param environment the environment of the process.
+ * @param answers the answers the operator gave before the sign in.
  */
 async function signInOf(
   ask: Asker,
-  environment: Readonly<Record<string, string | undefined>>
+  environment: Readonly<Record<string, string | undefined>>,
+  answers: Readonly<Values> = {}
 ): Promise<SignIn> {
   const binary = azureCli(environment)
 
@@ -1075,11 +1110,34 @@ async function signInOf(
   }
 
   let chosen = subscriptions[0]!
-  if (subscriptions.length > 1) {
-    const answer = await ask(
-      'the subscription of the deployment',
-      subscriptions.map((subscription) => subscription.name)
-    )
+  const named = answers[ACCOUNT]?.trim() ?? ''
+  if (named !== '') {
+    const found = subscriptions.find((subscription) => subscription.id === named)
+    if (found === undefined) {
+      throw new CliFailure(
+        `the subscription ${named} of the answers is not one the operator holds: the operator holds ${subscriptions.map((one) => `${one.name} (${one.id})`).join(', ')}`,
+        4,
+        'not_found'
+      )
+    }
+    chosen = found
+  } else if (subscriptions.length > 1) {
+    let answer: string
+    try {
+      answer = await ask(
+        'the subscription of the deployment',
+        subscriptions.map((subscription) => subscription.name)
+      )
+    } catch (error) {
+      if (!(error instanceof CliFailure) || error.code !== 'not_answered') throw error
+      // Nobody can answer, and the deployment is not written in a
+      // subscription nobody chose: the refusal says how it is named.
+      throw new CliFailure(
+        `the operator holds ${subscriptions.length} subscriptions and nobody can say which one the deployment is written in: name it in the file of the answers, as ${ACCOUNT} = "<the identifier>": ${subscriptions.map((one) => `${one.name} (${one.id})`).join(', ')}`,
+        2,
+        'not_answered'
+      )
+    }
     chosen = subscriptions.find((subscription) => subscription.name === answer) ?? chosen
   }
 
@@ -1730,7 +1788,8 @@ export function azureProvider(
     name: 'azure',
     summary: 'Microsoft Azure',
     questions,
-    signIn: (ask: Asker) => signInOf(ask, environment),
+    signIn: (ask: Asker, answers?: Readonly<Values>) => signInOf(ask, environment, answers),
+    accounts: async () => accountsOf(environment),
     facts: async () => factsOf(azureCli(environment)),
     leftoverOf: async (reason: string, region?: string) =>
       leftoverOf(azureCli(environment), reason, region),

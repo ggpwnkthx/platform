@@ -23,6 +23,15 @@ packages/cli/
 │   │   ├── help.ts          help for the CLI, a group and a command
 │   │   ├── output.ts        output formats: table, json, yaml
 │   │   └── prompt.ts        confirmation before a write
+│   ├── tui/              the interface of the operator
+│   │   ├── app.ts            the loop: a key is an action on the state
+│   │   ├── model.ts          the state of the interface and its actions
+│   │   ├── views.ts          the pages, drawn from the state
+│   │   ├── draw.ts           the drawing: tables, panels, the bar of the keys
+│   │   ├── forms.ts          the forms of the profiles, the tenants and the grants
+│   │   ├── keys.ts           the bytes of the terminal, read as keys
+│   │   ├── screen.ts         the terminal of the reader
+│   │   └── tasks.ts          the work: the profiles, Access and the probes
 │   ├── domains/          core: no sockets, no files, no output of its own
 │   │   ├── contracts.ts     the core's ports
 │   │   ├── context.ts       deployment profiles and their resolution
@@ -54,5 +63,7 @@ bun run test
 bun run typecheck
 bun run architecture   # the core imports neither the interface nor the adapters
 ```
+
+The interface of the operator is `platformctl tui`: it draws the deployments of the machine and what they answer. Its pages, its keys and the credentials it reads are in [The interface](../../docs/cli/tui.md).
 
 The CLI's environment variables all carry its own prefix: `PLATFORMCTL_GATEWAY_URL`, `PLATFORMCTL_CONTROL_URL`, `PLATFORMCTL_ACCESS_URL`, `PLATFORMCTL_WORKSPACE_ID`, `PLATFORMCTL_TENANT_ID`, `PLATFORMCTL_CLIENT_ID`, `PLATFORMCTL_CLIENT_SECRET`, `PLATFORMCTL_REDIRECT_URI`, `PLATFORMCTL_CONTROL_TOKEN`, `PLATFORMCTL_ADMIN_TOKEN`, `PLATFORMCTL_TOKEN`, `PLATFORMCTL_PROFILE` and `PLATFORMCTL_TIMEOUT_MS`. Their meanings are in [spec §3](../../docs/cli/spec.md#3-profiles).

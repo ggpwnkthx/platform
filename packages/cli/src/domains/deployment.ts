@@ -35,6 +35,20 @@ export type QuestionKind =
  */
 export const ENVIRONMENTS: readonly string[] = ['development', 'staging', 'production']
 
+/**
+ * The images of the platform that a release holds.
+ *
+ * The digests of these four images are the digests of a build that was
+ * proved, and the templates of the deployment are the ones of the same
+ * release.
+ */
+export const PLATFORM_IMAGES: readonly string[] = [
+  'gateway_image',
+  'access_image',
+  'data_image',
+  'console_image',
+]
+
 /** A question of the wizard. */
 export interface Question {
   /** The name of the value. */
@@ -98,6 +112,64 @@ export interface Importable {
   readonly ids: readonly string[]
 }
 
+/**
+ * The answers the wizard finds by itself.
+ *
+ * Some answers of a deployment are not the operator's to type: the
+ * digests of the images are the ones of the release of the platform,
+ * the address that reaches the state is the one of the machine, and
+ * the values of a deployment that is already there are the ones the
+ * operator gave before. The wizard reads them, and the operator
+ * confirms them or changes them.
+ */
+export interface Found {
+  /** The answers that were found, by the name of the value. */
+  readonly values: Readonly<Values>
+  /** The tag of the release the digests of the images come from, when it was read. */
+  readonly release?: string
+  /**
+   * The accounts of the provider the operator may deploy in, when the
+   * provider names them. A machine that holds no session names none.
+   */
+  readonly accounts?: readonly Account[]
+  /** What the operator is told about what was read, and about what could not be. */
+  readonly notes: readonly string[]
+}
+
+/**
+ * What a deployment answers about itself to the operator who wrote it.
+ *
+ * The deployment creates the credential of the administration of
+ * Access, and the state of the deployment holds it: the operator who
+ * reads the state reads the credential, and does not copy it into a
+ * shell first. The credential is held in the memory of the program
+ * that read it, and it is never written and never drawn.
+ */
+export interface Held {
+  /** The credential of the administration of Access. */
+  readonly adminToken?: string
+  /** The address of Access, as the templates answered it. */
+  readonly accessUrl?: string
+  /** Why the credential could not be read, when it could not. */
+  readonly note?: string
+}
+
+/**
+ * An account of a provider that a deployment is written in: a
+ * subscription of Azure.
+ */
+export interface Account {
+  /** The identifier of the account. */
+  readonly id: string
+  /** The name of the account, as the operator reads it. */
+  readonly name: string
+  /** True when the account is the one the session of the operator works in. */
+  readonly current: boolean
+}
+
+/** The name of the value that names the account of a deployment. */
+export const ACCOUNT = 'subscription_id'
+
 /** A provider of the infrastructure of a deployment. */
 export interface DeploymentProvider {
   /** The name of the provider. */
@@ -109,9 +181,21 @@ export interface DeploymentProvider {
   /**
    * Signs the operator in and reads the facts of the deployment.
    *
+   * An operator who holds several accounts is asked which one the
+   * deployment is written in, unless the answers of the operator name
+   * it already: a deployment that nobody watches — the one the
+   * interface runs — is asked nothing.
+   *
    * @param ask asks the operator a question and waits for the answer.
+   * @param answers the answers the operator gave before the sign in.
    */
-  signIn(ask: Asker): Promise<SignIn>
+  signIn(ask: Asker, answers?: Readonly<Values>): Promise<SignIn>
+  /**
+   * The accounts the operator may deploy in, as the session of the
+   * machine holds them. Nobody is signed in: a machine that holds no
+   * session holds no account.
+   */
+  accounts?(): Promise<readonly Account[]>
   /**
    * The facts of the deployment, as the machine of the operator holds
    * them.

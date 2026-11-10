@@ -55,7 +55,7 @@ export async function ask(
 ): Promise<string> {
   if (!input.isTTY) {
     throw new CliFailure(
-      'the command asks a question and nobody can answer it: run it on a terminal',
+      `the command asks a question and nobody can answer it: "${question}": run it on a terminal`,
       2,
       'not_answered'
     )
