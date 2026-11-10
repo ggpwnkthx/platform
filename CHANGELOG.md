@@ -10,6 +10,8 @@ in the same commit as the code.
 
 ## Unreleased
 
+## 1.2.0
+
 ### The interface says what it waits for
 
 The interface of `platformctl tui` went silent while a deployment went on: the header said that the interface was at work, the log held the last words of the tool that writes the infrastructure, and the frame did not move for the minutes the deployment took. A reader who applied a deployment again could not tell a long wait from a hang, and the wizard it runs was silent in the same way: the binding of the certificates of the public names, the job of the migration of the schema and the wait for Access to come up were said only when they were over.
@@ -23,6 +25,7 @@ The audit of a deployment on Azure named the address of the ingress of the envir
 The address of the caller is resolved once, at the edge, and it is the address of the caller: the gateway reads it from the chain the ingress forwards, the console passes it on to Access, and the audit of a change names the operator that made it. The deployment says that the environment is the only way in — `GATEWAY_INGRESS_ONLY`, `ACCESS_INGRESS_ONLY` and `CONSOLE_INGRESS_ONLY` — and the three services trust the address the ingress reports in `x-real-ip`.
 
 The trust of the header is the trust of the deployment, and it is narrow: a service that is published reads nothing, the host and the protocol of a request are not read from the headers when the ingress cannot be named, and the limiter of the administration keeps the address of the socket — a caller that names another address does not spend the budget of the address it names. **Contract:** [gateway spec §7.3](docs/gateway/spec.md#73-forwarding-headers-and-client-address), [access spec §10.1](docs/access/spec.md#101-common-rules), [console spec §4.1](docs/console/spec.md#41-the-address-of-the-caller).
+
 
 ## 1.1.0
 
