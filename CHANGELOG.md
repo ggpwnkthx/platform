@@ -10,6 +10,8 @@ in the same commit as the code.
 
 ## Unreleased
 
+## 1.1.0
+
 ### The deployment that is selected is applied again
 
 The interface of `platformctl tui` could create a deployment and could not apply one that is already there: the form of a new deployment opened on the answers of the deployment the machine wrote last, and the reader who wanted another one had to name its environment by hand.
@@ -55,6 +57,7 @@ A principal is registered and given its first grant in one pass. The form of a g
 A question is answered by `y` or by `n`, and it names what it removes: a key that was neither refused the question, and it leaves it where it is now. The tenant that is selected is described and edited — the record of a tenant was looked for under its slug where Access answers with an identifier, and neither worked.
 
 The frame is drawn over the one before it and the screen is not cleared in between: the interface does not blink at every key and at every reading of the clock. **Contract:** [CLI spec §9.3 and §9.4](docs/cli/spec.md#93-the-keys).
+
 
 ## 1.0.13
 
