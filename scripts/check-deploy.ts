@@ -1422,6 +1422,70 @@ export async function checkConsoleCredentials(root: string): Promise<DeployFindi
 }
 
 /**
+ * Checks the credential of the administration of the tenant of the
+ * deployment.
+ *
+ * The console acts for the operator of the tenant with the credential
+ * of the tenant, and the audit of Access names the operator of the
+ * credential that was presented. The deployment holds one tenant: the
+ * console holds the credential of that tenant, and Access knows that
+ * credential.
+ *
+ * A console that holds no credential of the tenant signs every change
+ * of the tenant with the token of the platform, and the audit of the
+ * change names nobody. A credential that Access does not know is a
+ * credential that Access refuses, and the administration of the tenant
+ * is refused to every operator.
+ *
+ * @param root the root of the repository.
+ */
+export async function checkConsoleTenantCredential(root: string): Promise<DeployFinding[]> {
+  const findings: DeployFinding[] = []
+  const sources = await sourcesOf(root, TEMPLATES)
+  const consoleSecret = secretOf(sources, 'console_env_secrets', 'CONSOLE_TENANT_ADMIN_TOKENS')
+  if (consoleSecret === undefined) {
+    findings.push({
+      file: join(TEMPLATES, 'containerapps.tf'),
+      message:
+        'the console of the deployment holds no credential of the administration of its tenant: it signs every change of the tenant with the token of the platform, and the audit of the change names nobody',
+    })
+  }
+  const accessSecret = secretOf(sources, 'access_env_secrets', 'ACCESS_ADMIN_TOKENS')
+  if (accessSecret === undefined) {
+    findings.push({
+      file: join(TEMPLATES, 'containerapps.tf'),
+      message:
+        'Access of the deployment holds no credential of the administration of the tenant of the deployment: the console presents a credential that Access refuses, and the administration of the tenant is refused to every operator',
+    })
+  }
+
+  const text = sources.join('\n')
+  const held = /^\s*tenant_admin_tokens\s*=\s*\{([^}]*)\}/m.exec(text)?.[1] ?? ''
+  const known = /^\s*admin_tokens\s*=\s*\{([^}]*)\}/m.exec(text)?.[1] ?? ''
+  const credential = /random_bytes\.(\w+)\.hex/.exec(held)?.[1]
+  const registered = /random_bytes\.(\w+)\.hex/.exec(known)?.[1]
+  if (credential === undefined || registered === undefined || credential !== registered) {
+    findings.push({
+      file: join(TEMPLATES, 'locals.tf'),
+      message:
+        'the console of the deployment and Access do not hold the same credential of the administration of the tenant: the console presents a credential that Access refuses, and the administration of the tenant is refused to every operator',
+    })
+  }
+  for (const [block, name] of [
+    [held, 'the console of the deployment'],
+    [known, 'Access of the deployment'],
+  ] as const) {
+    if (!block.includes('var.data_workspace_slug')) {
+      findings.push({
+        file: join(TEMPLATES, 'locals.tf'),
+        message: `${name} holds a credential of the administration that names no tenant: the credential is scoped to no tenant, and it refuses every call`,
+      })
+    }
+  }
+  return findings
+}
+
+/**
  * The files of a stack that belong to a deployment and not to the
  * repository.
  *
@@ -1524,6 +1588,7 @@ export async function checkDeploy(root: string): Promise<DeployFinding[]> {
   findings.push(...(await checkInfrastructure(root)))
   findings.push(...(await checkConsoleProbes(root)))
   findings.push(...(await checkConsoleCredentials(root)))
+  findings.push(...(await checkConsoleTenantCredential(root)))
   findings.push(...checkTrackedInfrastructure(root))
   return findings
 }

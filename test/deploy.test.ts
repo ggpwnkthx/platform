@@ -15,6 +15,7 @@ import {
   checkMinimumEnvironment,
   checkStacks,
   checkConsoleCredentials,
+  checkConsoleTenantCredential,
   checkTrackedInfrastructure,
   credentialsOfTemplates,
   imagesOfTemplates,
@@ -599,6 +600,133 @@ describe('the credentials of the console of the deployment', () => {
           file: join('deploy', 'tofu', 'azure', 'locals.tf'),
           message:
             'the console of the deployment reads the secret of the client, and that secret is the token of the control plane: the service that the browsers reach holds a credential of the control plane',
+        },
+      ])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('the credential of the tenant of the deployment', () => {
+  test('the console holds the credential of its tenant', async () => {
+    expect(await checkConsoleTenantCredential(root)).toEqual([])
+  })
+
+  test('a console that holds no credential of its tenant is reported', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
+    try {
+      const templates = join(directory, 'deploy', 'tofu', 'azure')
+      await mkdir(templates, { recursive: true })
+      await writeFile(
+        join(templates, 'locals.tf'),
+        [
+          'locals {',
+          '  access_env_secrets = {',
+          '    ACCESS_ADMIN_TOKENS = "access-admin-tokens"',
+          '  }',
+          '  admin_tokens = {',
+          '    (random_bytes.access_tenant_admin.hex) = {',
+          '      tenant   = var.data_workspace_slug',
+          '      operator = "the-console-of-the-deployment"',
+          '    }',
+          '  }',
+          '  tenant_admin_tokens = {',
+          '    (var.data_workspace_slug) = random_bytes.access_tenant_admin.hex',
+          '  }',
+          '}',
+          '',
+        ].join('\n')
+      )
+      const findings = await checkConsoleTenantCredential(directory)
+      expect(findings).toEqual([
+        {
+          file: join('deploy', 'tofu', 'azure', 'containerapps.tf'),
+          message:
+            'the console of the deployment holds no credential of the administration of its tenant: it signs every change of the tenant with the token of the platform, and the audit of the change names nobody',
+        },
+      ])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('a credential that Access does not know is reported', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
+    try {
+      const templates = join(directory, 'deploy', 'tofu', 'azure')
+      await mkdir(templates, { recursive: true })
+      await writeFile(
+        join(templates, 'locals.tf'),
+        [
+          'locals {',
+          '  console_env_secrets = {',
+          '    CONSOLE_TENANT_ADMIN_TOKENS = "console-tenant-admin-tokens"',
+          '  }',
+          '  admin_tokens = {',
+          '    (random_bytes.access_admin.hex) = {',
+          '      tenant   = var.data_workspace_slug',
+          '      operator = "the-console-of-the-deployment"',
+          '    }',
+          '  }',
+          '  tenant_admin_tokens = {',
+          '    (var.data_workspace_slug) = random_bytes.access_tenant_admin.hex',
+          '  }',
+          '}',
+          '',
+        ].join('\n')
+      )
+      const findings = await checkConsoleTenantCredential(directory)
+      expect(findings).toEqual([
+        {
+          file: join('deploy', 'tofu', 'azure', 'containerapps.tf'),
+          message:
+            'Access of the deployment holds no credential of the administration of the tenant of the deployment: the console presents a credential that Access refuses, and the administration of the tenant is refused to every operator',
+        },
+        {
+          file: join('deploy', 'tofu', 'azure', 'locals.tf'),
+          message:
+            'the console of the deployment and Access do not hold the same credential of the administration of the tenant: the console presents a credential that Access refuses, and the administration of the tenant is refused to every operator',
+        },
+      ])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('a credential that names no tenant is reported', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
+    try {
+      const templates = join(directory, 'deploy', 'tofu', 'azure')
+      await mkdir(templates, { recursive: true })
+      await writeFile(
+        join(templates, 'locals.tf'),
+        [
+          'locals {',
+          '  access_env_secrets = {',
+          '    ACCESS_ADMIN_TOKENS = "access-admin-tokens"',
+          '  }',
+          '  console_env_secrets = {',
+          '    CONSOLE_TENANT_ADMIN_TOKENS = "console-tenant-admin-tokens"',
+          '  }',
+          '  admin_tokens = {',
+          '    (random_bytes.access_tenant_admin.hex) = {',
+          '      operator = "the-console-of-the-deployment"',
+          '    }',
+          '  }',
+          '  tenant_admin_tokens = {',
+          '    (var.data_workspace_slug) = random_bytes.access_tenant_admin.hex',
+          '  }',
+          '}',
+          '',
+        ].join('\n')
+      )
+      const findings = await checkConsoleTenantCredential(directory)
+      expect(findings).toEqual([
+        {
+          file: join('deploy', 'tofu', 'azure', 'locals.tf'),
+          message:
+            'Access of the deployment holds a credential of the administration that names no tenant: the credential is scoped to no tenant, and it refuses every call',
         },
       ])
     } finally {

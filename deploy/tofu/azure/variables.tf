@@ -304,6 +304,15 @@ variable "data_workspace_slug" {
   description = "The slug of the workspace of Data."
   type        = string
   default     = "acme"
+
+  validation {
+    # The slug is the slug of the tenant of the deployment, and the
+    # console reads it as the key of the credential of the
+    # administration of the tenant: a slug that Access refuses is a slug
+    # that the console refuses to start with.
+    condition     = can(regex("^[a-z0-9-]{2,63}$", var.data_workspace_slug))
+    error_message = "The slug of the workspace is [a-z0-9-] and is 2 to 63 characters long: it is the slug of the tenant of the deployment, and the console reads it as the key of the credential of the administration of the tenant."
+  }
 }
 
 variable "tenant_auto_provision" {

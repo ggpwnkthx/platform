@@ -247,6 +247,16 @@ resource "random_bytes" "access_admin" {
   length = 32
 }
 
+# The credential of the administration of the tenant of the deployment.
+#
+# The console acts for the operator of the tenant with the credential of
+# the tenant, and the audit of Access names the operator of the
+# credential: a change of the tenant is signed by the tenant and not by
+# the platform.
+resource "random_bytes" "access_tenant_admin" {
+  length = 32
+}
+
 resource "random_bytes" "access_metrics" {
   length = 32
 }
@@ -522,6 +532,34 @@ locals {
   }
 }
 
+# The credentials of the administration of Access.
+#
+# Access holds the token of the platform, and it holds the credential of
+# the tenant of the deployment: the console acts for the operator of the
+# tenant with the credential of the tenant, and the audit of Access
+# names the operator of the credential that was presented. A credential
+# of a tenant is scoped to it, and it refuses every call about another
+# tenant.
+#
+# The operator of the credential is the console of the deployment: the
+# people who sign in are named by the rights they are given, and the
+# grant that carries the name of the person who gave it is the audit of
+# the change.
+locals {
+  admin_tokens = {
+    (random_bytes.access_tenant_admin.hex) = {
+      tenant   = var.data_workspace_slug
+      operator = "the-console-of-the-deployment"
+    }
+  }
+
+  # The same credential, as the console reads it: the map of the slug of
+  # a tenant and of the credential of the administration of it.
+  tenant_admin_tokens = {
+    (var.data_workspace_slug) = random_bytes.access_tenant_admin.hex
+  }
+}
+
 # The secrets of the deployment.
 #
 # The names of the secrets are the names of the files that the services
@@ -531,6 +569,7 @@ locals {
 locals {
   secret_names = toset([
     "access-admin-token",
+    "access-admin-tokens",
     "access-app-password",
     "access-context-tokens",
     "access-database-url",
@@ -541,6 +580,7 @@ locals {
     "client-secret",
     "console-access-context-token",
     "console-session-secret",
+    "console-tenant-admin-tokens",
     "data-access-context-token",
     "data-cursor-key",
     "data-database-url",
@@ -582,6 +622,10 @@ locals {
     "access-admin-token"    = random_bytes.access_admin.hex
     "access-metrics-token"  = random_bytes.access_metrics.hex
     "access-context-tokens" = jsonencode(local.access_context_tokens)
+    # The credentials of the administration of Access: the token of the
+    # platform is the one of `access-admin-token`, and the credential of
+    # the tenant is the one of the map.
+    "access-admin-tokens" = jsonencode(local.admin_tokens)
 
     # The secrets of Data.
     "data-access-context-token"   = random_bytes.access_context.hex
@@ -597,6 +641,10 @@ locals {
     # The secrets of the console.
     "console-session-secret"       = random_bytes.console_session.hex
     "console-access-context-token" = random_bytes.console_access_context.hex
+    # The credentials of the administration of the tenant of the
+    # deployment: the console acts for the operator of the tenant with
+    # the credential of the tenant, and the audit of Access names it.
+    "console-tenant-admin-tokens" = jsonencode(local.tenant_admin_tokens)
 
     # The addresses that carry a password.
     "postgres-admin-url"     = local.postgres_admin_url

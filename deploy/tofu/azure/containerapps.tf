@@ -118,6 +118,10 @@ locals {
     ACCESS_DATABASE_URL   = "access-database-url"
     ACCESS_REDIS_URL      = "redis-session-url"
     ACCESS_DECISION_TOKEN = "gateway-access-token"
+    # The credentials of the administration: the token of the platform
+    # is read from a file, and the credential of the tenant of the
+    # deployment is read from the environment.
+    ACCESS_ADMIN_TOKENS = "access-admin-tokens"
   }
 
   data_env_secrets = {
@@ -135,8 +139,18 @@ locals {
     # console that holds no credential of the administration opens
     # nothing: the scope of the caller says that it administers the
     # tenant, and the console has no way to act for it. The credential
-    # is the one of the platform, and the deployment holds one tenant.
+    # is the one of the platform, and it is the one the console
+    # presents when it holds no credential of the tenant.
     CONSOLE_ADMIN_TOKEN = "access-admin-token"
+    # The credential of the administration of the tenant of the
+    # deployment.
+    #
+    # The console acts for the operator of the tenant with the
+    # credential of the tenant, and the audit of Access names the
+    # operator of the credential. A console that holds no credential of
+    # the tenant signs every change of the tenant with the token of the
+    # platform, and the audit of the change names nobody.
+    CONSOLE_TENANT_ADMIN_TOKENS = "console-tenant-admin-tokens"
   }
 
   # Every secret that a service reads: the ones it reads from a file

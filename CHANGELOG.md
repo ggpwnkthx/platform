@@ -10,6 +10,14 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The console of the deployment holds the credential of its tenant
+
+The console of a deployment on Azure held the token of the platform and nothing else: every change it made in the tenant of the deployment was signed with the credential of the platform, and the audit of the change named nobody. The console acts for the operator of a tenant with the credential of that tenant, and the deployment now gives it one.
+
+The templates generate the credential of the tenant of the deployment and write it twice: Access knows it as a credential of the administration scoped to the tenant, and the console holds it as the credential of the tenant. The credential refuses every call about another tenant, the audit of a change of the tenant names the operator of the credential, and the token of the platform is still there for the operator of the platform. The slug of the tenant is the slug of the workspace of Data, and the templates refuse a slug that the console cannot read.
+
+The check of the deployment holds the templates to it: a console that holds no credential of its tenant, a credential that Access does not know, and a credential that names no tenant are three findings of the check.
+
 ### The interface of the operator works on the deployment the reader is on
 
 The interface of `platformctl tui` worked on the deployment that was selected when the page of the deployments was drawn, and not on the one the reader moved to: a reader who went down a row and opened the tenants read — and wrote — the tenants of the row above. The selected deployment is the one the other pages work on now, the header names it, and the reader who comes back is on the row they left.

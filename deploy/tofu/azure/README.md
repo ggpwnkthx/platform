@@ -593,11 +593,18 @@ The steps of the console are in [Console operations](../../../docs/console/opera
 The console reads the scope of the people who sign in through the
 credential of the access context, and it acts for them with the
 credential of the administration: the deployment gives the console the
-token of the platform, and the console administers the tenant of the
-deployment with it. A console that holds no credential of the
-administration opens nothing: the scope of the caller says that it
+token of the platform and the credential of the tenant of the
+deployment, and the console administers the tenant of the deployment
+with the credential of the tenant. A console that holds no credential of
+the administration opens nothing: the scope of the caller says that it
 administers the tenant, and the console has no way to act for it. The
 steps are in [Console operations](../../../docs/console/operations.md#credentials-it-holds).
+
+The credential of the tenant is scoped to it: Access refuses every call
+that is about another tenant with it, and the audit of a change of the
+tenant names the operator of the credential instead of naming nobody.
+The deployment holds one tenant, and the credential of that tenant is
+the one the console presents for it.
 
 The secret of the client is a credential of the deployment, and the
 templates generate it. An apply that changes it is an apply that
