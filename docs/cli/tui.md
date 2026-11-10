@@ -30,6 +30,7 @@ The page of the deployments is the one the interface opens on. The reader goes f
 | `/` | Filters the list with the text you type. `enter` keeps the filter, `esc` clears it. |
 | `enter` | Opens the selected deployment, or the form of the selected tenant. |
 | `n` | Creates: a deployment, a tenant, a principal or a grant, according to the page. |
+| `a` | Applies the deployment that is selected again: it opens the form of that deployment with its answers and with the images of the release, and the deployment is applied when you send the form and confirm it. |
 | `e` | Edits the profile or the tenant that is selected. |
 | `c` | Makes the selected profile the one of the machine. |
 | `d` | Removes the selected profile, or revokes the selected grant. The interface asks before it writes. |
@@ -99,6 +100,8 @@ A page whose credential is missing says why it could not be read and which varia
 The form of a new deployment holds the answers the wizard finds by itself, and you confirm them or change them: the digests of the images of the latest release of the platform, the digest of the image of the client of PostgreSQL, the range of the public address of your machine, and the answers of the deployment of the environment when there is one already. They are read while you fill in the form, and they are written in the fields you did not write in. What cannot be read is said in the log, and its field is yours to fill in. A deployment whose digests you left to the release runs that release, and the question the interface asks before it begins names it.
 
 A deployment that is applied is written as a profile of your machine, so the interface works on it at once: the profile is named after the prefix and the environment of the deployment (`platform-development`), it holds the public addresses of the gateway and of Access and the workspace, and it becomes the current one when the machine has none. `esc` goes back to the deployments, on the new one. The form opens on the answers of the deployment you wrote last.
+
+A deployment that is already there is applied again by its environment: select it on the deployments and press `a`. The form opens with the answers of that deployment and with the images of the latest release, the question the interface asks before it begins names the release, and the wizard applies it. A deployment your machine holds no files of cannot be applied again — there are no answers of it to apply — and the interface says so; name its environment in the form of a new deployment instead.
 
 When your session of Azure holds more than one subscription, the first field of the form asks which one the deployment is written in. It holds the subscription your session works in until you choose another, and the question the interface asks before the deployment begins names it. The deployment itself runs where nobody can answer a question, so sign in to Azure (`az login`) before you open the form: the log says so when the machine holds no session.
 

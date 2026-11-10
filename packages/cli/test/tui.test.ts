@@ -426,6 +426,40 @@ describe('the interface of the operator', () => {
     expect(frames).toContain('westeurope')
     expect(frames).toContain('example.com')
   })
+
+  test('the deployment that is selected is applied again', async () => {
+    const screen = new FakeScreen({ kind: 'char', char: 'a' })
+    const app = new Interface({
+      screen,
+      services: servicesOf(new FakeHttp()),
+      environment: {},
+      provider: azureProvider(),
+      deployments: async () =>
+        new Map([['development', { name: 'production', accessUrl: 'https://access.example.com' }]]),
+    })
+    await app.start()
+    const frames = screen.frames.join('\n')
+    // The form is the form of the deployment that is selected, and it
+    // holds the environment of that deployment.
+    expect(frames).toContain('the deployment of production again')
+    expect(frames).toContain('development')
+  })
+
+  test('a deployment that this machine holds no files of is not applied again', async () => {
+    const screen = new FakeScreen({ kind: 'char', char: 'a' })
+    const app = new Interface({
+      screen,
+      services: servicesOf(new FakeHttp()),
+      environment: {},
+      provider: azureProvider(),
+      deployments: async () => new Map(),
+    })
+    await app.start()
+    const frames = screen.frames.join('\n')
+    expect(frames).toContain(
+      'the deployment production is applied with the answers of the environment it is named after'
+    )
+  })
 })
 
 /** The letters of a text, as the keys of a reader who types them. */

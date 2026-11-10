@@ -10,6 +10,12 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The deployment that is selected is applied again
+
+The interface of `platformctl tui` could create a deployment and could not apply one that is already there: the form of a new deployment opened on the answers of the deployment the machine wrote last, and the reader who wanted another one had to name its environment by hand.
+
+The key `a` on the page of the deployments applies the deployment of the selected profile again. The form opens with the answers of that deployment — the ones of its environment — and with the images of the latest release, the reader sends it, and the wizard applies it. The deployment of a profile is found by its name and by the address of Access it answers at, so a profile that was renamed is still the deployment it is. A deployment the machine holds no files of is not applied again: there are no answers of it to apply, and the interface says so.
+
 ### The console of the deployment holds the credential of its tenant
 
 The console of a deployment on Azure held the token of the platform and nothing else: every change it made in the tenant of the deployment was signed with the credential of the platform, and the audit of the change named nobody. The console acts for the operator of a tenant with the credential of that tenant, and the deployment now gives it one.

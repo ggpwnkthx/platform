@@ -49,9 +49,11 @@ import {
   accessCallOf,
   answersFor,
   detailsOf,
+  environmentOf,
   listOf,
   peopleOf,
   valuesIn,
+  type DeploymentOnMachine,
   type Person,
   grantOf,
   grantRows,
@@ -112,6 +114,17 @@ export interface InterfaceOptions {
    * @param context the deployment the interface works on.
    */
   readonly held?: (templates: string, context: ResolvedContext) => Promise<Held>
+  /**
+   * The deployments that are on this machine, by their environment.
+   *
+   * The interface reads them to know which deployment the profile the
+   * reader has selected is: a deployment is applied again by its
+   * environment, and the answers of that environment are the answers
+   * of the deployment.
+   *
+   * @param templates the directory of the templates of a deployment.
+   */
+  readonly deployments?: (templates: string) => Promise<ReadonlyMap<string, DeploymentOnMachine>>
 }
 
 /** The number of milliseconds between two refreshes of the page. */
@@ -169,6 +182,8 @@ export class Interface {
   private giver?: string
   /** What a deployment of this machine answers about itself. */
   private readonly held?: InterfaceOptions['held']
+  /** The deployments of the machine, by their environment. */
+  private readonly deployments?: InterfaceOptions['deployments']
   /** The credentials the interface read, by the name of their deployment. */
   private readonly credentials = new Map<string, Held>()
   /** The deployments whose credential was asked for and not read. */
@@ -206,6 +221,7 @@ export class Interface {
     this.provider = options.provider
     this.answers = options.answers
     this.held = options.held
+    this.deployments = options.deployments
     this.templates = options.templates ?? defaultTemplates()
     this.root = resolve(this.templates, '..', '..', '..')
   }
@@ -854,6 +870,9 @@ export class Interface {
       case 'c':
         await this.onCurrent()
         return
+      case 'a':
+        await this.onApply()
+        return
       case 't':
         this.scope = {}
         await this.openPage('tenants')
@@ -1406,8 +1425,12 @@ export class Interface {
 
   /**
    * The form of the creation of a deployment.
+   *
+   * @param environment the environment of the deployment the form is
+   *   for, when the reader applies a deployment that is already there.
+   * @param name the name of the profile of that deployment.
    */
-  private async openWizard(): Promise<void> {
+  private async openWizard(environment?: string, name?: string): Promise<void> {
     const provider = this.provider
     if (!provider) {
       this.dispatch({
@@ -1420,7 +1443,11 @@ export class Interface {
     const fields: Field[] = []
     for (const question of provider.questions) {
       if (question.kind === 'given') continue
-      fields.push(fieldOf(question, defaults[question.name] ?? ''))
+      const value =
+        question.name === 'environment' && environment !== undefined
+          ? environment
+          : (defaults[question.name] ?? '')
+      fields.push(fieldOf(question, value))
     }
     fields.push({
       name: 'operator_addresses',
@@ -1430,11 +1457,46 @@ export class Interface {
       hint: 'the addresses of the machine of the operator, separated by commas',
     })
     this.dispatch({ type: 'page', page: 'create' })
-    this.openForm('the questions of the deployment', 'deploy', fields)
+    this.openForm(
+      name === undefined ? 'the questions of the deployment' : `the deployment of ${name} again`,
+      'deploy',
+      fields
+    )
     this.noted = new Set()
     this.accounts = new Map()
     this.release = undefined
-    this.find()
+    this.find(environment)
+  }
+
+  /**
+   * Applies the deployment of the profile that is selected again.
+   *
+   * A deployment is applied again by its environment: the form of the
+   * deployment opens with the answers of that environment and with the
+   * images of the release, and the reader sends it. A deployment that
+   * this machine holds no files of is not applied again: there are no
+   * answers of it to apply.
+   */
+  private async onApply(): Promise<void> {
+    if (this.state.page !== 'deployments') return
+    const row = this.selected()
+    if (!row) return
+    const deployments = await this.deployments?.(this.templates)
+    const profile = this.state.profiles.profiles[row.id]
+    const environment = deployments
+      ? environmentOf(deployments, row.id, profile?.accessUrl)
+      : undefined
+    if (environment === undefined) {
+      this.dispatch({
+        type: 'message',
+        message: {
+          text: `the deployment ${row.id} is applied with the answers of the environment it is named after, and this machine holds no files of it`,
+          kind: 'error',
+        },
+      })
+      return
+    }
+    await this.openWizard(environment, row.id)
   }
 
   /**

@@ -418,6 +418,64 @@ export function profileOfDeployment(
 }
 
 /**
+ * A deployment of the machine, as the interface knows it.
+ *
+ * The key of the map of the deployments of the machine is the
+ * environment of the deployment, and the value names the profile of the
+ * deployment and the address of Access it answers at. The interface
+ * reads them to know which deployment the profile the reader has
+ * selected is: a deployment is applied again by its environment.
+ */
+export interface DeploymentOnMachine {
+  /** The name of the profile of the deployment. */
+  readonly name: string
+  /** The address of Access of the deployment. */
+  readonly accessUrl?: string
+}
+
+/**
+ * An address without the stroke it may end with.
+ *
+ * Two addresses that name the same service are the same address when
+ * they are written the same way, and the reader may have written the
+ * stroke that ends it.
+ *
+ * @param address the address.
+ */
+export function plain(address: string | undefined): string {
+  return (address ?? '').replace(/\/+$/, '').toLowerCase()
+}
+
+/**
+ * The environment of the deployment of a profile.
+ *
+ * A profile is the deployment the reader works on, and a deployment is
+ * applied again by its environment: the answers of that environment are
+ * the answers of the deployment. The profile of a deployment is named
+ * after it, and the address of Access of the deployment is the address
+ * of the profile: the two tell which deployment a profile is.
+ *
+ * @param deployments the deployments of the machine, by their environment.
+ * @param name the name of the profile.
+ * @param accessUrl the address of Access of the profile.
+ */
+export function environmentOf(
+  deployments: ReadonlyMap<string, DeploymentOnMachine>,
+  name: string,
+  accessUrl?: string
+): string | undefined {
+  for (const [environment, deployment] of deployments) {
+    if (deployment.name === name) return environment
+  }
+  if (accessUrl === undefined) return undefined
+  for (const [environment, deployment] of deployments) {
+    if (deployment.accessUrl === undefined) continue
+    if (plain(deployment.accessUrl) === plain(accessUrl)) return environment
+  }
+  return undefined
+}
+
+/**
  * The answers the wizard of a deployment is given.
  *
  * The answers are the values of the form, and the digests of the

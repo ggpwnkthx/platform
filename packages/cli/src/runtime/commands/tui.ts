@@ -19,17 +19,8 @@ import { CliFailure } from '../../domains/failure'
 import { azureProvider, AZURE_QUESTIONS } from '../../platform/azure'
 import { Interface } from '../../tui/app'
 import { terminalScreen } from '../../tui/screen'
-import { profileOfDeployment } from '../../tui/tasks'
+import { type DeploymentOnMachine, plain, profileOfDeployment } from '../../tui/tasks'
 import { existingOf, latestOf, offersOf, readingsOf } from './deploy'
-
-/**
- * An address without the stroke it may end with.
- *
- * @param address the address.
- */
-function plain(address: string | undefined): string {
-  return (address ?? '').replace(/\/+$/, '').toLowerCase()
-}
 
 /**
  * The credential of the administration of a deployment of this machine.
@@ -133,6 +124,23 @@ export const tui: CommandSpec = {
       // The credential of the administration is read in the state of
       // the deployment when the shell holds none.
       held: (templates, context) => heldOf(input.services.infrastructure, templates, context),
+      // The deployments of the machine: the interface reads them to
+      // know the environment of the profile the reader has selected,
+      // and a deployment is applied again by its environment.
+      deployments: async (templates) => {
+        const existing = await existingOf(undefined, templates)
+        const found = new Map<string, DeploymentOnMachine>()
+        for (const [environment, values] of existing) {
+          const deployment = profileOfDeployment(values, {
+            public_names_enabled: values.public_names_enabled ?? '',
+          })
+          found.set(environment, {
+            name: deployment.name,
+            accessUrl: deployment.profile.accessUrl,
+          })
+        }
+        return found
+      },
       // The form of a deployment holds what the wizard of the CLI
       // reads and offers: the readings of the wizard, over the answers
       // of the deployment of the environment that is already there.
