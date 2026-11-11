@@ -10,6 +10,8 @@ in the same commit as the code.
 
 ## Unreleased
 
+## 1.4.1
+
 ### The reason of a refused login is in the log
 
 A login that the provider refused ended on a page that said that the identity was refused, and on nothing else: the reason of the refusal was dropped on the way, and the operator of the deployment had nothing to read. The reason is in the log of the service now, in the line of the refusal: it names the check of the token that failed, the two issuers when they are not the same, and the code of the refusal of the provider (`invalid_grant`, `AADSTS7000218`). The page of the refusal is unchanged: it names what happened and nothing else.
@@ -21,6 +23,7 @@ A failure of the service that is not a refusal of the provider is not a refusal 
 ### The deployment of Azure names the issuer it registers
 
 The issuer of the provider of the tenant of the deployment is the one the directory names, and the deployment says so before the first login: the wizard of the deployment reads the document of the directory and it names the two issuers when they are not the same. The identifier of the tenant is in lower case in that issuer and in the templates: Entra ID names the tenant of its issuer in lower case, and Access compares the issuer of the registration with the issuer of the token and with the issuer of the document character for character.
+
 
 
 ## 1.4.0
