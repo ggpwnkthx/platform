@@ -719,10 +719,12 @@ jobs:
         # The boundaries of the transport are the ones that are not
         # observable on the older lines of the runtime: they are the
         # reason the gateway refuses to start on one (decision 36).
+        #
+        # The suites of the runtime are the ones that run here, and the
+        # whole suite of the gateway runs once, with the pinned runtime,
+        # in the job of the checks: a suite that runs three times over
+        # proves the same thing three times.
         run: bun test --cwd packages/gateway test/network test/fuzz test/load
-
-      - name: the tests of the gateway
-        run: bun run --cwd packages/gateway test
 
   runtime-refusal:
     name: the gateway refuses an old runtime
@@ -784,7 +786,13 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: install the browser
-        run: bunx playwright install --with-deps chromium
+        # The runner carries the libraries that chromium needs, and the
+        # packages of the archive of Ubuntu are not installed: the fonts
+        # they carry are cosmetic, and the archive is a network the job
+        # does not depend on. The archive of the runner failed to
+        # resolve twice, and the failure of a network is not the failure
+        # of the gateway.
+        run: bunx playwright install chromium
 
       - name: the cookies and the origins
         run: bun test --cwd packages/gateway test/browser
