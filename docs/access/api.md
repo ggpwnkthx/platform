@@ -1,6 +1,6 @@
 # HTTP API
 
-Every Access endpoint with its request, response, errors and a `curl` example, ending with a tenant's whole session in fifteen calls. It is written for developers and operators who call Access; the rules behind each endpoint are in the [specification](spec.md), cited as `§N`.
+Every Access endpoint with its request, response, errors and a `curl` example, ending with a tenant's whole session in eighteen calls. It is written for developers and operators who call Access; the rules behind each endpoint are in the [specification](spec.md), cited as `§N`.
 
 ## Conventions
 
@@ -47,6 +47,34 @@ The OpenAPI description of the served paths and response shapes. The repository'
 | `login_hint` | Optional. An e-mail, used only when the client is shared. |
 
 Response: `302` to the tenant's provider, `400 invalid_request` (no tenant, bad parameters, unregistered `redirect_uri`) or `403 tenant_disabled`.
+
+### `GET /oauth/local/authorize`
+
+The page that asks for the password of a local provider (§5.4.1). Access serves it: the caller never leaves the origin of the service.
+
+The page needs the state of a login in flight: it is in the cookie of the page, and a login that is not in flight has no page.
+
+```html
+<form method="post" action="/oauth/local/login">
+  <input type="hidden" name="token" value="…" />
+  <input id="email" name="email" type="email" required autocomplete="username" />
+  <input id="password" name="password" type="password" required autocomplete="current-password" />
+</form>
+```
+
+### `POST /oauth/local/login`
+
+The answer of the form of the password (§5.4.2).
+
+| Field | Rule |
+| --- | --- |
+| `token` | Required. The state of the provider: it is bound to the state of the login. |
+| `email` | Required. The address of the account. |
+| `password` | Required. The password of the account. |
+
+A credential that signed in answers `302` with the callback of Access: `Location: /oauth/tenant/callback?code=…&state=…`.
+
+A refused sign-in answers `403 identity_rejected` with a page saying that the address or the password is wrong — the same answer for an address that names no account, a wrong password, a disabled account and a locked account. Too many failures from one address answer `429 too_many_requests`.
 
 ### `GET /oauth/tenant/callback`
 
@@ -211,7 +239,7 @@ Unknown or mistyped fields are refused; the body is at most 64 KiB.
 
 ## Administration
 
-The fifteen administrative endpoints live under `/v1/admin`, next to `GET /v1/admin/audit`; every call sends `Authorization: Bearer <credential>`. The credential is `ACCESS_ADMIN_TOKEN` or one from `ACCESS_ADMIN_TOKENS` (§4.6); a tenant credential acts only for its tenant, and naming another is `403 forbidden`. Limits, pagination, error codes and auditing: §10.1.
+The eighteen administrative endpoints live under `/v1/admin`, next to `GET /v1/admin/audit`; every call sends `Authorization: Bearer <credential>`. The credential is `ACCESS_ADMIN_TOKEN` or one from `ACCESS_ADMIN_TOKENS` (§4.6); a tenant credential acts only for its tenant, and naming another is `403 forbidden`. Limits, pagination, error codes and auditing: §10.1.
 
 ### `POST /v1/admin/tenants`
 
@@ -487,6 +515,70 @@ curl -sS -X DELETE https://access.example.com/v1/admin/providers/d4e5… \
 ```
 
 `204` when the provider is removed. `400 invalid_request` when the provider is the default one of its tenant, `409 conflict` when it holds principals, `404 not_found` when the identifier names no provider.
+
+### `POST /v1/admin/credentials`
+
+Upsert by `(tenant, provider, email)` (§10.17). The provider must be a local one.
+
+```bash
+curl -sS -X POST https://access.example.com/v1/admin/credentials \
+  -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{
+        "tenant": "acme",
+        "provider": "local",
+        "email": "alice@acme.example",
+        "password": "a-long-password-of-the-account"
+      }'
+```
+
+| Field | Rule |
+| --- | --- |
+| `tenant` | Required. The tenant slug. |
+| `provider` | Required. The slug of the **local** provider of the credential. |
+| `email` | Required. The address of the account. |
+| `password` | Required. At least 12 characters, at most 128. |
+| `status` | Optional. `active` (default) or `disabled`. |
+
+`400 invalid_request` when the provider is not a local one and when the password is too short or too long. `404 not_found` when the tenant does not exist, and when the provider does not exist either.
+
+```json
+{
+  "credential": {
+    "id": "e6f7…", "tenant": "acme", "provider": "local",
+    "email": "alice@acme.example", "status": "active",
+    "failedAttempts": 0, "lockedUntil": null,
+    "passwordChangedAt": "2026-01-08T10:05:00.000Z",
+    "createdAt": "2026-01-08T10:05:00.000Z"
+  }
+}
+```
+
+The answer never carries the verifier of the password.
+
+### `GET /v1/admin/credentials`
+
+```bash
+curl -sS "https://access.example.com/v1/admin/credentials?tenant=acme" \
+  -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
+```
+
+| Parameter | Rule |
+| --- | --- |
+| `tenant` | Optional. A tenant slug. Absent: every tenant. |
+| `provider` | Optional. The slug of the provider. |
+| `email` | Optional. Exact e-mail match. |
+| `limit` | Optional. Default `50`, maximum `200`. |
+| `offset` | Optional. Default `0`. |
+
+### `DELETE /v1/admin/credentials/{id}`
+
+```bash
+curl -sS -X DELETE https://access.example.com/v1/admin/credentials/e6f7… \
+  -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
+```
+
+`204` when the credential is removed. `404 not_found` when the identifier names no credential.
 
 ### `PUT /v1/admin/grants`
 
@@ -796,9 +888,9 @@ id,at,action,targetId,tenant,operator,address,requestId
 0f2c…,2026-01-08T10:30:00.000Z,grant.revoked,9fbfda13-…,acme,6b1f2c9d0e3a,10.0.0.7,8452a08e-…
 ```
 
-## Session in fifteen calls
+## Session in eighteen calls
 
-The fifteen calls of the session take a tenant from registration to revocation, using each administration endpoint once. You need `curl` and `jq`.
+The eighteen calls of the session take a tenant from registration to revocation, using each administration endpoint once. You need `curl` and `jq`.
 
 ```bash
 export ACCESS=https://access.example.com
@@ -824,58 +916,69 @@ USER_ID=$(curl -sS -X POST $ACCESS/v1/admin/users \
 curl -sS "$ACCESS/v1/admin/users?tenant=acme" \
   -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
 
-# 5. Register a second provider of the tenant
+# 5. Register a local provider of the tenant
 PROVIDER_ID=$(curl -sS -X POST $ACCESS/v1/admin/providers \
   -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" -H "content-type: application/json" \
-  -d '{"tenant":"acme","slug":"okta","displayName":"Okta",
-       "issuer":"https://login.okta.example","idpClientId":"access-acme-okta",
-       "idpClientSecret":"…","idpRedirectUri":"https://access.example.com/oauth/tenant/callback"}' | jq -r .provider.id)
+  -d '{"tenant":"acme","kind":"local","slug":"local","displayName":"The accounts of the tenant"}' | jq -r .provider.id)
 
 # 6. List the tenant's providers
 curl -sS "$ACCESS/v1/admin/providers?tenant=acme" \
   -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
 
-# 7. Grant a permission on a workspace and route
+# 7. Write a credential of the local provider
+CREDENTIAL_ID=$(curl -sS -X POST $ACCESS/v1/admin/credentials \
+  -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" -H "content-type: application/json" \
+  -d '{"tenant":"acme","provider":"local","email":"alice@acme.example",
+       "password":"a-long-password-of-the-account"}' | jq -r .credential.id)
+
+# 8. List the tenant's credentials
+curl -sS "$ACCESS/v1/admin/credentials?tenant=acme" \
+  -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
+
+# 9. Grant a permission on a workspace and route
 GRANT_ID=$(curl -sS -X PUT $ACCESS/v1/admin/grants \
   -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" -H "content-type: application/json" \
   -d '{"tenant":"acme","userId":"'"$USER_ID"'","permission":"workspace.read",
        "workspaceId":"11111111-1111-4111-8111-111111111111","routeId":"workspace-api"}' | jq -r .id)
 
-# 8. List the tenant's grants
+# 10. List the tenant's grants
 curl -sS "$ACCESS/v1/admin/grants?tenant=acme" \
   -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
 
-# 9. Create a group; a grant to the group applies to every member
+# 11. Create a group; a grant to the group applies to every member
 curl -sS -X POST $ACCESS/v1/admin/groups \
   -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" -H "content-type: application/json" \
   -d '{"tenant":"acme","key":"team-platform","displayName":"The platform team",
        "members":["00u1a2b3c4d5"]}'
 
-# 10. List the tenant's groups
+# 12. List the tenant's groups
 curl -sS "$ACCESS/v1/admin/groups?tenant=acme" \
   -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
 
-# 11. Create a role holding a permission
+# 13. Create a role holding a permission
 ROLE_ID=$(curl -sS -X PUT $ACCESS/v1/admin/roles \
   -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" -H "content-type: application/json" \
   -d '{"tenant":"acme","key":"role-editor","displayName":"The editors",
        "permissions":["workspace.write"]}' | jq -r .id)
 
-# 12. List the tenant's roles
+# 14. List the tenant's roles
 curl -sS "$ACCESS/v1/admin/roles?tenant=acme" \
   -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
 
-# 13. Remove the role (no grant names it)
+# 15. Remove the role (no grant names it)
 curl -sS -X DELETE $ACCESS/v1/admin/roles/$ROLE_ID -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
 
-# 14. Remove the provider (it holds no principal)
+# 16. Remove the credential
+curl -sS -X DELETE $ACCESS/v1/admin/credentials/$CREDENTIAL_ID -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
+
+# 17. Remove the provider (it holds no principal)
 curl -sS -X DELETE $ACCESS/v1/admin/providers/$PROVIDER_ID -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
 
-# 15. Revoke the grant when access must end
+# 18. Revoke the grant when access must end
 curl -sS -X DELETE $ACCESS/v1/admin/grants/$GRANT_ID -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
 ```
 
-To grant a role, send `"role":"role-editor"` instead of `"permission"` in step 7. `scripts/cli/admin-smoke.ts` runs the same sequence against a deployment:
+To grant a role, send `"role":"role-editor"` instead of `"permission"` in step 9. `scripts/cli/admin-smoke.ts` runs the same sequence against a deployment:
 
 ```bash
 ACCESS_URL=$ACCESS ACCESS_ADMIN_TOKEN=$ACCESS_ADMIN_TOKEN bun run scripts/cli/admin-smoke.ts

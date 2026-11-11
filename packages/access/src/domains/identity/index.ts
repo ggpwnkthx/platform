@@ -14,6 +14,15 @@ export type {
 } from './provider-client'
 export { ProviderClient } from './provider-client'
 export { mapIdentity, MappingError } from './mapping'
+export { LocalAuthenticator, LocalLoginError } from './local-authenticator'
+export {
+  LocalProvider,
+  type CredentialLookup,
+  type LocalCodeRecord,
+  type LocalCredential,
+  type PasswordHasher,
+} from './local-provider'
+
 export type {
   AuthorizationRequest,
   BegunLogin,

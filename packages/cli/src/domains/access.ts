@@ -114,6 +114,43 @@ export async function removeProvider(call: AccessCall, id: string): Promise<unkn
 }
 
 /**
+ * The credentials of the deployment.
+ *
+ * @param call the parameters of the call.
+ * @param query the query of the page.
+ */
+export async function listCredentials(
+  call: AccessCall,
+  query: Readonly<Record<string, string | number | undefined>>
+): Promise<unknown> {
+  return await read(() =>
+    clientOf(call)
+      .send('GET', '/credentials', query as Record<string, string>)
+      .then(bodyOf)
+  )
+}
+
+/**
+ * Writes a credential of a local provider, or changes it.
+ *
+ * @param call the parameters of the call.
+ * @param credential the credential.
+ */
+export async function writeCredential(call: AccessCall, credential: unknown): Promise<unknown> {
+  return await read(() => clientOf(call).send('POST', '/credentials', {}, credential).then(bodyOf))
+}
+
+/**
+ * Removes a credential of a local provider.
+ *
+ * @param call the parameters of the call.
+ * @param id the identifier of the credential.
+ */
+export async function removeCredential(call: AccessCall, id: string): Promise<unknown> {
+  return await read(() => clientOf(call).send('DELETE', `/credentials/${id}`).then(bodyOf))
+}
+
+/**
  * The principals of the deployment.
  *
  * @param call the parameters of the call.

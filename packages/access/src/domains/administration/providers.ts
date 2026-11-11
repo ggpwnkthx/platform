@@ -60,19 +60,37 @@ export async function upsertProvider(
 
   const existing = await options.providers.findBySlug(tenant.id, registration.slug)
 
+  // A **local** provider holds its own identities: it has no
+  // registration, and it signs its callers in at Access itself.
+  const local = registration.kind === 'local'
+
+  if (local && tenant.sharedClient) {
+    // A shared client moves the logins of the platform, and a local
+    // provider is a set of passwords: a caller that chooses it signs in
+    // at the tenant of its choice. The platform operator accepts that
+    // for a shared client; it does not accept it for passwords.
+    throw new AdministrationError(
+      'invalid_request',
+      'a tenant that shares its client cannot have a local provider: the callers of the platform would choose a password to sign in at'
+    )
+  }
+
   if (!existing) {
     // A provider that is created carries a complete registration: the
     // issuer, the client, the secret and the callback are needed, and a
     // registration that names none of them is a registration that creates
-    // no provider.
-    const missing = (
-      [
-        ['issuer', registration.issuer],
-        ['the client id of Access at the provider', registration.idpClientId],
-        ['the secret of Access at the provider', registration.idpClientSecret],
-        ['the callback of Access at the provider', registration.idpRedirectUri],
-      ] as const
-    ).find(([, value]) => value === undefined || value === '')
+    // no provider. A local provider has no registration: it holds its
+    // own identities.
+    const missing = local
+      ? undefined
+      : (
+          [
+            ['issuer', registration.issuer],
+            ['the client id of Access at the provider', registration.idpClientId],
+            ['the secret of Access at the provider', registration.idpClientSecret],
+            ['the callback of Access at the provider', registration.idpRedirectUri],
+          ] as const
+        ).find(([, value]) => value === undefined || value === '')
     if (missing) {
       throw new AdministrationError(
         'invalid_request',
@@ -82,6 +100,7 @@ export async function upsertProvider(
     const provider = await options.providers.create(
       {
         tenantId: tenant.id,
+        kind: local ? 'local' : 'oidc',
         slug: registration.slug,
         displayName: registration.displayName ?? registration.slug,
         enabled: registration.enabled ?? true,

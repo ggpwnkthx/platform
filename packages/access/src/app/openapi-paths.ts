@@ -197,6 +197,30 @@ export function apiPaths(): Record<string, unknown> {
         },
       },
     },
+    '/oauth/local/authorize': {
+      get: {
+        summary: 'The page that asks for the password of a local provider.',
+        description:
+          'Access serves the page itself: the caller signs in with an address and a password, and the state of the login travels in a cookie of its own.',
+        responses: {
+          200: jsonResponse('The page of the password.'),
+          400: errorResponse('The login has to start again.'),
+        },
+      },
+    },
+    '/oauth/local/login': {
+      post: {
+        summary: 'The answer of the form of the password.',
+        description:
+          'The credential that signed in is handed a code that names it, and the browser goes back to the callback of Access.',
+        responses: {
+          302: { description: 'The browser is sent to the callback of Access.' },
+          400: errorResponse('The login has to start again.'),
+          403: errorResponse('The address or the password is wrong.'),
+          429: errorResponse('Too many failed sign-ins from this address.'),
+        },
+      },
+    },
     '/oauth/tenant/callback': {
       get: {
         summary: 'The callback of Access at the provider of a tenant.',
@@ -334,6 +358,36 @@ export function apiPaths(): Record<string, unknown> {
           'The default provider of a tenant is not removed, and a provider that has principals is not removed either: the principals carry its slug.',
         responses: {
           200: jsonResponse('The provider is removed.'),
+          403: errorResponse('The caller does not hold the administration of the tenant.'),
+        },
+      },
+    },
+    '/v1/admin/credentials': {
+      post: {
+        summary: 'The registration of a credential of a local provider.',
+        description:
+          'It creates a credential, or it changes the credential of that `(tenant, provider, email)` pair: the call is an upsert. The password is hashed before it is stored and it is never answered.',
+        responses: {
+          201: jsonResponse('The credential is registered.'),
+          403: errorResponse('The caller does not hold the administration of the tenant.'),
+        },
+      },
+      get: {
+        summary: 'The list of the credentials.',
+        description: 'The credentials of the tenant, filtered by provider and by e-mail.',
+        responses: {
+          200: jsonResponse('The credentials of the tenant.'),
+          403: errorResponse('The caller does not hold the administration of the tenant.'),
+        },
+      },
+    },
+    '/v1/admin/credentials/{id}': {
+      delete: {
+        summary: 'The removal of a credential of a local provider.',
+        description:
+          'The principal the credential created stays: it cannot be signed in with any more, and the operator revokes its rights.',
+        responses: {
+          200: jsonResponse('The credential is removed.'),
           403: errorResponse('The caller does not hold the administration of the tenant.'),
         },
       },

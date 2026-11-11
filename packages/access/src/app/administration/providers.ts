@@ -78,6 +78,7 @@ export async function providerHandler(
       scope,
       {
         tenant: body.tenant,
+        ...(body.kind ? { kind: body.kind } : {}),
         slug: body.slug,
         displayName: body.displayName,
         enabled: body.enabled,

@@ -9,10 +9,24 @@
 
 import { createAccessApp, createAccessHandler } from '../app/app'
 import type { AdminCredential } from '../domains/administration'
-import { LoginError, LoginService, ProviderClient, createStateCipher } from '../domains/identity'
-import type { ProviderOfLogin, TenantOfLogin } from '../domains/identity'
+import {
+  LocalAuthenticator,
+  LocalProvider,
+  LoginError,
+  LoginService,
+  ProviderClient,
+  createStateCipher,
+} from '../domains/identity'
+import type {
+  CredentialLookup,
+  LocalCodeRecord,
+  LocalCredential,
+  ProviderOfLogin,
+  TenantOfLogin,
+} from '../domains/identity'
 import { CodeService, ProviderService, RefreshService } from '../domains/provider'
 import { resolveCallableAddress } from '../platform/bun/address'
+import { BunPasswordHasher } from '../platform/bun/password'
 import { createFetchTransport } from '../platform/bun/http'
 import {
   createStoreClient,
@@ -27,7 +41,8 @@ import type { AccessDependencies } from '../app/dependencies'
 import { createAdministrationService } from './adapters'
 import { change, platformScope } from '../domains/administration'
 import { callerAddress } from '../domains/forwarding'
-import { createLogger, MetricsStore, type Logger, type Observer } from '../observability'
+import { createLogger, MetricsStore } from '../observability'
+import type { Logger, Observer } from '../observability'
 import { startListener, type StartedListener } from '../platform/bun/listener'
 import {
   createDatabase,
@@ -35,6 +50,7 @@ import {
   createTracedClient,
   AccessContextRepository,
   AuditRepository,
+  CredentialRepository,
   DecisionRepository,
   GrantRepository,
   GroupRepository,
@@ -46,11 +62,14 @@ import {
   roleOf,
   runMigrations,
   TenantRepository,
-  type ProviderRow,
-  type TenantRow,
   UserRepository,
-  type Database,
-  type SecretCipher,
+} from '../platform/postgres'
+import type {
+  CredentialRow,
+  Database,
+  ProviderRow,
+  SecretCipher,
+  TenantRow,
 } from '../platform/postgres'
 import { parseAccessContextCredentials } from './access-context-credentials'
 import type { RuntimeSettings } from './env'
@@ -88,6 +107,8 @@ interface AccessRepositories {
   tenants: TenantRepository
   /** The providers of the tenants (spec §3.11). */
   providers: ProviderRepository
+  /** The credentials of the local providers (spec §3.12). */
+  credentials: CredentialRepository
   users: UserRepository
   permissions: PermissionRepository
   grants: GrantRepository
@@ -169,6 +190,7 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
   const repositories: AccessRepositories = {
     tenants: new TenantRepository(traced, secrets),
     providers: new ProviderRepository(traced, secrets),
+    credentials: new CredentialRepository(traced),
     users: new UserRepository(traced),
     permissions: new PermissionRepository(traced),
     grants: new GrantRepository(traced),
@@ -363,6 +385,9 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
     // on every request (spec §6.6). A change of the registration of a
     // provider drops its client, and the next login builds a new one.
     driverOf: async (tenant, provider) => {
+      // A local provider is served by Access itself: the driver of the
+      // local provider is the same for every tenant (spec §5.4).
+      if (provider.kind === 'local') return localProvider
       const key = `${tenant.id}:${provider.slug}`
       const cached = providerClients.get(key)
       if (cached && Date.now() - cached.at < PROVIDER_CLIENT_TTL_MS) {
@@ -395,6 +420,69 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
       return client
     },
     secret: settings.secrets.stateSecret ?? 'the-state-of-the-development',
+  })
+
+  // The codes of the local providers: the code that the page of the
+  // password hands to the callback. They live in the shared store like
+  // the other codes, under a key of their own.
+  const localCodes: MemoryCodeStore<LocalCodeRecord> = new MemoryCodeStore<LocalCodeRecord>()
+  const localCodeStore = storeClient
+    ? new RedisCodeStore<LocalCodeRecord>(storeClient, 'access:local')
+    : localCodes
+
+  // The driver of a local provider: the page of the password, and the
+  // code that the page hands to the callback (spec §5.4).
+  const localProvider = new LocalProvider({
+    publicUrl: settings.public.publicUrl,
+    codes: localCodeStore,
+  })
+
+  // The counts of the failed sign-ins. They are the counts of the shared
+  // store, under a namespace of their own: a caller that hammers the
+  // administration does not spend the budget of the sign-ins.
+  const loginFailures = storeClient
+    ? new RedisAuthenticationFailures(storeClient, 'access', 'login-failures')
+    : new MemoryAuthenticationFailures()
+
+  /**
+   * Turns a credential of the storage into a credential of the identity
+   * domain.
+   *
+   * The verifier of the password is carried as it is: the identity
+   * domain checks the password against it, and it never answers it.
+   */
+  const toLocalCredential = (row: CredentialRow): LocalCredential => ({
+    id: row.id,
+    tenantId: row.tenantId,
+    providerSlug: row.providerSlug,
+    email: row.email,
+    passwordHash: row.passwordHash,
+    status: row.status,
+    failedAttempts: row.failedAttempts,
+    lockedUntil: row.lockedUntil,
+  })
+
+  // The sign-in at a local provider: the credential, the password and
+  // the code of the login (spec §5.4).
+  const credentialLookup: CredentialLookup = {
+    findByEmail: async (tenantSlug, providerSlug, email) => {
+      const credential = await repositories.credentials.findByEmail(tenantSlug, providerSlug, email)
+      return credential ? toLocalCredential(credential) : null
+    },
+    recordFailure: async (id) => {
+      const credential = await repositories.credentials.recordFailure(id)
+      return credential ? toLocalCredential(credential) : null
+    },
+    clearFailures: async (id) => await repositories.credentials.clearFailures(id),
+  }
+
+  const local = new LocalAuthenticator({
+    credentials: credentialLookup,
+    codes: localCodeStore,
+    hasher: new BunPasswordHasher(),
+    state: createStateCipher(settings.secrets.stateSecret ?? 'the-state-of-the-development'),
+    secret: settings.secrets.stateSecret ?? 'the-state-of-the-development',
+    failures: loginFailures,
   })
 
   // The codes of the logins and their exchange.
@@ -462,6 +550,7 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
     observer,
     provider,
     login,
+    local,
     codes: codeService,
     refresh: {
       exchange: async (options) => await refreshService.exchange(options),
@@ -492,11 +581,13 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
     accessContexts: new AccessContextRepository(traced),
     accessContextCredentials: parseAccessContextCredentials(settings.access.contextTokens),
     metricsToken: settings.metrics.token,
-    // The administration of the platform: the fifteen endpoints of the
+    // The administration of the platform: the eighteen endpoints of the
     // specification, and nothing else.
     administration: createAdministrationService({
       tenants: repositories.tenants,
       providers: repositories.providers,
+      credentials: repositories.credentials,
+      hasher: new BunPasswordHasher(),
       users: repositories.users,
       groups: new GroupRepository(traced),
       roles: new RoleRepository(traced),
@@ -508,7 +599,7 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
       audit: new AuditRepository(traced),
       token: settings.admin.token,
       previousToken: settings.admin.previousToken,
-      credentials: readAdminCredentials(settings.admin.credentials),
+      adminCredentials: readAdminCredentials(settings.admin.credentials),
       publicUrl: settings.public.publicUrl,
       // The cipher of the secrets at rest: the secret of a provider is
       // encrypted before it is written (spec §4.3).

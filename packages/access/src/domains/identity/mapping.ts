@@ -94,10 +94,19 @@ export interface ExternalIdentity {
   name?: string | null
 }
 
-/** The provider a mapping is made at. */
+/**
+ * The provider a mapping is made at.
+ *
+ * The kind of the provider is part of the rule of the mapping: the
+ * identity of a **local** provider is known, because the credential that
+ * holds it is a row of the platform. The identity of an OpenID Connect
+ * provider is known only when the tenant provisions it (spec §6.4).
+ */
 export interface ProviderOfMapping {
   /** The slug of the provider: the third part of the key of the mapping. */
   slug: string
+  /** The kind of the provider. */
+  kind: 'oidc' | 'local'
 }
 
 /** The failure of a mapping. */
@@ -149,7 +158,12 @@ export async function mapIdentity(
     return { principal: existing, created: false, first: false }
   }
 
-  if (!tenant.autoProvision) {
+  // The identity of a local provider is known: the credential that holds
+  // it is a row of the platform, and the operator wrote it. The identity
+  // of an OpenID Connect provider is known only when the tenant
+  // provisions the identities that sign in (spec §6.4).
+  const known = provider.kind === 'local'
+  if (!known && !tenant.autoProvision) {
     throw new MappingError('identity_unknown', 'the identity is unknown to the platform')
   }
 

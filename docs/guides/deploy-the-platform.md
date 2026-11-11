@@ -325,7 +325,7 @@ Expect `200` on all six; the console answers the same probes on `8083`. From an 
 
 Then run the end-to-end checks:
 
-1. Run the fifteen-call administration session against Access: `ACCESS_URL=https://access.example.com ACCESS_ADMIN_TOKEN=… bun run --cwd packages/access admin:smoke`.
+1. Run the eighteen-call administration session against Access: `ACCESS_URL=https://access.example.com ACCESS_ADMIN_TOKEN=… bun run --cwd packages/access admin:smoke`.
 2. Open `https://api.example.com/auth/login?redirect=/ws/11111111-1111-4111-8111-111111111111/v1/me` in a browser and sign in as a principal you granted. Data answers with the principal, tenant and workspace as JSON, which proves the login, the Access decision, the identity signature and Data's access context all work.
 3. From a script, the same read is `platformctl data me --workspace 11111111-1111-4111-8111-111111111111` with `PLATFORMCTL_TOKEN` set.
 4. Call Data directly, bypassing the gateway: it must answer `401 UNAUTHENTICATED`, because no gateway signed the request.

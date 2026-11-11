@@ -9,7 +9,12 @@
 import type { AdministrationService } from '../domains/administration'
 import type { AccessContextStore, DecisionStore } from '../domains/authorization'
 import type { AccessContextCredential } from './access-context-contract'
-import type { AuthorizationRequest, BegunLogin, CompletedLogin } from '../domains/identity'
+import type {
+  AuthorizationRequest,
+  BegunLogin,
+  CompletedLogin,
+  LocalAuthenticator,
+} from '../domains/identity'
 import type { ProviderService, TokenPair } from '../domains/provider'
 import type { Logger, Observer } from '../observability'
 
@@ -129,6 +134,14 @@ export interface AccessDependencies {
   metricsToken?: string
   /** The login of the callers. */
   login: LoginPort
+  /**
+   * The sign-in at a local provider.
+   *
+   * The local provider is served by Access itself: the page of the
+   * password and the answer of the form are the work of the identity
+   * domain (spec §5.4).
+   */
+  local: LocalAuthenticator
   /** The codes of the logins. */
   codes: CodePort
   /** The refresh tokens of the logins (spec §7.6). */

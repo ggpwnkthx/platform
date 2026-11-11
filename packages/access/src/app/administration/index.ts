@@ -14,6 +14,11 @@ export { auditHandler } from './audit'
 export { grantHandler, grantsHandler, revokeGrantHandler } from './grants'
 export { groupHandler, groupsHandler } from './groups'
 export { principalHandler, principalsHandler } from './principals'
+export {
+  credentialHandler,
+  credentialsHandler,
+  removeCredentialHandler,
+} from './local-credentials'
 export { providerHandler, providersHandler, removeProviderHandler } from './providers'
 export { removeRoleHandler, roleHandler, rolesHandler } from './roles'
 export { tenantHandler, tenantsHandler } from './tenants'

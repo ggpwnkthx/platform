@@ -35,7 +35,7 @@ Development values are in [`packages/access/.env.example`](../../packages/access
 
 | Variable | Default | Production | Meaning |
 | --- | --- | --- | --- |
-| `ACCESS_ADMIN_TOKEN` | none | required, unless `ACCESS_ADMIN_TOKENS` is set | The bearer token of the fifteen administrative endpoints: a platform credential. Without it and without `ACCESS_ADMIN_TOKENS`, the administration refuses every call. |
+| `ACCESS_ADMIN_TOKEN` | none | required, unless `ACCESS_ADMIN_TOKENS` is set | The bearer token of the eighteen administrative endpoints: a platform credential. Without it and without `ACCESS_ADMIN_TOKENS`, the administration refuses every call. |
 | `ACCESS_ADMIN_TOKENS` | none | optional | Administration credentials: a JSON object of bearer tokens and their scopes ([format](#administration-credentials), §4.6). |
 | `ACCESS_PREVIOUS_ADMIN_TOKEN` | none | optional | The token the current one replaced. Accepted until the deployment removes it (§4.3.1). |
 | `ACCESS_DECISION_TOKEN` | none | optional, deprecated | Bearer token the gateway presents on `POST /v1/decisions`. Unscoped: without it, only tenant credentials are accepted (§8.8). |

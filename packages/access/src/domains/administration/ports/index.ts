@@ -1,7 +1,7 @@
 /**
  * The ports of the administration.
  *
- * The domain owns the rules of the fifteen endpoints; the storage is a port
+ * The domain owns the rules of the eighteen endpoints; the storage is a port
  * that the composition root fulfils. The domain knows nothing about
  * PostgreSQL and nothing about the shape of the rows.
  *
@@ -9,6 +9,14 @@
  * permissions, the groups, the grants and the audit.
  */
 
+export type {
+  Credential,
+  CredentialFilter,
+  CredentialHasher,
+  CredentialPage,
+  CredentialRegistration,
+  CredentialStore,
+} from './local-credentials'
 export type {
   AuditContext,
   AuditFilter,

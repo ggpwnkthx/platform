@@ -49,8 +49,13 @@ export async function createStoreClient(options: StoreOptions): Promise<SharedSt
   return client as RedisClientType
 }
 
-/** The store of the codes, in the shared store. */
-export class RedisCodeStore implements CodeStore {
+/**
+ * The store of the codes, in the shared store.
+ *
+ * The store holds a record of any shape: the code of the platform holds
+ * a `CodeRecord`, and the code of a local provider holds its own.
+ */
+export class RedisCodeStore<T = CodeRecord> implements CodeStore<T> {
   constructor(
     private readonly client: SharedStoreClient,
     private readonly keyPrefix = 'access'
@@ -61,17 +66,17 @@ export class RedisCodeStore implements CodeStore {
     return `${this.keyPrefix}:code:${hash}`
   }
 
-  async put(hash: string, record: CodeRecord, ttlSeconds: number): Promise<void> {
+  async put(hash: string, record: T, ttlSeconds: number): Promise<void> {
     await this.client.set(this.key(hash), JSON.stringify(record), { EX: ttlSeconds })
   }
 
-  async take(hash: string): Promise<CodeRecord | null> {
+  async take(hash: string): Promise<T | null> {
     // The read and the delete are one operation: a code that is redeemed
     // twice is a code that does not exist.
     const raw = await this.client.getDel(this.key(hash))
     if (!raw) return null
     try {
-      return JSON.parse(raw) as CodeRecord
+      return JSON.parse(raw) as T
     } catch {
       return null
     }
@@ -79,16 +84,16 @@ export class RedisCodeStore implements CodeStore {
 }
 
 /** The store of the codes, in the memory of the process. */
-export class MemoryCodeStore implements CodeStore {
-  private readonly codes = new Map<string, { record: CodeRecord; expiresAt: number }>()
+export class MemoryCodeStore<T = CodeRecord> implements CodeStore<T> {
+  private readonly codes = new Map<string, { record: T; expiresAt: number }>()
 
   constructor(private readonly now: () => number = () => Date.now()) {}
 
-  async put(hash: string, record: CodeRecord, ttlSeconds: number): Promise<void> {
+  async put(hash: string, record: T, ttlSeconds: number): Promise<void> {
     this.codes.set(hash, { record, expiresAt: this.now() + ttlSeconds * 1000 })
   }
 
-  async take(hash: string): Promise<CodeRecord | null> {
+  async take(hash: string): Promise<T | null> {
     const found = this.codes.get(hash)
     if (!found) return null
     this.codes.delete(hash)
@@ -161,12 +166,20 @@ export class MemoryRefreshTokenStore implements RefreshTokenStore {
 export class RedisAuthenticationFailures implements AuthenticationFailures {
   constructor(
     private readonly client: SharedStoreClient,
-    private readonly keyPrefix = 'access'
+    private readonly keyPrefix = 'access',
+    /**
+     * The namespace of the counts.
+     *
+     * The counts of the administration and the counts of the logins are
+     * kept apart: a caller that hammers the administration does not spend
+     * the budget of the sign-ins, and the other way around.
+     */
+    private readonly namespace = 'admin-failures'
   ) {}
 
   /** The key of the count of an address. */
   private key(address: string): string {
-    return `${this.keyPrefix}:admin-failures:${address}`
+    return `${this.keyPrefix}:${this.namespace}:${address}`
   }
 
   async fail(address: string, windowMs: number): Promise<FailureCount> {

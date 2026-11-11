@@ -8,7 +8,7 @@ Access is the platform's OpenID Connect broker and access decision service: it a
 - **Maps identities.** A provider's `(tenant, subject)` pair becomes exactly one principal, the platform identity.
 - **Answers decisions.** The gateway asks `POST /v1/decisions` on every request; grants alone decide.
 - **Serves the access context.** Data reads a principal's permissions for a workspace and route through `POST /v1/access-context`.
-- **Is administered over HTTP.** The fifteen administrative endpoints, plus one that reads the change audit, are the whole administration: `curl`, with platform or per-tenant credentials.
+- **Is administered over HTTP.** The eighteen administrative endpoints, plus one that reads the change audit, are the whole administration: `curl`, with platform or per-tenant credentials.
 
 It does not proxy traffic, does not have a policy language of its own, and does not manage routes, upstreams or workspaces; the gateway owns those. SAML, SCIM, directory sync, account linking and a console are deferred features (§14).
 

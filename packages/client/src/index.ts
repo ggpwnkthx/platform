@@ -66,6 +66,8 @@ export type {
   AuditRecord,
   BatchOutcome,
   CollectionMetadata,
+  Credential,
+  CredentialInput,
   FieldAttributes,
   FieldMetadata,
   Grant,

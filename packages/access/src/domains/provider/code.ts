@@ -34,12 +34,18 @@ export interface CodeRecord {
   createdAt: number
 }
 
-/** The store of the codes. */
-export interface CodeStore {
+/**
+ * The store of the codes.
+ *
+ * The store holds a record of any shape: the code of the platform holds
+ * a `CodeRecord`, and the code of a local provider holds its own. The
+ * store is the storage of a single use value, and nothing else.
+ */
+export interface CodeStore<T = CodeRecord> {
   /** Stores a code under its hash. */
-  put: (hash: string, record: CodeRecord, ttlSeconds: number) => Promise<void>
+  put: (hash: string, record: T, ttlSeconds: number) => Promise<void>
   /** Reads a code and deletes it: a code is single use. */
-  take: (hash: string) => Promise<CodeRecord | null>
+  take: (hash: string) => Promise<T | null>
 }
 
 /** A fresh code of 32 bytes. */

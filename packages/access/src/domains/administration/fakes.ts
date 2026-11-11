@@ -16,6 +16,10 @@ import {
 import type {
   AuditContext,
   ChangeAudit,
+  Credential,
+  CredentialFilter,
+  CredentialHasher,
+  CredentialStore,
   Grant,
   GrantFilter,
   GrantStore,
@@ -132,6 +136,7 @@ class FakeTenants implements TenantStore {
       id: `provider-${(this.providers?.rows.length ?? 0) + 1}`,
       tenantId: tenant.id,
       tenant: tenant.slug,
+      kind: 'oidc',
       slug: 'default',
       displayName: tenant.displayName,
       enabled: true,
@@ -189,6 +194,7 @@ class FakeProviders implements ProviderStore {
   async create(
     registration: {
       tenantId: string
+      kind?: 'oidc' | 'local'
       slug: string
       displayName: string
       enabled: boolean
@@ -206,6 +212,7 @@ class FakeProviders implements ProviderStore {
       id: `provider-${this.rows.length + 1}`,
       tenantId: registration.tenantId,
       tenant: tenant?.slug ?? '',
+      kind: registration.kind ?? 'oidc',
       slug: registration.slug,
       displayName: registration.displayName,
       enabled: registration.enabled,
@@ -246,6 +253,102 @@ class FakeProviders implements ProviderStore {
     if (index < 0) return false
     this.rows.splice(index, 1)
     return true
+  }
+}
+
+/** The storage of the credentials of the tests. */
+class FakeCredentials implements CredentialStore {
+  readonly rows: Credential[] = []
+
+  async findByEmail(
+    tenantSlug: string,
+    providerSlug: string,
+    email: string
+  ): Promise<Credential | null> {
+    return (
+      this.rows.find(
+        (row) => row.tenant === tenantSlug && row.provider === providerSlug && row.email === email
+      ) ?? null
+    )
+  }
+
+  async findById(id: string, _scope?: Scope): Promise<Credential | null> {
+    return this.rows.find((row) => row.id === id) ?? null
+  }
+
+  async list(filter: CredentialFilter) {
+    const matching = this.rows.filter((row) => {
+      if (filter.email !== null && row.email !== filter.email) return false
+      if (filter.providerSlug !== null && row.provider !== filter.providerSlug) return false
+      return true
+    })
+    return {
+      credentials: matching.slice(filter.offset, filter.offset + filter.limit),
+      total: matching.length,
+      limit: filter.limit,
+      offset: filter.offset,
+    }
+  }
+
+  async create(
+    registration: {
+      tenantId: string
+      providerId: string
+      email: string
+      password: string
+      status: 'active' | 'disabled'
+    },
+    _audit?: ChangeAudit
+  ): Promise<Credential> {
+    const credential: Credential = {
+      id: `credential-${this.rows.length + 1}`,
+      tenant: '',
+      provider: '',
+      email: registration.email,
+      status: registration.status,
+      failedAttempts: 0,
+      lockedUntil: null,
+      passwordChangedAt: new Date('2026-01-08T10:05:00.000Z'),
+      createdAt: new Date('2026-01-08T10:05:00.000Z'),
+    }
+    this.rows.push(credential)
+    return credential
+  }
+
+  async update(
+    id: string,
+    changes: { email?: string; password?: string; status?: 'active' | 'disabled' },
+    _scope?: Scope,
+    _audit?: ChangeAudit
+  ): Promise<Credential | null> {
+    const credential = this.rows.find((row) => row.id === id)
+    if (!credential) return null
+    if (changes.email !== undefined) credential.email = changes.email
+    if (changes.status !== undefined) credential.status = changes.status
+    if (changes.password !== undefined) {
+      credential.passwordChangedAt = new Date('2026-01-08T10:05:00.000Z')
+    }
+    return credential
+  }
+
+  async remove(id: string, _scope?: Scope, _audit?: ChangeAudit): Promise<boolean> {
+    const index = this.rows.findIndex((row) => row.id === id)
+    if (index < 0) return false
+    this.rows.splice(index, 1)
+    return true
+  }
+}
+
+/**
+ * The hasher of the passwords of the tests.
+ *
+ * The verifier of the tests is the password itself: the tests are about
+ * the rules of the administration, and the argon2id of the platform is
+ * slow.
+ */
+class FakeHasher implements CredentialHasher {
+  async hash(clear: string): Promise<string> {
+    return `hashed:${clear}`
   }
 }
 
@@ -821,6 +924,8 @@ export interface Fakes {
   tenants: FakeTenants
   /** The storage of the providers. */
   providers: FakeProviders
+  /** The storage of the credentials of the local providers. */
+  localCredentials: FakeCredentials
   /** The storage of the principals. */
   principals: FakePrincipals
   /** The storage of the permissions. */
@@ -840,6 +945,7 @@ export function createFakes(): Fakes {
   const tenants = new FakeTenants()
   const permissions = new FakePermissions()
   const providers = new FakeProviders(tenants)
+  const localCredentials = new FakeCredentials()
   // A tenant that is created gets its default provider, like the real
   // one (spec §3.11).
   tenants.providers = providers
@@ -853,6 +959,7 @@ export function createFakes(): Fakes {
   return {
     tenants,
     providers,
+    localCredentials,
     principals,
     permissions,
     grants,
@@ -866,6 +973,8 @@ export function createFakes(): Fakes {
 export interface ServiceOptions {
   /** The token of the administration, when it is not the one of the tests. */
   token?: string
+  /** The credentials of the tenants of the administration. */
+  adminCredentials?: AdminCredential[]
   /** The limiter of the failed authentications. */
   limiter?: FailedAuthenticationLimiter
   /** The count of the failed authentications. */
@@ -885,13 +994,15 @@ export function serviceOf(fakes: Fakes, options: ServiceOptions = {}): Administr
   return new AdministrationService({
     tenants: fakes.tenants,
     providers: fakes.providers,
+    localCredentials: fakes.localCredentials,
+    hasher: new FakeHasher(),
     principals: fakes.principals,
     permissions: fakes.permissions,
     grants: fakes.grants,
     groups: fakes.groups,
     roles: fakes.roles,
     token: options.token ?? 'the-admin-token',
-    ...(options.credentials ? { credentials: options.credentials } : {}),
+    ...(options.adminCredentials ? { credentials: options.adminCredentials } : {}),
     publicUrl: 'https://access.example.com',
     limiter: options.limiter ?? new FailedAuthenticationLimiter(options.failures ?? fakes.failures),
   })

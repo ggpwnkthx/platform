@@ -16,6 +16,8 @@ export type {
   GrantInput,
   Group,
   GroupInput,
+  Credential,
+  CredentialInput,
   Principal,
   PrincipalInput,
   Provider,

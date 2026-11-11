@@ -11,6 +11,7 @@ import type { Context } from 'hono'
 import { LoginError } from '../domains/identity'
 import { acceptedScopes } from '../domains/provider'
 import type { AccessDependencies } from './dependencies'
+import { localStateCookie } from './local-login'
 import { providerChooserPage, refusalPage } from './pages'
 import type { AccessEnv } from './state'
 
@@ -103,6 +104,16 @@ export async function authorizeHandler(
       // The tenant signs its people in at several providers: the caller
       // chooses, and the choice is made by the browser (spec §5.2.1).
       return providerChooserPage(begun.providers, chooserLinks(begun.providers, query))
+    }
+    if (begun.kind === 'local') {
+      // The provider is a local one: the browser goes to the page of the
+      // password, and the state of the login travels in two cookies: the
+      // one of the callback and the one of the page (spec §5.4).
+      const headers = new Headers()
+      headers.set('location', begun.url)
+      headers.append('set-cookie', stateCookie(begun.cookie, dependencies.cookieSecure, 600))
+      headers.append('set-cookie', localStateCookie(begun.cookie, dependencies.cookieSecure, 600))
+      return new Response(null, { status: 302, headers })
     }
     return new Response(null, {
       status: 302,

@@ -19,6 +19,9 @@ import {
   providerHandler,
   providersHandler,
   removeProviderHandler,
+  credentialHandler,
+  credentialsHandler,
+  removeCredentialHandler,
   removeRoleHandler,
   revokeGrantHandler,
   roleHandler,
@@ -30,6 +33,7 @@ import {
 import { decisionHandler } from './decision-contract'
 import { accessContextDiscoveryHandler, accessContextHandler } from './access-context-contract'
 import { authorizeHandler, callbackHandler } from './login'
+import { localAuthorizeHandler, localLoginHandler } from './local-login'
 import { tokenHandler } from './oauth'
 import { healthHandler, readyHandler } from './endpoints'
 import { openapiDocument } from './openapi'
@@ -139,6 +143,13 @@ export function createAccessApp(dependencies: AccessDependencies): Hono<AccessEn
   // provider of the tenant sends it back.
   app.get('/oauth/authorize', async (context) => await authorizeHandler(context, dependencies))
   app.get('/oauth/tenant/callback', async (context) => await callbackHandler(context, dependencies))
+  // The sign-in at a local provider: the page of the password and the
+  // answer of the form (spec §5.4).
+  app.get(
+    '/oauth/local/authorize',
+    async (context) => await localAuthorizeHandler(context, dependencies)
+  )
+  app.post('/oauth/local/login', async (context) => await localLoginHandler(context, dependencies))
 
   // The token endpoint of the gateway.
   app.post('/oauth/token', async (context) => await tokenHandler(context, dependencies))
@@ -177,7 +188,7 @@ export function createAccessApp(dependencies: AccessDependencies): Hono<AccessEn
   // The metrics of the service.
   app.get('/metrics', async (context) => await metricsHandler(context, dependencies))
 
-  // The administration of the platform: fifteen endpoints and the audit
+  // The administration of the platform: eighteen endpoints and the audit
   // that reads it, and they are the whole surface.
   app.post('/v1/admin/tenants', async (context) => await tenantHandler(context, dependencies))
   app.get('/v1/admin/tenants', async (context) => await tenantsHandler(context, dependencies))
@@ -188,6 +199,18 @@ export function createAccessApp(dependencies: AccessDependencies): Hono<AccessEn
   app.delete(
     '/v1/admin/providers/:id',
     async (context) => await removeProviderHandler(context, dependencies)
+  )
+  app.post(
+    '/v1/admin/credentials',
+    async (context) => await credentialHandler(context, dependencies)
+  )
+  app.get(
+    '/v1/admin/credentials',
+    async (context) => await credentialsHandler(context, dependencies)
+  )
+  app.delete(
+    '/v1/admin/credentials/:id',
+    async (context) => await removeCredentialHandler(context, dependencies)
   )
   app.post('/v1/admin/groups', async (context) => await groupHandler(context, dependencies))
   app.get('/v1/admin/groups', async (context) => await groupsHandler(context, dependencies))

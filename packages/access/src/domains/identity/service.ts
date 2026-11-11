@@ -91,6 +91,22 @@ export type BegunLogin =
     }
   | {
       /**
+       * The browser is sent to the page of a local provider.
+       *
+       * The page is served by Access itself: the caller signs in with an
+       * address and a password, and the state of the login travels in a
+       * cookie of its own (spec §5.4).
+       */
+      kind: 'local'
+      /** The url of the page of the password. */
+      url: string
+      /** The value of the cookie of the state. */
+      cookie: string
+      /** The slug of the tenant of the login. */
+      tenant: string
+    }
+  | {
+      /**
        * The caller chooses between the providers of the tenant.
        *
        * A tenant that signs its people in at several providers is a
@@ -220,6 +236,12 @@ export class LoginService {
     } catch (error) {
       throw this.refusalOf(error)
     }
+    // A local provider is served by Access itself: the browser goes to
+    // the page of the password, and the state of the login travels in a
+    // cookie of its own (spec §5.4).
+    if (provider.kind === 'local') {
+      return { kind: 'local', url, cookie, tenant: tenant.slug }
+    }
     return { kind: 'redirect', url, cookie, tenant: tenant.slug }
   }
 
@@ -291,7 +313,7 @@ export class LoginService {
       mapping = await mapIdentity(
         this.options.principals,
         tenant,
-        provider,
+        { slug: provider.slug, kind: provider.kind },
         identity,
         options.facts
       )

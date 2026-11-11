@@ -26,6 +26,8 @@ export {
 } from './migrations'
 
 export { AuditRepository, type AuditRow } from './audit'
+export type { CredentialRow } from './credentials'
+export { CredentialRepository } from './credentials'
 
 export { AccessContextRepository } from './access-context-facts'
 export { DecisionRepository, TimeoutError } from './decision-facts'

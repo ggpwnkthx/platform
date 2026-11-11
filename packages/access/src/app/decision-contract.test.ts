@@ -29,6 +29,7 @@ function dependencies(decide: () => Promise<DecisionFacts>): AccessDependencies 
     administration: {} as AccessDependencies['administration'],
     provider: {} as AccessDependencies['provider'],
     login: {} as AccessDependencies['login'],
+    local: {} as AccessDependencies['local'],
     codes: {} as AccessDependencies['codes'],
     refresh: {} as AccessDependencies['refresh'],
     tenants: {} as AccessDependencies['tenants'],

@@ -19,6 +19,8 @@ export interface Provider {
   id: string
   /** The id of the tenant of the provider. */
   tenantId: string
+  /** The kind of the provider: an OpenID Connect one, or the local one. */
+  kind: 'oidc' | 'local'
   /** The slug of the tenant of the provider. */
   tenant: string
   /** The name of the provider inside its tenant. */
@@ -42,6 +44,13 @@ export interface Provider {
 export interface ProviderRegistration {
   /** The slug of the tenant of the provider. */
   tenant: string
+  /**
+   * The kind of the provider.
+   *
+   * A local provider holds its own identities and has no registration
+   * (spec §5.4).
+   */
+  kind?: 'oidc' | 'local'
   /** The name of the provider inside its tenant. */
   slug: string
   displayName?: string
@@ -105,6 +114,7 @@ export interface ProviderStore {
   create(
     registration: {
       tenantId: string
+      kind?: 'oidc' | 'local'
       slug: string
       displayName: string
       enabled: boolean

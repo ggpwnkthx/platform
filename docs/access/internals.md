@@ -49,7 +49,7 @@ A **modular monolith**: one process, one image, one database, four independent d
 | `src/main.ts` | Process entry point. |
 | `src/domains/identity/` | Provider token validation, principal mapping, tenant resolution, login state, the driver of a provider and the provider client. |
 | `src/domains/authorization/` | The decision rule, grant reads, reasons. |
-| `src/domains/administration/` | The fifteen endpoints, body validation, auditing every change. |
+| `src/domains/administration/` | The eighteen endpoints, body validation, auditing every change. |
 | `src/domains/provider/` | The tokens Access issues, the JWKS, the discovery document, code exchange. |
 | `src/observability/` | Logs, metrics, secret comparison. |
 | `src/runtime/env.ts` | Environment schema and validation; the only reader of `process.env`. |
@@ -57,7 +57,7 @@ A **modular monolith**: one process, one image, one database, four independent d
 | `src/app/app.ts` | Pipeline: request id, probes, routes, unknown-path refusal, error handler. |
 | `src/app/{login,oauth,provider}.ts` | Login, token endpoint, discovery, JWKS. |
 | `src/app/decision-contract.ts`, `access-context-contract.ts` | The two read contracts. |
-| `src/app/administration/`, `src/domains/administration/` | The fifteen endpoints of the administration and the audit that reads it, one file per resource (tenants, principals, groups, roles, grants, audit); the domain also holds validation, the limiter, authentication and storage `ports/`. |
+| `src/app/administration/`, `src/domains/administration/` | The eighteen endpoints of the administration and the audit that reads it, one file per resource (tenants, principals, groups, roles, grants, audit); the domain also holds validation, the limiter, authentication and storage `ports/`. |
 | `src/app/{errors,pages,metrics,endpoints,state}.ts` | Refusals, login pages, metrics, probes, request state. |
 | `src/platform/postgres/` | Pool, migrations, repositories, statement tracing, tenant scope, audit table. |
 | `src/platform/redis/`, `src/platform/bun/` | Code store; listener, request and response, address guard. |
@@ -83,7 +83,7 @@ The rule that every rule needs a test is in [platform internals](../platform/int
 | Kind | Where | What it proves |
 | --- | --- | --- |
 | Unit | `src/domains/*/*.test.ts` | Provider token validation, mapping, the decision rule, tenant resolution. |
-| Contract | `test/contract/` | The whole flow against Access fixtures: browser login, code exchange, decision, the fifteen administrative endpoints, the audit, secret rotation. |
+| Contract | `test/contract/` | The whole flow against Access fixtures: browser login, code exchange, decision, the eighteen administrative endpoints, the audit, secret rotation. |
 | Integration | `test/integration/` | Decisions against real PostgreSQL and Redis, tenant isolation, migrations, the statement deadline, the decision rule against randomly built policies. |
 | Compatibility | `test/compatibility/` | **The unchanged gateway against Access.** The gateway reference's fixtures are replaced by Access, and the gateway's contract suite runs against it. |
 | Architecture | `test/architecture/` | Import boundaries, the absence of deferred features, the documented routes and counts, and every `§` reference. |
@@ -98,7 +98,7 @@ The rule that every rule needs a test is in [platform internals](../platform/int
 | Test | Holds |
 | --- | --- |
 | `routes.test.ts` | Every route registered in `src/app/app.ts` appears as `METHOD /path` in `docs/access/api.md` or `docs/access/operations.md`, and every such pattern in those two files is a real route. |
-| `counts.test.ts` | Every phrase that counts the administration (the fifteen administrative endpoints, the fifteen calls of the session) uses the number of routes the code registers. |
+| `counts.test.ts` | Every phrase that counts the administration (the eighteen administrative endpoints, the eighteen calls of the session) uses the number of routes the code registers. |
 | `spec-references.test.ts` | Every `§N` in the code, the tests and `docs/access/` names a heading of `docs/access/spec.md`. |
 | `version.test.ts` | The release version agrees across the files listed in [Release and delivery](#release-and-delivery). |
 

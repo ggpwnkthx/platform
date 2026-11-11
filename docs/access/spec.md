@@ -2,7 +2,7 @@
 
 The normative contract of Access: login brokering, identity mapping, tokens, decisions, the access context and the administration, with their invariants, limits and error codes. It is written for implementers and reviewers; change it first when behavior changes.
 
-Access is a Bun service that brokers logins against each tenant's OpenID Connect (OIDC) provider, maps external identities to principals, answers gateway decision requests from a table of grants, and is administered through the fifteen administrative endpoints plus one endpoint that reads the audit.
+Access is a Bun service that brokers logins against each tenant's OpenID Connect (OIDC) provider, maps external identities to principals, answers gateway decision requests from a table of grants, and is administered through the eighteen administrative endpoints plus one endpoint that reads the audit.
 
 Access is a separate deployable, not a gateway feature. It sits between browsers, tenant identity providers and gateways. The gateway keeps its single provider, its single Access deployment and its whole configuration, and gains **zero** new features: a gateway deployment simply points at Access.
 
@@ -19,7 +19,7 @@ Status: 1.2.1. Runtime: Bun ≥ 1.4.3. Listener: HTTP on `ACCESS_HOST:ACCESS_POR
 | **Brokers the login** | It is an OIDC client of each tenant's provider *and* the OIDC provider of the gateway. The browser logs in at the tenant's provider; the gateway sees a provider it already knows how to talk to. |
 | **Maps the identity** | The provider's `(tenant, subject)` pair maps to exactly one **principal row**. The row is the platform identity; the external identity is only the way in. |
 | **Answers decisions** | It implements the decision contract the gateway already speaks, `POST /v1/decisions`, computed over a table of **grants**. |
-| **Is administered with fifteen endpoints** | Tenants, principals, grants, groups and roles are created, revoked and **listed** with fifteen `curl` calls; a sixteenth reads the audit. No console, portal or wizard. |
+| **Is administered with eighteen endpoints** | Tenants, principals, grants, groups and roles are created, revoked and **listed** with eighteen `curl` calls; a nineteenth reads the audit. No console, portal or wizard. |
 
 ### 1.2 What it does not do
 
@@ -75,7 +75,7 @@ Access is multi-tenant; the gateway is not. That is the price of "the gateway ga
 | **decision** | The answer of `POST /v1/decisions`: may this principal use this workspace on this route? |
 | **access context** | The answer of `POST /v1/access-context`: which permissions does this principal hold for this workspace and route (§9)? |
 | **gateway** | A gateway deployment: a client of Access and a consumer of its decisions. |
-| **operator** | The person who runs Access and calls the fifteen administrative endpoints. |
+| **operator** | The person who runs Access and calls the eighteen administrative endpoints. |
 
 ### 2.1 Invariants
 
@@ -93,7 +93,7 @@ None is configurable. Each is enforced in code and has a test.
 
 ## 3. Tables
 
-The domain model is nine tables, and only these. Protocol state that is not a domain concept (the authorization codes) lives in the shared store (§5.5), not in the database.
+The domain model is ten tables, and only these. Protocol state that is not a domain concept (the authorization codes) lives in the shared store (§5.5), not in the database.
 
 Two infrastructure tables share the database but are not part of the model: the migration ledger `access_schema_migrations` (§3.8) and the administration audit `admin_audit` (§10.1). The audit holds no tenant, principal or grant: only what changed, when, and who changed it.
 
@@ -306,9 +306,9 @@ A **production** environment must name a PostgreSQL server, because the embedded
 
 ### 3.10 Tenant isolation
 
-The application isolates tenants: the keys of the nine tables carry the tenant, a grant's foreign key refuses another tenant's principal, and every statement reads a tenant by its id.
+The application isolates tenants: the keys of the ten tables carry the tenant, a grant's foreign key refuses another tenant's principal, and every statement reads a tenant by its id.
 
-The database is the **backstop**. The nine tables have PostgreSQL row level security, and the scope of a statement is written in two settings, local to the transaction:
+The database is the **backstop**. The ten tables have PostgreSQL row level security, and the scope of a statement is written in two settings, local to the transaction:
 
 - `access.scope` names the kind of the scope and `access.tenant_id` names the tenant of it.
 - A statement in the scope of a **tenant** (`access.scope` is `tenant`) sees that tenant's rows and nothing else.
@@ -346,6 +346,27 @@ An OpenID Connect provider carries a complete registration: a provider that is n
 **The default provider is written with the tenant.** The row of the tenant carries the registration of its default provider (§3.1), and the row of `tenant_providers` carries the same registration: the two are written by the same statements, and a tenant whose default provider row is missing refuses every login (§5.2).
 
 The table is scoped like the other tables of the model: a statement in the scope of a tenant sees the providers of that tenant and nothing else (§3.10).
+
+### 3.12 `local_credentials`
+
+One row per account of a **local** provider: the address the caller signs in with, and the verifier of its password.
+
+| Column | Type | Rule |
+| --- | --- | --- |
+| `id` | `uuid` | Primary key. The `sub` of a local provider is this id (§6.2). |
+| `tenant_id` | `uuid` | The tenant of the credential. Foreign key to `tenants`. |
+| `provider_id` | `uuid` | The local provider of the credential. Foreign key to `tenant_providers`. |
+| `email` | `text` | The address the caller signs in with. Unique per tenant. The **name** of the account, never its key. |
+| `password_hash` | `text` | The argon2id verifier of the password. It is never answered, not even by the administration. |
+| `status` | `text` | `active` or `disabled`. Default `active`. A disabled credential signs nobody in. |
+| `failed_attempts` | `integer` | The number of the failed sign-ins since the last success. |
+| `locked_until` | `timestamptz` | The moment the credential is locked until, when it is locked. |
+| `password_changed_at` | `timestamptz` | The moment the password was written. |
+| `created_at`, `updated_at` | `timestamptz` | |
+
+Unique: `(tenant_id, email)`. The address is the name of the account: a credential of a tenant and a provider of another tenant never share an address.
+
+The table is scoped like the other tables of the model: a statement in the scope of a tenant sees the credentials of that tenant and nothing else (§3.10).
 
 ## 4. Environment
 
@@ -408,10 +429,10 @@ With `ACCESS_ENVIRONMENT=production`, the service refuses to start when a requir
 
 | Variable | Why it is required |
 | --- | --- |
-| `ACCESS_DATABASE_URL` | Holds the nine tables. Production must name a server (§3.9). |
+| `ACCESS_DATABASE_URL` | Holds the ten tables. Production must name a server (§3.9). |
 | `ACCESS_ISSUER` | The `iss` of every issued token and the issuer the gateway is configured with. |
 | `ACCESS_REDIS_URL` | Replicas must share authorization codes, unless `ACCESS_ALLOW_MEMORY_STATE=true` marks a single-node deployment. |
-| `ACCESS_ADMIN_TOKEN` | The bearer token of the fifteen administrative endpoints, unless the deployment names its credentials in `ACCESS_ADMIN_TOKENS` (§4.6). |
+| `ACCESS_ADMIN_TOKEN` | The bearer token of the eighteen administrative endpoints, unless the deployment names its credentials in `ACCESS_ADMIN_TOKENS` (§4.6). |
 | `ACCESS_STATE_SECRET` | Signs and encrypts the login state. At least 32 bytes. |
 | `ACCESS_SECRET_ENCRYPTION_KEY` | Encrypts client secrets at rest. At least 32 bytes. |
 | `ACCESS_SIGNING_KEY` | The private key that signs issued tokens, in PEM. |
@@ -457,6 +478,8 @@ A credential is at least 16 characters, and a malformed value stops the service:
 | --- | --- |
 | `GET /oauth/authorize` | Authorization endpoint. The gateway sends the browser here. |
 | `GET /oauth/tenant/callback` | Callback registered at each tenant's provider. The provider sends the browser here. |
+| `GET /oauth/local/authorize` | The page that asks for the password of a local provider (spec §5.4). |
+| `POST /oauth/local/login` | The answer of the form of the password (spec §5.4). |
 | `POST /oauth/token` | Token endpoint, where the gateway exchanges the code and the console exchanges a refresh token (§7.6). The client authenticates with `client_secret_basic`; a client without a secret is refused. |
 | `GET /oauth/jwks` | The service's public keys. |
 | `GET /oauth/userinfo` | Claims of a bearer token's principal. |
@@ -545,6 +568,30 @@ The cookie is **single use**: it is deleted as soon as the callback is processed
 7. The gateway exchanges the code at `POST /oauth/token` with its verifier, client id and secret.
 8. Access answers with an `id_token` and an `access_token` (§7).
 
+### 5.4.1 The local provider
+
+A **local** provider is a provider of the platform: it holds its own identities, and the caller signs in at Access itself with an address and a password. It is the provider of a tenant that has no other provider of its own, or the second one of a tenant that has both.
+
+The flow is the flow of every login, with the provider in the middle replaced by the page of the password:
+
+1. The browser goes to `GET /oauth/authorize` with `provider` naming the local provider.
+2. Access resolves the tenant and the provider (§5.2.1), writes the state of the login and sends the browser to `GET /oauth/local/authorize`. The state travels in **two** cookies: the one of the callback (`access_login_state`) and the one of the page (`access_local_state`, `Path=/oauth/local`). The verifier of the PKCE of the gateway never leaves the cookie.
+3. The page asks for an address and a password. The form carries the **token** of the form: the state of the provider, which is bound to the state of the login and cannot be forged.
+4. The browser posts the form to `POST /oauth/local/login`. The service reads the cookie of the page, checks the token of the form, looks the credential up and checks the password against its argon2id verifier (§5.4.2).
+5. A credential that signed in hands the callback a code that names it. The browser goes to `GET /oauth/tenant/callback?code=…&state=…`, and the login finishes like every login: the code names the credential, the credential is the identity of the caller, and the principal is mapped (§6.2).
+
+The credential is the identity: the `sub` of a local provider is the id of the row (§3.12). The principal it creates belongs to the provider and to the tenant, and it is created at the first sign-in **even when the tenant does not provision unknown identities**: the credential is a row of the platform, and the operator wrote it (§6.4).
+
+### 5.4.2 The rules of a password
+
+A password is never stored: the service stores the argon2id verifier of it, and it checks a password against the verifier.
+
+**The answer of a refused sign-in says nothing about the accounts of the tenant.** An address that names no account, a wrong password, a disabled account and a locked account are the same refusal, with the same code and the same text. When the address names no account, the service verifies the password against nothing: the verification costs what a real one costs, and the time of the answer does not tell the accounts of the tenant apart.
+
+**The guessing is expensive.** The failures of an address are counted in the shared store of the deployment, under a namespace of their own: the budget of the sign-ins is not the budget of the administration. The failures of a credential are counted in its row: at the fifth failure the credential is locked, and the lock doubles with every failure, up to a quarter of an hour. A credential that signs in is unlocked again.
+
+**The password is at least twelve characters long and at most a hundred and twenty-eight.** The operator writes the first password of an account, and the caller cannot change it yet: the reset of a password is deferred (§14).
+
 ### 5.5 Authorization code
 
 An opaque random 32-byte string, stored in the shared store under its hash, together with the client id, the redirect URI, the PKCE challenge, the principal and its creation time.
@@ -566,6 +613,8 @@ The shared store is Redis. A single-replica deployment may use process memory wi
 | The provider token is invalid | `403 identity_rejected`, with a page saying the identity was refused. The reason is in the service log. |
 | Unknown identity, tenant does not auto-provision | `403 identity_unknown`, with a page saying the identity is not known to the platform. The log carries the refused `(tenant, subject)`. |
 | The principal is disabled | `403 principal_disabled`. |
+| The password of a local provider is wrong, the address names no account, the account is disabled or locked | `403 identity_rejected`, with a page saying that the address or the password is wrong. The reason is in the log of the service. |
+| The failures of an address are too many | `429 too_many_requests`. |
 | The state does not match, or the cookie is missing | `400 login_state_invalid`. The login is refused; a new one must start. |
 | The state cookie is not readable | `400 login_state_invalid`. A cookie that is not a valid escape is not a cookie. |
 
@@ -1107,15 +1156,15 @@ Each role carries the keys of the permissions it holds and of the roles it names
 
 Removes a role that no grant names. A role named by a grant → `409 conflict`: grants are kept, so the operator revokes them first. Unknown role → `404 not_found`.
 
-### 10.14 Full session in fifteen calls
+### 10.14 Full session in eighteen calls
 
-A tenant's whole lifecycle, from registration to revocation, takes one call to each administrative endpoint; the walkthrough is in [API](api.md#session-in-fifteen-calls).
+A tenant's whole lifecycle, from registration to revocation, takes one call to each administrative endpoint; the walkthrough is in [API](api.md#session-in-eighteen-calls).
 
 ### 10.15 `GET /v1/admin/audit`
 
 The audit of changes, newest first. Read-only, paginated like the other lists (§10.1).
 
-Filters: `tenant` (an unknown tenant slug → `404 not_found`) and `action` (`tenant.created`, `tenant.updated`, `provider.created`, `provider.updated`, `provider.removed`, `principal.created`, `principal.updated`, `group.created`, `group.updated`, `grant.created`, `grant.updated`, `grant.revoked`, `role.created`, `role.updated`, `role.removed`, `role.permission.granted`, `role.permission.revoked`, `role.role.nested`, `role.role.unnested`).
+Filters: `tenant` (an unknown tenant slug → `404 not_found`) and `action` (`tenant.created`, `tenant.updated`, `provider.created`, `provider.updated`, `provider.removed`, `credential.created`, `credential.updated`, `credential.removed`, `principal.created`, `principal.updated`, `group.created`, `group.updated`, `grant.created`, `grant.updated`, `grant.revoked`, `role.created`, `role.updated`, `role.removed`, `role.permission.granted`, `role.permission.revoked`, `role.role.nested`, `role.role.unnested`).
 
 `format` defaults to `json`; `csv` and `jsonl` are **exports** that a spreadsheet or script can read, with the list filters applied. Any other format → `400 invalid_request`.
 
@@ -1179,6 +1228,34 @@ Removes a provider of a tenant. `204` when removed.
 - The default provider of a tenant is not removed → `400 invalid_request`: its registration is the registration of the tenant.
 - A provider that **holds principals** is not removed → `409 conflict`: the principals carry its slug, and a principal that names a provider that does not exist is a principal nobody can sign in with.
 - An unknown identifier → `404 not_found`.
+
+### 10.17 The credentials of the local providers
+
+A credential is the account of a caller at a **local** provider (§5.4.1). The operator writes it: the platform holds the accounts of the tenant that has no provider of its own.
+
+#### `POST /v1/admin/credentials`
+
+Creates a credential, or changes the credential of that `(tenant, provider, email)` pair.
+
+An **upsert** keyed by the pair: the operator changes the password of an account by calling it again. `201` when created, `200` when changed.
+
+- The provider must exist and be a **local** one. A provider that signs its callers in somewhere else → `400 invalid_request`.
+- The address must be an address, and the password at least twelve characters and at most a hundred and twenty-eight → `400 invalid_request`.
+- An unknown tenant → `404 not_found`.
+
+The answer is the credential, and it never carries the verifier of the password.
+
+#### `GET /v1/admin/credentials`
+
+The credentials of a tenant. Filters: `tenant`, `provider`, `email`; paging: `limit`, `offset` (§10.1). An unknown tenant → `404 not_found`.
+
+The answer never carries the verifier of a password, and it never carries the password either.
+
+#### `DELETE /v1/admin/credentials/{id}`
+
+Removes a credential. `204` when removed. An unknown identifier → `404 not_found`.
+
+The principal the credential created stays: it cannot be signed in with any more, and the operator revokes its rights.
 
 ## 11. Decision outcomes
 
@@ -1284,11 +1361,12 @@ One comes back only when **a named customer pays for it**. Not "it seems useful"
 | Deferred | What it would mean | Without it |
 | --- | --- | --- |
 | **SAML** | A tenant whose provider speaks SAML instead of OIDC. | A tenant whose provider is not an OIDC provider is not served. |
-| **The local provider** | A provider of the platform that holds its own credentials in PostgreSQL and signs its callers in itself (§5.4). | The providers of a tenant are OpenID Connect providers. The driver of a provider is the seam it comes through (§5.4), and the local driver is the work that is not done yet. |
 | **Account linking** | One principal, several external identities (a second subject at the same provider). | The mapping key `(tenant, provider, subject)` is one to one. A person who signs in at two providers of a tenant has two principals and two sets of grants. |
-| **Console** | A web interface for the administration. | The fifteen endpoints of §10 and `curl`. |
+| **Console** | A web interface for the administration. | The eighteen endpoints of §10 and `curl`. |
 | **SCIM** | Principal provisioning by a provider. | Principals are created by the §10.4 endpoint or by the tenant's auto-provisioning. |
 | **Directory sync** | Scheduled import of a tenant's directory from a source of truth. | Principals are created one at a time, by hand or by a script calling the endpoints. |
+| **The reset of a password** | A caller that forgot its password changes it. | The operator writes the password of an account (§10.17): the platform holds the accounts of the local providers and gives them their first password. |
+| **The second factor** | A code that the caller holds, besides its password. | The password of a local provider is the only secret of the account (§5.4.2). |
 
 **Groups** were not deferred: the platform operator asked for them, and they are the fifth table of the model (§3.5).
 

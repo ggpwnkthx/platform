@@ -1,7 +1,7 @@
 /**
  * The port of the principals.
  *
- * The domain owns the rules of the fifteen endpoints; the storage is a port
+ * The domain owns the rules of the eighteen endpoints; the storage is a port
  * that the composition root fulfils. The domain knows nothing about
  * PostgreSQL and nothing about the shape of the rows.
  */

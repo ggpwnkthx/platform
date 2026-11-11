@@ -24,6 +24,8 @@ import {
   type GroupFilter,
   type GroupStore,
   type PermissionStore,
+  type CredentialFilter,
+  type CredentialStore,
   type PrincipalFilter,
   type PrincipalStore,
   type ProviderFilter,
@@ -34,7 +36,7 @@ import {
   type Scope,
   type TenantStore,
 } from '../domains/administration'
-import { scopeOf, tenantScope } from '../domains/administration'
+import { scopeOf, tenantScope, type CredentialHasher } from '../domains/administration'
 import {
   CHECK_VIOLATION,
   DatabaseError,
@@ -46,6 +48,8 @@ import {
   type GrantRow,
   type GroupRepository,
   type GroupRow,
+  type CredentialRepository,
+  type CredentialRow,
   type PermissionRepository,
   type PermissionRow,
   type ProviderRepository,
@@ -106,6 +110,7 @@ function toProvider(row: ProviderRow): {
   id: string
   tenantId: string
   tenant: string
+  kind: 'oidc' | 'local'
   slug: string
   displayName: string
   enabled: boolean
@@ -120,6 +125,7 @@ function toProvider(row: ProviderRow): {
     id: row.id,
     tenantId: row.tenantId,
     tenant: row.tenantSlug ?? '',
+    kind: row.kind,
     slug: row.slug,
     displayName: row.displayName,
     enabled: row.enabled,
@@ -128,6 +134,36 @@ function toProvider(row: ProviderRow): {
     idpRedirectUri: row.idpRedirectUri ?? '',
     idpScopes: row.idpScopes,
     idpAlgorithms: row.idpAlgorithms,
+    createdAt: row.createdAt,
+  }
+}
+
+/**
+ * Turns a credential of the storage into a credential of the domain.
+ *
+ * The verifier of the password is never read here: the administration
+ * never answers one, and it never answers the password either.
+ */
+function toCredential(row: CredentialRow): {
+  id: string
+  tenant: string
+  provider: string
+  email: string
+  status: 'active' | 'disabled'
+  failedAttempts: number
+  lockedUntil: Date | null
+  passwordChangedAt: Date
+  createdAt: Date
+} {
+  return {
+    id: row.id,
+    tenant: row.tenantSlug,
+    provider: row.providerSlug,
+    email: row.email,
+    status: row.status,
+    failedAttempts: row.failedAttempts,
+    lockedUntil: row.lockedUntil,
+    passwordChangedAt: row.passwordChangedAt,
     createdAt: row.createdAt,
   }
 }
@@ -271,6 +307,15 @@ export interface AdministrationDependencies {
   tenants: TenantRepository
   /** The providers of the tenants (spec §3.11). */
   providers: ProviderRepository
+  /** The credentials of the local providers (spec §3.12). */
+  credentials: CredentialRepository
+  /**
+   * The hasher of the passwords of the credentials.
+   *
+   * The domain never hashes a password itself: the algorithm belongs to
+   * the platform.
+   */
+  hasher: CredentialHasher
   users: UserRepository
   groups?: GroupRepository
   roles?: RoleRepository
@@ -291,7 +336,7 @@ export interface AdministrationDependencies {
   /** The token that the current one replaced, during a rotation. */
   previousToken?: string
   /** The credentials of the tenants of the administration (spec §10.1). */
-  credentials?: AdminCredential[]
+  adminCredentials?: AdminCredential[]
   /** The public url of Access. */
   publicUrl: string
   /**
@@ -445,6 +490,63 @@ export function createAdministrationService(
     },
     remove: async (id, _scope, audit) =>
       await run(async () => await dependencies.providers.remove(id, audit)),
+  }
+
+  const credentialStore: CredentialStore = {
+    findByEmail: async (tenantSlug, providerSlug, email) => {
+      const row = await run(
+        async () => await dependencies.credentials.findByEmail(tenantSlug, providerSlug, email)
+      )
+      return row ? toCredential(row) : null
+    },
+    findById: async (id, scope) => {
+      const row = await run(async () => await dependencies.credentials.findById(id, scope))
+      return row ? toCredential(row) : null
+    },
+    list: async (filter: CredentialFilter) => {
+      const page = await run(async () => await dependencies.credentials.list(filter))
+      return {
+        credentials: page.rows.map(toCredential),
+        total: page.total,
+        limit: filter.limit,
+        offset: filter.offset,
+      }
+    },
+    create: async (registration, audit) => {
+      const row = await run(
+        async () =>
+          await dependencies.credentials.create(
+            {
+              ...registration,
+              // The verifier of the password is written by the platform:
+              // the domain never hashes a password itself.
+              passwordHash: await dependencies.hasher.hash(registration.password),
+            },
+            audit
+          )
+      )
+      return toCredential(row)
+    },
+    update: async (id, changes, scope, audit) => {
+      const row = await run(
+        async () =>
+          await dependencies.credentials.update(
+            id,
+            {
+              ...(changes.email !== undefined ? { email: changes.email } : {}),
+              ...(changes.password !== undefined
+                ? { passwordHash: await dependencies.hasher.hash(changes.password) }
+                : {}),
+              ...(changes.status !== undefined ? { status: changes.status } : {}),
+            },
+            scope,
+            audit
+          )
+      )
+      return row ? toCredential(row) : null
+    },
+    remove: async (id, scope, audit) =>
+      await run(async () => await dependencies.credentials.remove(id, scope, audit)),
   }
 
   const principalStore: PrincipalStore = {
@@ -735,6 +837,8 @@ export function createAdministrationService(
   return new AdministrationService({
     tenants: tenantStore,
     providers: providerStore,
+    localCredentials: credentialStore,
+    hasher: dependencies.hasher,
     principals: principalStore,
     permissions: permissionStore,
     grants: grantStore,
@@ -743,7 +847,7 @@ export function createAdministrationService(
     audit: auditStore,
     token: dependencies.token,
     previousToken: dependencies.previousToken,
-    credentials: dependencies.credentials,
+    ...(dependencies.adminCredentials ? { credentials: dependencies.adminCredentials } : {}),
     publicUrl: dependencies.publicUrl,
     limiter: new FailedAuthenticationLimiter(dependencies.failures),
   })

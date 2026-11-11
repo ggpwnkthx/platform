@@ -29,6 +29,8 @@ import type {
   GrantInput,
   Group,
   GroupInput,
+  Credential,
+  CredentialInput,
   Principal,
   PrincipalInput,
   Provider,
@@ -261,6 +263,32 @@ export class AccessAdminClient extends AccessClient {
   /** Removes a provider that holds no principal. */
   async removeProvider(id: string): Promise<void> {
     await this.send('DELETE', `/providers/${id}`)
+  }
+
+  /** A page of the credentials of the local providers. */
+  async credentials(
+    query: {
+      tenant?: string
+      provider?: string
+      email?: string
+      limit?: number
+      offset?: number
+    } = {}
+  ): Promise<AdminPage<Credential>> {
+    return await this.page<Credential>('/credentials', 'credentials', query)
+  }
+
+  /** Creates a credential, or updates the credential of that pair. */
+  async saveCredential(
+    input: CredentialInput
+  ): Promise<{ credential: Credential; created: boolean }> {
+    const answer = await this.send('POST', '/credentials', {}, input)
+    return { credential: bodyOf(answer) as Credential, created: answer.status === 201 }
+  }
+
+  /** Removes a credential of a local provider. */
+  async removeCredential(id: string): Promise<void> {
+    await this.send('DELETE', `/credentials/${id}`)
   }
 
   /** A page of the grants. */

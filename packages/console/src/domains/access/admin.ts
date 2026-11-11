@@ -22,6 +22,8 @@ import type {
   GrantInput,
   Group,
   GroupInput,
+  Credential,
+  CredentialInput,
   Principal,
   PrincipalInput,
   Provider,
@@ -129,6 +131,41 @@ export class AdminClient {
   async removeProvider(id: string): Promise<void> {
     try {
       await this.#client.removeProvider(id)
+    } catch (error) {
+      throw failureOf(error)
+    }
+  }
+
+  /** The credentials of the local providers of a tenant. */
+  async credentials(query: {
+    tenant?: string
+    provider?: string
+    email?: string
+    limit?: number
+    offset?: number
+  }): Promise<AdminPage<Credential>> {
+    try {
+      return await this.#client.credentials(query)
+    } catch (error) {
+      throw failureOf(error)
+    }
+  }
+
+  /** Creates a credential, or updates the credential of that pair. */
+  async saveCredential(
+    input: CredentialInput
+  ): Promise<{ credential: Credential; created: boolean }> {
+    try {
+      return await this.#client.saveCredential(input)
+    } catch (error) {
+      throw failureOf(error)
+    }
+  }
+
+  /** Removes a credential of a local provider. */
+  async removeCredential(id: string): Promise<void> {
+    try {
+      await this.#client.removeCredential(id)
     } catch (error) {
       throw failureOf(error)
     }

@@ -84,6 +84,7 @@ describe('the schema of Access', () => {
       '0013_explicit_scope.sql',
       '0014_tenant_auto_provision_admin.sql',
       '0015_provider_registry.sql',
+      '0016_local_credentials.sql',
     ])
 
     const second = await runMigrations({
@@ -108,10 +109,11 @@ describe('the schema of Access', () => {
       '0013_explicit_scope.sql',
       '0014_tenant_auto_provision_admin.sql',
       '0015_provider_registry.sql',
+      '0016_local_credentials.sql',
     ])
   })
 
-  test('the nine tables are the only tables of the domain', async () => {
+  test('the ten tables are the only tables of the domain', async () => {
     const rows = await database.query<{ table_name: string }>(
       `select table_name from information_schema.tables
        where table_schema = current_schema()
@@ -121,6 +123,7 @@ describe('the schema of Access', () => {
     expect(rows.map((row) => row.table_name)).toEqual([
       'grants',
       'groups',
+      'local_credentials',
       'permissions',
       'role_permissions',
       'role_roles',

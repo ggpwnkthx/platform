@@ -24,25 +24,36 @@ export function ProviderForm(props: { action: string }) {
           <span class="hint">the name of the provider inside the tenant; it never changes</span>
         </label>
         <label class="field">
+          <span>Kind</span>
+          <select name="kind">
+            <option value="oidc">an OpenID Connect provider</option>
+            <option value="local">the accounts of the tenant</option>
+          </select>
+          <span class="hint">
+            a local provider holds its own accounts: the callers sign in with a password
+          </span>
+        </label>
+        <label class="field">
           <span>Name</span>
           <input name="displayName" />
         </label>
         <label class="field">
           <span>Issuer</span>
-          <input name="issuer" type="url" required />
+          <input name="issuer" type="url" />
+          <span class="hint">the issuer of the provider: a local provider has none</span>
         </label>
         <label class="field">
           <span>Client at the provider</span>
-          <input name="idpClientId" required />
+          <input name="idpClientId" />
         </label>
         <label class="field">
           <span>Secret at the provider</span>
-          <input name="idpClientSecret" type="password" required autocomplete="new-password" />
+          <input name="idpClientSecret" type="password" autocomplete="new-password" />
           <span class="hint">never answered by the service</span>
         </label>
         <label class="field">
           <span>Redirect at the provider</span>
-          <input name="idpRedirectUri" type="url" required />
+          <input name="idpRedirectUri" type="url" />
         </label>
         <label class="field">
           <span>Scopes</span>
@@ -61,6 +72,46 @@ export function RemoveProvider(props: { id: string; action: string }) {
   return (
     <form method="post" action={props.action} class="inline">
       <input type="hidden" name="_action" value="remove-provider" />
+      <input type="hidden" name="id" value={props.id} />
+      <button type="submit" class="button button-quiet">
+        Remove
+      </button>
+    </form>
+  )
+}
+
+/** The form that writes the account of a caller of a local provider. */
+export function CredentialForm(props: { action: string; provider: string }) {
+  return (
+    <form method="post" action={props.action} class="form">
+      <input type="hidden" name="_action" value="save-credential" />
+      <input type="hidden" name="provider" value={props.provider} />
+      <div class="form-grid">
+        <label class="field">
+          <span>E-mail</span>
+          <input name="email" type="email" required />
+          <span class="hint">the address the caller signs in with</span>
+        </label>
+        <label class="field">
+          <span>Password</span>
+          <input name="password" type="password" required autocomplete="new-password" />
+          <span class="hint">
+            at least twelve characters: the caller cannot change it yet, the operator writes it
+          </span>
+        </label>
+      </div>
+      <button type="submit" class="button">
+        Write the account
+      </button>
+    </form>
+  )
+}
+
+/** The button that removes a credential of a local provider. */
+export function RemoveCredential(props: { id: string; action: string }) {
+  return (
+    <form method="post" action={props.action} class="inline">
+      <input type="hidden" name="_action" value="remove-credential" />
       <input type="hidden" name="id" value={props.id} />
       <button type="submit" class="button button-quiet">
         Remove

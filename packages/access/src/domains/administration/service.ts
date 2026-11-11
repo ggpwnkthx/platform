@@ -17,6 +17,9 @@ import type { AdministrationOptions } from './options'
 import type {
   AuditContext,
   AuditPage,
+  Credential,
+  CredentialPage,
+  CredentialRegistration,
   Grant,
   GrantPage,
   GrantRegistration,
@@ -57,6 +60,7 @@ import {
 } from './principals'
 import { listTenants, upsertTenant } from './tenants'
 import { listProviders, removeProvider, upsertProvider } from './providers'
+import { listCredentials, removeCredential, upsertCredential } from './local-credentials'
 import { bootstrapAdministrator } from './bootstrap'
 
 export type { AdministrationOptions } from './options'
@@ -169,6 +173,49 @@ export class AdministrationService {
    */
   async removeProvider(scope: AdminScope, id: string, context: AuditContext): Promise<AuditEntry> {
     return await removeProvider(this.options, scope, id, context)
+  }
+
+  /**
+   * Creates a credential of a local provider, or changes it.
+   *
+   * The call is an upsert on the pair `(tenant, provider, email)`: the
+   * operator changes the password of an account by calling it again.
+   * The password is hashed before it is stored and it is never answered.
+   */
+  async upsertCredential(
+    scope: AdminScope,
+    registration: CredentialRegistration,
+    context: AuditContext
+  ): Promise<{ credential: Credential; created: boolean; audit: AuditEntry }> {
+    return await upsertCredential(this.options, scope, registration, context)
+  }
+
+  /** The credentials that match a filter, and their number. */
+  async listCredentials(
+    scope: AdminScope,
+    query: {
+      tenant?: string | null
+      provider?: string | null
+      email?: string | null
+      limit?: string | null
+      offset?: string | null
+    }
+  ): Promise<CredentialPage> {
+    return await listCredentials(this.options, scope, query)
+  }
+
+  /**
+   * Removes a credential of a local provider.
+   *
+   * The principal the credential created stays: it cannot be signed in
+   * with any more, and the operator revokes its rights.
+   */
+  async removeCredential(
+    scope: AdminScope,
+    id: string,
+    context: AuditContext
+  ): Promise<AuditEntry> {
+    return await removeCredential(this.options, scope, id, context)
   }
 
   /**

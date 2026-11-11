@@ -19,15 +19,18 @@ import {
   accessContext,
   audit,
   decide,
+  listCredentials,
   listGroups,
   listPrincipals,
   listGrants,
   listProviders,
   listRoles,
   listTenants,
+  removeCredential,
   removeProvider,
   removeRole,
   revokeGrant,
+  writeCredential,
   writeGrant,
   writeGroup,
   writeProvider,
@@ -200,6 +203,7 @@ export const accessGroup: GroupSpec = {
       options: [
         { name: 'tenant', kind: 'string', summary: 'the slug of the tenant' },
         { name: 'slug', kind: 'string', summary: 'the slug of the provider in its tenant' },
+        { name: 'kind', kind: 'string', summary: 'the kind of the provider: oidc or local' },
         { name: 'display-name', kind: 'string', summary: 'the name of the provider' },
         { name: 'issuer', kind: 'string', summary: 'the issuer of the provider' },
         { name: 'idp-client-id', kind: 'string', summary: 'the client of the provider' },
@@ -221,6 +225,8 @@ export const accessGroup: GroupSpec = {
           )
         }
         const body: Record<string, unknown> = { tenant, slug }
+        const kind = stringOf(input.options, 'kind')
+        if (kind) body.kind = kind
         const displayName = stringOf(input.options, 'display-name')
         const issuer = stringOf(input.options, 'issuer')
         const idpClientId = stringOf(input.options, 'idp-client-id')
@@ -248,6 +254,73 @@ export const accessGroup: GroupSpec = {
         }
         const removed = await removeProvider(accessCall(input), id)
         return { value: removed, message: 'the provider is removed' }
+      },
+    },
+    {
+      name: 'credentials list',
+      summary: 'list the accounts of the local providers',
+      options: [
+        { name: 'tenant', kind: 'string', summary: 'the slug of the tenant' },
+        { name: 'provider', kind: 'string', summary: 'the slug of the local provider' },
+        { name: 'email', kind: 'string', summary: 'the address of the account' },
+        { name: 'limit', kind: 'string', summary: 'the size of the page', default: '50' },
+        { name: 'offset', kind: 'string', summary: 'the offset of the page', default: '0' },
+      ],
+      async run(input) {
+        const body = await listCredentials(accessCall(input), {
+          tenant: stringOf(input.options, 'tenant'),
+          provider: stringOf(input.options, 'provider'),
+          email: stringOf(input.options, 'email'),
+          limit: numberOf(input.options, 'limit'),
+          offset: numberOf(input.options, 'offset'),
+        })
+        const rows = rowsOf(body, 'credentials')
+        return { value: body, lines: linesOf(rows, input.globals.color) }
+      },
+    },
+    {
+      name: 'credentials create',
+      summary: 'write the account of a caller of a local provider, or change its password',
+      options: [
+        { name: 'tenant', kind: 'string', summary: 'the slug of the tenant' },
+        { name: 'provider', kind: 'string', summary: 'the slug of the local provider' },
+        { name: 'email', kind: 'string', summary: 'the address of the account' },
+        { name: 'password', kind: 'string', summary: 'the password of the account' },
+        { name: 'status', kind: 'string', summary: 'the status of the account' },
+      ],
+      examples: [
+        'platformctl access credentials create --tenant acme --provider local --email alice@acme.example --password a-long-password',
+      ],
+      async run(input) {
+        const tenant = stringOf(input.options, 'tenant')
+        const provider = stringOf(input.options, 'provider')
+        const email = stringOf(input.options, 'email')
+        const password = stringOf(input.options, 'password')
+        if (!tenant || !provider || !email || !password) {
+          throw new CliFailure(
+            'the tenant, the provider, the address and the password are needed',
+            2,
+            'missing_argument'
+          )
+        }
+        const body: Record<string, unknown> = { tenant, provider, email, password }
+        const status = stringOf(input.options, 'status')
+        if (status) body.status = status
+        const written = await writeCredential(accessCall(input), body)
+        return { value: written, message: `the account "${email}" is written` }
+      },
+    },
+    {
+      name: 'credentials remove',
+      summary: 'remove the account of a caller of a local provider',
+      options: [{ name: 'id', kind: 'string', summary: 'the identifier of the account' }],
+      async run(input) {
+        const id = stringOf(input.options, 'id')
+        if (!id) {
+          throw new CliFailure('the identifier of the account is needed', 2, 'missing_argument')
+        }
+        const removed = await removeCredential(accessCall(input), id)
+        return { value: removed, message: 'the account is removed' }
       },
     },
     {

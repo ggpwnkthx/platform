@@ -179,6 +179,9 @@ Callers' sessions cannot be listed: the gateway has no endpoint for them, and th
 | `access providers list` | The providers of the deployment. |
 | `access providers create` | Registers a provider of a tenant, or changes it. |
 | `access providers remove <id>` | Removes a provider that holds no principal. |
+| `access credentials list` | The accounts of the local providers. |
+| `access credentials create` | Writes the account of a caller of a local provider, or changes its password. |
+| `access credentials remove <id>` | Removes the account of a caller of a local provider. |
 | `access grants list` | A page of grants. |
 | `access grants put` | Gives a grant, or changes it. |
 | `access grants revoke <id>` | Revokes a grant. |

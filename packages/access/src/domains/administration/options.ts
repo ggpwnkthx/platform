@@ -10,6 +10,8 @@ import type { AdminCredential } from './credentials'
 import type { FailedAuthenticationLimiter } from './limiter'
 import type {
   AuditStore,
+  CredentialHasher,
+  CredentialStore,
   GrantStore,
   GroupStore,
   PermissionStore,
@@ -26,6 +28,15 @@ export interface AdministrationOptions {
   principals: PrincipalStore
   /** The storage of the providers of the tenants. */
   providers: ProviderStore
+  /** The storage of the credentials of the local providers. */
+  localCredentials: CredentialStore
+  /**
+   * The hasher of the passwords of the credentials.
+   *
+   * The domain never hashes a password itself: the algorithm belongs to
+   * the platform, and the deployment may change it.
+   */
+  hasher: CredentialHasher
   /** The storage of the groups. */
   groups?: GroupStore
   /** The storage of the roles. */

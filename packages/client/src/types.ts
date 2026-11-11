@@ -265,6 +265,8 @@ export interface TenantInput {
 export interface Provider {
   readonly id: string
   readonly tenant: string
+  /** The kind of the provider: an OpenID Connect one, or the local one. */
+  readonly kind: 'oidc' | 'local'
   /** The name of the provider inside its tenant. It never changes. */
   readonly slug: string
   readonly displayName: string
@@ -277,9 +279,38 @@ export interface Provider {
   readonly createdAt: string
 }
 
+/** A credential of a local provider. */
+export interface Credential {
+  readonly id: string
+  readonly tenant: string
+  /** The slug of the local provider of the credential. */
+  readonly provider: string
+  readonly email: string
+  readonly status: 'active' | 'disabled'
+  /** The number of the failed sign-ins since the last success. */
+  readonly failedAttempts: number
+  /** The moment the credential is locked until, when it is locked. */
+  readonly lockedUntil: string | null
+  readonly passwordChangedAt: string
+  readonly createdAt: string
+}
+
+/** The body of the upsert of a credential. */
+export interface CredentialInput {
+  readonly tenant: string
+  /** The slug of the local provider of the credential. */
+  readonly provider: string
+  readonly email: string
+  /** The password of the account. It is hashed before it is stored. */
+  readonly password: string
+  readonly status?: 'active' | 'disabled'
+}
+
 /** The body of the upsert of a provider. */
 export interface ProviderInput {
   readonly tenant: string
+  /** The kind of the provider: an OpenID Connect one, or the local one. */
+  readonly kind?: 'oidc' | 'local'
   /** The name of the provider inside its tenant. It never changes. */
   readonly slug: string
   readonly displayName?: string
