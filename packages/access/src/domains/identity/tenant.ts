@@ -8,6 +8,47 @@
  * deliberate weakening and it is refused by default.
  */
 
+/**
+ * The slug of the default provider of a tenant.
+ *
+ * The default provider is the one the administration writes: the row of
+ * the tenant carries its registration, and the logins of the tenant that
+ * name no provider use it (spec §3.11).
+ *
+ * The slug is the same in the identity domain and in the platform: the
+ * domains do not share a constant, and the specification names it.
+ */
+export const DEFAULT_PROVIDER_SLUG = 'default'
+
+/**
+ * A provider of a tenant, as the identity domain knows it.
+ *
+ * A tenant signs its people in at one or more providers, and the slug of
+ * the provider is the handle a login names (spec §5.2). The slug never
+ * changes: a principal carries the slug of the provider it was created
+ * at (spec §6.2).
+ */
+export interface ProviderOfLogin {
+  /** The name of the provider inside its tenant. */
+  slug: string
+  /** The kind of the provider: an OpenID Connect one, or the local one. */
+  kind: 'oidc' | 'local'
+  /** The name shown to a human. */
+  displayName: string
+  /** False when the provider is not asked to sign anybody in. */
+  enabled: boolean
+  /** The issuer of an OpenID Connect provider. */
+  issuer: string
+  /** The client id of Access at an OpenID Connect provider. */
+  idpClientId: string
+  /** The url of Access at an OpenID Connect provider. */
+  idpRedirectUri: string
+  /** The scopes Access asks an OpenID Connect provider for. */
+  scopes: string[]
+  /** The algorithms a token of an OpenID Connect provider may use. */
+  algorithms: string[]
+}
+
 /** The tenant of a login, as the identity domain knows it. */
 export interface TenantOfLogin {
   id: string
@@ -17,12 +58,6 @@ export interface TenantOfLogin {
   isDefault: boolean
   /** Whether an unknown external identity creates a principal row. */
   autoProvision: boolean
-  /** The issuer of the provider of the tenant. */
-  issuer: string
-  /** The client id of Access at the provider of the tenant. */
-  idpClientId: string
-  /** The url of Access at the provider of the tenant. */
-  idpRedirectUri: string
   /** The domain of the tenant; a hint, never an authorization. */
   emailDomain: string | null
   /** The client id of the gateway of the tenant. */
@@ -34,10 +69,8 @@ export interface TenantOfLogin {
    * a url that is not in this list is never sent a code.
    */
   clientRedirectUris: string[]
-  /** The scopes Access asks the provider for. */
-  scopes: string[]
-  /** The algorithms a token of the tenant may be signed with. */
-  algorithms: string[]
+  /** The providers the tenant signs its people in at. */
+  providers: ProviderOfLogin[]
 }
 
 /** The request of an authorization, as the resolution reads it. */

@@ -52,6 +52,10 @@ export interface SeededTenant {
  * The rows are written by statements of their own: a script that fills
  * a database does not go through the administration of the service, and
  * it writes the rows that the statement of the decision reads.
+ *
+ * The tenant gets its default provider as well: the row of the provider
+ * is what the logins read, and a tenant without one refuses every login
+ * (spec §3.11).
  */
 export async function seedToolTenant(database: Database, tenant: SeededTenant): Promise<void> {
   await database.exec(`
@@ -60,6 +64,14 @@ export async function seedToolTenant(database: Database, tenant: SeededTenant): 
     values ('${tenant.slug}', '${tenant.displayName}', '${tenant.issuer}', '${tenant.clientId}',
       '\\x01', 'https://access.example.com/oauth/tenant/callback', 'gateway-${tenant.slug}', '\\x01')
     on conflict (slug) do nothing;
+  `)
+  await database.exec(`
+    insert into tenant_providers (tenant_id, kind, slug, display_name, enabled, issuer,
+      idp_client_id, idp_client_secret, idp_redirect_uri)
+    select id, 'oidc', 'default', display_name, true, idp_issuer, idp_client_id, idp_client_secret,
+      idp_redirect_uri
+    from tenants where slug = '${tenant.slug}'
+    on conflict (tenant_id, slug) do nothing;
   `)
   await database.exec(`
     insert into permissions (tenant_id, key)

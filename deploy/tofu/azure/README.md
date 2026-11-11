@@ -402,7 +402,7 @@ is started by hand when the wizard could not start it.
 The job creates the five roles of Data, creates the role of Access, and
 applies the migrations of the schema of Data. The grants of the roles
 belong to the database the roles work in: the role of Access creates
-the eight tables of its schema in the database of the platform, and the
+the nine tables of its schema in the database of the platform, and the
 owner of the schema of Data creates the schemas of the service in the
 database of Data.
 

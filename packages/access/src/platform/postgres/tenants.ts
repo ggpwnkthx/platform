@@ -9,12 +9,19 @@
  * written and they are never returned in clear by the methods of the
  * listing: only the two methods that read a secret decrypt it, and only
  * for the caller that needs it.
+ *
+ * **The default provider of a tenant is written with the tenant.** The row
+ * of the tenant carries the registration of the provider the administration
+ * writes, and the row of `tenant_providers` carries the same registration
+ * (spec §3.11): the two are one change, and a tenant whose provider row
+ * is missing is a tenant whose logins are refused.
  */
 
 import { withPlatformScope, withTenantScope } from './scope'
 import type { SqlClient } from './database'
 import { sameSecret } from '../../observability'
 import { SecretError, type SecretCipher } from './secrets'
+import { DEFAULT_PROVIDER_SLUG } from './providers'
 import { auditedCte } from './audited'
 import type { ChangeAudit } from '../../domains/administration'
 
@@ -315,11 +322,9 @@ export class TenantRepository {
       input.enabled ?? true,
     ]
     const audited = auditedCte('inserted', params, audit)
-    const rows = await withPlatformScope(
-      this.db,
-      async (client) =>
-        await client.query<TenantRecord>(
-          `with inserted as (
+    const rows = await withPlatformScope(this.db, async (client) => {
+      const inserted = await client.query<TenantRecord>(
+        `with inserted as (
          insert into tenants (slug, display_name, idp_issuer, idp_client_id, idp_client_secret,
            idp_redirect_uri, idp_scopes, idp_algorithms, email_domain, client_id, client_secret,
            client_redirect_uris, auto_provision, auto_provision_admin, shared_client, is_default,
@@ -328,9 +333,15 @@ export class TenantRepository {
          returning ${COLUMNS}
        )${audited}
        select ${COLUMNS} from inserted`,
-          params
-        )
-    )
+        params
+      )
+      const tenant = toRow(inserted[0]!)
+      // The default provider of the tenant is written with it: the
+      // registration of the tenant is the registration of its default
+      // provider (spec §3.11).
+      await this.mirrorDefaultProvider(client, tenant)
+      return inserted
+    })
     return toRow(rows[0]!)
   }
 
@@ -412,8 +423,56 @@ export class TenantRepository {
        select ${COLUMNS} from updated`,
         params
       )
+      if (rows[0]) {
+        // The default provider of the tenant follows the registration of
+        // the tenant: a change of the provider is a change of both
+        // (spec §3.11).
+        await this.mirrorDefaultProvider(client, toRow(rows[0]))
+      }
       return rows[0] ? toRow(rows[0]) : null
     })
+  }
+
+  /**
+   * Writes the default provider of a tenant.
+   *
+   * The provider of the tenant is the one whose slug is `default`: it is
+   * the provider the administration writes, and the one the logins of the
+   * tenant use when they name none.
+   *
+   * The row is written by an upsert: a tenant whose provider row was
+   * removed gets it back with the registration it has.
+   *
+   * The flag of the provider is not the flag of the tenant: the tenant
+   * that is disabled refuses every login on its own (§5.6), and a
+   * provider of a tenant carries its own flag.
+   */
+  private async mirrorDefaultProvider(client: SqlClient, tenant: TenantRow): Promise<void> {
+    await client.query(
+      `insert into tenant_providers (tenant_id, kind, slug, display_name, enabled, issuer,
+         idp_client_id, idp_client_secret, idp_redirect_uri, idp_scopes, idp_algorithms)
+       values ($1, 'oidc', $2, $3, true, $4, $5, $6, $7, $8, $9)
+       on conflict (tenant_id, slug) do update set
+         display_name = excluded.display_name,
+         issuer = excluded.issuer,
+         idp_client_id = excluded.idp_client_id,
+         idp_client_secret = excluded.idp_client_secret,
+         idp_redirect_uri = excluded.idp_redirect_uri,
+         idp_scopes = excluded.idp_scopes,
+         idp_algorithms = excluded.idp_algorithms,
+         updated_at = now()`,
+      [
+        tenant.id,
+        DEFAULT_PROVIDER_SLUG,
+        tenant.displayName,
+        tenant.idpIssuer,
+        tenant.idpClientId,
+        tenant.idpClientSecret,
+        tenant.idpRedirectUri,
+        tenant.idpScopes,
+        tenant.idpAlgorithms,
+      ]
+    )
   }
 
   /** The client secret of Access at the provider, in clear. */

@@ -43,6 +43,7 @@ The OpenAPI description of the served paths and response shapes. The repository'
 | `nonce` | Optional. Bound to the issued token. |
 | `code_challenge`, `code_challenge_method` | Optional. `S256`. |
 | `tenant` | Only when the tenant's client is `shared_client`. |
+| `provider` | Optional. The slug of a provider of the tenant of the login (§5.2.1). |
 | `login_hint` | Optional. An e-mail, used only when the client is shared. |
 
 Response: `302` to the tenant's provider, `400 invalid_request` (no tenant, bad parameters, unregistered `redirect_uri`) or `403 tenant_disabled`.

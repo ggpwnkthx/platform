@@ -182,6 +182,14 @@ export function apiPaths(): Record<string, unknown> {
             schema: { type: 'string' },
             description: 'The challenge of the proof key of the code.',
           },
+          {
+            name: 'provider',
+            in: 'query',
+            required: false,
+            schema: { type: 'string' },
+            description:
+              'The slug of the provider of the tenant the caller signs in at. It names a provider of the tenant of the login and nothing else.',
+          },
         ],
         responses: {
           302: { description: 'The browser is sent to the provider of the tenant.' },

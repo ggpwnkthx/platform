@@ -27,7 +27,7 @@ Development values are in [`packages/access/.env.example`](../../packages/access
 
 | Variable | Default | Production | Meaning |
 | --- | --- | --- | --- |
-| `ACCESS_DATABASE_URL` | embedded PostgreSQL in `./.access/pglite` (development only) | required, a server | PostgreSQL holding the eight tables. `postgres://…` or `postgresql://…` names a server; `pglite://<path>` names the embedded database (§3.9). Any other value is refused. |
+| `ACCESS_DATABASE_URL` | embedded PostgreSQL in `./.access/pglite` (development only) | required, a server | PostgreSQL holding the nine tables. `postgres://…` or `postgresql://…` names a server; `pglite://<path>` names the embedded database (§3.9). Any other value is refused. |
 | `ACCESS_REDIS_URL` | none: codes live in process memory | required, unless `ACCESS_ALLOW_MEMORY_STATE=true` | Shared store for authorization codes and the administration's failed-authentication counts. Required when more than one replica runs. |
 | `ACCESS_ALLOW_MEMORY_STATE` | `false` | optional | `true`, `false`, `1` or `0`. Replaces the shared store with process memory. Single-node deployments only: codes die with the process. |
 

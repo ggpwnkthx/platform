@@ -3,7 +3,7 @@
  *
  * The repository is the storage of the rows: it holds no policy. The
  * mapping of an identity is the work of the identity domain, and it uses
- * the key `(tenant, subject)` and never the e-mail.
+ * the key `(tenant, provider, subject)` and never the e-mail.
  */
 
 import { withScope, withTenantScope } from './scope'
@@ -20,6 +20,13 @@ export interface UserRow {
   tenantId: string
   /** The slug of the tenant of the principal. */
   tenantSlug: string
+  /**
+   * The slug of the provider the principal was created at.
+   *
+   * The key of the mapping is the triple `(tenant, provider, subject)`:
+   * two providers of a tenant hand out the same `sub` (spec §6.2).
+   */
+  providerSlug: string
   /** The `sub` of the provider of the tenant. */
   externalSubject: string
   /** The last e-mail seen at the provider: a display value, never a key. */
@@ -34,6 +41,14 @@ export interface UserRow {
 /** The fields of the creation of a principal. */
 export interface NewUser {
   tenantId: string
+  /**
+   * The slug of the provider the principal is created at.
+   *
+   * A principal that is created without a provider is a principal of the
+   * default provider of its tenant: the administration writes the
+   * principals of the default provider (spec §10.4).
+   */
+  providerSlug?: string
   externalSubject: string
   email?: string | null
   displayName?: string | null
@@ -52,6 +67,7 @@ interface UserRecord {
   id: string
   tenant_id: string
   tenant_slug: string
+  provider_slug: string
   external_subject: string
   email: string | null
   display_name: string | null
@@ -67,7 +83,7 @@ interface UserRecord {
  * The slug of the tenant comes with them: the answer of the
  * administration names the tenant and not its id.
  */
-const COLUMNS = `users.id, users.tenant_id, users.external_subject, users.email,
+const COLUMNS = `users.id, users.tenant_id, users.provider_slug, users.external_subject, users.email,
   users.display_name, users.status, users.last_login_at, users.created_at, users.updated_at,
   tenants.slug as tenant_slug`
 
@@ -77,6 +93,7 @@ function toRow(record: UserRecord): UserRow {
     id: record.id,
     tenantId: record.tenant_id,
     tenantSlug: record.tenant_slug,
+    providerSlug: record.provider_slug,
     externalSubject: record.external_subject,
     email: record.email,
     displayName: record.display_name,
@@ -151,18 +168,23 @@ export class UserRepository {
   /**
    * The principal of an external identity.
    *
-   * The key is the pair `(tenant, subject)`: an e-mail is mutable and is
-   * not an identity (spec §6.2).
+   * The key is the triple `(tenant, provider, subject)`: an e-mail is
+   * mutable and is not an identity, and two providers of a tenant hand
+   * out the same `sub` (spec §6.2).
    */
-  async findByExternalSubject(tenantId: string, externalSubject: string): Promise<UserRow | null> {
+  async findByExternalSubject(
+    tenantId: string,
+    providerSlug: string,
+    externalSubject: string
+  ): Promise<UserRow | null> {
     const rows = await withTenantScope(
       this.db,
       tenantId,
       async (client) =>
         await client.query<UserRecord>(
           `select ${COLUMNS} from users join tenants on tenants.id = users.tenant_id
-       where users.tenant_id = $1 and users.external_subject = $2`,
-          [tenantId, externalSubject]
+       where users.tenant_id = $1 and users.provider_slug = $2 and users.external_subject = $3`,
+          [tenantId, providerSlug, externalSubject]
         )
     )
     return rows[0] ? toRow(rows[0]) : null
@@ -260,6 +282,7 @@ export class UserRepository {
   async create(input: NewUser, audit?: ChangeAudit | null): Promise<UserRow> {
     const params: unknown[] = [
       input.tenantId,
+      input.providerSlug ?? 'default',
       input.externalSubject,
       input.email ?? null,
       input.displayName ?? null,
@@ -272,10 +295,10 @@ export class UserRepository {
       async (client) =>
         await client.query<UserRecord>(
           `with inserted as (
-         insert into users (tenant_id, external_subject, email, display_name, status)
-         values ($1, $2, $3, $4, $5)
-         returning id, tenant_id, external_subject, email, display_name, status, last_login_at,
-           created_at, updated_at
+         insert into users (tenant_id, provider_slug, external_subject, email, display_name, status)
+         values ($1, $2, $3, $4, $5, $6)
+         returning id, tenant_id, provider_slug, external_subject, email, display_name, status,
+           last_login_at, created_at, updated_at
        )${audited}
        select inserted.*, tenants.slug as tenant_slug
        from inserted join tenants on tenants.id = inserted.tenant_id`,
@@ -327,8 +350,8 @@ export class UserRepository {
         await client.query<UserRecord>(
           `with updated as (
          update users set ${assignments.join(', ')} where id = $${idParam}
-         returning id, tenant_id, external_subject, email, display_name, status, last_login_at,
-           created_at, updated_at
+         returning id, tenant_id, provider_slug, external_subject, email, display_name, status,
+           last_login_at, created_at, updated_at
        )${audited}
        select updated.*, tenants.slug as tenant_slug
        from updated join tenants on tenants.id = updated.tenant_id`,

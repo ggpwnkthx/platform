@@ -47,7 +47,7 @@ A **modular monolith**: one process, one image, one database, four independent d
 | Path | Owns |
 | --- | --- |
 | `src/main.ts` | Process entry point. |
-| `src/domains/identity/` | Provider token validation, principal mapping, tenant resolution, login state and the provider client. |
+| `src/domains/identity/` | Provider token validation, principal mapping, tenant resolution, login state, the driver of a provider and the provider client. |
 | `src/domains/authorization/` | The decision rule, grant reads, reasons. |
 | `src/domains/administration/` | The twelve endpoints, body validation, auditing every change. |
 | `src/domains/provider/` | The tokens Access issues, the JWKS, the discovery document, code exchange. |
@@ -237,7 +237,7 @@ Model: login state is encrypted, authenticated and single use; codes are opaque,
 | 17 | An unregistered gateway redirect URI is refused with `400 invalid_request` before the tenant is resolved, and never gets a code. | Fixed | `src/domains/identity/tenant.ts`, `src/app/login.ts` |
 | 18 | State cookie: `HttpOnly`, `SameSite=Lax`, `Secure` in production, path is the callback. | Fixed | `src/app/login.ts` |
 | 19 | Tenant credentials asking about another tenant's principal get "principal does not exist"; the bearer token is unscoped. | Fixed | `src/app/decision-contract.ts` |
-| 20 | Row level security on all eight tables, transaction-local scope, production refuses a bypassing role. | Fixed | `src/platform/postgres/scope.ts`, `src/platform/postgres/migrations/0003_tenant_isolation.sql` |
+| 20 | Row level security on all nine tables, transaction-local scope, production refuses a bypassing role. | Fixed | `src/platform/postgres/scope.ts`, `src/platform/postgres/migrations/0003_tenant_isolation.sql` |
 | 21 | Rotation without a gap: a replaced gateway secret stays valid 24 hours; environment tokens use two variables. | Fixed | `src/app/decision-contract.ts`, `src/app/oauth.ts`, `src/domains/administration/service.ts`, `docs/access/spec.md` §4.3.1 |
 | 22 | The audit is a table naming the credential's fingerprint, written by the same statement as the change. | Fixed | `src/platform/postgres/audited.ts`, `src/platform/postgres/audit.ts`, `src/app/administration/` |
 | 23 | Server-side `statement_timeout` frees the connection at the decision deadline. | Fixed | `src/platform/postgres/postgres.ts`, `src/platform/postgres/decision-facts.ts` |

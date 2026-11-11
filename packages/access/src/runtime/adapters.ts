@@ -54,6 +54,7 @@ import {
   type UserRepository,
   type UserRow,
 } from '../platform/postgres'
+import { DEFAULT_PROVIDER_SLUG } from '../platform/postgres'
 
 /** Turns a tenant of the storage into a tenant of the domain. */
 function toTenant(row: TenantRow): {
@@ -259,10 +260,10 @@ export interface AdministrationDependencies {
   /**
    * Called when the registration of a tenant changes.
    *
-   * The client of the provider of the tenant is dropped, so that the next
-   * login builds a new one with the new registration (spec §6.6).
+   * The clients of the providers of the tenant are dropped, so that the
+   * next login builds new ones with the new registration (spec §6.6).
    */
-  onTenantChanged?: (tenantId: string) => void
+  onTenantChanged?: (tenantId: string) => void | Promise<void>
 }
 
 /**
@@ -293,12 +294,12 @@ export function createAdministrationService(
     },
     create: async (registration, audit) => {
       const row = await run(async () => await dependencies.tenants.create(registration, audit))
-      dependencies.onTenantChanged?.(row.id)
+      await dependencies.onTenantChanged?.(row.id)
       return toTenant(row)
     },
     update: async (id, registration, audit) => {
       const row = await run(async () => await dependencies.tenants.update(id, registration, audit))
-      if (row) dependencies.onTenantChanged?.(id)
+      if (row) await dependencies.onTenantChanged?.(id)
       return row ? toTenant(row) : null
     },
   }
@@ -309,13 +310,27 @@ export function createAdministrationService(
       return row ? toPrincipal(row) : null
     },
     findByExternalSubject: async (tenantId, externalSubject) => {
+      // The principals of the administration are the principals of the
+      // **default** provider of the tenant: the administration writes the
+      // identity of a caller of the provider it knows (spec §10.4).
       const row = await run(
-        async () => await dependencies.users.findByExternalSubject(tenantId, externalSubject)
+        async () =>
+          await dependencies.users.findByExternalSubject(
+            tenantId,
+            DEFAULT_PROVIDER_SLUG,
+            externalSubject
+          )
       )
       return row ? toPrincipal(row) : null
     },
     create: async (registration, audit) => {
-      const row = await run(async () => await dependencies.users.create(registration, audit))
+      const row = await run(
+        async () =>
+          await dependencies.users.create(
+            { ...registration, providerSlug: DEFAULT_PROVIDER_SLUG },
+            audit
+          )
+      )
       return toPrincipal(row)
     },
     update: async (id, changes, scope, audit) => {

@@ -83,6 +83,7 @@ describe('the schema of Access', () => {
       '0012_roles_scope.sql',
       '0013_explicit_scope.sql',
       '0014_tenant_auto_provision_admin.sql',
+      '0015_provider_registry.sql',
     ])
 
     const second = await runMigrations({
@@ -106,10 +107,11 @@ describe('the schema of Access', () => {
       '0012_roles_scope.sql',
       '0013_explicit_scope.sql',
       '0014_tenant_auto_provision_admin.sql',
+      '0015_provider_registry.sql',
     ])
   })
 
-  test('the eight tables are the only tables of the domain', async () => {
+  test('the nine tables are the only tables of the domain', async () => {
     const rows = await database.query<{ table_name: string }>(
       `select table_name from information_schema.tables
        where table_schema = current_schema()
@@ -123,6 +125,7 @@ describe('the schema of Access', () => {
       'role_permissions',
       'role_roles',
       'roles',
+      'tenant_providers',
       'tenants',
       'users',
     ])

@@ -30,6 +30,14 @@ const KEY_INFO = 'access:login-state:v1'
 export interface LoginState {
   /** The slug of the tenant of the login. */
   tenant: string
+  /**
+   * The slug of the provider the login signs in at.
+   *
+   * The provider is named in the state because the callback does not
+   * carry it: the state is what tells the login which provider is
+   * waiting for the code (spec §5.3).
+   */
+  provider: string
   /** The client id of the gateway. */
   clientId: string
   /** The redirect uri of the request. */
@@ -129,6 +137,10 @@ export function createStateCipher(secret: string): StateCipher {
       }
       return {
         tenant: state.tenant,
+        // The provider of a state that was written before the providers
+        // of a tenant were named is empty: the login falls back to the
+        // default provider of its tenant (§5.2.1).
+        provider: typeof state.provider === 'string' ? state.provider : '',
         clientId: state.clientId,
         redirectUri: state.redirectUri,
         state: typeof state.state === 'string' ? state.state : '',

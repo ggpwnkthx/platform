@@ -8,17 +8,35 @@ import {
   LoginStateError,
   mapIdentity,
   MappingError,
+  providerOf,
   providerScopesOf,
   resolveTenant,
   TenantResolutionError,
   validateProviderToken,
   type LoginState,
   type Principal,
+  type ProviderOfLogin,
   type TenantOfLogin,
 } from './index'
 
 /** The redirect uri the gateway of the tests is registered with. */
 const REDIRECT = 'https://gateway-acme.example.com/auth/callback'
+
+/** The provider of the tests. */
+function provider(overrides: Partial<ProviderOfLogin> = {}): ProviderOfLogin {
+  return {
+    slug: 'default',
+    kind: 'oidc',
+    displayName: 'The provider of Acme',
+    enabled: true,
+    issuer: 'https://login.acme.example',
+    idpClientId: 'access-acme',
+    idpRedirectUri: 'https://access.example.com/oauth/tenant/callback',
+    scopes: ['openid', 'email', 'profile'],
+    algorithms: ['RS256'],
+    ...overrides,
+  }
+}
 
 /** A tenant of the tests. */
 function tenant(overrides: Partial<TenantOfLogin> = {}): TenantOfLogin {
@@ -29,14 +47,10 @@ function tenant(overrides: Partial<TenantOfLogin> = {}): TenantOfLogin {
     sharedClient: false,
     isDefault: false,
     autoProvision: false,
-    issuer: 'https://login.acme.example',
-    idpClientId: 'access-acme',
-    idpRedirectUri: 'https://access.example.com/oauth/tenant/callback',
     emailDomain: 'acme.example',
     clientId: 'gateway-acme',
     clientRedirectUris: ['https://gateway-acme.example.com/auth/callback'],
-    scopes: ['openid', 'email', 'profile'],
-    algorithms: ['RS256'],
+    providers: [provider()],
     ...overrides,
   }
 }
@@ -59,32 +73,59 @@ describe('the scopes of a provider', () => {
     // platform asks for the groups of a caller. The provider of the
     // tenant has no directory of groups, and a scope it does not name
     // is a scope its authorization refuses.
-    expect(providerScopesOf(tenant(), ['openid', 'profile', 'email', 'groups'])).toEqual([
+    expect(providerScopesOf(provider(), ['openid', 'profile', 'email', 'groups'])).toEqual([
       'openid',
       'profile',
       'email',
     ])
   })
 
-  test('a tenant whose provider knows no scope is asked for the scopes of the request', () => {
-    expect(providerScopesOf(tenant({ scopes: [] }), ['openid', 'email'])).toEqual([
+  test('a provider that knows no scope is asked for the scopes of the request', () => {
+    expect(providerScopesOf(provider({ scopes: [] }), ['openid', 'email'])).toEqual([
       'openid',
       'email',
     ])
   })
 
   test('a client that asks for nothing the provider knows is asked for everything it knows', () => {
-    expect(providerScopesOf(tenant(), ['groups'])).toEqual(['openid', 'email', 'profile'])
+    expect(providerScopesOf(provider(), ['groups'])).toEqual(['openid', 'email', 'profile'])
   })
 
   test('the provider is never asked for a scope of the platform', () => {
     // The refresh token is a credential of Access: no provider of a
     // tenant knows the scope, and one that is asked for it refuses the
     // login.
-    expect(providerScopesOf(tenant({ scopes: [] }), ['openid', 'offline_access'])).toEqual([
+    expect(providerScopesOf(provider({ scopes: [] }), ['openid', 'offline_access'])).toEqual([
       'openid',
     ])
-    expect(providerScopesOf(tenant(), ['openid', 'offline_access'])).toEqual(['openid'])
+    expect(providerScopesOf(provider(), ['openid', 'offline_access'])).toEqual(['openid'])
+  })
+})
+
+describe('the provider of a login', () => {
+  test('a request that names no provider is a request at the default one', () => {
+    expect(providerOf(tenant()).slug).toBe('default')
+  })
+
+  test('a request that names a provider of the tenant is a request at it', () => {
+    const two = tenant({
+      providers: [provider(), provider({ slug: 'okta', displayName: 'Okta' })],
+    })
+    expect(providerOf(two, 'okta').slug).toBe('okta')
+  })
+
+  test('a request that names a provider of another tenant is refused', () => {
+    expect(() => providerOf(tenant(), 'okta')).toThrow(/provider/)
+  })
+
+  test('a disabled provider is never asked to sign anybody in', () => {
+    const disabled = tenant({ providers: [provider({ enabled: false })] })
+    expect(() => providerOf(disabled)).toThrow(/provider/)
+  })
+
+  test('a tenant with one provider and no default is a tenant with that provider', () => {
+    const one = tenant({ providers: [provider({ slug: 'okta' })] })
+    expect(providerOf(one).slug).toBe('okta')
   })
 })
 
@@ -203,6 +244,7 @@ describe('the tenant of a login', () => {
 describe('the state of a login', () => {
   const state: LoginState = {
     tenant: 'acme',
+    provider: 'default',
     clientId: 'gateway-acme',
     redirectUri: 'https://gateway-acme.example.com/auth/callback',
     state: 'the-state-of-the-gateway',
@@ -341,6 +383,7 @@ describe('the mapping of an identity', () => {
         },
       },
       tenant(),
+      provider(),
       { subject: 'the-subject' }
     )
     expect(mapping.principal.id).toBe('principal-1')
@@ -356,6 +399,7 @@ describe('the mapping of an identity', () => {
           create: async () => principal,
         },
         tenant(),
+        provider(),
         { subject: 'the-subject' }
       )
     ).rejects.toThrow(MappingError)
@@ -369,6 +413,7 @@ describe('the mapping of an identity', () => {
         create: async () => principal,
       },
       tenant({ autoProvision: true }),
+      provider(),
       { subject: 'the-subject', email: 'alice@acme.example' }
     )
     expect(mapping.created).toBe(true)
@@ -386,6 +431,7 @@ describe('the mapping of an identity', () => {
         create: async () => principal,
       },
       tenant({ autoProvision: true }),
+      provider(),
       { subject: 'the-subject', email: 'alice@acme.example' }
     )
     expect(mapping.created).toBe(true)
@@ -401,6 +447,7 @@ describe('the mapping of an identity', () => {
           create: async () => principal,
         },
         tenant(),
+        provider(),
         { subject: 'the-subject' }
       )
     ).rejects.toThrow(/disabled/)

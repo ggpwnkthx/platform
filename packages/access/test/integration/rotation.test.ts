@@ -6,6 +6,7 @@ import {
   createDatabase,
   createSecretCipher,
   MIGRATIONS_DIRECTORY,
+  ProviderRepository,
   runMigrations,
   TenantRepository,
   type Database,
@@ -65,9 +66,18 @@ describe('the rotation of the key of the client secrets', () => {
       expect(await rotated.readProviderSecret(tenant.id)).toBe('the-secret-of-the-provider')
       expect(await rotated.readGatewaySecret(tenant.id)).toBe('the-secret-of-the-gateway')
 
+      // The secret of the provider is stored in the row of its provider
+      // as well, and it is re-encrypted with the rest: the login of the
+      // tenant works after the rotation (spec §3.11).
+      const providers = new ProviderRepository(database, createSecretCipher(NEW_KEY))
+      const provider = (await providers.listByTenant(tenant.id))[0]!
+      expect(await providers.readSecret(provider.id)).toBe('the-secret-of-the-provider')
+
       // The old key does not read the secrets any more.
       const old = new TenantRepository(database, createSecretCipher(OLD_KEY))
       expect(() => old.readProviderSecret(tenant.id)).toThrow()
+      const oldProviders = new ProviderRepository(database, createSecretCipher(OLD_KEY))
+      expect(() => oldProviders.readSecret(provider.id)).toThrow()
     } finally {
       await database?.close().catch(() => undefined)
       rmSync(directory, { recursive: true, force: true })

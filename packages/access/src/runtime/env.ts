@@ -49,7 +49,7 @@ interface PublicSettings {
   publicUrl: string
 }
 
-/** The settings of the database of the eight tables. */
+/** The settings of the database of the nine tables. */
 interface DatabaseSettings {
   /** The driver of the database. */
   driver: 'postgres' | 'pglite'
@@ -482,7 +482,7 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
   const production = parsed.ACCESS_ENVIRONMENT === 'production'
   const problems: string[] = []
 
-  // The database of the eight tables. A deployment talks to a PostgreSQL
+  // The database of the nine tables. A deployment talks to a PostgreSQL
   // server: the replicas share their tables. A development machine runs
   // the embedded PostgreSQL of the process when nothing is named.
   const rawDatabase = parsed.ACCESS_DATABASE_URL?.trim()
@@ -492,7 +492,7 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
   if (!rawDatabase) {
     if (production) {
       problems.push(
-        'ACCESS_DATABASE_URL must be set in a production environment: it names the PostgreSQL of the eight tables of Access'
+        'ACCESS_DATABASE_URL must be set in a production environment: it names the PostgreSQL of the nine tables of Access'
       )
     } else {
       databasePath = DEFAULT_EMBEDDED_DATABASE_PATH

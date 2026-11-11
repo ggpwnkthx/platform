@@ -94,6 +94,9 @@ export async function authorizeHandler(
       scopes: acceptedScopes((query.scope ?? 'openid').split(' ').filter(Boolean)),
       tenant: query.tenant,
       loginHint: query.login_hint,
+      // The provider of the tenant the caller signs in at: it names a
+      // provider of the tenant of the login and nothing else (spec §5.2).
+      provider: query.provider,
       codeChallenge: query.code_challenge,
     })
     return new Response(null, {

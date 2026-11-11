@@ -93,7 +93,7 @@ None is configurable. Each is enforced in code and has a test.
 
 ## 3. Tables
 
-The domain model is eight tables, and only these. Protocol state that is not a domain concept (the authorization codes) lives in the shared store (§5.5), not in the database.
+The domain model is nine tables, and only these. Protocol state that is not a domain concept (the authorization codes) lives in the shared store (§5.5), not in the database.
 
 Two infrastructure tables share the database but are not part of the model: the migration ledger `access_schema_migrations` (§3.8) and the administration audit `admin_audit` (§10.1). The audit holds no tenant, principal or grant: only what changed, when, and who changed it.
 
@@ -101,7 +101,9 @@ Schema: `src/platform/postgres/migrations/`.
 
 ### 3.1 `tenants`
 
-One row per customer, with the registration of the tenant's provider and of its gateway.
+One row per customer, with the registration of the tenant's **default** provider and of its gateway.
+
+The registration of the default provider is written here because it is what the administration writes (§10.2). The providers of the tenant themselves are rows of §3.11, and the default provider is the one whose slug is `default`: the two are one change, and a tenant whose default provider row is missing is a tenant whose logins are refused.
 
 | Column | Type | Rule |
 | --- | --- | --- |
@@ -135,6 +137,7 @@ One row per principal: the platform identity.
 | --- | --- | --- |
 | `id` | `uuid` | Primary key. The `sub` of every token Access issues and the `subject` of every decision request. |
 | `tenant_id` | `uuid` | The principal's tenant. Foreign key to `tenants`. |
+| `provider_slug` | `text` | The slug of the provider the principal was created at (§3.11). Default `default`. It never changes: a principal belongs to the provider it signed in at. |
 | `external_subject` | `text` | The provider's `sub`. |
 | `email` | `text` | Last e-mail seen at the provider; `null` when the provider publishes none. A display value, never a key. |
 | `display_name` | `text` | Last name seen at the provider. |
@@ -142,7 +145,7 @@ One row per principal: the platform identity.
 | `last_login_at` | `timestamptz` | Last successful login; `null` before the first. |
 | `created_at`, `updated_at` | `timestamptz` | |
 
-Unique: `(tenant_id, external_subject)`. `(id, tenant_id)` is also unique, so a grant can carry its tenant in a foreign key (§3.4).
+Unique: `(tenant_id, provider_slug, external_subject)`. Two providers of a tenant hand out the same `sub`, and the subject alone does not name a principal (§6.2). `(id, tenant_id)` is also unique, so a grant can carry its tenant in a foreign key (§3.4).
 
 ### 3.3 `permissions`
 
@@ -266,7 +269,11 @@ The administration call **replaces** the memberships (§10.11): the listed permi
      │              └──< roles >──── permissions
      │                    (the roles a role names)
      │
-     └── the registration of the provider and of the gateway
+     ├──< tenant_providers (the providers the tenant signs in at)
+     │        (the slug of the provider is the third part of the key
+     │         of a principal)
+     │
+     └── the registration of the default provider and of the gateway
 ```
 
 ### 3.8 Migrations
@@ -299,9 +306,9 @@ A **production** environment must name a PostgreSQL server, because the embedded
 
 ### 3.10 Tenant isolation
 
-The application isolates tenants: the keys of the eight tables carry the tenant, a grant's foreign key refuses another tenant's principal, and every statement reads a tenant by its id.
+The application isolates tenants: the keys of the nine tables carry the tenant, a grant's foreign key refuses another tenant's principal, and every statement reads a tenant by its id.
 
-The database is the **backstop**. The eight tables have PostgreSQL row level security, and the scope of a statement is written in two settings, local to the transaction:
+The database is the **backstop**. The nine tables have PostgreSQL row level security, and the scope of a statement is written in two settings, local to the transaction:
 
 - `access.scope` names the kind of the scope and `access.tenant_id` names the tenant of it.
 - A statement in the scope of a **tenant** (`access.scope` is `tenant`) sees that tenant's rows and nothing else.
@@ -313,6 +320,32 @@ The scope of a statement is the scope of the credential that caused it: a creden
 A statement that forgets the tenant in its text is therefore refused by PostgreSQL itself, not only by code review.
 
 Policies only bind a role that is **subject** to them; a superuser or a role with `BYPASSRLS` is not. A **production** deployment therefore refuses to start with such a role, since isolation would be a promise and not a rule. The deployment's role owns the platform tables and is not a superuser.
+
+### 3.11 `tenant_providers`
+
+One row per provider a tenant signs its people in at.
+
+| Column | Type | Rule |
+| --- | --- | --- |
+| `id` | `uuid` | Primary key. |
+| `tenant_id` | `uuid` | The provider's tenant. Foreign key to `tenants`. |
+| `kind` | `text` | `oidc` or `local`. Default `oidc`. The kind of the provider: an OpenID Connect provider, or the local provider of the platform (§5.4). |
+| `slug` | `text` | The name of the provider inside its tenant, `[a-z0-9-]{2,63}`. Unique per tenant. **It never changes**: a principal carries it (§6.2), and the slug of the default provider is `default`. |
+| `display_name` | `text` | Name shown to a human. |
+| `enabled` | `boolean` | Default `true`. A disabled provider is never asked to sign anybody in. |
+| `issuer` | `text` | The provider's issuer. A token whose `iss` does not match it exactly is refused. |
+| `idp_client_id` | `text` | The client id of Access at the provider. |
+| `idp_client_secret` | `bytea` | The client secret of Access at the provider, encrypted at rest (§4.3). |
+| `idp_redirect_uri` | `text` | The Access callback URL registered at the provider. Must be the URL of §5.1. |
+| `idp_scopes` | `text[]` | Scopes requested from the provider. Default `['openid','email','profile']`. |
+| `idp_algorithms` | `text[]` | Algorithms a provider token may be signed with. Default `['RS256']`. |
+| `created_at`, `updated_at` | `timestamptz` | |
+
+An OpenID Connect provider carries a complete registration: a provider that is named and not registered signs nobody in, and the database refuses the row.
+
+**The default provider is written with the tenant.** The row of the tenant carries the registration of its default provider (§3.1), and the row of `tenant_providers` carries the same registration: the two are written by the same statements, and a tenant whose default provider row is missing refuses every login (§5.2).
+
+The table is scoped like the other tables of the model: a statement in the scope of a tenant sees the providers of that tenant and nothing else (§3.10).
 
 ## 4. Environment
 
@@ -375,7 +408,7 @@ With `ACCESS_ENVIRONMENT=production`, the service refuses to start when a requir
 
 | Variable | Why it is required |
 | --- | --- |
-| `ACCESS_DATABASE_URL` | Holds the eight tables. Production must name a server (§3.9). |
+| `ACCESS_DATABASE_URL` | Holds the nine tables. Production must name a server (§3.9). |
 | `ACCESS_ISSUER` | The `iss` of every issued token and the issuer the gateway is configured with. |
 | `ACCESS_REDIS_URL` | Replicas must share authorization codes, unless `ACCESS_ALLOW_MEMORY_STATE=true` marks a single-node deployment. |
 | `ACCESS_ADMIN_TOKEN` | The bearer token of the twelve administrative endpoints, unless the deployment names its credentials in `ACCESS_ADMIN_TOKENS` (§4.6). |
@@ -462,6 +495,20 @@ The login's tenant is resolved in this order; the first match wins.
 
 A client that names no tenant → `400 invalid_request`. A disabled tenant → `403 tenant_disabled`.
 
+### 5.2.1 Resolving the provider
+
+The tenant is resolved first, and the **provider** of the login is a provider of that tenant (§3.11).
+
+1. **The parameter of the provider.** The request may name a provider in `provider`. It names a provider of the tenant of the login, and nothing else: a slug that belongs to no provider of that tenant → `400 invalid_request`.
+2. **The default provider.** A request that names no provider is a request at the **default** provider of the tenant: the one whose slug is `default`.
+3. **The only provider.** A tenant whose default provider row is missing but which has exactly one enabled provider is a tenant with that provider.
+
+A tenant that has no enabled provider, or whose providers are several and whose request names none, refuses the login with `400 invalid_request`: it has no provider to sign the caller in at.
+
+The parameter chooses between the providers of **one** tenant: it never moves a login to another tenant, and it is never an authorization. It is refused when it names a provider that is disabled, because a disabled provider signs nobody in.
+
+The scopes Access asks the provider for are the ones of **that** provider (§5.4): the providers of a tenant do not have to know the same scopes.
+
 With a shared client, the operator accepts that a hint the caller controls may choose a login's tenant. It is off by default, which is why a shared gateway is not the recommended topology. Only the platform operator may enable it: it is one of the tenant flags that belong to the platform (§10.1).
 
 **The request's redirect URI.** The caller controls the URL the browser returns to, so it is checked against the gateway's registered URLs (`client_redirect_uris`, §3.1) before the tenant is resolved:
@@ -475,21 +522,21 @@ The check is on the **client**, not the login's tenant. With a shared client the
 
 Login state is carried by two cookies and by the redirect parameters.
 
-**The state cookie** (`access_login_state`) holds, encrypted with `ACCESS_STATE_SECRET` (AES-256-GCM, authenticated): the tenant, the client id, the redirect URI, the gateway's `state`, the `nonce`, the PKCE verifier for the provider, and the login start time. It is `HttpOnly`, `Secure` in production, `SameSite=Lax`, `Path=/oauth/tenant/callback`, and lives ten minutes.
+**The state cookie** (`access_login_state`) holds, encrypted with `ACCESS_STATE_SECRET` (AES-256-GCM, authenticated): the tenant, **the slug of the provider of the login**, the client id, the redirect URI, the gateway's `state`, the `nonce`, the PKCE verifier for the provider, and the login start time. It is `HttpOnly`, `Secure` in production, `SameSite=Lax`, `Path=/oauth/tenant/callback`, and lives ten minutes.
 
 The cookie is **single use**: it is deleted as soon as the callback is processed, whatever the outcome.
 
-**Provider state.** Access sends the provider a fresh random `state` and a fresh `nonce`, both bound to the state cookie and checked when the browser returns.
+**Provider state.** Access sends the provider a fresh random `state` and a fresh `nonce`, both bound to the state cookie and checked when the browser returns. The state of the provider is bound to the provider of the login as well: a code that was minted for one provider is not a code for another one.
 
 **PKCE.** Access sends `S256` to the provider and keeps the verifier in the state cookie. A provider without PKCE support is refused when the tenant is registered.
 
 ### 5.4 Flow
 
 1. The gateway sends the browser to `GET /oauth/authorize?client_id=…&redirect_uri=…&response_type=code&scope=openid profile email groups&state=…&nonce=…&code_challenge=…&code_challenge_method=S256`.
-2. Access resolves the tenant (§5.2), sets the state cookie and redirects the browser to the provider's authorization endpoint with the `state`, `nonce`, `code_challenge` and the tenant's `redirect_uri`.
+2. Access resolves the tenant (§5.2) and the provider of the login (§5.2.1), sets the state cookie and redirects the browser to the provider's authorization endpoint with the `state`, `nonce`, `code_challenge` and the provider's `redirect_uri`.
 3. The provider authenticates the caller and sends the browser to `GET /oauth/tenant/callback?code=…&state=…`.
-4. Access reads the state cookie, checks the `state`, deletes the cookie, exchanges the code at the provider with the PKCE verifier, and validates the id token (§6.1).
-5. It maps the external identity to a principal (§6.2, §6.4).
+4. Access reads the state cookie, checks the `state`, deletes the cookie, exchanges the code at the provider of the login with the PKCE verifier, and validates the id token (§6.1).
+5. It maps the external identity to a principal of that provider (§6.2, §6.4).
 6. It issues an authorization code for the gateway and redirects the browser to the request's `redirect_uri` with the code and the gateway's `state`.
 7. The gateway exchanges the code at `POST /oauth/token` with its verifier, client id and secret.
 8. Access answers with an `id_token` and an `access_token` (§7).
@@ -544,14 +591,19 @@ The provider's discovery document is fetched from `{idp_issuer}/.well-known/open
 
 ### 6.2 Mapping key
 
-The mapping key is **`(tenant, subject)`**:
+The mapping key is the triple **`(tenant, provider, subject)`**:
 
 ```text
 users.tenant_id        = the tenant of the login
+users.provider_slug    = the slug of the provider of the login (§3.11)
 users.external_subject = the `sub` of the provider
 ```
 
-Never the e-mail: an e-mail changes, is reused and is not unique, so a principal bound to one is a guess. Linking two external identities to one principal is a deferred feature (§14).
+Never the e-mail: an e-mail changes, is reused and is not unique, so a principal bound to one is a guess.
+
+The provider is part of the key because two providers of a tenant hand out the same `sub`: the subject of one provider and the subject of another one are two identities of two people, and a key that carried only the subject would merge them.
+
+**A principal belongs to one provider.** A person who signs in at two providers of the same tenant has **two** principals, and two sets of grants: the two know nothing of each other. Linking two external identities to one principal is a deferred feature (§14).
 
 ### 6.3 E-mail is a display value
 
@@ -1195,7 +1247,8 @@ One comes back only when **a named customer pays for it**. Not "it seems useful"
 | Deferred | What it would mean | Without it |
 | --- | --- | --- |
 | **SAML** | A tenant whose provider speaks SAML instead of OIDC. | A tenant whose provider is not an OIDC provider is not served. |
-| **Account linking** | One principal, several external identities (a second provider, a second subject). | The mapping key `(tenant, subject)` is one to one. A person with two accounts has two principals and two sets of grants. |
+| **The local provider** | A provider of the platform that holds its own credentials in PostgreSQL and signs its callers in itself (§5.4). | The providers of a tenant are OpenID Connect providers. The driver of a provider is the seam it comes through (§5.4), and the local driver is the work that is not done yet. |
+| **Account linking** | One principal, several external identities (a second subject at the same provider). | The mapping key `(tenant, provider, subject)` is one to one. A person who signs in at two providers of a tenant has two principals and two sets of grants. |
 | **Console** | A web interface for the administration. | The twelve endpoints of §10 and `curl`. |
 | **SCIM** | Principal provisioning by a provider. | Principals are created by the §10.4 endpoint or by the tenant's auto-provisioning. |
 | **Directory sync** | Scheduled import of a tenant's directory from a source of truth. | Principals are created one at a time, by hand or by a script calling the endpoints. |

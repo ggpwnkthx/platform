@@ -1,12 +1,25 @@
 /**
- * The client of the provider of a tenant (spec §5.4).
+ * The client of an OpenID Connect provider of a tenant (spec §5.4).
  *
  * The client speaks to the provider of a tenant: it reads the discovery
  * document, it builds the url of the authorization, it exchanges the code
  * and it verifies the id token. The discovery document and the keys are
  * cached for ten minutes: a login does not call the provider of a tenant
  * on every request.
+ *
+ * The client is the **driver** of an OpenID Connect provider: it owns the
+ * whole exchange with it, and it answers an identity it has validated
+ * (spec §6.1). The identity domain never sees a token of a provider.
  */
+
+import { createLocalJWKSet, decodeProtectedHeader, jwtVerify } from 'jose'
+import { IdentityError, validateProviderToken } from './token'
+import type {
+  AuthorizationUrlOptions,
+  ExchangeOptions,
+  ProviderDriver,
+  ProviderIdentity,
+} from './provider-driver'
 
 /** The answer of an outbound call. */
 export interface TransportResponse {
@@ -88,8 +101,9 @@ export interface ProviderDiscovery {
   jwks_uri: string
 }
 
-/** The client of the provider of a tenant. */
-export class ProviderClient {
+/** The client of an OpenID Connect provider of a tenant. */
+export class ProviderClient implements ProviderDriver {
+  readonly kind = 'oidc' as const
   private discoveryCache: { document: ProviderDiscovery; at: number } | null = null
   private jwksCache: { keys: unknown; at: number } | null = null
   /** The moment of the last refresh of the keys of the provider. */
@@ -112,6 +126,8 @@ export class ProviderClient {
       now?: () => number
       /** How long a call to the provider may take, in milliseconds. */
       timeoutMs?: number
+      /** How long the clock of the token is tolerated, in seconds. */
+      clockSkewSeconds?: number
     }
   ) {}
 
@@ -258,12 +274,7 @@ export class ProviderClient {
    * Access sends a fresh state and a fresh nonce, and the challenge of the
    * PKCE: the verifier stays in the state cookie of the login.
    */
-  async authorizationUrl(options: {
-    state: string
-    nonce: string
-    challenge: string
-    scopes: string[]
-  }): Promise<string> {
+  async authorizationUrl(options: AuthorizationUrlOptions): Promise<string> {
     const discovery = await this.discovery()
     const url = new URL(discovery.authorization_endpoint)
     url.searchParams.set('client_id', this.options.clientId)
@@ -278,13 +289,18 @@ export class ProviderClient {
   }
 
   /**
-   * Exchanges the code of the provider for its id token.
+   * Exchanges the code of the provider for the identity of the caller.
    *
    * The client authenticates itself with its secret and it presents the
    * verifier of the PKCE: a provider that does not support the PKCE is
    * refused at the registration of the tenant.
+   *
+   * The token of the provider is validated before it is answered: the
+   * issuer, the audience, the nonce, the algorithm, the clock and the
+   * subject (spec §6.1). A token that does not pass every check is
+   * refused, and the reason is never in the answer of the browser.
    */
-  async exchange(options: { code: string; verifier: string }): Promise<string> {
+  async exchange(options: ExchangeOptions): Promise<ProviderIdentity> {
     const discovery = await this.discovery()
     const authorization = Buffer.from(
       `${this.options.clientId}:${this.options.clientSecret}`
@@ -318,6 +334,103 @@ export class ProviderClient {
     if (typeof idToken !== 'string' || idToken.length === 0) {
       throw new ProviderError('provider_error', 'the answer of the provider has no id token')
     }
-    return idToken
+    return await this.identityOf(idToken, options.nonce)
+  }
+
+  /**
+   * The identity the token of the provider carries.
+   *
+   * The signature is verified with the keys of the provider, and the
+   * claims are validated with the rules of the tenant (spec §6.1).
+   */
+  private async identityOf(idToken: string, nonce: string): Promise<ProviderIdentity> {
+    const claims = await this.verify(idToken)
+    try {
+      return validateProviderToken({
+        token: {
+          issuer: claims.issuer,
+          audience: claims.audience,
+          authorizedParty: claims.authorizedParty,
+          subject: claims.subject,
+          nonce: claims.nonce,
+          algorithm: claims.algorithm,
+          expiresAt: claims.expiresAt,
+          issuedAt: claims.issuedAt,
+          email: claims.email,
+          name: claims.name,
+        },
+        expectedIssuer: this.options.issuer,
+        expectedAudience: this.options.clientId,
+        expectedNonce: nonce,
+        allowedAlgorithms: this.options.algorithms,
+        skewSeconds: this.options.clockSkewSeconds ?? 60,
+      })
+    } catch (error) {
+      if (error instanceof IdentityError) {
+        throw new ProviderError('identity_rejected', 'the token of the provider was refused')
+      }
+      throw error
+    }
+  }
+
+  /** Verifies the signature of the id token of the provider. */
+  private async verify(idToken: string): Promise<{
+    issuer?: string
+    audience?: string | string[]
+    authorizedParty?: string
+    subject?: string
+    nonce?: string
+    algorithm?: string
+    expiresAt?: number
+    issuedAt?: number
+    email?: string
+    name?: string
+  }> {
+    const jwks = await this.keysFor(idToken)
+    try {
+      const verified = await jwtVerify(idToken, createLocalJWKSet(jwks as { keys: [] }))
+      const header = verified.protectedHeader
+      const payload = verified.payload
+      return {
+        issuer: typeof payload.iss === 'string' ? payload.iss : undefined,
+        audience: payload.aud as string | string[] | undefined,
+        authorizedParty: typeof payload.azp === 'string' ? payload.azp : undefined,
+        subject: typeof payload.sub === 'string' ? payload.sub : undefined,
+        nonce: typeof payload.nonce === 'string' ? payload.nonce : undefined,
+        algorithm: header.alg,
+        expiresAt: typeof payload.exp === 'number' ? payload.exp : undefined,
+        issuedAt: typeof payload.iat === 'number' ? payload.iat : undefined,
+        email: typeof payload.email === 'string' ? payload.email : undefined,
+        name: typeof payload.name === 'string' ? payload.name : undefined,
+      }
+    } catch {
+      throw new ProviderError('identity_rejected', 'the token of the provider was refused')
+    }
+  }
+
+  /**
+   * The keys that verify a token of a provider.
+   *
+   * A provider that rotates its signing key publishes a new one, and the
+   * keys of the provider are cached for ten minutes. A token that names a
+   * key that the cache does not have is therefore the sign of a rotation
+   * and not a bad token: the keys are read again once, and the token is
+   * verified against them (spec §6.6).
+   */
+  private async keysFor(idToken: string): Promise<{ keys: [] }> {
+    const jwks = (await this.jwks()) as { keys: { kid?: string }[] }
+    let kid: string | undefined
+    try {
+      kid = decodeProtectedHeader(idToken).kid
+    } catch {
+      kid = undefined
+    }
+    // A token without an identifier of a key is verified against the keys
+    // of the provider: a provider that signs with one key does not name
+    // it.
+    if (!kid) return jwks as { keys: [] }
+    const known = (jwks.keys ?? []).some((key) => key.kid === kid)
+    if (known) return jwks as { keys: [] }
+    return (await this.jwks({ refresh: true })) as { keys: [] }
   }
 }

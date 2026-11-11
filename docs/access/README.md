@@ -18,7 +18,7 @@ It does not proxy traffic, does not have a policy language of its own, and does 
   browser ──login──▶ gateway ──OIDC──▶ Access ──OIDC──▶ tenant identity provider
                         │                 ▲
                         └── decisions ────┘
-  Data ───────── access context ─────────▶ Access ──▶ PostgreSQL (eight tables), Redis (codes)
+  Data ───────── access context ─────────▶ Access ──▶ PostgreSQL (nine tables), Redis (codes)
 ```
 
 The gateway (`packages/gateway/`, read-only here) logs callers in through Access and asks it for a decision on every request. The gateway itself is unchanged, and the compatibility suite proves it against the repository's revision of the gateway. Shared concerns are in [Platform](../platform/README.md).
@@ -36,7 +36,7 @@ The gateway (`packages/gateway/`, read-only here) logs callers in through Access
 | Decision | The allow or deny answer the gateway receives, with a reason only the operator sees. |
 | Administration | Twelve `curl` endpoints plus one that reads the change audit. |
 
-The domain model is eight tables: `tenants`, `users`, `permissions`, `grants`, `groups`, `roles`, `role_permissions`, `role_roles` (§3).
+The domain model is nine tables: `tenants`, `tenant_providers`, `users`, `permissions`, `grants`, `groups`, `roles`, `role_permissions`, `role_roles` (§3).
 
 ## Find your way
 

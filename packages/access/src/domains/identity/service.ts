@@ -7,9 +7,7 @@
  */
 
 import { createHash, createHmac } from 'node:crypto'
-import { createLocalJWKSet, decodeProtectedHeader, jwtVerify } from 'jose'
-import { IdentityError, validateProviderToken } from './token'
-import { ProviderError, type ProviderClient } from './provider-client'
+import { ProviderError } from './provider-client'
 import {
   mapIdentity,
   MappingError,
@@ -26,11 +24,14 @@ import {
   type StateCipher,
 } from './state'
 import {
+  DEFAULT_PROVIDER_SLUG,
   resolveTenant,
   TenantResolutionError,
+  type ProviderOfLogin,
   type TenantLookup,
   type TenantOfLogin,
 } from './tenant'
+import type { ProviderDriver, ProviderIdentity } from './provider-driver'
 
 /** The failure of a login. */
 export class LoginError extends Error {
@@ -63,6 +64,14 @@ export interface AuthorizationRequest {
   scopes: string[]
   /** The tenant that the request names, when it names one. */
   tenant?: string
+  /**
+   * The provider of the tenant that the request names, when it names one.
+   *
+   * The provider is always a provider of the tenant of the login: the
+   * parameter chooses between the providers of one tenant, and it never
+   * moves a login to another one (spec §5.2).
+   */
+  provider?: string
   /** The hint of the caller, when there is one. */
   loginHint?: string
   /** The challenge of the PKCE of the gateway, when there is one. */
@@ -121,14 +130,15 @@ export interface LoginOptions {
   principals: PrincipalLookup
   /** The cipher of the state of a login. */
   state: StateCipher
-  /** The client of the provider of a tenant. */
-  clientOf: (tenant: TenantOfLogin) => Promise<ProviderClient>
+  /**
+   * The driver of a provider of a tenant.
+   *
+   * The driver owns the exchange with the provider: the url of the
+   * authorization and the identity that comes back from it (spec §5.4).
+   */
+  driverOf: (tenant: TenantOfLogin, provider: ProviderOfLogin) => Promise<ProviderDriver>
   /** The secret of the deployment, for the binding of the state. */
   secret: string
-  /** How long the clock of the token is tolerated, in seconds. */
-  clockSkewSeconds: number
-  /** The algorithms that a token of a tenant may be signed with. */
-  algorithmsOf: (tenant: TenantOfLogin) => string[]
 }
 
 /** The login of the callers. */
@@ -143,10 +153,12 @@ export class LoginService {
    */
   async begin(request: AuthorizationRequest): Promise<BegunLogin> {
     const tenant = await this.resolve(request)
+    const provider = providerOf(tenant, request.provider)
     const verifier = aVerifier()
     const nonce = request.nonce ?? aNonce()
     const state: LoginState = {
       tenant: tenant.slug,
+      provider: provider.slug,
       clientId: request.clientId,
       redirectUri: request.redirectUri,
       state: request.state ?? '',
@@ -157,14 +169,14 @@ export class LoginService {
       startedAt: Date.now(),
     }
     const cookie = this.options.state.encrypt(state)
-    const client = await this.options.clientOf(tenant)
+    const driver = await this.options.driverOf(tenant, provider)
     let url: string
     try {
-      url = await client.authorizationUrl({
+      url = await driver.authorizationUrl({
         state: this.providerStateOf(state),
         nonce,
         challenge: createHash('sha256').update(verifier, 'ascii').digest('base64url'),
-        scopes: providerScopesOf(tenant, request.scopes),
+        scopes: providerScopesOf(provider, request.scopes),
       })
     } catch (error) {
       throw this.refusalOf(error)
@@ -216,10 +228,18 @@ export class LoginService {
       throw new LoginError('tenant_disabled', 'the tenant of the login is disabled')
     }
 
-    const client = await this.options.clientOf(tenant)
-    let idToken: string
+    // The provider of the login is the one the state names: the callback
+    // does not carry it, and the state is what tells the login which
+    // provider is waiting for the code (spec §5.3).
+    const provider = providerOf(tenant, state.provider || undefined)
+    const driver = await this.options.driverOf(tenant, provider)
+    let identity: ProviderIdentity
     try {
-      idToken = await client.exchange({ code: options.code, verifier: state.verifier })
+      identity = await driver.exchange({
+        code: options.code,
+        verifier: state.verifier,
+        nonce: state.nonce,
+      })
     } catch (error) {
       if (error instanceof ProviderError) {
         throw this.refusalOf(error)
@@ -227,17 +247,18 @@ export class LoginService {
       throw error
     }
 
-    const identity = await this.validate(tenant, idToken, state.nonce)
-
     let mapping: Mapping
     try {
-      mapping = await mapIdentity(this.options.principals, tenant, identity, options.facts)
+      mapping = await mapIdentity(
+        this.options.principals,
+        tenant,
+        provider,
+        identity,
+        options.facts
+      )
     } catch (error) {
       if (error instanceof MappingError) {
         throw new LoginError(error.code, error.message)
-      }
-      if (error instanceof IdentityError) {
-        throw new LoginError('identity_rejected', 'the identity was refused')
       }
       throw error
     }
@@ -326,116 +347,18 @@ export class LoginService {
     }
   }
 
-  /** Validates the id token of the provider. */
-  private async validate(
-    tenant: TenantOfLogin,
-    idToken: string,
-    nonce: string
-  ): Promise<{ subject: string; email?: string; name?: string }> {
-    const claims = await this.verify(tenant, idToken)
-    try {
-      return validateProviderToken({
-        token: {
-          issuer: claims.issuer,
-          audience: claims.audience,
-          authorizedParty: claims.authorizedParty,
-          subject: claims.subject,
-          nonce: claims.nonce,
-          algorithm: claims.algorithm,
-          expiresAt: claims.expiresAt,
-          issuedAt: claims.issuedAt,
-          email: claims.email,
-          name: claims.name,
-        },
-        expectedIssuer: tenant.issuer,
-        expectedAudience: tenant.idpClientId,
-        expectedNonce: nonce,
-        allowedAlgorithms: this.options.algorithmsOf(tenant),
-        skewSeconds: this.options.clockSkewSeconds,
-      })
-    } catch (error) {
-      if (error instanceof IdentityError) {
-        throw new LoginError('identity_rejected', 'the token of the provider was refused')
-      }
-      throw error
-    }
-  }
-
-  /** Verifies the signature of the id token of the provider. */
-  private async verify(
-    tenant: TenantOfLogin,
-    idToken: string
-  ): Promise<{
-    issuer?: string
-    audience?: string | string[]
-    authorizedParty?: string
-    subject?: string
-    nonce?: string
-    algorithm?: string
-    expiresAt?: number
-    issuedAt?: number
-    email?: string
-    name?: string
-  }> {
-    const client = await this.options.clientOf(tenant)
-    const jwks = await this.keysFor(client, idToken)
-    try {
-      const verified = await jwtVerify(idToken, createLocalJWKSet(jwks as { keys: [] }))
-      const header = verified.protectedHeader
-      const payload = verified.payload
-      return {
-        issuer: typeof payload.iss === 'string' ? payload.iss : undefined,
-        audience: payload.aud as string | string[] | undefined,
-        authorizedParty: typeof payload.azp === 'string' ? payload.azp : undefined,
-        subject: typeof payload.sub === 'string' ? payload.sub : undefined,
-        nonce: typeof payload.nonce === 'string' ? payload.nonce : undefined,
-        algorithm: header.alg,
-        expiresAt: typeof payload.exp === 'number' ? payload.exp : undefined,
-        issuedAt: typeof payload.iat === 'number' ? payload.iat : undefined,
-        email: typeof payload.email === 'string' ? payload.email : undefined,
-        name: typeof payload.name === 'string' ? payload.name : undefined,
-      }
-    } catch {
-      throw new LoginError('identity_rejected', 'the token of the provider was refused')
-    }
-  }
-
-  /**
-   * The keys that verify a token of a provider.
-   *
-   * A provider that rotates its signing key publishes a new one, and the
-   * keys of the provider are cached for ten minutes. A token that names a
-   * key that the cache does not have is therefore the sign of a rotation
-   * and not a bad token: the keys are read again once, and the token is
-   * verified against them (spec §6.6).
-   */
-  private async keysFor(client: ProviderClient, idToken: string): Promise<{ keys: [] }> {
-    const jwks = (await client.jwks()) as { keys: { kid?: string }[] }
-    let kid: string | undefined
-    try {
-      kid = decodeProtectedHeader(idToken).kid
-    } catch {
-      kid = undefined
-    }
-    // A token without an identifier of a key is verified against the keys
-    // of the provider: a provider that signs with one key does not name
-    // it.
-    if (!kid) return jwks as { keys: [] }
-    const known = (jwks.keys ?? []).some((key) => key.kid === kid)
-    if (known) return jwks as { keys: [] }
-    return (await client.jwks({ refresh: true })) as { keys: [] }
-  }
-
   /**
    * The state of the provider.
    *
    * It is bound to the state cookie: it is derived from the fields of the
    * state and from the secret of the deployment, so it cannot be forged
-   * and it does not have to be carried by the cookie.
+   * and it does not have to be carried by the cookie. It is bound to the
+   * provider too: a code that was minted for one provider is not a code
+   * for another one.
    */
   private providerStateOf(state: LoginState): string {
     return createHmac('sha256', this.options.secret)
-      .update(`${state.tenant}:${state.startedAt}:${state.nonce}`)
+      .update(`${state.tenant}:${state.provider}:${state.startedAt}:${state.nonce}`)
       .digest('base64url')
   }
 
@@ -472,13 +395,52 @@ const PLATFORM_SCOPES = ['offline_access']
  * of the request: a provider that knows no scope is a provider that is
  * asked what the caller asked for.
  *
- * @param tenant the tenant of the login.
+ * @param provider the provider of the login.
  * @param requested the scopes the client asked for.
  */
-export function providerScopesOf(tenant: TenantOfLogin, requested: readonly string[]): string[] {
+export function providerScopesOf(
+  provider: ProviderOfLogin,
+  requested: readonly string[]
+): string[] {
   const asked = requested.filter((scope) => !PLATFORM_SCOPES.includes(scope))
-  const known = tenant.scopes
+  const known = provider.scopes
   if (known.length === 0) return [...asked]
   const named = asked.filter((scope) => known.includes(scope))
   return named.length > 0 ? named : [...known]
+}
+
+/**
+ * The provider of a login (spec §5.2).
+ *
+ * The provider named by the request wins, when it names one that belongs
+ * to the tenant of the login and is enabled. A request that names no
+ * provider is a request at the **default** provider of the tenant: the
+ * one whose slug is `default`, and the one the administration writes.
+ *
+ * A tenant that has no provider, or whose providers are all disabled,
+ * refuses every login: `invalid_request` is the answer of a tenant that
+ * cannot sign anybody in.
+ *
+ * @param tenant the tenant of the login.
+ * @param requested the provider the request names, when it names one.
+ */
+export function providerOf(tenant: TenantOfLogin, requested?: string): ProviderOfLogin {
+  const providers = tenant.providers.filter((provider) => provider.enabled)
+  if (requested !== undefined && requested !== '') {
+    const named = providers.find((provider) => provider.slug === requested)
+    if (!named) {
+      throw new LoginError(
+        'invalid_request',
+        'the provider of the request does not belong to the tenant of the login'
+      )
+    }
+    return named
+  }
+  const fallback = providers.find((provider) => provider.slug === DEFAULT_PROVIDER_SLUG)
+  if (fallback) return fallback
+  if (providers.length === 1) return providers[0]!
+  throw new LoginError(
+    'invalid_request',
+    'the tenant of the login has no provider to sign the caller in at'
+  )
 }

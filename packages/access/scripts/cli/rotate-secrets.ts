@@ -11,6 +11,11 @@
  *   ACCESS_NEW_SECRET_ENCRYPTION_KEY=the-new-key \
  *   bun run scripts/rotate-secrets.ts
  *
+ * The secret of the provider of a tenant is stored twice: in the row of
+ * the tenant and in the row of its provider (spec §3.11). Both are
+ * re-encrypted, or the logins of the tenant stop working after the
+ * rotation.
+ *
  * The script reads the environment of the process: it is an operator tool
  * and not part of the service. It never writes a secret and never prints
  * one.
@@ -71,11 +76,28 @@ async function main(): Promise<void> {
         }
         count += 1
       }
-      return count
+
+      // The secret of a provider is stored in the row of its provider as
+      // well: it is re-encrypted with the rest, or the provider of the
+      // tenant cannot be read any more (spec §3.11).
+      const providers = await client.query<{ id: string; idp_client_secret: Uint8Array | null }>(
+        'select id, idp_client_secret from tenant_providers where idp_client_secret is not null'
+      )
+      for (const provider of providers) {
+        const clear = reader.decrypt(provider.idp_client_secret!)
+        const encrypted = writer.encrypt(clear)
+        await client.query(`update tenant_providers set idp_client_secret = $1 where id = $2`, [
+          encrypted,
+          provider.id,
+        ])
+      }
+
+      return { tenants: count, providers: providers.length }
     })
 
     logger.info('the client secrets were re-encrypted', {
-      tenants: rotated,
+      tenants: rotated.tenants,
+      providers: rotated.providers,
       columns: COLUMNS.length,
     })
     logger.info('the deployment has to be restarted with the new key')

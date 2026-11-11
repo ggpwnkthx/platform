@@ -41,7 +41,7 @@ let admin: (
  * then back to the callback of Access.
  */
 async function startLogin(
-  options: { clientId?: string; tenant?: string; scope?: string } = {}
+  options: { clientId?: string; tenant?: string; scope?: string; provider?: string } = {}
 ): Promise<{ response: Response; cookie: string }> {
   const query = new URLSearchParams({
     client_id: options.clientId ?? 'gateway-acme',
@@ -53,6 +53,7 @@ async function startLogin(
     code_challenge: CHALLENGE,
     code_challenge_method: 'S256',
     ...(options.tenant ? { tenant: options.tenant } : {}),
+    ...(options.provider ? { provider: options.provider } : {}),
   })
   const authorize = await fetch(`${service.base}/oauth/authorize?${query.toString()}`, {
     redirect: 'manual',
@@ -108,6 +109,26 @@ describe('the login of Access', () => {
     expect(location.origin + location.pathname).toBe(GATEWAY_REDIRECT)
     expect(location.searchParams.get('code')).toBeTruthy()
     expect(location.searchParams.get('state')).toBe('the-state-of-the-gateway')
+  })
+
+  test('a login that names the provider of the tenant signs in at it', async () => {
+    // The provider of a login is a provider of the tenant of the login,
+    // and the default one is the provider a request that names none
+    // signs in at (spec §5.2.1).
+    const { response } = await startLogin({ provider: 'default' })
+    expect(response.status).toBe(302)
+    const location = new URL(response.headers.get('location') ?? '')
+    expect(location.origin + location.pathname).toBe(GATEWAY_REDIRECT)
+    expect(location.searchParams.get('code')).toBeTruthy()
+  })
+
+  test('a login that names a provider that does not exist is refused', async () => {
+    // The parameter names a provider of the tenant of the login and
+    // nothing else: a slug that belongs to no provider of that tenant is
+    // an invalid request (spec §5.2.1).
+    const { response } = await startLogin({ provider: 'keycloak' })
+    expect(response.status).toBe(400)
+    expect(await response.text()).toContain('invalid_request')
   })
 
   test('the provider is asked for the scopes it knows', async () => {

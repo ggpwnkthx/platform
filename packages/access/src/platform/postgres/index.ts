@@ -48,6 +48,8 @@ export {
 } from './scope'
 export type { NewTenant, TenantRow, TenantSummary } from './tenants'
 export { TenantRepository } from './tenants'
+export type { ProviderRow } from './providers'
+export { DEFAULT_PROVIDER_SLUG, ProviderRepository } from './providers'
 export type { UserRow } from './users'
 export { UserRepository } from './users'
 

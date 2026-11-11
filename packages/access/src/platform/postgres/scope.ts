@@ -2,7 +2,7 @@
  * The scope of a statement (spec §3.10).
  *
  * The isolation of the tenants is enforced by the application: the keys
- * of the eight tables carry the tenant and every statement that reads a
+ * of the nine tables carry the tenant and every statement that reads a
  * tenant reads it by its id. The scope of this module is the **backstop**
  * of the database: a statement that runs in the scope of a tenant sees
  * the rows of that tenant and nothing else, even when it forgets the

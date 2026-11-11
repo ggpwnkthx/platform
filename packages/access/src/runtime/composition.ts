@@ -9,8 +9,8 @@
 
 import { createAccessApp, createAccessHandler } from '../app/app'
 import type { AdminCredential } from '../domains/administration'
-import { LoginService, ProviderClient, createStateCipher } from '../domains/identity'
-import type { TenantOfLogin } from '../domains/identity'
+import { LoginError, LoginService, ProviderClient, createStateCipher } from '../domains/identity'
+import type { ProviderOfLogin, TenantOfLogin } from '../domains/identity'
 import { CodeService, ProviderService, RefreshService } from '../domains/provider'
 import { resolveCallableAddress } from '../platform/bun/address'
 import { createFetchTransport } from '../platform/bun/http'
@@ -40,11 +40,13 @@ import {
   GroupRepository,
   MIGRATIONS_TABLE,
   PermissionRepository,
+  ProviderRepository,
   resolveMigrationsDirectory,
   RoleRepository,
   roleOf,
   runMigrations,
   TenantRepository,
+  type ProviderRow,
   type TenantRow,
   UserRepository,
   type Database,
@@ -63,11 +65,11 @@ export interface AccessRuntime {
   logger: Logger
   /** The observer of the service. */
   observer: Observer
-  /** The database of the eight tables. */
+  /** The database of the nine tables. */
   database: Database
   /** The cipher of the client secrets, when the deployment has a key. */
   secrets?: SecretCipher
-  /** The storage of the eight tables. */
+  /** The storage of the nine tables. */
   repositories: AccessRepositories
   /** The listener of the service. */
   listener: StartedListener
@@ -81,9 +83,11 @@ export interface AccessRuntime {
   close: () => Promise<void>
 }
 
-/** The storage of the eight tables, as the domains receive it. */
+/** The storage of the nine tables, as the domains receive it. */
 interface AccessRepositories {
   tenants: TenantRepository
+  /** The providers of the tenants (spec §3.11). */
+  providers: ProviderRepository
   users: UserRepository
   permissions: PermissionRepository
   grants: GrantRepository
@@ -105,7 +109,7 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
   })
   const observer = new MetricsStore()
 
-  // The database of the eight tables. A deployment talks to a PostgreSQL
+  // The database of the nine tables. A deployment talks to a PostgreSQL
   // server and a development machine runs the embedded PostgreSQL of the
   // process: both are PostgreSQL and the migrations are the same.
   const database = await createDatabase({
@@ -164,6 +168,7 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
   const traced = createTracedClient(database, { logger })
   const repositories: AccessRepositories = {
     tenants: new TenantRepository(traced, secrets),
+    providers: new ProviderRepository(traced, secrets),
     users: new UserRepository(traced),
     permissions: new PermissionRepository(traced),
     grants: new GrantRepository(traced),
@@ -180,8 +185,9 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
   // a deployment: a code that lives in the memory of one replica is
   // unknown to the others.
   const transport = createFetchTransport()
-  // The clients of the providers of the tenants, one per tenant (spec
-  // §6.6).
+  // The clients of the providers of the tenants, one per provider (spec
+  // §6.6). The key is the tenant and the slug of the provider: a slug
+  // only names a provider inside its tenant.
   const providerClients = new Map<string, { client: ProviderClient; at: number }>()
   const storeClient = settings.store.url
     ? await createStoreClient({
@@ -252,10 +258,31 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
   // The login of the callers: the tenant of the login, the state of the
   // login, the provider of the tenant and the mapping of the identity.
   //
+  // The row of a provider, as the identity domain knows it. A provider
+  // that is not registered is a provider that signs nobody in, and the
+  // login refuses it.
+  const toProviderOfLogin = (row: ProviderRow): ProviderOfLogin => ({
+    slug: row.slug,
+    kind: row.kind,
+    displayName: row.displayName,
+    enabled: row.enabled,
+    issuer: row.issuer ?? '',
+    idpClientId: row.idpClientId ?? '',
+    idpRedirectUri: row.idpRedirectUri ?? '',
+    scopes: row.idpScopes,
+    algorithms: row.idpAlgorithms,
+  })
+
+  // The providers of a tenant, as the identity domain knows them.
+  const providersOf = async (tenantId: string): Promise<ProviderOfLogin[]> => {
+    const rows = await repositories.providers.listByTenant(tenantId)
+    return rows.map(toProviderOfLogin)
+  }
+
   // The tenant of the login is read four ways: by the client id of the
   // gateway, by the slug, by the domain of an e-mail and as the default
   // of the platform. Every way answers the same shape of the tenant.
-  const tenantOfLogin = (tenant: TenantRow | null): TenantOfLogin | null => {
+  const tenantOfLogin = async (tenant: TenantRow | null): Promise<TenantOfLogin | null> => {
     if (!tenant) return null
     return {
       id: tenant.id,
@@ -264,14 +291,10 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
       sharedClient: tenant.sharedClient,
       isDefault: tenant.isDefault,
       autoProvision: tenant.autoProvision,
-      issuer: tenant.idpIssuer,
-      idpClientId: tenant.idpClientId,
-      idpRedirectUri: tenant.idpRedirectUri,
       emailDomain: tenant.emailDomain,
       clientId: tenant.clientId,
       clientRedirectUris: tenant.clientRedirectUris,
-      scopes: tenant.idpScopes,
-      algorithms: tenant.idpAlgorithms,
+      providers: await providersOf(tenant.id),
     }
   }
 
@@ -286,8 +309,16 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
       findDefault: async () => tenantOfLogin(await repositories.tenants.findDefault()),
     },
     principals: {
-      findByExternalSubject: async (tenantId: string, externalSubject: string) => {
-        const principal = await repositories.users.findByExternalSubject(tenantId, externalSubject)
+      findByExternalSubject: async (
+        tenantId: string,
+        providerSlug: string,
+        externalSubject: string
+      ) => {
+        const principal = await repositories.users.findByExternalSubject(
+          tenantId,
+          providerSlug,
+          externalSubject
+        )
         if (!principal) return null
         return {
           id: principal.id,
@@ -326,23 +357,29 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
       },
     },
     state: createStateCipher(settings.secrets.stateSecret ?? 'the-state-of-the-development'),
-    // The client of the provider of a tenant is kept for ten minutes: the
-    // discovery document and the keys of the provider are cached in it,
-    // and a login does not call the provider on every request (spec
-    // §6.6). A change of the registration of a tenant drops its client.
-    clientOf: async (tenant) => {
-      const cached = providerClients.get(tenant.id)
+    // The driver of a provider of a tenant. The client of a provider is
+    // kept for ten minutes: the discovery document and the keys of the
+    // provider are cached in it, and a login does not call the provider
+    // on every request (spec §6.6). A change of the registration of a
+    // provider drops its client, and the next login builds a new one.
+    driverOf: async (tenant, provider) => {
+      const key = `${tenant.id}:${provider.slug}`
+      const cached = providerClients.get(key)
       if (cached && Date.now() - cached.at < PROVIDER_CLIENT_TTL_MS) {
         return cached.client
       }
-      const secret = await repositories.tenants.readProviderSecret(tenant.id)
+      const row = await repositories.providers.findByTenantAndSlug(tenant.id, provider.slug)
+      if (!row) {
+        throw new LoginError('invalid_request', 'the provider of the tenant does not exist')
+      }
+      const secret = await repositories.providers.readSecret(row.id)
       const client = new ProviderClient({
-        issuer: tenant.issuer,
-        clientId: tenant.idpClientId,
+        issuer: row.issuer ?? provider.issuer,
+        clientId: row.idpClientId ?? provider.idpClientId,
         clientSecret: secret ?? '',
-        redirectUri: tenant.idpRedirectUri,
-        scopes: tenant.scopes,
-        algorithms: tenant.algorithms,
+        redirectUri: row.idpRedirectUri ?? provider.idpRedirectUri,
+        scopes: row.idpScopes,
+        algorithms: row.idpAlgorithms,
         transport,
         guard: {
           // The guard checks the address of the provider and pins it: the
@@ -352,13 +389,12 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
             await resolveCallableAddress(url, { allowPrivate: !settings.production }),
         },
         cacheTtlMs: 600_000,
+        clockSkewSeconds: settings.timeouts.clockSkewSeconds,
       })
-      providerClients.set(tenant.id, { client, at: Date.now() })
+      providerClients.set(key, { client, at: Date.now() })
       return client
     },
     secret: settings.secrets.stateSecret ?? 'the-state-of-the-development',
-    clockSkewSeconds: settings.timeouts.clockSkewSeconds,
-    algorithmsOf: (tenant) => tenant.algorithms,
   })
 
   // The codes of the logins and their exchange.
@@ -476,10 +512,13 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
       // The key that opens the administration of a tenant: the key the
       // console reads in the context of its caller (spec §6.4).
       tenantAdminPermission: settings.admin.tenantAdminPermission,
-      // The registration of a tenant changed: its client of the provider
-      // is dropped, so that the next login builds a new one (spec §6.6).
-      onTenantChanged: (tenantId: string) => {
-        providerClients.delete(tenantId)
+      // The registration of a tenant changed: the clients of its
+      // providers are dropped, so that the next login builds new ones
+      // with the new registration (spec §6.6).
+      onTenantChanged: async (tenantId: string) => {
+        for (const row of await repositories.providers.listByTenant(tenantId)) {
+          providerClients.delete(`${tenantId}:${row.slug}`)
+        }
       },
     }),
     publicUrl: settings.public.publicUrl,

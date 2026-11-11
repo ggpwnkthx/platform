@@ -54,7 +54,7 @@ import {
  *
  * The four domains are independent: the identity of a caller, the access
  * of a caller, the administration and the provider of Access do not share a
- * policy. What they share is the tables of the eight tables, and that is read
+ * policy. What they share is the tables of the nine tables, and that is read
  * through the repositories of the platform.
  */
 export const DOMAIN_DEPENDENCIES: Record<string, readonly string[]> = {

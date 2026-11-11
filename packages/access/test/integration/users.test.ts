@@ -31,20 +31,45 @@ describe('the principals of Access', () => {
     expect(created.email).toBe('alice@acme.example')
     expect(created.lastLoginAt).toBeNull()
 
-    const found = await users.findByExternalSubject(tenantId, '00u1a2b3c4d5')
+    const found = await users.findByExternalSubject(tenantId, 'default', '00u1a2b3c4d5')
     expect(found?.id).toBe(created.id)
   })
 
-  test('the mapping key is the pair (tenant, subject)', async () => {
+  test('the mapping key is the triple (tenant, provider, subject)', async () => {
+    // Two providers of a tenant hand out the same `sub`: the subject
+    // alone does not name a principal (spec §6.2).
+    await users.create({
+      tenantId,
+      providerSlug: 'default',
+      externalSubject: 'the-shared-subject',
+    })
+    const other = await users.create({
+      tenantId,
+      providerSlug: 'okta',
+      externalSubject: 'the-shared-subject',
+    })
+    expect(other.id).not.toBe(
+      (await users.findByExternalSubject(tenantId, 'default', 'the-shared-subject'))?.id
+    )
+    expect((await users.findByExternalSubject(tenantId, 'okta', 'the-shared-subject'))?.id).toBe(
+      other.id
+    )
+    // A principal that is not written by the administration belongs to
+    // the default provider of its tenant.
+    const created = await users.create({ tenantId, externalSubject: 'the-plain-subject' })
+    expect(created.providerSlug).toBe('default')
+  })
+
+  test('the key of a principal of another tenant is another principal', async () => {
     await users.create({ tenantId, externalSubject: 'the-subject', email: 'alice@acme.example' })
     const other = await seedTenant(database, { tenant: OTHER_TENANT, subject: null })
     // The same subject in another tenant is another principal.
-    const found = await users.findByExternalSubject(other.tenantId, 'the-subject')
+    const found = await users.findByExternalSubject(other.tenantId, 'default', 'the-subject')
     expect(found).toBeNull()
     // The same subject in the same tenant is the same principal.
-    expect((await users.findByExternalSubject(tenantId, 'the-subject'))?.externalSubject).toBe(
-      'the-subject'
-    )
+    expect(
+      (await users.findByExternalSubject(tenantId, 'default', 'the-subject'))?.externalSubject
+    ).toBe('the-subject')
   })
 
   test('a principal is disabled and enabled again', async () => {

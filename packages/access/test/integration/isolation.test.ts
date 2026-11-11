@@ -53,10 +53,10 @@ describe('the isolation of the tenants', () => {
        from pg_class c
        join pg_namespace n on n.oid = c.relnamespace
        where n.nspname = current_schema()
-         and c.relname in ('tenants', 'users', 'permissions', 'grants', 'groups')
+         and c.relname in ('tenants', 'tenant_providers', 'users', 'permissions', 'grants', 'groups')
        order by c.relname`
     )
-    expect(rows).toHaveLength(5)
+    expect(rows).toHaveLength(6)
     for (const row of rows) {
       expect(row.enabled).toBe(true)
       expect(row.forced).toBe(true)
@@ -73,7 +73,8 @@ describe('the isolation of the tenants', () => {
     await database.exec(`create role access_isolation_test`)
     await database.exec(`grant usage on schema "${schemaName}" to access_isolation_test`)
     await database.exec(
-      `grant select on tenants, users, permissions, grants, groups to access_isolation_test`
+      `grant select on tenants, tenant_providers, users, permissions, grants, groups
+        to access_isolation_test`
     )
 
     try {
@@ -94,9 +95,16 @@ describe('the isolation of the tenants', () => {
         await client.query(`select set_config('access.tenant_id', $1, true)`, [acme])
         const users = await client.query<{ tenant_id: string }>(`select tenant_id from users`)
         const tenants = await client.query<{ slug: string }>(`select slug from tenants`)
+        const providers = await client.query<{ tenant_id: string }>(
+          `select tenant_id from tenant_providers`
+        )
         expect(users).toHaveLength(1)
         expect(users[0]?.tenant_id).toBe(acme)
         expect(tenants.map((row) => row.slug)).toEqual(['acme'])
+        // The providers are scoped like the other tables of the model:
+        // the provider of the other tenant is not there (spec §3.10).
+        expect(providers).toHaveLength(1)
+        expect(providers[0]?.tenant_id).toBe(acme)
 
         // The role is given back before the transaction is committed: a
         // committed `set role` would stay on the connection of the pool.
@@ -126,7 +134,8 @@ describe('the isolation of the tenants', () => {
     await database.exec(`create role access_scope_leak_test`)
     await database.exec(`grant usage on schema "${schemaName}" to access_scope_leak_test`)
     await database.exec(
-      `grant select, insert on tenants, users, permissions, grants, groups, admin_audit to access_scope_leak_test`
+      `grant select, insert on tenants, tenant_providers, users, permissions, grants, groups,
+        admin_audit to access_scope_leak_test`
     )
 
     // A pool of one connection: the scoped statement and the statement

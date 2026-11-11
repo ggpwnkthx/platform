@@ -17,7 +17,7 @@ How to deploy and run the whole platform: deployments, environment conventions, 
 | Service | Image | Port | Env prefix | State it needs |
 | --- | --- | --- | --- | --- |
 | Gateway | `ghcr.io/ggpwnkthx/gateway` | `8080` | `GATEWAY_*` | Redis or PostgreSQL: sessions, limits, cached decisions |
-| Access | `ghcr.io/ggpwnkthx/access` | `8081` | `ACCESS_*` | PostgreSQL for its eight tables; Redis for login codes |
+| Access | `ghcr.io/ggpwnkthx/access` | `8081` | `ACCESS_*` | PostgreSQL for its nine tables; Redis for login codes |
 | Data | `ghcr.io/ggpwnkthx/data` | `8082` | `DATA_*` | PostgreSQL for business data |
 
 The gateway also runs a **control plane**, the deployment's administrative surface. It uses the same image with a different command, listens on port `9090`, and is never routed through the gateway.

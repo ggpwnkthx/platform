@@ -6,7 +6,7 @@ How to run Access in production: requirements, deployment, the first tenant, mon
 
 | What | Variable |
 | --- | --- |
-| PostgreSQL for the eight tables | `ACCESS_DATABASE_URL` |
+| PostgreSQL for the nine tables | `ACCESS_DATABASE_URL` |
 | Redis for login codes, shared by all replicas | `ACCESS_REDIS_URL` |
 | URL browsers and the gateway use | `ACCESS_ISSUER` |
 | PEM key that signs the service's tokens | `ACCESS_SIGNING_KEY`, `ACCESS_SIGNING_KID` |
@@ -161,7 +161,7 @@ To retire the shared token, remove `ACCESS_DECISION_TOKEN` and `ACCESS_PREVIOUS_
 
 ## Backup and restore
 
-The eight tables are the only data; login state lives in the cookie, codes for sixty seconds in the store, and tokens are signed. Back up the database only.
+The nine tables are the only data; login state lives in the cookie, codes for sixty seconds in the store, and tokens are signed. Back up the database only.
 
 ```bash
 pg_dump --format=custom --compress=9 --no-owner --no-privileges \

@@ -20,7 +20,7 @@ export type {
   CompletedLogin,
 } from './service'
 export { LoginError, LoginService } from './service'
-export { providerScopesOf } from './service'
+export { providerOf, providerScopesOf } from './service'
 export type { LoginState } from './state'
 export {
   aChallenge,
@@ -29,7 +29,7 @@ export {
   isAlive,
   LoginStateError,
 } from './state'
-export type { TenantOfLogin } from './tenant'
+export type { ProviderOfLogin, TenantOfLogin } from './tenant'
 export { domainOf, resolveTenant, TenantResolutionError } from './tenant'
 
 export { validateProviderToken } from './token'

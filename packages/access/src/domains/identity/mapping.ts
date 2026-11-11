@@ -2,8 +2,9 @@
  * The mapping of an identity (spec §6.2, §6.4).
  *
  * The external identity of a caller is mapped to exactly one principal
- * row. The key of the mapping is the pair `(tenant, subject)`: an e-mail
- * is mutable and is not an identity.
+ * row. The key of the mapping is the triple `(tenant, provider, subject)`:
+ * an e-mail is mutable and is not an identity, and two providers of a
+ * tenant hand out the same `sub`.
  */
 
 /** A principal of the platform, as the identity domain knows it. */
@@ -20,8 +21,16 @@ export interface Principal {
 
 /** The storage of the principals. */
 export interface PrincipalLookup {
-  /** The principal of an external identity of a tenant. */
-  findByExternalSubject(tenantId: string, externalSubject: string): Promise<Principal | null>
+  /**
+   * The principal of an external identity of a provider of a tenant.
+   *
+   * The key is the triple `(tenant, provider, subject)` (spec §6.2).
+   */
+  findByExternalSubject(
+    tenantId: string,
+    providerSlug: string,
+    externalSubject: string
+  ): Promise<Principal | null>
   /**
    * The number of principals of a tenant.
    *
@@ -38,6 +47,8 @@ export interface PrincipalLookup {
   create(
     principal: {
       tenantId: string
+      /** The slug of the provider the principal is created at. */
+      providerSlug: string
       externalSubject: string
       email?: string | null
       displayName?: string | null
@@ -83,6 +94,12 @@ export interface ExternalIdentity {
   name?: string | null
 }
 
+/** The provider a mapping is made at. */
+export interface ProviderOfMapping {
+  /** The slug of the provider: the third part of the key of the mapping. */
+  slug: string
+}
+
 /** The failure of a mapping. */
 export class MappingError extends Error {
   constructor(
@@ -120,10 +137,11 @@ export interface Mapping {
 export async function mapIdentity(
   lookup: PrincipalLookup,
   tenant: TenantOfIdentity,
+  provider: ProviderOfMapping,
   identity: ExternalIdentity,
   facts?: { address: string; requestId?: string }
 ): Promise<Mapping> {
-  const existing = await lookup.findByExternalSubject(tenant.id, identity.subject)
+  const existing = await lookup.findByExternalSubject(tenant.id, provider.slug, identity.subject)
   if (existing) {
     if (existing.status === 'disabled') {
       throw new MappingError('principal_disabled', 'the principal is disabled')
@@ -142,6 +160,7 @@ export async function mapIdentity(
   const principal = await lookup.create(
     {
       tenantId: tenant.id,
+      providerSlug: provider.slug,
       externalSubject: identity.subject,
       email: identity.email ?? null,
       displayName: identity.name ?? null,

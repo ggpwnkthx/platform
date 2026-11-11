@@ -204,7 +204,11 @@ describe('the audit of the administration', () => {
         )
       ).rejects.toThrow()
     })
-    const principal = await users.findByExternalSubject(tenantId, 'the-subject-of-the-failure')
+    const principal = await users.findByExternalSubject(
+      tenantId,
+      'default',
+      'the-subject-of-the-failure'
+    )
     expect(principal).toBeNull()
   })
 
