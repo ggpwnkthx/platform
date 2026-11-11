@@ -10,6 +10,12 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The tree of the platform holds no advisory of node-forge
+
+Four advisories of `node-forge` were published on the tenth of November: an Ed25519 verification that accepts small-order public keys, a TLS client that crashes on a handshake it does not like, and a regular expression that a header of an answer of `forge.http` may make slow. The tree of the platform holds `node-forge` — the gateway asks for the certificates of a deployment with it — and the lockfile held the version the advisories are about, so the audit of the dependencies refused every build of the platform, and the tag of the release with it.
+
+The version that carries the fix is 1.4.3, and the dependency that wants `node-forge` accepts it: the lockfile moves by one line, and the audit of the tree is green again. The rows that are already written keep the value they hold: the fix is a fix, and it changes nothing of what the platform does.
+
 ## 1.3.1
 
 ### The first identity of a tenant administers it
