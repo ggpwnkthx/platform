@@ -3341,6 +3341,8 @@ describe('the tenant of the deployment', () => {
           return new Response(
             JSON.stringify({
               issuer: 'https://login.microsoftonline.com/AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE/v2.0',
+              token_endpoint:
+                'https://login.microsoftonline.com/AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE/oauth2/v2.0/token',
             }),
             { status: 200, headers: { 'content-type': 'application/json' } }
           )
@@ -3397,6 +3399,93 @@ describe('the tenant of the deployment', () => {
       expect(notes?.join('\n')).toContain(
         'https://login.microsoftonline.com/AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE/v2.0'
       )
+    } finally {
+      globalThis.fetch = real
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('the provider of the deployment refuses the secret of its client', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'platformctl-tenant-'))
+    const real = globalThis.fetch
+    try {
+      const binary = join(directory, 'az')
+      await writeFile(binary, CLIENT_BINDING(join(directory, 'calls')))
+      await chmod(binary, 0o755)
+      globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/.well-known/openid-configuration')) {
+          return new Response(
+            JSON.stringify({
+              issuer: 'https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0',
+              token_endpoint:
+                'https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/oauth2/v2.0/token',
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } }
+          )
+        }
+        // The provider refuses the secret of the client: every login of
+        // the tenant is refused at the exchange of the code, and the
+        // deployment says so before the first login.
+        if (url.endsWith('/oauth2/v2.0/token')) {
+          return new Response(
+            JSON.stringify({
+              error: 'invalid_client',
+              error_description: 'AADSTS7000215: Invalid client secret is provided. Trace ID: 1',
+            }),
+            { status: 401, headers: { 'content-type': 'application/json' } }
+          )
+        }
+        if (init?.method === 'POST') {
+          return new Response(JSON.stringify({ id: '11111111-1111-4111-8111-111111111111' }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+        }
+        return new Response(
+          JSON.stringify({
+            tenants: [
+              {
+                id: '11111111-1111-4111-8111-111111111111',
+                slug: 'acme',
+                displayName: 'Acme Inc',
+                emailDomain: 'acme.example',
+                autoProvision: true,
+                sharedClient: false,
+                default: false,
+                enabled: true,
+              },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
+      }) as typeof globalThis.fetch
+      const provider = azureProvider([], { PATH: process.env.PATH ?? '', AZURE_CLI: binary })
+      const notes = await provider.afterApply?.({
+        values: {
+          public_names_enabled: 'false',
+          entra_tenant_enabled: 'true',
+          access_tenant_id: '11111111-1111-4111-8111-111111111111',
+          data_workspace_slug: 'acme',
+        },
+        outputs: {
+          resource_group_name: 'platform-production',
+          access_issuer: 'https://access.example.com',
+          access_admin_token: 'the-token-of-the-administration',
+          client_id: 'platform',
+          client_secret: 'the-secret-of-the-client',
+          client_redirect_uris: ['https://api.example.com/auth/callback'],
+          entra_issuer:
+            'https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0',
+          entra_client_id: 'the-client-of-access-at-entra',
+          entra_client_secret: 'the-secret-of-the-client-at-entra',
+          entra_redirect_uri: 'https://access.example.com/oauth/tenant/callback',
+        },
+      })
+      expect(notes?.join('\n')).toContain(
+        'the provider of the deployment refuses the secret of its client'
+      )
+      expect(notes?.join('\n')).toContain('AADSTS7000215')
     } finally {
       globalThis.fetch = real
       await rm(directory, { recursive: true, force: true })

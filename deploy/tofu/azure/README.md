@@ -499,6 +499,22 @@ effect at once: a change of the registration of a tenant drops the
 client of the provider that Access built for it, and the next login
 builds a new one.
 
+The secret of the client is the secret that the directory accepts, and
+the wizard of the deployment asks the directory about it before the
+first login: it presents a code that does not exist, the way a login
+presents a code, and the directory answers. A directory that refuses the
+client refuses every login of the tenant at the exchange of the code,
+and the wizard says so — with the code of the refusal of the directory
+(`AADSTS7000215`: the secret is not the secret of the application;
+`AADSTS7000218`: the code cannot be redeemed).
+
+An apply of the templates that is run by hand does not register the
+tenant: the registration is a call to the administration of Access, and
+the wizard of the deployment makes that call. A deployment whose tenant
+was registered by hand carries the secret of the application of the
+moment of that registration, and a secret that was rotated afterwards
+refuses every login of the tenant until the registration is repeated.
+
 The identity of a caller is the subject of the directory, and it is the
 key of the principal: the e-mail of the directory is published by Entra
 ID for the users that carry a mail attribute, and it is not an identity

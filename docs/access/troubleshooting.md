@@ -43,8 +43,8 @@ The reason names the failure:
 | --- | --- | --- |
 | `the issuer of the provider is not the issuer of the tenant` | The discovery document of Entra ID names another issuer than the registration of the tenant. The two are in the reason, character for character. | Register the issuer the document names: it is the second version of the endpoint of the directory, `https://login.microsoftonline.com/{tenant-id}/v2.0`, and the identifier of the tenant is in lower case. |
 | `the issuer of the token is not the one of the tenant` | The token of Entra ID names another issuer than the registration. The two are in the reason. | The same: the registration and the directory have to name the same issuer, character for character. |
-| `the provider refused the exchange of the code (invalid_grant)` | Entra ID refused the code of the login. | Read the code of Entra ID in the reason (`AADSTS7000218`: the code is spent or was minted for another callback; `AADSTS7000215`: the secret of the client is wrong; `AADSTS7000222`: the code has expired). |
-| `the provider refused the exchange of the code (invalid_client)` | Entra ID refused the secret of the client of Access. | The secret of the registration is the secret of the application of Access at Entra ID; a rotation of the secret is a rotation of the registration of the tenant. |
+| `the provider refused the exchange of the code (invalid_grant)` | Entra ID refused the **code** of the login, and it accepted the client: the secret of the registration is a secret that Entra ID accepts. | Read the code of Entra ID in the reason (`AADSTS7000218`: the code is spent or was minted for another callback; `AADSTS7000222`: the code has expired; `AADSTS9002313`: the request is malformed). | A spent code is a code that was already redeemed: start the login again. A code that was minted for another callback is a registration whose `idpRedirectUri` is not the callback of the application. |
+| `the provider refused the exchange of the code (invalid_client)` | Entra ID refused the **client** of Access: the secret of the registration is not the secret of the application, or the application was replaced and its secret changed. Entra ID refuses the client before it reads the code, so the code of Entra ID in the reason may name the code and not the secret. | Compare the secret of the registration with the secret of the application at Entra ID. The check that does not need the registration: | Re-send the registration of the tenant with the secret of the application (`tofu -chdir=deploy/tofu/azure output -raw entra_client_secret`), or let the wizard of the deployment register the tenant again. The registration takes effect at once: the client of the provider is dropped and the next login builds a new one. |
 | `the token is not for the client of the tenant` | The token was minted for another client. | The `idpClientId` of the registration is the client id of the application of Access at Entra ID. |
 | `the nonce of the token is not the one of the login` | The token was not minted for this login. | Nothing: a login that is refused this way is a login that was started somewhere else. Start a new one. |
 | `the signature of the token is not the one of the provider` | The signature of the token is not one of the keys of Entra ID. | Nothing: Entra ID signs with a key that it publishes. Wait for the keys of the provider to be read again (§6.6). |
@@ -57,6 +57,23 @@ curl -sS https://login.microsoftonline.com/{tenant-id}/v2.0/.well-known/openid-c
 ```
 
 The issuer it names is the one the registration of the tenant has to carry. A trailing slash, another case in the identifier of the tenant and the first version of the endpoint of the directory are three issuers that refuse every login.
+
+**The check of the secret of the client.** A secret that Entra ID does not accept refuses every login of the tenant at the exchange of the code, and the answer of Entra ID is a grant-level refusal when the secret is good and a client-level refusal when it is not:
+
+```bash
+curl -sS -X POST "https://login.microsoftonline.com/{tenant-id}/oauth2/v2.0/token" \
+  -u "{client-id}:{client-secret}" \
+  -d "grant_type=authorization_code&code=dummy&redirect_uri={the-callback-of-access}"
+```
+
+`invalid_grant` (`AADSTS9002313`, `AADSTS70070008`) means the secret was accepted and the code is not a code. `invalid_client` (`AADSTS7000215`) means the secret was refused. The secret of the deployment is the one the templates hold:
+
+```bash
+tofu -chdir=deploy/tofu/azure output -raw entra_client_id
+tofu -chdir=deploy/tofu/azure output -raw entra_client_secret
+```
+
+A secret that these two hold and that the tenant does not carry is a registration that is older than the application: the templates never register the tenant, and only the wizard of the deployment does.
 
 ## Unknown identity
 

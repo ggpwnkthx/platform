@@ -10,6 +10,14 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The deployment of Azure asks the directory about the secret of the client
+
+A deployment of Azure registers the tenant of the platform with the application of Access at Entra ID, and the registration carries the secret of that application. A secret that the directory does not accept refuses every login of the tenant at the exchange of the code, and the operator reads it in the log of Access — after the first attempt.
+
+The wizard of the deployment asks the directory before the first login: it reads the document of the discovery of the provider, it compares the issuer of the registration with the issuer the document names, and it presents the secret of the client the way a login presents it — with a code that does not exist. A directory that refuses the client is named before the first login, with the code of its refusal (`AADSTS7000215`, `AADSTS7000218`), and a directory that refuses the request is named too.
+
+**Contract:** [cli spec §5.8](docs/cli/spec.md#58-deploy).
+
 ## 1.4.1
 
 ### The reason of a refused login is in the log

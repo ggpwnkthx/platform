@@ -14,6 +14,7 @@
 import { existsSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { randomBytes } from 'node:crypto'
 import { CliFailure } from '../domains/failure'
 import {
   ACCOUNT,
@@ -1987,11 +1988,36 @@ async function tenantWithEntra(context: AfterApply, waits: Waits): Promise<strin
   // the provider, and it refuses every login when they differ. The
   // deployment says so before the first login, and it names the two
   // issuers when they are not the same.
-  const named = await issuerNamedBy(entraIssuer)
-  if (named !== null) {
-    notes.push(
-      `the issuer of the provider of the deployment is not the one the provider names: the deployment registers ${entraIssuer} and the provider names ${named}: every login of the tenant is refused until the issuer of the registration is the one the provider names`
+  //
+  // The secret of the client of the provider is the secret that the
+  // provider accepts: a secret of another value — the secret of an
+  // application that was replaced, a secret that was rotated and that
+  // the registration does not carry — refuses every login of the tenant
+  // at the exchange of the code. The deployment asks the provider the
+  // question before the first login, the way a login asks it.
+  const discovery = await discoveryOf(entraIssuer)
+  if (discovery !== null) {
+    if (discovery.issuer !== entraIssuer) {
+      notes.push(
+        `the issuer of the provider of the deployment is not the one the provider names: the deployment registers ${entraIssuer} and the provider names ${discovery.issuer}: every login of the tenant is refused until the issuer of the registration is the one the provider names`
+      )
+    }
+    const refusal = await refusalOfProvider(
+      discovery.tokenEndpoint,
+      entraClient,
+      entraSecret,
+      entraCallback
     )
+    if (refusal?.code === 'invalid_client') {
+      notes.push(
+        `the provider of the deployment refuses the secret of its client${refusal.own === null ? '' : ` (${refusal.own})`}: the secret of the application of Access at Entra ID is not the secret of the registration of the tenant, and every login of the tenant is refused at the exchange of the code until it is`
+      )
+    }
+    if (refusal?.code === 'invalid_request') {
+      notes.push(
+        `the provider of the deployment refuses the request of the exchange${refusal.own === null ? '' : ` (${refusal.own})`}: the callback of Access is not registered at the application of Access at Entra ID, and every login of the tenant is refused until it is`
+      )
+    }
   }
 
   // The identifier of the tenant is the scope of the access context of
@@ -2007,31 +2033,119 @@ async function tenantWithEntra(context: AfterApply, waits: Waits): Promise<strin
   return notes
 }
 
+/** The document of the discovery of a provider. */
+interface DiscoveryDocument {
+  /** The issuer the provider names. */
+  readonly issuer: string
+  /** The endpoint of the tokens of the provider. */
+  readonly tokenEndpoint: string
+}
+
 /**
- * The issuer that the discovery document of a provider names.
+ * The document of the discovery of a provider.
  *
  * The document of a provider names the issuer of the provider, and the
  * issuer of the tenant of the platform has to be that one, character for
  * character: Access compares the two and refuses every login when they
- * differ. The deployment reads the document before the first login, and
- * it says so when the two are not the same.
+ * differ. The document also names the endpoint of the tokens of the
+ * provider, and the deployment asks it the questions of a login before
+ * the first one.
  *
- * A document that cannot be read names nothing: the deployment of a
- * provider that is not reachable is not a deployment that is refused.
+ * A document that cannot be read is a document of nothing: the
+ * deployment of a provider that is not reachable is not a deployment
+ * that is refused.
  *
  * @param issuer the issuer of the provider.
- * @returns the issuer the document names, or null.
+ * @returns the document of the provider, or null.
  */
-async function issuerNamedBy(issuer: string): Promise<string | null> {
+async function discoveryOf(issuer: string): Promise<DiscoveryDocument | null> {
   try {
     const answer = await fetch(`${issuer.replace(/\/$/, '')}/.well-known/openid-configuration`, {
       headers: { accept: 'application/json' },
       signal: AbortSignal.timeout(10_000),
     })
     if (answer.status !== 200) return null
-    const document = (await answer.json()) as { issuer?: unknown }
+    const document = (await answer.json()) as { issuer?: unknown; token_endpoint?: unknown }
     if (typeof document.issuer !== 'string' || document.issuer === '') return null
-    return document.issuer === issuer ? null : document.issuer
+    if (typeof document.token_endpoint !== 'string' || document.token_endpoint === '') return null
+    return { issuer: document.issuer, tokenEndpoint: document.token_endpoint }
+  } catch {
+    return null
+  }
+}
+
+/** The refusal of a provider that refuses a request. */
+interface ProviderRefusal {
+  /** The code of the refusal, as the provider names it. */
+  readonly code: string
+  /** The code of Entra ID, when the answer of the provider names one. */
+  readonly own: string | null
+}
+
+/**
+ * A code of a login that does not exist.
+ *
+ * The code has the shape of a code of Entra ID: a provider that reads
+ * the shape of a code first refuses a request that carries a word, and
+ * the refusal of the shape hides the refusal of the secret.
+ *
+ * @returns the code of a login that does not exist.
+ */
+function aCodeOfNoLogin(): string {
+  const part = (bytes: number): string => randomBytes(bytes).toString('base64url')
+  return `0.${part(32)}.${part(64)}`
+}
+
+/**
+ * The refusal of a provider that refuses the exchange of a code.
+ *
+ * The wizard asks the endpoint of the tokens of the provider the way a
+ * login asks it: the client authenticates itself with its secret, and it
+ * presents a code that does not exist. A provider that accepts the
+ * secret refuses the code, and a provider that refuses the secret
+ * refuses the client.
+ *
+ * @param tokenEndpoint the endpoint of the tokens of the provider.
+ * @param clientId the identifier of the client of Access.
+ * @param clientSecret the secret of the client of Access.
+ * @param redirectUri the callback of Access at the provider.
+ * @returns the refusal of the provider, or null when it answered nothing.
+ */
+async function refusalOfProvider(
+  tokenEndpoint: string,
+  clientId: string,
+  clientSecret: string,
+  redirectUri: string
+): Promise<ProviderRefusal | null> {
+  const authorization = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
+  try {
+    const answer = await fetch(tokenEndpoint, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        accept: 'application/json',
+        authorization: `Basic ${authorization}`,
+      },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: aCodeOfNoLogin(),
+        redirect_uri: redirectUri,
+        client_id: clientId,
+      }).toString(),
+      signal: AbortSignal.timeout(10_000),
+    })
+    const text = await answer.text()
+    let parsed: { error?: unknown; error_description?: unknown } = {}
+    try {
+      parsed = JSON.parse(text) as { error?: unknown; error_description?: unknown }
+    } catch {
+      parsed = {}
+    }
+    const code = typeof parsed.error === 'string' ? parsed.error.trim() : ''
+    if (code === '') return null
+    const description = typeof parsed.error_description === 'string' ? parsed.error_description : ''
+    const own = description.match(/AADSTS\d+/i)?.[0]
+    return { code, own: own ? own.toUpperCase() : null }
   } catch {
     return null
   }
