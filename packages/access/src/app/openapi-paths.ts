@@ -308,6 +308,36 @@ export function apiPaths(): Record<string, unknown> {
         },
       },
     },
+    '/v1/admin/providers': {
+      post: {
+        summary: 'The registration of a provider of a tenant.',
+        description:
+          'It creates a provider, or it changes the provider of that `(tenant, slug)` pair: the call is an upsert, and the slug never changes. The default provider of a tenant is the registration of the tenant, and it is written with it.',
+        responses: {
+          201: jsonResponse('The provider is registered.'),
+          403: errorResponse('The caller does not hold the administration of the tenant.'),
+        },
+      },
+      get: {
+        summary: 'The list of the providers.',
+        description: 'The providers of the tenant, filtered by slug.',
+        responses: {
+          200: jsonResponse('The providers of the tenant.'),
+          403: errorResponse('The caller does not hold the administration of the tenant.'),
+        },
+      },
+    },
+    '/v1/admin/providers/{id}': {
+      delete: {
+        summary: 'The removal of a provider of a tenant.',
+        description:
+          'The default provider of a tenant is not removed, and a provider that has principals is not removed either: the principals carry its slug.',
+        responses: {
+          200: jsonResponse('The provider is removed.'),
+          403: errorResponse('The caller does not hold the administration of the tenant.'),
+        },
+      },
+    },
     '/v1/admin/groups': {
       post: {
         summary: 'The registration of a group.',

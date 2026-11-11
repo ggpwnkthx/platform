@@ -26,6 +26,9 @@ import type {
   Principal,
   PrincipalPage,
   PrincipalRegistration,
+  Provider,
+  ProviderPage,
+  ProviderRegistration,
   Role,
   RolePage,
   RoleRegistration,
@@ -53,6 +56,7 @@ import {
   type PrincipalQuery,
 } from './principals'
 import { listTenants, upsertTenant } from './tenants'
+import { listProviders, removeProvider, upsertProvider } from './providers'
 import { bootstrapAdministrator } from './bootstrap'
 
 export type { AdministrationOptions } from './options'
@@ -123,6 +127,48 @@ export class AdministrationService {
     context: AuditContext
   ): Promise<Grant | null> {
     return await bootstrapAdministrator(this.options, principal, context)
+  }
+
+  /**
+   * Creates a provider of a tenant, or changes the provider of that slug.
+   *
+   * The slug of a provider never changes: the call is an upsert on the
+   * pair `(tenant, slug)`, and a principal carries the slug of the
+   * provider it was created at (spec §10.16).
+   *
+   * The row of the audit is written by the statement that writes the
+   * provider (spec §10.1).
+   */
+  async upsertProvider(
+    scope: AdminScope,
+    registration: ProviderRegistration,
+    context: AuditContext
+  ): Promise<{ provider: Provider; created: boolean; audit: AuditEntry }> {
+    return await upsertProvider(this.options, scope, registration, context)
+  }
+
+  /** The providers that match a filter, and their number. */
+  async listProviders(
+    scope: AdminScope,
+    query: {
+      tenant?: string | null
+      slug?: string | null
+      limit?: string | null
+      offset?: string | null
+    }
+  ): Promise<ProviderPage> {
+    return await listProviders(this.options, scope, query)
+  }
+
+  /**
+   * Removes a provider of a tenant.
+   *
+   * The default provider of a tenant is not removed: its registration is
+   * the registration of the tenant. A provider that has principals is not
+   * removed either: the principals carry its slug.
+   */
+  async removeProvider(scope: AdminScope, id: string, context: AuditContext): Promise<AuditEntry> {
+    return await removeProvider(this.options, scope, id, context)
   }
 
   /**

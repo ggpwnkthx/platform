@@ -24,7 +24,6 @@ import {
   type StateCipher,
 } from './state'
 import {
-  DEFAULT_PROVIDER_SLUG,
   resolveTenant,
   TenantResolutionError,
   type ProviderOfLogin,
@@ -79,13 +78,39 @@ export interface AuthorizationRequest {
 }
 
 /** The beginning of a login. */
-export interface BegunLogin {
-  /** The url of the provider of the tenant. */
-  url: string
-  /** The value of the cookie of the state. */
-  cookie: string
-  /** The slug of the tenant of the login. */
-  tenant: string
+export type BegunLogin =
+  | {
+      /** The browser is sent to the provider of the tenant. */
+      kind: 'redirect'
+      /** The url of the provider of the tenant. */
+      url: string
+      /** The value of the cookie of the state. */
+      cookie: string
+      /** The slug of the tenant of the login. */
+      tenant: string
+    }
+  | {
+      /**
+       * The caller chooses between the providers of the tenant.
+       *
+       * A tenant that signs its people in at several providers is a
+       * tenant whose login asks the caller which one it signs in at
+       * (spec §5.2.1). The choice is the caller's, and it is made by the
+       * browser: no state is written before it.
+       */
+      kind: 'choose'
+      /** The slug of the tenant of the login. */
+      tenant: string
+      /** The providers the caller may sign in at. */
+      providers: ProviderChoice[]
+    }
+
+/** A provider the caller may sign in at. */
+interface ProviderChoice {
+  /** The slug of the provider: the handle a login names. */
+  slug: string
+  /** The name shown to a human. */
+  displayName: string
 }
 
 /** The end of a login. */
@@ -153,7 +178,21 @@ export class LoginService {
    */
   async begin(request: AuthorizationRequest): Promise<BegunLogin> {
     const tenant = await this.resolve(request)
-    const provider = providerOf(tenant, request.provider)
+    const provider = choiceOf(tenant, request.provider)
+    if (!provider) {
+      // The tenant signs its people in at several providers and the
+      // request names none: the caller chooses (spec §5.2.1).
+      return {
+        kind: 'choose',
+        tenant: tenant.slug,
+        providers: tenant.providers
+          .filter((candidate) => candidate.enabled)
+          .map((candidate) => ({
+            slug: candidate.slug,
+            displayName: candidate.displayName,
+          })),
+      }
+    }
     const verifier = aVerifier()
     const nonce = request.nonce ?? aNonce()
     const state: LoginState = {
@@ -181,7 +220,7 @@ export class LoginService {
     } catch (error) {
       throw this.refusalOf(error)
     }
-    return { url, cookie, tenant: tenant.slug }
+    return { kind: 'redirect', url, cookie, tenant: tenant.slug }
   }
 
   /**
@@ -414,8 +453,8 @@ export function providerScopesOf(
  *
  * The provider named by the request wins, when it names one that belongs
  * to the tenant of the login and is enabled. A request that names no
- * provider is a request at the **default** provider of the tenant: the
- * one whose slug is `default`, and the one the administration writes.
+ * provider is a request at the only provider of the tenant, and a tenant
+ * that has several is a tenant whose caller chooses (spec §5.2.1).
  *
  * A tenant that has no provider, or whose providers are all disabled,
  * refuses every login: `invalid_request` is the answer of a tenant that
@@ -425,6 +464,32 @@ export function providerScopesOf(
  * @param requested the provider the request names, when it names one.
  */
 export function providerOf(tenant: TenantOfLogin, requested?: string): ProviderOfLogin {
+  const provider = choiceOf(tenant, requested)
+  if (!provider) {
+    throw new LoginError(
+      'invalid_request',
+      'the tenant of the login has several providers and the request names none'
+    )
+  }
+  return provider
+}
+
+/**
+ * The provider of a login, when there is one (spec §5.2.1).
+ *
+ * The provider named by the request wins, when it names one that belongs
+ * to the tenant of the login and is enabled. A request that names no
+ * provider is a request at the only provider of the tenant: a tenant
+ * that has several is a tenant whose caller chooses, and the choice is
+ * the caller's.
+ *
+ * A slug that names no enabled provider of the tenant is refused: the
+ * parameter names a provider of the tenant of the login and nothing else.
+ *
+ * @param tenant the tenant of the login.
+ * @param requested the provider the request names, when it names one.
+ */
+function choiceOf(tenant: TenantOfLogin, requested?: string): ProviderOfLogin | null {
   const providers = tenant.providers.filter((provider) => provider.enabled)
   if (requested !== undefined && requested !== '') {
     const named = providers.find((provider) => provider.slug === requested)
@@ -436,11 +501,12 @@ export function providerOf(tenant: TenantOfLogin, requested?: string): ProviderO
     }
     return named
   }
-  const fallback = providers.find((provider) => provider.slug === DEFAULT_PROVIDER_SLUG)
-  if (fallback) return fallback
   if (providers.length === 1) return providers[0]!
-  throw new LoginError(
-    'invalid_request',
-    'the tenant of the login has no provider to sign the caller in at'
-  )
+  if (providers.length === 0) {
+    throw new LoginError(
+      'invalid_request',
+      'the tenant of the login has no provider to sign the caller in at'
+    )
+  }
+  return null
 }

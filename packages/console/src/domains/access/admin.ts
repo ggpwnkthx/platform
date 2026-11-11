@@ -24,6 +24,8 @@ import type {
   GroupInput,
   Principal,
   PrincipalInput,
+  Provider,
+  ProviderInput,
   Role,
   RoleInput,
   Tenant,
@@ -95,6 +97,38 @@ export class AdminClient {
   async savePrincipal(input: PrincipalInput): Promise<{ principal: Principal; created: boolean }> {
     try {
       return await this.#client.savePrincipal(input)
+    } catch (error) {
+      throw failureOf(error)
+    }
+  }
+
+  /** The providers of a tenant. */
+  async providers(query: {
+    tenant?: string
+    slug?: string
+    limit?: number
+    offset?: number
+  }): Promise<AdminPage<Provider>> {
+    try {
+      return await this.#client.providers(query)
+    } catch (error) {
+      throw failureOf(error)
+    }
+  }
+
+  /** Creates a provider, or updates the provider of that slug. */
+  async saveProvider(input: ProviderInput): Promise<{ provider: Provider; created: boolean }> {
+    try {
+      return await this.#client.saveProvider(input)
+    } catch (error) {
+      throw failureOf(error)
+    }
+  }
+
+  /** Removes a provider that holds no principal. */
+  async removeProvider(id: string): Promise<void> {
+    try {
+      await this.#client.removeProvider(id)
     } catch (error) {
       throw failureOf(error)
     }

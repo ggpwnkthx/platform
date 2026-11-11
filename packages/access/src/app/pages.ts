@@ -53,3 +53,44 @@ export function refusalPage(code: string, message: string, status: number): Resp
     headers: { 'content-type': 'text/html; charset=utf-8' },
   })
 }
+
+/**
+ * Builds the page of the choice of a provider (spec §5.2.1).
+ *
+ * The page lists the providers of the tenant and nothing else: every
+ * entry is a link back to the authorization, with the same request and
+ * the slug of the provider. The page carries no script and no style of
+ * another site: the policy of the answers of the service forbids them.
+ *
+ * @param providers the providers the caller may sign in at.
+ * @param links the address of the authorization of each provider.
+ */
+export function providerChooserPage(
+  providers: { slug: string; displayName: string }[],
+  links: Map<string, string>
+): Response {
+  const items = providers
+    .map((provider) => {
+      const href = links.get(provider.slug) ?? ''
+      return `    <li><a href="${escapeHtml(href)}">${escapeHtml(provider.displayName)}</a></li>`
+    })
+    .join('\n')
+  const body = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Choose a way to sign in</title>
+  </head>
+  <body>
+    <h1>Choose a way to sign in</h1>
+    <ul>
+${items}
+    </ul>
+  </body>
+</html>
+`
+  return new Response(body, {
+    status: 200,
+    headers: { 'content-type': 'text/html; charset=utf-8' },
+  })
+}

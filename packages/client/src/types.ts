@@ -261,9 +261,53 @@ export interface TenantInput {
 }
 
 /** A principal: a user of a tenant. */
+/** A provider of a tenant. */
+export interface Provider {
+  readonly id: string
+  readonly tenant: string
+  /** The name of the provider inside its tenant. It never changes. */
+  readonly slug: string
+  readonly displayName: string
+  readonly enabled: boolean
+  readonly issuer: string
+  readonly idpClientId: string
+  readonly idpRedirectUri: string
+  readonly idpScopes: readonly string[]
+  readonly idpAlgorithms: readonly string[]
+  readonly createdAt: string
+}
+
+/** The body of the upsert of a provider. */
+export interface ProviderInput {
+  readonly tenant: string
+  /** The name of the provider inside its tenant. It never changes. */
+  readonly slug: string
+  readonly displayName?: string
+  readonly enabled?: boolean
+  readonly issuer?: string
+  readonly idpClientId?: string
+  /**
+   * The secret of Access at the provider.
+   *
+   * A provider that is created is created with a secret, and a provider
+   * that is changed keeps the secret it has when the change names none.
+   */
+  readonly idpClientSecret?: string
+  readonly idpRedirectUri?: string
+  readonly idpScopes?: readonly string[]
+  readonly idpAlgorithms?: readonly string[]
+}
+
 export interface Principal {
   readonly id: string
   readonly tenant: string
+  /**
+   * The slug of the provider the principal belongs to.
+   *
+   * The key of the mapping is the triple `(tenant, provider, subject)`:
+   * two providers of a tenant hand out the same `sub`.
+   */
+  readonly provider: string
   readonly externalSubject: string
   readonly email: string | null
   readonly displayName: string | null
@@ -275,6 +319,13 @@ export interface Principal {
 /** The body of the upsert of a principal. */
 export interface PrincipalInput {
   readonly tenant: string
+  /**
+   * The slug of the provider the principal belongs to.
+   *
+   * A body that names none is a body of the default provider of the
+   * tenant.
+   */
+  readonly provider?: string
   readonly externalSubject: string
   readonly email?: string
   readonly displayName?: string

@@ -1,7 +1,7 @@
 /**
  * The administration of Access.
  *
- * The domain owns the twelve endpoints, the validation of their bodies and
+ * The domain owns the fifteen endpoints, the validation of their bodies and
  * the audit of every change. It is the whole administration surface of the
  * platform: there is no console and no second way to change a tenant, a
  * principal or a grant.
@@ -32,6 +32,9 @@ export type {
   PrincipalFilter,
   Principal,
   PrincipalStore,
+  Provider,
+  ProviderFilter,
+  ProviderStore,
   Role,
   RoleFilter,
   RoleStore,
@@ -46,6 +49,7 @@ export {
   GroupBody,
   PrincipalBatchBody,
   PrincipalBody,
+  ProviderBody,
   RoleBody,
   TenantBody,
 } from './schemas'
@@ -54,4 +58,5 @@ export {
   type AuditEntry,
 } from './service'
 export { change } from './audit'
+export { DEFAULT_PROVIDER_SLUG } from './values'
 export { TENANT_ADMIN_PERMISSION } from './bootstrap'

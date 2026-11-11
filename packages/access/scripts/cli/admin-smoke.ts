@@ -1,13 +1,14 @@
 #!/usr/bin/env bun
 /**
- * The twelve calls of the administration (spec §10.11).
+ * The fifteen calls of the administration (spec §10.14).
  *
  * The script is the smoke test of a deployment: it creates a tenant, it
  * lists the tenants, it creates a principal, it lists the principals, it
- * grants a permission, it lists the grants, it creates a group, it lists
- * the groups, it creates a role, it lists the roles, it removes the role
- * and it revokes the grant. It reads the environment of the process: it
- * is an operator tool and not part of the service.
+ * registers a provider, it lists the providers, it grants a permission,
+ * it lists the grants, it creates a group, it lists the groups, it
+ * creates a role, it lists the roles, it removes the role, it removes
+ * the provider and it revokes the grant. It reads the environment of the
+ * process: it is an operator tool and not part of the service.
  *
  *   ACCESS_URL=https://access.example.com ACCESS_ADMIN_TOKEN=… bun run scripts/admin-smoke.ts
  */
@@ -105,7 +106,31 @@ async function main(): Promise<void> {
     fail('the principal is not in the list', principals)
   }
 
-  // 5. the grant: the permission on the workspace, on the route
+  // 5. the second provider of the tenant: a tenant signs its people in
+  // at the default provider and at every other one it registers
+  const provider = await call('/v1/admin/providers', 'POST', {
+    tenant: slug,
+    slug: 'smoke-provider',
+    displayName: 'The provider of the smoke test',
+    issuer: 'https://login.smoke2.example',
+    idpClientId: `access-${slug}-smoke`,
+    idpClientSecret: 'the-secret-of-the-provider',
+    idpRedirectUri: 'https://access.example.com/oauth/tenant/callback',
+  })
+  if (provider.status !== 201 && provider.status !== 200) {
+    fail('the provider could not be created', provider)
+  }
+  const providerId = (provider.body.provider as { id: string }).id
+
+  // 6. the providers of the tenant
+  const providers = await call(`/v1/admin/providers?tenant=${slug}`, 'GET')
+  if (providers.status !== 200) fail('the providers could not be listed', providers)
+  const listedProviders = (providers.body.providers ?? []) as { id: string }[]
+  if (!listedProviders.some((row) => row.id === providerId)) {
+    fail('the provider is not in the list', providers)
+  }
+
+  // 7. the grant: the permission on the workspace, on the route
   const grant = await call('/v1/admin/grants', 'PUT', {
     tenant: slug,
     userId: principal.body.id,
@@ -115,7 +140,7 @@ async function main(): Promise<void> {
   })
   if (grant.status !== 200) fail('the grant could not be created', grant)
 
-  // 6. the grants of the tenant
+  // 8. the grants of the tenant
   const grants = await call(`/v1/admin/grants?tenant=${slug}`, 'GET')
   if (grants.status !== 200) fail('the grants could not be listed', grants)
   const listedGrants = (grants.body.grants ?? []) as { id: string }[]
@@ -123,7 +148,7 @@ async function main(): Promise<void> {
     fail('the grant is not in the list', grants)
   }
 
-  // 7. the group and its membership: a grant of the group holds for every
+  // 9. the group and its membership: a grant of the group holds for every
   // member of the group
   const group = await call('/v1/admin/groups', 'POST', {
     tenant: slug,
@@ -135,7 +160,7 @@ async function main(): Promise<void> {
     fail('the group could not be created', group)
   }
 
-  // 8. the groups of the tenant
+  // 10. the groups of the tenant
   const groups = await call(`/v1/admin/groups?tenant=${slug}`, 'GET')
   if (groups.status !== 200) fail('the groups could not be listed', groups)
   const listedGroups = (groups.body.groups ?? []) as { key: string }[]
@@ -143,7 +168,7 @@ async function main(): Promise<void> {
     fail('the group is not in the list', groups)
   }
 
-  // 9. the role and the permission it holds
+  // 11. the role and the permission it holds
   const role = await call('/v1/admin/roles', 'PUT', {
     tenant: slug,
     key: 'smoke-role',
@@ -154,7 +179,7 @@ async function main(): Promise<void> {
     fail('the role could not be created', role)
   }
 
-  // 10. the roles of the tenant
+  // 12. the roles of the tenant
   const roles = await call(`/v1/admin/roles?tenant=${slug}`, 'GET')
   if (roles.status !== 200) fail('the roles could not be listed', roles)
   const listedRoles = (roles.body.roles ?? []) as { key: string }[]
@@ -162,18 +187,25 @@ async function main(): Promise<void> {
     fail('the role is not in the list', roles)
   }
 
-  // 11. the removal of the role: a role that no grant names goes away
+  // 13. the removal of the role: a role that no grant names goes away
   const removed = await call(`/v1/admin/roles/${role.body.id}`, 'DELETE')
   if (removed.status !== 204) fail('the role could not be removed', removed)
 
-  // 12. the revocation, when Access has to end
+  // 14. the removal of the provider: a provider that holds no principal
+  // goes away
+  const removedProvider = await call(`/v1/admin/providers/${providerId}`, 'DELETE')
+  if (removedProvider.status !== 204) {
+    fail('the provider could not be removed', removedProvider)
+  }
+
+  // 15. the revocation, when Access has to end
   const revoked = await call(`/v1/admin/grants/${grant.body.id}`, 'DELETE')
   if (revoked.status !== 204) fail('the grant could not be revoked', revoked)
 
   console.log(
     JSON.stringify({
       level: 'info',
-      msg: 'the twelve calls of the administration answered',
+      msg: 'the fifteen calls of the administration answered',
       tenant: tenantId,
       principal: principal.body.id,
       grant: grant.body.id,

@@ -26,6 +26,8 @@ import {
   type PermissionStore,
   type PrincipalFilter,
   type PrincipalStore,
+  type ProviderFilter,
+  type ProviderStore,
   type Role,
   type RoleFilter,
   type RoleStore,
@@ -46,6 +48,9 @@ import {
   type GroupRow,
   type PermissionRepository,
   type PermissionRow,
+  type ProviderRepository,
+  type ProviderRow,
+  type SecretCipher,
   type RoleRepository,
   type RoleRow,
   type TenantRepository,
@@ -54,7 +59,6 @@ import {
   type UserRepository,
   type UserRow,
 } from '../platform/postgres'
-import { DEFAULT_PROVIDER_SLUG } from '../platform/postgres'
 
 /** Turns a tenant of the storage into a tenant of the domain. */
 function toTenant(row: TenantRow): {
@@ -92,9 +96,46 @@ function toTenant(row: TenantRow): {
 }
 
 /** Turns a principal of the storage into a principal of the domain. */
+/**
+ * Turns a provider of the storage into a provider of the domain.
+ *
+ * The secret of a provider is never read here: the administration never
+ * answers a secret, and the storage is the one that holds it.
+ */
+function toProvider(row: ProviderRow): {
+  id: string
+  tenantId: string
+  tenant: string
+  slug: string
+  displayName: string
+  enabled: boolean
+  issuer: string
+  idpClientId: string
+  idpRedirectUri: string
+  idpScopes: string[]
+  idpAlgorithms: string[]
+  createdAt: Date
+} {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    tenant: row.tenantSlug ?? '',
+    slug: row.slug,
+    displayName: row.displayName,
+    enabled: row.enabled,
+    issuer: row.issuer ?? '',
+    idpClientId: row.idpClientId ?? '',
+    idpRedirectUri: row.idpRedirectUri ?? '',
+    idpScopes: row.idpScopes,
+    idpAlgorithms: row.idpAlgorithms,
+    createdAt: row.createdAt,
+  }
+}
+
 function toPrincipal(row: UserRow): {
   id: string
   tenant: string
+  provider: string
   externalSubject: string
   email: string | null
   displayName: string | null
@@ -105,6 +146,7 @@ function toPrincipal(row: UserRow): {
   return {
     id: row.id,
     tenant: row.tenantSlug,
+    provider: row.providerSlug,
     externalSubject: row.externalSubject,
     email: row.email,
     displayName: row.displayName,
@@ -227,6 +269,8 @@ async function run<T>(action: () => Promise<T>): Promise<T> {
 
 export interface AdministrationDependencies {
   tenants: TenantRepository
+  /** The providers of the tenants (spec §3.11). */
+  providers: ProviderRepository
   users: UserRepository
   groups?: GroupRepository
   roles?: RoleRepository
@@ -250,6 +294,13 @@ export interface AdministrationDependencies {
   credentials?: AdminCredential[]
   /** The public url of Access. */
   publicUrl: string
+  /**
+   * The cipher of the client secrets.
+   *
+   * The secret of a provider is encrypted before it is written: without
+   * a key the administration cannot write a provider, and it says so.
+   */
+  secrets?: SecretCipher
   /**
    * The key of the permission that opens the administration of a tenant.
    *
@@ -304,33 +355,112 @@ export function createAdministrationService(
     },
   }
 
+  /**
+   * Encrypts the secret of a provider before it is written.
+   *
+   * A deployment without a key of the secrets cannot write a provider:
+   * the secret would be stored in clear, and the administration refuses
+   * to do that (spec §4.3).
+   */
+  const encrypt = async (clear: string): Promise<Uint8Array> => {
+    if (!dependencies.secrets) {
+      throw new AdministrationError(
+        'invalid_request',
+        'the deployment cannot write the secret of a provider: the key of the deployment is not set'
+      )
+    }
+    return dependencies.secrets.encrypt(clear)
+  }
+
+  const providerStore: ProviderStore = {
+    findBySlug: async (tenantId, slug) => {
+      const row = await run(
+        async () => await dependencies.providers.findByTenantAndSlug(tenantId, slug)
+      )
+      return row ? toProvider(row) : null
+    },
+    findById: async (id, scope) => {
+      const row = await run(async () => await dependencies.providers.findById(id))
+      if (!row) return null
+      // The scope of the call is the scope of the statement: a provider
+      // of another tenant is not a provider the call may read.
+      if ('tenant' in scope && scope.tenant !== row.tenantId) return null
+      return toProvider(row)
+    },
+    list: async (filter: ProviderFilter) => {
+      const page = await run(
+        async () =>
+          await dependencies.providers.list({
+            tenantId: filter.tenantId,
+            slug: filter.slug,
+            limit: filter.limit,
+            offset: filter.offset,
+          })
+      )
+      return {
+        providers: page.rows.map(toProvider),
+        total: page.total,
+        limit: filter.limit,
+        offset: filter.offset,
+      }
+    },
+    create: async (registration, audit) => {
+      const row = await run(
+        async () =>
+          await dependencies.providers.create(
+            {
+              ...registration,
+              idpClientSecret: await encrypt(registration.idpClientSecret),
+            },
+            audit
+          )
+      )
+      return toProvider(row)
+    },
+    update: async (id, changes, _scope, audit) => {
+      const row = await run(
+        async () =>
+          await dependencies.providers.update(
+            id,
+            {
+              ...(changes.displayName !== undefined ? { displayName: changes.displayName } : {}),
+              ...(changes.enabled !== undefined ? { enabled: changes.enabled } : {}),
+              ...(changes.issuer !== undefined ? { issuer: changes.issuer } : {}),
+              ...(changes.idpClientId !== undefined ? { idpClientId: changes.idpClientId } : {}),
+              ...(changes.idpClientSecret !== undefined
+                ? { idpClientSecret: await encrypt(changes.idpClientSecret) }
+                : {}),
+              ...(changes.idpRedirectUri !== undefined
+                ? { idpRedirectUri: changes.idpRedirectUri }
+                : {}),
+              ...(changes.idpScopes !== undefined ? { idpScopes: changes.idpScopes } : {}),
+              ...(changes.idpAlgorithms !== undefined
+                ? { idpAlgorithms: changes.idpAlgorithms }
+                : {}),
+            },
+            audit
+          )
+      )
+      return row ? toProvider(row) : null
+    },
+    remove: async (id, _scope, audit) =>
+      await run(async () => await dependencies.providers.remove(id, audit)),
+  }
+
   const principalStore: PrincipalStore = {
     findById: async (id, scope) => {
       const row = await run(async () => await dependencies.users.findById(id, scope))
       return row ? toPrincipal(row) : null
     },
-    findByExternalSubject: async (tenantId, externalSubject) => {
-      // The principals of the administration are the principals of the
-      // **default** provider of the tenant: the administration writes the
-      // identity of a caller of the provider it knows (spec §10.4).
+    findByExternalSubject: async (tenantId, providerSlug, externalSubject) => {
       const row = await run(
         async () =>
-          await dependencies.users.findByExternalSubject(
-            tenantId,
-            DEFAULT_PROVIDER_SLUG,
-            externalSubject
-          )
+          await dependencies.users.findByExternalSubject(tenantId, providerSlug, externalSubject)
       )
       return row ? toPrincipal(row) : null
     },
     create: async (registration, audit) => {
-      const row = await run(
-        async () =>
-          await dependencies.users.create(
-            { ...registration, providerSlug: DEFAULT_PROVIDER_SLUG },
-            audit
-          )
-      )
+      const row = await run(async () => await dependencies.users.create(registration, audit))
       return toPrincipal(row)
     },
     update: async (id, changes, scope, audit) => {
@@ -346,6 +476,8 @@ export function createAdministrationService(
         offset: filter.offset,
       }
     },
+    countByProvider: async (tenantId, providerSlug) =>
+      await run(async () => await dependencies.users.countByProvider(tenantId, providerSlug)),
   }
 
   const permissionStore: PermissionStore = {
@@ -602,6 +734,7 @@ export function createAdministrationService(
 
   return new AdministrationService({
     tenants: tenantStore,
+    providers: providerStore,
     principals: principalStore,
     permissions: permissionStore,
     grants: grantStore,

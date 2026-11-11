@@ -1,6 +1,6 @@
 # HTTP API
 
-Every Access endpoint with its request, response, errors and a `curl` example, ending with a tenant's whole session in twelve calls. It is written for developers and operators who call Access; the rules behind each endpoint are in the [specification](spec.md), cited as `§N`.
+Every Access endpoint with its request, response, errors and a `curl` example, ending with a tenant's whole session in fifteen calls. It is written for developers and operators who call Access; the rules behind each endpoint are in the [specification](spec.md), cited as `§N`.
 
 ## Conventions
 
@@ -211,7 +211,7 @@ Unknown or mistyped fields are refused; the body is at most 64 KiB.
 
 ## Administration
 
-The twelve administrative endpoints live under `/v1/admin`, next to `GET /v1/admin/audit`; every call sends `Authorization: Bearer <credential>`. The credential is `ACCESS_ADMIN_TOKEN` or one from `ACCESS_ADMIN_TOKENS` (§4.6); a tenant credential acts only for its tenant, and naming another is `403 forbidden`. Limits, pagination, error codes and auditing: §10.1.
+The fifteen administrative endpoints live under `/v1/admin`, next to `GET /v1/admin/audit`; every call sends `Authorization: Bearer <credential>`. The credential is `ACCESS_ADMIN_TOKEN` or one from `ACCESS_ADMIN_TOKENS` (§4.6); a tenant credential acts only for its tenant, and naming another is `403 forbidden`. Limits, pagination, error codes and auditing: §10.1.
 
 ### `POST /v1/admin/tenants`
 
@@ -303,7 +303,7 @@ curl -sS https://access.example.com/v1/admin/tenants \
 
 ### `POST /v1/admin/users`
 
-Upsert by `(tenant, externalSubject)` (§10.4).
+Upsert by `(tenant, provider, externalSubject)` (§10.4).
 
 ```bash
 curl -sS -X POST https://access.example.com/v1/admin/users \
@@ -322,15 +322,17 @@ curl -sS -X POST https://access.example.com/v1/admin/users \
 | --- | --- |
 | `tenant` | Required. The tenant slug. |
 | `externalSubject` | Required. The `sub` from the tenant's provider. |
+| `provider` | Optional. The slug of the provider of the principal. Absent: the default provider of the tenant. |
 | `email` | Optional. Published in the token until the provider says otherwise. |
 | `displayName` | Optional. |
 | `status` | Optional. `active` (default) or `disabled`. |
 
-`404 not_found` when the tenant is unknown.
+`404 not_found` when the tenant or the provider is unknown.
 
 ```json
 {
-  "id": "b1c2…", "tenant": "acme", "externalSubject": "00u1a2b3c4d5",
+  "id": "b1c2…", "tenant": "acme", "provider": "default",
+  "externalSubject": "00u1a2b3c4d5",
   "email": "alice@acme.example", "displayName": "Alice", "status": "active",
   "lastLoginAt": null, "createdAt": "2026-01-08T10:05:00.000Z"
 }
@@ -383,7 +385,8 @@ curl -sS "https://access.example.com/v1/admin/users?tenant=acme&limit=50" \
 {
   "principals": [
     {
-      "id": "b1c2…", "tenant": "acme", "externalSubject": "00u1a2b3c4d5",
+      "id": "b1c2…", "tenant": "acme", "provider": "default",
+      "externalSubject": "00u1a2b3c4d5",
       "email": "alice@acme.example", "displayName": "Alice", "status": "active",
       "lastLoginAt": "2026-01-08T10:05:00.000Z",
       "createdAt": "2026-01-08T10:00:00.000Z"
@@ -394,6 +397,96 @@ curl -sS "https://access.example.com/v1/admin/users?tenant=acme&limit=50" \
 ```
 
 Ordering and paging: §10.5.
+
+### `POST /v1/admin/providers`
+
+Upsert by `(tenant, slug)` (§10.16). The slug of a provider never changes.
+
+```bash
+curl -sS -X POST https://access.example.com/v1/admin/providers \
+  -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{
+        "tenant": "acme",
+        "slug": "okta",
+        "displayName": "Okta",
+        "issuer": "https://login.okta.example",
+        "idpClientId": "access-acme-okta",
+        "idpClientSecret": "the-secret-of-okta",
+        "idpRedirectUri": "https://access.example.com/oauth/tenant/callback",
+        "idpScopes": ["openid", "email", "profile"]
+      }'
+```
+
+| Field | Rule |
+| --- | --- |
+| `tenant` | Required. The tenant slug. |
+| `slug` | Required. The name of the provider inside the tenant, `[a-z0-9-]{2,63}`. It never changes. |
+| `displayName` | Optional. The name shown to a human. |
+| `enabled` | Optional. `true` (default) or `false`. A disabled provider signs nobody in. |
+| `issuer` | Required when the provider is created. |
+| `idpClientId` | Required when the provider is created. |
+| `idpClientSecret` | Required when the provider is created. A change that names another provider and no secret is refused. |
+| `idpRedirectUri` | Required when the provider is created. |
+| `idpScopes` | Optional. Default `openid`, `email`, `profile`. |
+
+`400 invalid_request` when the slug is `default` — the default provider of a tenant is the registration of the tenant — and when a change names another provider and no secret of it. `404 not_found` when the tenant is unknown.
+
+```json
+{
+  "provider": {
+    "id": "d4e5…", "tenant": "acme", "slug": "okta", "displayName": "Okta",
+    "enabled": true, "issuer": "https://login.okta.example",
+    "idpClientId": "access-acme-okta",
+    "idpRedirectUri": "https://access.example.com/oauth/tenant/callback",
+    "idpScopes": ["openid", "email", "profile"],
+    "idpAlgorithms": ["RS256"],
+    "createdAt": "2026-01-08T10:05:00.000Z"
+  }
+}
+```
+
+### `GET /v1/admin/providers`
+
+```bash
+curl -sS "https://access.example.com/v1/admin/providers?tenant=acme" \
+  -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
+```
+
+| Parameter | Rule |
+| --- | --- |
+| `tenant` | Optional. A tenant slug. Absent: every tenant. |
+| `slug` | Optional. The slug of the provider. |
+| `limit` | Optional. Default `50`, maximum `200`. |
+| `offset` | Optional. Default `0`. |
+
+```json
+{
+  "providers": [
+    {
+      "id": "d4e5…", "tenant": "acme", "slug": "okta", "displayName": "Okta",
+      "enabled": true, "issuer": "https://login.okta.example",
+      "idpClientId": "access-acme-okta",
+      "idpRedirectUri": "https://access.example.com/oauth/tenant/callback",
+      "idpScopes": ["openid", "email", "profile"],
+      "idpAlgorithms": ["RS256"],
+      "createdAt": "2026-01-08T10:05:00.000Z"
+    }
+  ],
+  "total": 2, "limit": 50, "offset": 0
+}
+```
+
+The secret of a provider is never answered.
+
+### `DELETE /v1/admin/providers/{id}`
+
+```bash
+curl -sS -X DELETE https://access.example.com/v1/admin/providers/d4e5… \
+  -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
+```
+
+`204` when the provider is removed. `400 invalid_request` when the provider is the default one of its tenant, `409 conflict` when it holds principals, `404 not_found` when the identifier names no provider.
 
 ### `PUT /v1/admin/grants`
 
@@ -703,9 +796,9 @@ id,at,action,targetId,tenant,operator,address,requestId
 0f2c…,2026-01-08T10:30:00.000Z,grant.revoked,9fbfda13-…,acme,6b1f2c9d0e3a,10.0.0.7,8452a08e-…
 ```
 
-## Session in twelve calls
+## Session in fifteen calls
 
-The twelve calls of the session take a tenant from registration to revocation, using each administration endpoint once. You need `curl` and `jq`.
+The fifteen calls of the session take a tenant from registration to revocation, using each administration endpoint once. You need `curl` and `jq`.
 
 ```bash
 export ACCESS=https://access.example.com
@@ -731,44 +824,58 @@ USER_ID=$(curl -sS -X POST $ACCESS/v1/admin/users \
 curl -sS "$ACCESS/v1/admin/users?tenant=acme" \
   -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
 
-# 5. Grant a permission on a workspace and route
+# 5. Register a second provider of the tenant
+PROVIDER_ID=$(curl -sS -X POST $ACCESS/v1/admin/providers \
+  -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" -H "content-type: application/json" \
+  -d '{"tenant":"acme","slug":"okta","displayName":"Okta",
+       "issuer":"https://login.okta.example","idpClientId":"access-acme-okta",
+       "idpClientSecret":"…","idpRedirectUri":"https://access.example.com/oauth/tenant/callback"}' | jq -r .provider.id)
+
+# 6. List the tenant's providers
+curl -sS "$ACCESS/v1/admin/providers?tenant=acme" \
+  -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
+
+# 7. Grant a permission on a workspace and route
 GRANT_ID=$(curl -sS -X PUT $ACCESS/v1/admin/grants \
   -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" -H "content-type: application/json" \
   -d '{"tenant":"acme","userId":"'"$USER_ID"'","permission":"workspace.read",
        "workspaceId":"11111111-1111-4111-8111-111111111111","routeId":"workspace-api"}' | jq -r .id)
 
-# 6. List the tenant's grants
+# 8. List the tenant's grants
 curl -sS "$ACCESS/v1/admin/grants?tenant=acme" \
   -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
 
-# 7. Create a group; a grant to the group applies to every member
+# 9. Create a group; a grant to the group applies to every member
 curl -sS -X POST $ACCESS/v1/admin/groups \
   -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" -H "content-type: application/json" \
   -d '{"tenant":"acme","key":"team-platform","displayName":"The platform team",
        "members":["00u1a2b3c4d5"]}'
 
-# 8. List the tenant's groups
+# 10. List the tenant's groups
 curl -sS "$ACCESS/v1/admin/groups?tenant=acme" \
   -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
 
-# 9. Create a role holding a permission
+# 11. Create a role holding a permission
 ROLE_ID=$(curl -sS -X PUT $ACCESS/v1/admin/roles \
   -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" -H "content-type: application/json" \
   -d '{"tenant":"acme","key":"role-editor","displayName":"The editors",
        "permissions":["workspace.write"]}' | jq -r .id)
 
-# 10. List the tenant's roles
+# 12. List the tenant's roles
 curl -sS "$ACCESS/v1/admin/roles?tenant=acme" \
   -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
 
-# 11. Remove the role (no grant names it)
+# 13. Remove the role (no grant names it)
 curl -sS -X DELETE $ACCESS/v1/admin/roles/$ROLE_ID -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
 
-# 12. Revoke the grant when access must end
+# 14. Remove the provider (it holds no principal)
+curl -sS -X DELETE $ACCESS/v1/admin/providers/$PROVIDER_ID -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
+
+# 15. Revoke the grant when access must end
 curl -sS -X DELETE $ACCESS/v1/admin/grants/$GRANT_ID -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
 ```
 
-To grant a role, send `"role":"role-editor"` instead of `"permission"` in step 5. `scripts/cli/admin-smoke.ts` runs the same sequence against a deployment:
+To grant a role, send `"role":"role-editor"` instead of `"permission"` in step 7. `scripts/cli/admin-smoke.ts` runs the same sequence against a deployment:
 
 ```bash
 ACCESS_URL=$ACCESS ACCESS_ADMIN_TOKEN=$ACCESS_ADMIN_TOKEN bun run scripts/cli/admin-smoke.ts

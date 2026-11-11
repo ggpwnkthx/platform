@@ -176,6 +176,9 @@ Callers' sessions cannot be listed: the gateway has no endpoint for them, and th
 | `access principals list` | A page of principals. |
 | `access principals create` | Registers a principal, or changes it. |
 | `access principals import --file <file>` | Registers a batch of principals. |
+| `access providers list` | The providers of the deployment. |
+| `access providers create` | Registers a provider of a tenant, or changes it. |
+| `access providers remove <id>` | Removes a provider that holds no principal. |
 | `access grants list` | A page of grants. |
 | `access grants put` | Gives a grant, or changes it. |
 | `access grants revoke <id>` | Revokes a grant. |

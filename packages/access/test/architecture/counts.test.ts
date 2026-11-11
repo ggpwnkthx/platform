@@ -7,8 +7,8 @@ const root = resolve(import.meta.dir, '..', '..')
 /**
  * The numbers that the documents and the code have to agree on.
  *
- * The administration is a fixed surface: twelve endpoints, and the whole
- * session of a tenant is twelve calls. A document that says "the eight
+ * The administration is a fixed surface: fifteen endpoints, and the whole
+ * session of a tenant is fifteen calls. A document that says "the eight
  * administrative endpoints" is a lie about the contract of the service,
  * and a reader that counts the routes finds it.
  *
@@ -21,7 +21,7 @@ const root = resolve(import.meta.dir, '..', '..')
 /**
  * The route that reads the audit.
  *
- * The audit is not one of the twelve: the twelve are the endpoints that
+ * The audit is not one of the fifteen: the fifteen are the endpoints that
  * create, revoke and list, and the audit is read with a tenth (spec
  * §1.1).
  */
@@ -55,7 +55,7 @@ async function routesOfTheCode(): Promise<number> {
 /**
  * The numbers in words, for the counts the documents carry.
  *
- * The documents say "the twelve administrative endpoints": the number is a
+ * The documents say "the fifteen administrative endpoints": the number is a
  * word, and the word is what the test reads.
  */
 const WORDS: Record<number, string> = {
@@ -112,8 +112,8 @@ describe('the numbers of the documentation', () => {
       for (let index = 0; index < lines.length; index += 1) {
         const line = lines[index]!
         // The phrases that carry the count of the administration: "the
-        // twelve administrative endpoints", "the twelve calls of the
-        // session", "the twelve calls of the administration".
+        // fifteen administrative endpoints", "the fifteen calls of the
+        // session", "the fifteen calls of the administration".
         for (const match of line.matchAll(
           /the (five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty) (administrative endpoints|calls of the (session|administration))/g
         )) {

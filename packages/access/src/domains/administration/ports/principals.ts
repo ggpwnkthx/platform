@@ -1,7 +1,7 @@
 /**
  * The port of the principals.
  *
- * The domain owns the rules of the twelve endpoints; the storage is a port
+ * The domain owns the rules of the fifteen endpoints; the storage is a port
  * that the composition root fulfils. The domain knows nothing about
  * PostgreSQL and nothing about the shape of the rows.
  */
@@ -17,6 +17,13 @@ export interface Principal {
   id: string
   /** The slug of the tenant of the principal. */
   tenant: string
+  /**
+   * The slug of the provider the principal belongs to.
+   *
+   * The key of the mapping is the triple `(tenant, provider, subject)`
+   * (spec §6.2), and the answer names the provider of the principal.
+   */
+  provider: string
   /** The `sub` of the provider of the tenant. */
   externalSubject: string
   email: string | null
@@ -30,6 +37,13 @@ export interface Principal {
 export interface PrincipalRegistration {
   /** The slug of the tenant of the principal. */
   tenant: string
+  /**
+   * The slug of the provider the principal belongs to.
+   *
+   * A registration that names none is a registration of the default
+   * provider of the tenant (spec §6.2).
+   */
+  provider?: string
   externalSubject: string
   email?: string | null
   displayName?: string | null
@@ -70,8 +84,16 @@ export interface PrincipalStore {
    * is not a principal the statement may read (spec §3.10).
    */
   findById(id: string, scope: Scope): Promise<Principal | null>
-  /** The principal of an external identity of a tenant. */
-  findByExternalSubject(tenantId: string, externalSubject: string): Promise<Principal | null>
+  /**
+   * The principal of an external identity of a provider of a tenant.
+   *
+   * The key is the triple `(tenant, provider, subject)` (spec §6.2).
+   */
+  findByExternalSubject(
+    tenantId: string,
+    providerSlug: string,
+    externalSubject: string
+  ): Promise<Principal | null>
   /**
    * Creates a principal.
    *
@@ -81,6 +103,8 @@ export interface PrincipalStore {
   create(
     registration: {
       tenantId: string
+      /** The slug of the provider the principal belongs to. */
+      providerSlug: string
       externalSubject: string
       email?: string | null
       displayName?: string | null
@@ -97,4 +121,11 @@ export interface PrincipalStore {
   ): Promise<Principal | null>
   /** The principals that match a filter, and their number. */
   list(filter: PrincipalFilter): Promise<PrincipalPage>
+  /**
+   * The number of the principals that were created at a provider.
+   *
+   * The count is what tells a provider that holds principals from one
+   * that holds none (spec §10.16).
+   */
+  countByProvider(tenantId: string, providerSlug: string): Promise<number>
 }

@@ -7,6 +7,7 @@ export type {
   GrantInput,
   Group,
   Principal,
+  Provider,
   Role,
   RoleInput,
   Tenant,

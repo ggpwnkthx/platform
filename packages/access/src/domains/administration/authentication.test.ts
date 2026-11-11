@@ -42,6 +42,7 @@ describe('the authentication of the administration', () => {
   test('a deployment without a token has no administrative surface', async () => {
     const administration = new AdministrationService({
       tenants: fakes.tenants,
+      providers: fakes.providers,
       principals: fakes.principals,
       permissions: fakes.permissions,
       grants: fakes.grants,

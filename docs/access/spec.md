@@ -2,7 +2,7 @@
 
 The normative contract of Access: login brokering, identity mapping, tokens, decisions, the access context and the administration, with their invariants, limits and error codes. It is written for implementers and reviewers; change it first when behavior changes.
 
-Access is a Bun service that brokers logins against each tenant's OpenID Connect (OIDC) provider, maps external identities to principals, answers gateway decision requests from a table of grants, and is administered through the twelve administrative endpoints plus one endpoint that reads the audit.
+Access is a Bun service that brokers logins against each tenant's OpenID Connect (OIDC) provider, maps external identities to principals, answers gateway decision requests from a table of grants, and is administered through the fifteen administrative endpoints plus one endpoint that reads the audit.
 
 Access is a separate deployable, not a gateway feature. It sits between browsers, tenant identity providers and gateways. The gateway keeps its single provider, its single Access deployment and its whole configuration, and gains **zero** new features: a gateway deployment simply points at Access.
 
@@ -19,7 +19,7 @@ Status: 1.2.1. Runtime: Bun ≥ 1.4.3. Listener: HTTP on `ACCESS_HOST:ACCESS_POR
 | **Brokers the login** | It is an OIDC client of each tenant's provider *and* the OIDC provider of the gateway. The browser logs in at the tenant's provider; the gateway sees a provider it already knows how to talk to. |
 | **Maps the identity** | The provider's `(tenant, subject)` pair maps to exactly one **principal row**. The row is the platform identity; the external identity is only the way in. |
 | **Answers decisions** | It implements the decision contract the gateway already speaks, `POST /v1/decisions`, computed over a table of **grants**. |
-| **Is administered with twelve endpoints** | Tenants, principals, grants, groups and roles are created, revoked and **listed** with twelve `curl` calls; a thirteenth reads the audit. No console, portal or wizard. |
+| **Is administered with fifteen endpoints** | Tenants, principals, grants, groups and roles are created, revoked and **listed** with fifteen `curl` calls; a sixteenth reads the audit. No console, portal or wizard. |
 
 ### 1.2 What it does not do
 
@@ -75,7 +75,7 @@ Access is multi-tenant; the gateway is not. That is the price of "the gateway ga
 | **decision** | The answer of `POST /v1/decisions`: may this principal use this workspace on this route? |
 | **access context** | The answer of `POST /v1/access-context`: which permissions does this principal hold for this workspace and route (§9)? |
 | **gateway** | A gateway deployment: a client of Access and a consumer of its decisions. |
-| **operator** | The person who runs Access and calls the twelve administrative endpoints. |
+| **operator** | The person who runs Access and calls the fifteen administrative endpoints. |
 
 ### 2.1 Invariants
 
@@ -411,7 +411,7 @@ With `ACCESS_ENVIRONMENT=production`, the service refuses to start when a requir
 | `ACCESS_DATABASE_URL` | Holds the nine tables. Production must name a server (§3.9). |
 | `ACCESS_ISSUER` | The `iss` of every issued token and the issuer the gateway is configured with. |
 | `ACCESS_REDIS_URL` | Replicas must share authorization codes, unless `ACCESS_ALLOW_MEMORY_STATE=true` marks a single-node deployment. |
-| `ACCESS_ADMIN_TOKEN` | The bearer token of the twelve administrative endpoints, unless the deployment names its credentials in `ACCESS_ADMIN_TOKENS` (§4.6). |
+| `ACCESS_ADMIN_TOKEN` | The bearer token of the fifteen administrative endpoints, unless the deployment names its credentials in `ACCESS_ADMIN_TOKENS` (§4.6). |
 | `ACCESS_STATE_SECRET` | Signs and encrypts the login state. At least 32 bytes. |
 | `ACCESS_SECRET_ENCRYPTION_KEY` | Encrypts client secrets at rest. At least 32 bytes. |
 | `ACCESS_SIGNING_KEY` | The private key that signs issued tokens, in PEM. |
@@ -503,7 +503,11 @@ The tenant is resolved first, and the **provider** of the login is a provider of
 2. **The default provider.** A request that names no provider is a request at the **default** provider of the tenant: the one whose slug is `default`.
 3. **The only provider.** A tenant whose default provider row is missing but which has exactly one enabled provider is a tenant with that provider.
 
-A tenant that has no enabled provider, or whose providers are several and whose request names none, refuses the login with `400 invalid_request`: it has no provider to sign the caller in at.
+A tenant that has no enabled provider refuses the login with `400 invalid_request`: it has no provider to sign the caller in at.
+
+A tenant whose providers are several and whose request names none **asks the caller which one** it signs in at: Access answers the authorization with a page that lists the providers of the tenant, and every entry is a link back to the authorization with the same request and the slug of the provider. The page carries no script and no style of another site, and no state is written before the choice: the login begins again, with the provider named, when the browser comes back.
+
+The choice is the caller's, and the parameters of the request are the caller's too: the page never carries a parameter the request did not have.
 
 The parameter chooses between the providers of **one** tenant: it never moves a login to another tenant, and it is never an authorization. It is refused when it names a provider that is disabled, because a disabled provider signs nobody in.
 
@@ -1013,7 +1017,9 @@ Lists tenants, with their principal and grant counts.
 
 ### 10.4 `POST /v1/admin/users`
 
-Creates a principal, or updates the one with that `(tenant, externalSubject)` pair. Use it to register a caller before its first login, and to disable a caller.
+Creates a principal, or updates the one with that `(tenant, provider, externalSubject)` triple. Use it to register a caller before its first login, and to disable a caller.
+
+The body may name the **provider** of the principal, by its slug. A body that names none is a body of the **default** provider of the tenant (§3.11). A slug that names no provider of the tenant → `404 not_found`.
 
 An **upsert** keyed by the pair. `201` when created, `200` when updated. Unknown tenant → `404 not_found`.
 
@@ -1029,7 +1035,7 @@ An **upsert** keyed by the pair. `201` when created, `200` when updated. Unknown
 
 Lists principals: who has an account here, and in what state, without querying the database by hand. Filters: `tenant`, `status`, `email`; paging: `limit`, `offset` (§10.1).
 
-Order is newest first (`created_at desc, id desc`) and stable: pages never repeat or skip a row. The list never carries a secret.
+Order is newest first (`created_at desc, id desc`) and stable: pages never repeat or skip a row. The list never carries a secret. Every row names the **provider** of the principal (§6.2).
 
 ### 10.6 `PUT /v1/admin/grants`
 
@@ -1067,6 +1073,8 @@ Creates a group, or changes the one with that key. The call **replaces** the gro
 
 Members are given as the principals' external identities (§6.2): the operator knows the provider's `sub`, not the row id. A member that is not a principal of the tenant → `404 not_found`; a group cannot name a principal that does not exist.
 
+A member is written `<subject>` when it names a principal of the **default** provider of the tenant, and `<provider>/<subject>` when it names a principal of another provider: the subject alone does not name a principal of a tenant that has several providers (§6.2). The answer publishes the members the same way.
+
 An **upsert** keyed by the group key. `201` when created, `200` when changed.
 
 ### 10.10 `GET /v1/admin/groups`
@@ -1099,15 +1107,15 @@ Each role carries the keys of the permissions it holds and of the roles it names
 
 Removes a role that no grant names. A role named by a grant → `409 conflict`: grants are kept, so the operator revokes them first. Unknown role → `404 not_found`.
 
-### 10.14 Full session in twelve calls
+### 10.14 Full session in fifteen calls
 
-A tenant's whole lifecycle, from registration to revocation, takes one call to each administrative endpoint; the walkthrough is in [API](api.md#session-in-twelve-calls).
+A tenant's whole lifecycle, from registration to revocation, takes one call to each administrative endpoint; the walkthrough is in [API](api.md#session-in-fifteen-calls).
 
 ### 10.15 `GET /v1/admin/audit`
 
 The audit of changes, newest first. Read-only, paginated like the other lists (§10.1).
 
-Filters: `tenant` (an unknown tenant slug → `404 not_found`) and `action` (`tenant.created`, `tenant.updated`, `principal.created`, `principal.updated`, `group.created`, `group.updated`, `grant.created`, `grant.updated`, `grant.revoked`, `role.created`, `role.updated`, `role.removed`, `role.permission.granted`, `role.permission.revoked`, `role.role.nested`, `role.role.unnested`).
+Filters: `tenant` (an unknown tenant slug → `404 not_found`) and `action` (`tenant.created`, `tenant.updated`, `provider.created`, `provider.updated`, `provider.removed`, `principal.created`, `principal.updated`, `group.created`, `group.updated`, `grant.created`, `grant.updated`, `grant.revoked`, `role.created`, `role.updated`, `role.removed`, `role.permission.granted`, `role.permission.revoked`, `role.role.nested`, `role.role.unnested`).
 
 `format` defaults to `json`; `csv` and `jsonl` are **exports** that a spreadsheet or script can read, with the list filters applied. Any other format → `400 invalid_request`.
 
@@ -1142,6 +1150,35 @@ The `json` answer carries the rows and the `total` matching the filter:
 ```
 
 A row carries no secret: in this example the operator is the calling credential's fingerprint.
+
+### 10.16 The providers of a tenant
+
+A tenant signs its people in at one or more providers (§3.11). The **default** provider is the registration of the tenant: it is written with the tenant (§10.2) and it is not administered here. The other providers of the tenant are the ones this section administers.
+
+#### `POST /v1/admin/providers`
+
+Creates a provider of a tenant, or changes the provider of that `(tenant, slug)` pair.
+
+An **upsert** keyed by the pair. The **slug never changes**: a principal carries it (§6.2), and a call that names another slug creates another provider. `201` when created, `200` when changed.
+
+- A slug of `default` → `400 invalid_request`: the default provider is the registration of the tenant, and it is changed with the tenant.
+- A provider that is created carries a complete registration: the issuer, the client id, the secret and the callback. A registration that names none of them → `400 invalid_request`.
+- A change that names another issuer or another client id and **no secret** → `400 invalid_request`: the secret of a provider belongs to its provider, and the login at the new provider would be refused.
+- An unknown tenant → `404 not_found`.
+
+The answer is the provider, and it never carries the secret of the provider.
+
+#### `GET /v1/admin/providers`
+
+The providers of a tenant. Filters: `tenant`, `slug`; paging: `limit`, `offset` (§10.1). An unknown tenant → `404 not_found`.
+
+#### `DELETE /v1/admin/providers/{id}`
+
+Removes a provider of a tenant. `204` when removed.
+
+- The default provider of a tenant is not removed → `400 invalid_request`: its registration is the registration of the tenant.
+- A provider that **holds principals** is not removed → `409 conflict`: the principals carry its slug, and a principal that names a provider that does not exist is a principal nobody can sign in with.
+- An unknown identifier → `404 not_found`.
 
 ## 11. Decision outcomes
 
@@ -1249,7 +1286,7 @@ One comes back only when **a named customer pays for it**. Not "it seems useful"
 | **SAML** | A tenant whose provider speaks SAML instead of OIDC. | A tenant whose provider is not an OIDC provider is not served. |
 | **The local provider** | A provider of the platform that holds its own credentials in PostgreSQL and signs its callers in itself (§5.4). | The providers of a tenant are OpenID Connect providers. The driver of a provider is the seam it comes through (§5.4), and the local driver is the work that is not done yet. |
 | **Account linking** | One principal, several external identities (a second subject at the same provider). | The mapping key `(tenant, provider, subject)` is one to one. A person who signs in at two providers of a tenant has two principals and two sets of grants. |
-| **Console** | A web interface for the administration. | The twelve endpoints of §10 and `curl`. |
+| **Console** | A web interface for the administration. | The fifteen endpoints of §10 and `curl`. |
 | **SCIM** | Principal provisioning by a provider. | Principals are created by the §10.4 endpoint or by the tenant's auto-provisioning. |
 | **Directory sync** | Scheduled import of a tenant's directory from a source of truth. | Principals are created one at a time, by hand or by a script calling the endpoints. |
 

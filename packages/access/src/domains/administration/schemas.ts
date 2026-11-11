@@ -40,10 +40,34 @@ export const TenantBody = z.object({
   enabled: z.boolean().optional(),
 })
 
+/** The body of the creation and of the change of a provider. */
+export const ProviderBody = z.object({
+  tenant: z.string().regex(SLUG_PATTERN, 'the tenant is the slug of a tenant of the platform'),
+  // The name of the provider inside its tenant. It never changes: a
+  // principal carries it (spec §6.2).
+  slug: z
+    .string()
+    .regex(SLUG_PATTERN, 'the slug of a provider is [a-z0-9-] and is 2 to 63 characters long'),
+  displayName: z.string().min(1).optional(),
+  enabled: z.boolean().optional(),
+  issuer: z.string().url('the issuer of the provider must be a url').optional(),
+  idpClientId: z.string().min(1, 'the client id at the provider is required').optional(),
+  idpClientSecret: z.string().min(1, 'the client secret at the provider is required').optional(),
+  idpRedirectUri: z.string().url('the callback at the provider must be a url').optional(),
+  idpScopes: z.array(z.string().min(1)).optional(),
+  idpAlgorithms: z.array(z.string().min(1)).optional(),
+})
+
 /** The body of the creation and of the change of a principal. */
 export const PrincipalBody = z.object({
   tenant: z.string().regex(SLUG_PATTERN, 'the tenant is the slug of a tenant of the platform'),
   externalSubject: z.string().min(1, 'the subject of the provider is required'),
+  // The slug of the provider the principal belongs to. A body that names
+  // none is a body of the default provider of the tenant (spec §6.2).
+  provider: z
+    .string()
+    .regex(SLUG_PATTERN, 'the slug of a provider is [a-z0-9-] and is 2 to 63 characters long')
+    .optional(),
   email: z.string().email('the e-mail is not an address').nullable().optional(),
   displayName: z.string().min(1).nullable().optional(),
   status: z.enum(['active', 'disabled']).optional(),

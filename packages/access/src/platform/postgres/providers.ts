@@ -1,16 +1,4 @@
 /**
- * The slug of the default provider of a tenant.
- *
- * The default provider is the one the administration writes: the row of
- * the tenant carries its registration, and the logins of the tenant that
- * name no provider use it (spec §3.11).
- *
- * The slug is the same in the identity domain and in the platform: the
- * two domains do not share a constant, and the specification names it.
- */
-export const DEFAULT_PROVIDER_SLUG = 'default'
-
-/**
  * The providers of the tenants of Access (spec §3.11).
  *
  * The repository is the storage of the rows: it holds no policy. A tenant
@@ -25,6 +13,8 @@ export const DEFAULT_PROVIDER_SLUG = 'default'
 
 import { withPlatformScope, withTenantScope } from './scope'
 import type { SqlClient } from './database'
+import { auditedCte } from './audited'
+import type { ChangeAudit } from '../../domains/administration'
 import { SecretError, type SecretCipher } from './secrets'
 
 /** The kind of a provider. */
@@ -34,6 +24,8 @@ type ProviderKind = 'oidc' | 'local'
 export interface ProviderRow {
   id: string
   tenantId: string
+  /** The slug of the tenant of the provider. */
+  tenantSlug: string
   kind: ProviderKind
   /** The name of the provider inside its tenant: it never changes. */
   slug: string
@@ -88,6 +80,7 @@ export interface ProviderUpdate {
 interface ProviderRecord {
   id: string
   tenant_id: string
+  tenant_slug?: string
   kind: ProviderKind
   slug: string
   display_name: string
@@ -102,15 +95,32 @@ interface ProviderRecord {
   updated_at: Date
 }
 
-/** The columns of a provider. */
+/**
+ * The columns of a provider.
+ *
+ * The writes read the columns of the row alone: a `returning` clause
+ * cannot join another table.
+ */
 const COLUMNS = `id, tenant_id, kind, slug, display_name, enabled, issuer, idp_client_id,
   idp_client_secret, idp_redirect_uri, idp_scopes, idp_algorithms, created_at, updated_at`
+
+/** The columns of a provider, with the slug of its tenant. */
+const READ_COLUMNS = `tenant_providers.id, tenant_providers.tenant_id, tenants.slug as tenant_slug,
+  tenant_providers.kind, tenant_providers.slug, tenant_providers.display_name,
+  tenant_providers.enabled, tenant_providers.issuer, tenant_providers.idp_client_id,
+  tenant_providers.idp_client_secret, tenant_providers.idp_redirect_uri,
+  tenant_providers.idp_scopes, tenant_providers.idp_algorithms, tenant_providers.created_at,
+  tenant_providers.updated_at`
+
+/** The tables a read of a provider joins. */
+const FROM = `from tenant_providers join tenants on tenants.id = tenant_providers.tenant_id`
 
 /** Turns the row of the database into the row of the domain. */
 function toRow(record: ProviderRecord): ProviderRow {
   return {
     id: record.id,
     tenantId: record.tenant_id,
+    tenantSlug: record.tenant_slug ?? '',
     kind: record.kind,
     slug: record.slug,
     displayName: record.display_name,
@@ -140,7 +150,7 @@ export class ProviderRepository {
       this.db,
       async (client) =>
         await client.query<ProviderRecord>(
-          `select ${COLUMNS} from tenant_providers where id = $1`,
+          `select ${READ_COLUMNS} ${FROM} where tenant_providers.id = $1`,
           [id]
         )
     )
@@ -154,7 +164,8 @@ export class ProviderRepository {
       tenantId,
       async (client) =>
         await client.query<ProviderRecord>(
-          `select ${COLUMNS} from tenant_providers where tenant_id = $1 order by slug`,
+          `select ${READ_COLUMNS} ${FROM} where tenant_providers.tenant_id = $1
+           order by tenant_providers.slug`,
           [tenantId]
         )
     )
@@ -168,7 +179,8 @@ export class ProviderRepository {
       tenantId,
       async (client) =>
         await client.query<ProviderRecord>(
-          `select ${COLUMNS} from tenant_providers where tenant_id = $1 and slug = $2`,
+          `select ${READ_COLUMNS} ${FROM}
+           where tenant_providers.tenant_id = $1 and tenant_providers.slug = $2`,
           [tenantId, slug]
         )
     )
@@ -195,32 +207,85 @@ export class ProviderRepository {
     return this.decrypted(stored)
   }
 
-  /** Creates a provider. */
-  async create(input: NewProvider): Promise<ProviderRow> {
-    const rows = await withPlatformScope(
-      this.db,
-      async (client) =>
-        await client.query<ProviderRecord>(
-          `insert into tenant_providers (tenant_id, kind, slug, display_name, enabled, issuer,
-             idp_client_id, idp_client_secret, idp_redirect_uri, idp_scopes, idp_algorithms)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-           returning ${COLUMNS}`,
-          [
-            input.tenantId,
-            input.kind ?? 'oidc',
-            input.slug,
-            input.displayName,
-            input.enabled ?? true,
-            input.issuer ?? null,
-            input.idpClientId ?? null,
-            input.idpClientSecret ?? null,
-            input.idpRedirectUri ?? null,
-            input.idpScopes ?? ['openid', 'email', 'profile'],
-            input.idpAlgorithms ?? ['RS256'],
-          ]
-        )
-    )
-    return toRow(rows[0]!)
+  /**
+   * The providers of the platform, and their number.
+   *
+   * The order is the slug: the order of the names is stable, and two
+   * pages never show the same row twice.
+   */
+  async list(filter: {
+    tenantId: string | null
+    slug: string | null
+    limit: number
+    offset: number
+  }): Promise<{ rows: ProviderRow[]; total: number }> {
+    const conditions: string[] = []
+    const params: unknown[] = []
+    if (filter.tenantId !== null) {
+      params.push(filter.tenantId)
+      conditions.push(`tenant_providers.tenant_id = $${params.length}`)
+    }
+    if (filter.slug !== null) {
+      params.push(filter.slug)
+      conditions.push(`tenant_providers.slug = $${params.length}`)
+    }
+    const where = conditions.length > 0 ? `where ${conditions.join(' and ')}` : ''
+    const page = await withPlatformScope(this.db, async (client) => {
+      const counted = await client.query<{ count: number }>(
+        `select count(*)::int as count from tenant_providers ${where.replace(/tenant_providers\./g, '')}`,
+        params
+      )
+      const rows = await client.query<ProviderRecord>(
+        `select ${READ_COLUMNS} ${FROM} ${where}
+         order by tenant_providers.tenant_id, tenant_providers.slug
+         limit $${params.length + 1} offset $${params.length + 2}`,
+        [...params, filter.limit, filter.offset]
+      )
+      return { rows, total: counted[0]?.count ?? 0 }
+    })
+    return { rows: page.rows.map(toRow), total: page.total }
+  }
+
+  /**
+   * Creates a provider.
+   *
+   * The row of the audit of the creation is written by the same statement
+   * as the provider: a provider that is not audited does not exist
+   * (spec §10.1).
+   */
+  async create(input: NewProvider, audit?: ChangeAudit | null): Promise<ProviderRow> {
+    const params: unknown[] = [
+      input.tenantId,
+      input.kind ?? 'oidc',
+      input.slug,
+      input.displayName,
+      input.enabled ?? true,
+      input.issuer ?? null,
+      input.idpClientId ?? null,
+      input.idpClientSecret ?? null,
+      input.idpRedirectUri ?? null,
+      input.idpScopes ?? ['openid', 'email', 'profile'],
+      input.idpAlgorithms ?? ['RS256'],
+    ]
+    const audited = auditedCte('inserted', params, audit)
+    const rows = await withTenantScope(this.db, input.tenantId, async (client) => {
+      const inserted = await client.query<ProviderRecord>(
+        `with inserted as (
+         insert into tenant_providers (tenant_id, kind, slug, display_name, enabled, issuer,
+           idp_client_id, idp_client_secret, idp_redirect_uri, idp_scopes, idp_algorithms)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         returning ${COLUMNS}
+       )${audited}
+       select ${COLUMNS} from inserted`,
+        params
+      )
+      return inserted
+    })
+    const id = rows[0]!.id
+    // The row is read back: the answer of the administration names the
+    // tenant of the provider, and the statement that wrote it cannot
+    // join another table.
+    return (await this.findById(id)) ?? toRow(rows[0]!)
   }
 
   /**
@@ -229,8 +294,17 @@ export class ProviderRepository {
    * A secret that is not given keeps the one that is stored: a caller
    * that changes the name of a provider does not have to know its
    * secret.
+   *
+   * The row of the audit of the change is written by the same statement
+   * as the provider (spec §10.1).
    */
-  async update(id: string, input: ProviderUpdate): Promise<ProviderRow | null> {
+  async update(
+    id: string,
+    input: ProviderUpdate,
+    audit?: ChangeAudit | null
+  ): Promise<ProviderRow | null> {
+    const existing = await this.findById(id)
+    if (!existing) return null
     const assignments: string[] = []
     const params: unknown[] = []
     const set = (column: string, value: unknown): void => {
@@ -251,16 +325,48 @@ export class ProviderRepository {
       set('updated_at', new Date())
     }
     params.push(id)
-    const rows = await withPlatformScope(
-      this.db,
-      async (client) =>
-        await client.query<ProviderRecord>(
-          `update tenant_providers set ${assignments.join(', ')} where id = $${params.length}
-           returning ${COLUMNS}`,
-          params
-        )
-    )
-    return rows[0] ? toRow(rows[0]) : null
+    // The number of the id is read before the audit is appended: the
+    // parameters of the audit are always the last five.
+    const idParam = params.length
+    const audited = auditedCte('updated', params, audit)
+    const rows = await withTenantScope(this.db, existing.tenantId, async (client) => {
+      const updated = await client.query<ProviderRecord>(
+        `with updated as (
+         update tenant_providers set ${assignments.join(', ')} where id = $${idParam}
+         returning ${COLUMNS}
+       )${audited}
+       select ${COLUMNS} from updated`,
+        params
+      )
+      return updated
+    })
+    if (!rows[0]) return null
+    return (await this.findById(id)) ?? toRow(rows[0])
+  }
+
+  /**
+   * Removes a provider.
+   *
+   * The row of the audit of the removal is written by the same statement
+   * as the removal (spec §10.1).
+   */
+  async remove(id: string, audit?: ChangeAudit | null): Promise<boolean> {
+    const existing = await this.findById(id)
+    if (!existing) return false
+    const params: unknown[] = [id]
+    const audited = auditedCte('removed', params, audit)
+    const rows = await withTenantScope(this.db, existing.tenantId, async (client) => {
+      const removed = await client.query<ProviderRecord>(
+        `with removed as (
+         delete from tenant_providers where id = $1
+         returning ${COLUMNS}
+       )${audited}
+       select ${COLUMNS} from removed`,
+        params
+      )
+      return removed
+    })
+    return rows.length > 0
   }
 
   /** Decrypts a secret that is read. */

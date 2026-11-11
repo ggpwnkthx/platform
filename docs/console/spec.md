@@ -183,7 +183,7 @@ The ability library has two wildcards, the action `manage` and the subject `all`
 | `/workspaces/{id}/model` | The workspace data model: collections, fields, rules, relations, and changes to them. | `/model` and its writes (`data.model.read`, `data.model.write`) |
 | `/workspaces/{id}/audit` | Mutations committed in the workspace. | `/audit` (`data.audit.read`) |
 | `/operators` | Platform tenants, and tenant creation. A single-tenant operator is sent to its tenant. | Access administration. |
-| `/operators/tenants/{slug}` | The tenant: counts, latest changes, form. | Same. |
+| `/operators/tenants/{slug}` | The tenant: counts, latest changes, form, and the providers it signs its people in at. | Same. |
 | `/operators/tenants/{slug}/users` | Users, filtered by e-mail and status; registering one user, or a team in one batch. | Same. |
 | `/operators/tenants/{slug}/users/{id}` | A user's rights (direct and through groups), groups, and registration (including disabling). | Same. |
 | `/operators/tenants/{slug}/groups` | Groups, members and rights. | Same. |

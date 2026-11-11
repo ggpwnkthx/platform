@@ -77,6 +77,43 @@ export async function writeTenant(call: AccessCall, tenant: unknown): Promise<un
 }
 
 /**
+ * The providers of the deployment.
+ *
+ * @param call the parameters of the call.
+ * @param query the query of the page.
+ */
+export async function listProviders(
+  call: AccessCall,
+  query: Readonly<Record<string, string | number | undefined>>
+): Promise<unknown> {
+  return await read(() =>
+    clientOf(call)
+      .send('GET', '/providers', query as Record<string, string>)
+      .then(bodyOf)
+  )
+}
+
+/**
+ * Registers a provider of a tenant, or changes it.
+ *
+ * @param call the parameters of the call.
+ * @param provider the provider.
+ */
+export async function writeProvider(call: AccessCall, provider: unknown): Promise<unknown> {
+  return await read(() => clientOf(call).send('POST', '/providers', {}, provider).then(bodyOf))
+}
+
+/**
+ * Removes a provider that holds no principal.
+ *
+ * @param call the parameters of the call.
+ * @param id the identifier of the provider.
+ */
+export async function removeProvider(call: AccessCall, id: string): Promise<unknown> {
+  return await read(() => clientOf(call).send('DELETE', `/providers/${id}`).then(bodyOf))
+}
+
+/**
  * The principals of the deployment.
  *
  * @param call the parameters of the call.

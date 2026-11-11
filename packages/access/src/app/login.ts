@@ -11,7 +11,7 @@ import type { Context } from 'hono'
 import { LoginError } from '../domains/identity'
 import { acceptedScopes } from '../domains/provider'
 import type { AccessDependencies } from './dependencies'
-import { refusalPage } from './pages'
+import { providerChooserPage, refusalPage } from './pages'
 import type { AccessEnv } from './state'
 
 /** The cookie of the state of a login. */
@@ -99,6 +99,11 @@ export async function authorizeHandler(
       provider: query.provider,
       codeChallenge: query.code_challenge,
     })
+    if (begun.kind === 'choose') {
+      // The tenant signs its people in at several providers: the caller
+      // chooses, and the choice is made by the browser (spec §5.2.1).
+      return providerChooserPage(begun.providers, chooserLinks(begun.providers, query))
+    }
     return new Response(null, {
       status: 302,
       headers: {
@@ -242,6 +247,34 @@ export async function callbackHandler(
     )
     return refusalOf(error, dependencies, (await dependencies.login.tenantOf(cookie)) ?? 'unknown')
   }
+}
+
+/**
+ * The links of the page of the choice of a provider.
+ *
+ * Every link carries the request of the caller and the slug of the
+ * provider it signs in at: the browser comes back to the authorization
+ * with the same request, and the login begins again with the provider
+ * named.
+ */
+function chooserLinks(
+  providers: { slug: string }[],
+  query: Record<string, string | undefined>
+): Map<string, string> {
+  const links = new Map<string, string>()
+  for (const provider of providers) {
+    const params = new URLSearchParams()
+    for (const [name, value] of Object.entries(query)) {
+      if (value === undefined || value === '') continue
+      // The provider of the request is replaced by the provider of the
+      // link: the two are never in the same request.
+      if (name === 'provider') continue
+      params.set(name, value)
+    }
+    params.set('provider', provider.slug)
+    links.set(provider.slug, `/oauth/authorize?${params.toString()}`)
+  }
+  return links
 }
 
 /** Turns the failure of the login into the page of the refusal. */

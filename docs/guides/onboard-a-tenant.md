@@ -246,7 +246,7 @@ curl -sS -X PUT $ACCESS/v1/admin/grants \
 4. On the metrics, `access_logins_total{tenant="acme",result="success"}` and `access_decisions_total{tenant="acme",result="allow"}` rise while `gateway_auth_failures_total` stays flat.
 5. The audit holds `tenant.created`, `principal.created` and `grant.created` for the tenant: `platformctl access audit list --tenant acme`.
 
-`scripts/cli/admin-smoke.ts` exercises all twelve administration calls against a deployment. It works on its own tenant (`ACCESS_SMOKE_SLUG`, default `smoke`), not on `acme` ([Access configuration: variables of the scripts and tests](../access/configuration.md#variables-of-the-scripts-and-tests)).
+`scripts/cli/admin-smoke.ts` exercises all fifteen administration calls against a deployment. It works on its own tenant (`ACCESS_SMOKE_SLUG`, default `smoke`), not on `acme` ([Access configuration: variables of the scripts and tests](../access/configuration.md#variables-of-the-scripts-and-tests)).
 
 ## If something goes wrong
 
@@ -266,7 +266,7 @@ curl -sS -X PUT $ACCESS/v1/admin/grants \
 ## Related
 
 - [Access operations: first tenant](../access/operations.md#first-tenant) and [tenant cutover](../access/operations.md#tenant-cutover), for moving an existing tenant from another service
-- [Access API: session in twelve calls](../access/api.md#session-in-twelve-calls)
+- [Access API: session in fifteen calls](../access/api.md#session-in-fifteen-calls)
 - [Manage access](manage-access.md)
 - [Rotate secrets](rotate-secrets.md)
 - [Troubleshoot a request](troubleshoot-a-request.md)

@@ -28,6 +28,9 @@ import type {
   Principal,
   PrincipalFilter,
   PrincipalStore,
+  Provider,
+  ProviderFilter,
+  ProviderStore,
   Role,
   RoleFilter,
   RolePage,
@@ -70,6 +73,14 @@ export const TENANT = {
 /** The storage of the tenants of the tests. */
 class FakeTenants implements TenantStore {
   readonly rows: Tenant[] = []
+  /**
+   * The storage of the providers.
+   *
+   * A tenant is created with its default provider, like the real one:
+   * the registration of the tenant is the registration of its default
+   * provider (spec §3.11).
+   */
+  providers?: FakeProviders
 
   async findBySlug(slug: string): Promise<Tenant | null> {
     return this.rows.find((row) => row.slug === slug) ?? null
@@ -117,6 +128,20 @@ class FakeTenants implements TenantStore {
       createdAt: new Date('2026-01-08T10:00:00.000Z'),
     }
     this.rows.push(tenant)
+    this.providers?.rows.push({
+      id: `provider-${(this.providers?.rows.length ?? 0) + 1}`,
+      tenantId: tenant.id,
+      tenant: tenant.slug,
+      slug: 'default',
+      displayName: tenant.displayName,
+      enabled: true,
+      issuer: tenant.issuer,
+      idpClientId: tenant.idpClientId,
+      idpRedirectUri: '',
+      idpScopes: [],
+      idpAlgorithms: [],
+      createdAt: tenant.createdAt,
+    })
     return tenant
   }
 
@@ -133,6 +158,97 @@ class FakeTenants implements TenantStore {
   }
 }
 
+/** The storage of the providers of the tests. */
+class FakeProviders implements ProviderStore {
+  readonly rows: Provider[] = []
+
+  constructor(private readonly tenants: FakeTenants) {}
+
+  async findBySlug(tenantId: string, slug: string): Promise<Provider | null> {
+    return this.rows.find((row) => row.tenantId === tenantId && row.slug === slug) ?? null
+  }
+
+  async findById(id: string, _scope?: Scope): Promise<Provider | null> {
+    return this.rows.find((row) => row.id === id) ?? null
+  }
+
+  async list(filter: ProviderFilter) {
+    const matching = this.rows.filter((row) => {
+      if (filter.tenantId !== null && row.tenantId !== filter.tenantId) return false
+      if (filter.slug !== null && row.slug !== filter.slug) return false
+      return true
+    })
+    return {
+      providers: matching.slice(filter.offset, filter.offset + filter.limit),
+      total: matching.length,
+      limit: filter.limit,
+      offset: filter.offset,
+    }
+  }
+
+  async create(
+    registration: {
+      tenantId: string
+      slug: string
+      displayName: string
+      enabled: boolean
+      issuer: string
+      idpClientId: string
+      idpClientSecret: string
+      idpRedirectUri: string
+      idpScopes: string[]
+      idpAlgorithms: string[]
+    },
+    _audit?: ChangeAudit
+  ): Promise<Provider> {
+    const tenant = this.tenants.rows.find((row) => row.id === registration.tenantId)
+    const provider: Provider = {
+      id: `provider-${this.rows.length + 1}`,
+      tenantId: registration.tenantId,
+      tenant: tenant?.slug ?? '',
+      slug: registration.slug,
+      displayName: registration.displayName,
+      enabled: registration.enabled,
+      issuer: registration.issuer,
+      idpClientId: registration.idpClientId,
+      idpRedirectUri: registration.idpRedirectUri,
+      idpScopes: registration.idpScopes,
+      idpAlgorithms: registration.idpAlgorithms,
+      createdAt: new Date('2026-01-08T10:05:00.000Z'),
+    }
+    this.rows.push(provider)
+    return provider
+  }
+
+  async update(
+    id: string,
+    changes: {
+      displayName?: string
+      enabled?: boolean
+      issuer?: string
+      idpClientId?: string
+      idpClientSecret?: string
+      idpRedirectUri?: string
+      idpScopes?: string[]
+      idpAlgorithms?: string[]
+    },
+    _scope?: Scope,
+    _audit?: ChangeAudit
+  ): Promise<Provider | null> {
+    const provider = this.rows.find((row) => row.id === id)
+    if (!provider) return null
+    Object.assign(provider, changes)
+    return provider
+  }
+
+  async remove(id: string, _scope?: Scope, _audit?: ChangeAudit): Promise<boolean> {
+    const index = this.rows.findIndex((row) => row.id === id)
+    if (index < 0) return false
+    this.rows.splice(index, 1)
+    return true
+  }
+}
+
 /** The storage of the principals of the tests. */
 class FakePrincipals implements PrincipalStore {
   readonly rows: Principal[] = []
@@ -145,12 +261,16 @@ class FakePrincipals implements PrincipalStore {
 
   async findByExternalSubject(
     tenantId: string,
+    providerSlug: string,
     externalSubject: string
   ): Promise<Principal | null> {
     const tenant = this.tenants.rows.find((row) => row.id === tenantId)
     return (
       this.rows.find(
-        (row) => row.tenant === tenant?.slug && row.externalSubject === externalSubject
+        (row) =>
+          row.tenant === tenant?.slug &&
+          row.provider === providerSlug &&
+          row.externalSubject === externalSubject
       ) ?? null
     )
   }
@@ -158,6 +278,7 @@ class FakePrincipals implements PrincipalStore {
   async create(
     registration: {
       tenantId: string
+      providerSlug: string
       externalSubject: string
       email?: string | null
       displayName?: string | null
@@ -169,6 +290,7 @@ class FakePrincipals implements PrincipalStore {
     const principal: Principal = {
       id: `principal-${this.rows.length + 1}`,
       tenant: tenant?.slug ?? '',
+      provider: registration.providerSlug,
       externalSubject: registration.externalSubject,
       email: registration.email ?? null,
       displayName: registration.displayName ?? null,
@@ -190,6 +312,12 @@ class FakePrincipals implements PrincipalStore {
     if (!principal) return null
     Object.assign(principal, changes)
     return principal
+  }
+
+  async countByProvider(tenantId: string, providerSlug: string): Promise<number> {
+    const tenant = this.tenants.rows.find((row) => row.id === tenantId)
+    return this.rows.filter((row) => row.tenant === tenant?.slug && row.provider === providerSlug)
+      .length
   }
 
   async list(filter: PrincipalFilter) {
@@ -691,6 +819,8 @@ class FakeFailures implements AuthenticationFailures {
 export interface Fakes {
   /** The storage of the tenants. */
   tenants: FakeTenants
+  /** The storage of the providers. */
+  providers: FakeProviders
   /** The storage of the principals. */
   principals: FakePrincipals
   /** The storage of the permissions. */
@@ -709,6 +839,10 @@ export interface Fakes {
 export function createFakes(): Fakes {
   const tenants = new FakeTenants()
   const permissions = new FakePermissions()
+  const providers = new FakeProviders(tenants)
+  // A tenant that is created gets its default provider, like the real
+  // one (spec §3.11).
+  tenants.providers = providers
   const principals = new FakePrincipals(tenants)
   const groups = new FakeGroups(tenants)
   const roles = new FakeRoles(tenants, permissions)
@@ -718,6 +852,7 @@ export function createFakes(): Fakes {
   roles.grants = grants
   return {
     tenants,
+    providers,
     principals,
     permissions,
     grants,
@@ -749,6 +884,7 @@ export interface ServiceOptions {
 export function serviceOf(fakes: Fakes, options: ServiceOptions = {}): AdministrationService {
   return new AdministrationService({
     tenants: fakes.tenants,
+    providers: fakes.providers,
     principals: fakes.principals,
     permissions: fakes.permissions,
     grants: fakes.grants,

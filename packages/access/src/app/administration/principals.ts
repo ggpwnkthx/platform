@@ -24,6 +24,7 @@ function principalBody(principal: Principal): Record<string, unknown> {
   return {
     id: principal.id,
     tenant: principal.tenant,
+    provider: principal.provider,
     externalSubject: principal.externalSubject,
     email: principal.email,
     displayName: principal.displayName,
@@ -51,6 +52,7 @@ export async function principalHandler(
         scope,
         body.principals.map((principal) => ({
           tenant: principal.tenant,
+          ...(principal.provider ? { provider: principal.provider } : {}),
           externalSubject: principal.externalSubject,
           email: principal.email,
           displayName: principal.displayName,
@@ -72,6 +74,7 @@ export async function principalHandler(
       scope,
       {
         tenant: body.tenant,
+        ...(body.provider ? { provider: body.provider } : {}),
         externalSubject: body.externalSubject,
         email: body.email,
         displayName: body.displayName,

@@ -13,7 +13,7 @@ import type { AuditContext, Group, GroupFilter, GroupPage, GroupRegistration } f
 import { change, type AuditEntry } from './audit'
 import { tenantScope } from './ports'
 import { refuseOutsideScope, tenantOf } from './scope'
-import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, wholeNumber } from './values'
+import { DEFAULT_PAGE_SIZE, DEFAULT_PROVIDER_SLUG, MAX_PAGE_SIZE, wholeNumber } from './values'
 
 /**
  * The query of the list of the groups.
@@ -63,6 +63,31 @@ export async function listGroups(
 }
 
 /**
+ * The provider and the subject a member of a group names.
+ *
+ * A member is written `<provider>/<subject>` when it names a principal
+ * of another provider of the tenant, and `<subject>` when it names a
+ * principal of the default provider. The prefix is a provider of the
+ * tenant or it is not a provider at all: a subject that carries a slash
+ * is a subject of the default provider.
+ */
+async function memberOf(
+  options: AdministrationOptions,
+  tenantId: string,
+  member: string
+): Promise<{ provider: string; subject: string }> {
+  const slash = member.indexOf('/')
+  if (slash > 0) {
+    const candidate = member.slice(0, slash)
+    const provider = await options.providers.findBySlug(tenantId, candidate)
+    if (provider) {
+      return { provider: provider.slug, subject: member.slice(slash + 1) }
+    }
+  }
+  return { provider: DEFAULT_PROVIDER_SLUG, subject: member }
+}
+
+/**
  * Creates a group, or updates the group of that key.
  *
  * The membership is **replaced**: the principals of the list are the
@@ -92,13 +117,19 @@ export async function upsertGroup(
 
   // Every member is a principal of the tenant: the group cannot name a
   // principal that does not exist.
+  //
+  // A member is named by its subject, and a principal of another
+  // provider of the tenant is named by `<provider>/<subject>`: the
+  // subject alone does not name a principal of a tenant that has several
+  // providers (spec §6.2).
   const members: string[] = []
-  for (const subject of registration.members) {
-    const principal = await options.principals.findByExternalSubject(tenant.id, subject)
+  for (const member of registration.members) {
+    const { provider, subject } = await memberOf(options, tenant.id, member)
+    const principal = await options.principals.findByExternalSubject(tenant.id, provider, subject)
     if (!principal) {
       throw new AdministrationError(
         'not_found',
-        `the principal "${subject}" does not exist in the tenant`
+        `the principal "${member}" does not exist in the tenant`
       )
     }
     members.push(principal.id)

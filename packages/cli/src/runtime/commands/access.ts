@@ -22,12 +22,15 @@ import {
   listGroups,
   listPrincipals,
   listGrants,
+  listProviders,
   listRoles,
   listTenants,
+  removeProvider,
   removeRole,
   revokeGrant,
   writeGrant,
   writeGroup,
+  writeProvider,
   writePrincipal,
   writeRole,
   writeTenant,
@@ -172,6 +175,82 @@ export const accessGroup: GroupSpec = {
       },
     },
     {
+      name: 'providers list',
+      summary: 'list the providers of the deployment',
+      options: [
+        { name: 'tenant', kind: 'string', summary: 'the slug of the tenant' },
+        { name: 'slug', kind: 'string', summary: 'the slug of the provider' },
+        { name: 'limit', kind: 'string', summary: 'the size of the page', default: '50' },
+        { name: 'offset', kind: 'string', summary: 'the offset of the page', default: '0' },
+      ],
+      async run(input) {
+        const body = await listProviders(accessCall(input), {
+          tenant: stringOf(input.options, 'tenant'),
+          slug: stringOf(input.options, 'slug'),
+          limit: numberOf(input.options, 'limit'),
+          offset: numberOf(input.options, 'offset'),
+        })
+        const rows = rowsOf(body, 'providers')
+        return { value: body, lines: linesOf(rows, input.globals.color) }
+      },
+    },
+    {
+      name: 'providers create',
+      summary: 'register a provider of a tenant, or change it',
+      options: [
+        { name: 'tenant', kind: 'string', summary: 'the slug of the tenant' },
+        { name: 'slug', kind: 'string', summary: 'the slug of the provider in its tenant' },
+        { name: 'display-name', kind: 'string', summary: 'the name of the provider' },
+        { name: 'issuer', kind: 'string', summary: 'the issuer of the provider' },
+        { name: 'idp-client-id', kind: 'string', summary: 'the client of the provider' },
+        { name: 'idp-client-secret', kind: 'string', summary: 'the secret of the provider' },
+        { name: 'idp-redirect-uri', kind: 'string', summary: 'the callback of the provider' },
+        { name: 'idp-scope', kind: 'list', summary: 'a scope Access asks the provider for' },
+      ],
+      examples: [
+        'platformctl access providers create --tenant acme --slug okta --issuer https://login.okta.example',
+      ],
+      async run(input) {
+        const tenant = stringOf(input.options, 'tenant')
+        const slug = stringOf(input.options, 'slug')
+        if (!tenant || !slug) {
+          throw new CliFailure(
+            'the tenant and the slug of the provider are needed',
+            2,
+            'missing_argument'
+          )
+        }
+        const body: Record<string, unknown> = { tenant, slug }
+        const displayName = stringOf(input.options, 'display-name')
+        const issuer = stringOf(input.options, 'issuer')
+        const idpClientId = stringOf(input.options, 'idp-client-id')
+        const idpClientSecret = stringOf(input.options, 'idp-client-secret')
+        const idpRedirectUri = stringOf(input.options, 'idp-redirect-uri')
+        if (displayName) body.displayName = displayName
+        if (issuer) body.issuer = issuer
+        if (idpClientId) body.idpClientId = idpClientId
+        if (idpClientSecret) body.idpClientSecret = idpClientSecret
+        if (idpRedirectUri) body.idpRedirectUri = idpRedirectUri
+        const scopes = listOf(input.options, 'idp-scope')
+        if (scopes.length > 0) body.idpScopes = scopes
+        const written = await writeProvider(accessCall(input), body)
+        return { value: written, message: `the provider "${slug}" is written` }
+      },
+    },
+    {
+      name: 'providers remove',
+      summary: 'remove a provider that holds no principal',
+      options: [{ name: 'id', kind: 'string', summary: 'the identifier of the provider' }],
+      async run(input) {
+        const id = stringOf(input.options, 'id')
+        if (!id) {
+          throw new CliFailure('the identifier of the provider is needed', 2, 'missing_argument')
+        }
+        const removed = await removeProvider(accessCall(input), id)
+        return { value: removed, message: 'the provider is removed' }
+      },
+    },
+    {
       name: 'principals list',
       summary: 'list the principals of the deployment',
       options: [
@@ -199,6 +278,11 @@ export const accessGroup: GroupSpec = {
       options: [
         { name: 'tenant', kind: 'string', summary: 'the slug of the tenant' },
         { name: 'subject', kind: 'string', summary: 'the subject of the provider' },
+        {
+          name: 'provider',
+          kind: 'string',
+          summary: 'the slug of the provider the principal belongs to',
+        },
         { name: 'email', kind: 'string', summary: 'the address of the principal' },
         { name: 'display-name', kind: 'string', summary: 'the name of the principal' },
         { name: 'status', kind: 'string', summary: 'the status of the principal' },
@@ -214,6 +298,8 @@ export const accessGroup: GroupSpec = {
           )
         }
         const body: Record<string, unknown> = { tenant, externalSubject: subject }
+        const provider = stringOf(input.options, 'provider')
+        if (provider) body.provider = provider
         const email = stringOf(input.options, 'email')
         const displayName = stringOf(input.options, 'display-name')
         const status = stringOf(input.options, 'status')

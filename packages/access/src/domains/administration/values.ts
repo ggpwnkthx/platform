@@ -11,6 +11,15 @@ import { AdministrationError } from './errors'
 import type { AuditFormat } from './ports'
 import type { PrincipalStatus } from './ports/principals'
 
+/**
+ * The slug of the default provider of a tenant (spec §3.11).
+ *
+ * The default provider is the one the tenant row carries: it is the
+ * registration of the tenant, and it is written with it. The slug never
+ * changes, and a principal carries it (spec §6.2).
+ */
+export const DEFAULT_PROVIDER_SLUG = 'default'
+
 /** The default size of a page of the administration. */
 export const DEFAULT_PAGE_SIZE = 50
 

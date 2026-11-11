@@ -16,6 +16,9 @@ import {
   groupsHandler,
   principalHandler,
   principalsHandler,
+  providerHandler,
+  providersHandler,
+  removeProviderHandler,
   removeRoleHandler,
   revokeGrantHandler,
   roleHandler,
@@ -174,12 +177,18 @@ export function createAccessApp(dependencies: AccessDependencies): Hono<AccessEn
   // The metrics of the service.
   app.get('/metrics', async (context) => await metricsHandler(context, dependencies))
 
-  // The administration of the platform: twelve endpoints and the audit
+  // The administration of the platform: fifteen endpoints and the audit
   // that reads it, and they are the whole surface.
   app.post('/v1/admin/tenants', async (context) => await tenantHandler(context, dependencies))
   app.get('/v1/admin/tenants', async (context) => await tenantsHandler(context, dependencies))
   app.post('/v1/admin/users', async (context) => await principalHandler(context, dependencies))
   app.get('/v1/admin/users', async (context) => await principalsHandler(context, dependencies))
+  app.post('/v1/admin/providers', async (context) => await providerHandler(context, dependencies))
+  app.get('/v1/admin/providers', async (context) => await providersHandler(context, dependencies))
+  app.delete(
+    '/v1/admin/providers/:id',
+    async (context) => await removeProviderHandler(context, dependencies)
+  )
   app.post('/v1/admin/groups', async (context) => await groupHandler(context, dependencies))
   app.get('/v1/admin/groups', async (context) => await groupsHandler(context, dependencies))
   app.put('/v1/admin/roles', async (context) => await roleHandler(context, dependencies))

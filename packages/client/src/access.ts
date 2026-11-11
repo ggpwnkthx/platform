@@ -31,6 +31,8 @@ import type {
   GroupInput,
   Principal,
   PrincipalInput,
+  Provider,
+  ProviderInput,
   Role,
   RoleInput,
   Tenant,
@@ -241,6 +243,24 @@ export class AccessAdminClient extends AccessClient {
       }
     )
     return body.principals ?? []
+  }
+
+  /** A page of the providers. */
+  async providers(
+    query: { tenant?: string; slug?: string; limit?: number; offset?: number } = {}
+  ): Promise<AdminPage<Provider>> {
+    return await this.page<Provider>('/providers', 'providers', query)
+  }
+
+  /** Creates a provider, or updates the provider of that slug. */
+  async saveProvider(input: ProviderInput): Promise<{ provider: Provider; created: boolean }> {
+    const answer = await this.send('POST', '/providers', {}, input)
+    return { provider: bodyOf(answer) as Provider, created: answer.status === 201 }
+  }
+
+  /** Removes a provider that holds no principal. */
+  async removeProvider(id: string): Promise<void> {
+    await this.send('DELETE', `/providers/${id}`)
   }
 
   /** A page of the grants. */

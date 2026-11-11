@@ -18,6 +18,8 @@ export type {
   GroupInput,
   Principal,
   PrincipalInput,
+  Provider,
+  ProviderInput,
   Role,
   RoleInput,
   Tenant,

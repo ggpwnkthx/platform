@@ -75,7 +75,7 @@ interface StoreSettings {
 
 /** The settings of the administration. */
 interface AdminSettings {
-  /** The bearer token of the twelve administrative endpoints. */
+  /** The bearer token of the fifteen administrative endpoints. */
   token?: string
   /**
    * The token that the current one replaced.
@@ -536,7 +536,7 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
   if (production) {
     if (!parsed.ACCESS_ADMIN_TOKEN && !parsed.ACCESS_ADMIN_TOKENS) {
       problems.push(
-        'ACCESS_ADMIN_TOKEN must be set in a production environment: it is the bearer token of the twelve administrative endpoints, unless the deployment names its credentials in ACCESS_ADMIN_TOKENS'
+        'ACCESS_ADMIN_TOKEN must be set in a production environment: it is the bearer token of the fifteen administrative endpoints, unless the deployment names its credentials in ACCESS_ADMIN_TOKENS'
       )
     }
     if (!parsed.ACCESS_STATE_SECRET) {

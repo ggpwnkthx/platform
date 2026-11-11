@@ -14,6 +14,7 @@ import type {
   GroupStore,
   PermissionStore,
   PrincipalStore,
+  ProviderStore,
   RoleStore,
   TenantStore,
 } from './ports'
@@ -23,6 +24,8 @@ export interface AdministrationOptions {
   tenants: TenantStore
   /** The storage of the principals. */
   principals: PrincipalStore
+  /** The storage of the providers of the tenants. */
+  providers: ProviderStore
   /** The storage of the groups. */
   groups?: GroupStore
   /** The storage of the roles. */

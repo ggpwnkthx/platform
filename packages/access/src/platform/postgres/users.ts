@@ -9,7 +9,7 @@
 import { withScope, withTenantScope } from './scope'
 import { auditedCte } from './audited'
 import type { SqlClient } from './database'
-import type { ChangeAudit, Scope } from '../../domains/administration'
+import { DEFAULT_PROVIDER_SLUG, type ChangeAudit, type Scope } from '../../domains/administration'
 
 /** The status of a principal. */
 type PrincipalStatus = 'active' | 'disabled'
@@ -86,6 +86,20 @@ interface UserRecord {
 const COLUMNS = `users.id, users.tenant_id, users.provider_slug, users.external_subject, users.email,
   users.display_name, users.status, users.last_login_at, users.created_at, users.updated_at,
   tenants.slug as tenant_slug`
+
+/**
+ * The name of a principal outside of the default provider.
+ *
+ * A principal of the default provider of its tenant is named by its
+ * subject, and a principal of another provider is named by
+ * `<provider>/<subject>`: the subject alone does not name a principal of
+ * a tenant that has several providers (spec §6.2).
+ */
+function qualifiedSubject(providerSlug: string, externalSubject: string): string {
+  return providerSlug === DEFAULT_PROVIDER_SLUG
+    ? externalSubject
+    : `${providerSlug}/${externalSubject}`
+}
 
 /** Turns the row of the database into the row of the domain. */
 function toRow(record: UserRecord): UserRow {
@@ -227,6 +241,27 @@ export class UserRepository {
   }
 
   /**
+   * The number of the principals that were created at a provider.
+   *
+   * The count is what tells a provider that holds principals from one
+   * that holds none: the principals carry its slug, and a provider that
+   * is removed takes them out of the reach of every login (spec §10.16).
+   */
+  async countByProvider(tenantId: string, providerSlug: string): Promise<number> {
+    const rows = await withTenantScope(
+      this.db,
+      tenantId,
+      async (client) =>
+        await client.query<{ count: number }>(
+          `select count(*)::int as count from users
+           where tenant_id = $1 and provider_slug = $2`,
+          [tenantId, providerSlug]
+        )
+    )
+    return rows[0]?.count ?? 0
+  }
+
+  /**
    * The principals that match a filter, and their number.
    *
    * The order is the newest first and it is stable: two pages never show
@@ -264,12 +299,12 @@ export class UserRepository {
       this.db,
       scope,
       async (client) =>
-        await client.query<{ external_subject: string }>(
-          `select external_subject from users where id = any($1::uuid[])`,
+        await client.query<{ external_subject: string; provider_slug: string }>(
+          `select external_subject, provider_slug from users where id = any($1::uuid[])`,
           [ids]
         )
     )
-    return rows.map((row) => row.external_subject)
+    return rows.map((row) => qualifiedSubject(row.provider_slug, row.external_subject))
   }
 
   /**

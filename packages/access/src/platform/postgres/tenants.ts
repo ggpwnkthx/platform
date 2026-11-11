@@ -21,9 +21,8 @@ import { withPlatformScope, withTenantScope } from './scope'
 import type { SqlClient } from './database'
 import { sameSecret } from '../../observability'
 import { SecretError, type SecretCipher } from './secrets'
-import { DEFAULT_PROVIDER_SLUG } from './providers'
+import { DEFAULT_PROVIDER_SLUG, type ChangeAudit } from '../../domains/administration'
 import { auditedCte } from './audited'
-import type { ChangeAudit } from '../../domains/administration'
 
 /** The row of a tenant. */
 export interface TenantRow {

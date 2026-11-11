@@ -122,6 +122,47 @@ describe('the login of Access', () => {
     expect(location.searchParams.get('code')).toBeTruthy()
   })
 
+  test('a tenant with several providers asks the caller which one', async () => {
+    // The tenant signs its people in at two providers: the caller
+    // chooses, and the page carries the request of the caller and the
+    // slug of every provider (spec §5.2.1).
+    await admin('/v1/admin/providers', 'POST', {
+      tenant: 'acme',
+      slug: 'okta',
+      displayName: 'Okta',
+      issuer: provider.issuer,
+      idpClientId: provider.clientId,
+      idpClientSecret: provider.clientSecret,
+      idpRedirectUri: `${service.base}/oauth/tenant/callback`,
+    })
+    const query = new URLSearchParams({
+      client_id: 'gateway-acme',
+      redirect_uri: GATEWAY_REDIRECT,
+      response_type: 'code',
+      scope: 'openid profile email',
+      state: 'the-state-of-the-gateway',
+      nonce: 'the-nonce-of-the-gateway',
+      code_challenge: CHALLENGE,
+      code_challenge_method: 'S256',
+    })
+    const authorize = await fetch(`${service.base}/oauth/authorize?${query.toString()}`, {
+      redirect: 'manual',
+    })
+    expect(authorize.status).toBe(200)
+    const page = await authorize.text()
+    expect(page).toContain('provider=default')
+    expect(page).toContain('provider=okta')
+    // The request of the caller is carried by the links of the page.
+    expect(page).toContain('client_id=gateway-acme')
+    expect(page).toContain(`state=${encodeURIComponent('the-state-of-the-gateway')}`)
+
+    // The provider is removed again: the tests that follow log in at the
+    // only provider of the tenant.
+    const providers = await admin('/v1/admin/providers?tenant=acme&slug=okta', 'GET', {})
+    const rows = (providers.providers ?? []) as { id: string }[]
+    await client.call(`/v1/admin/providers/${rows[0]!.id}`, 'DELETE', undefined)
+  })
+
   test('a login that names a provider that does not exist is refused', async () => {
     // The parameter names a provider of the tenant of the login and
     // nothing else: a slug that belongs to no provider of that tenant is

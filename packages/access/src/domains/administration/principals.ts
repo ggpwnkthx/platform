@@ -19,7 +19,13 @@ import type {
 import { change, type AuditEntry } from './audit'
 import { tenantScope } from './ports'
 import { refuseOutsideScope, tenantOf } from './scope'
-import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, statusOf, wholeNumber } from './values'
+import {
+  DEFAULT_PAGE_SIZE,
+  DEFAULT_PROVIDER_SLUG,
+  MAX_PAGE_SIZE,
+  statusOf,
+  wholeNumber,
+} from './values'
 
 /**
  * The outcome of one principal of a batch.
@@ -95,7 +101,11 @@ export async function listPrincipals(
 
 /**
  * Creates a principal, or updates the principal of that
- * `(tenant, externalSubject)` pair.
+ * `(tenant, provider, externalSubject)` triple.
+ *
+ * The provider of a principal is the one the registration names, and the
+ * default provider of the tenant when it names none (spec §6.2). A slug
+ * that names no provider of the tenant is a `404 not_found`.
  *
  * The row of the audit is written by the statement that writes the
  * principal (spec §10.1).
@@ -111,15 +121,18 @@ export async function upsertPrincipal(
   if (!tenant) {
     throw new AdministrationError('not_found', 'the tenant does not exist')
   }
+  const provider = await providerOfTenant(options, tenant.id, registration.provider)
 
   const existing = await options.principals.findByExternalSubject(
     tenant.id,
+    provider.slug,
     registration.externalSubject
   )
   if (!existing) {
     const principal = await options.principals.create(
       {
         tenantId: tenant.id,
+        providerSlug: provider.slug,
         externalSubject: registration.externalSubject,
         email: registration.email ?? null,
         displayName: registration.displayName ?? null,
@@ -152,6 +165,27 @@ export async function upsertPrincipal(
     created: false,
     audit: { action: 'principal.updated', id: principal.id, tenant: tenant.slug },
   }
+}
+
+/**
+ * The provider of a principal.
+ *
+ * A registration that names none is a registration of the default
+ * provider of the tenant: the one the administration writes, and the one
+ * the tenant row carries (spec §3.11). A slug that names no provider of
+ * the tenant is refused.
+ */
+async function providerOfTenant(
+  options: AdministrationOptions,
+  tenantId: string,
+  slug: string | undefined
+): Promise<{ slug: string }> {
+  const wanted = slug ?? DEFAULT_PROVIDER_SLUG
+  const provider = await options.providers.findBySlug(tenantId, wanted)
+  if (!provider) {
+    throw new AdministrationError('not_found', 'the provider does not exist')
+  }
+  return { slug: provider.slug }
 }
 
 /**

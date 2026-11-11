@@ -79,6 +79,8 @@ export type {
   Page,
   Principal,
   PrincipalInput,
+  Provider,
+  ProviderInput,
   RecordValue,
   RelationAttributes,
   Role,

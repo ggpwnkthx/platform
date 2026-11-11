@@ -492,10 +492,11 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
     accessContexts: new AccessContextRepository(traced),
     accessContextCredentials: parseAccessContextCredentials(settings.access.contextTokens),
     metricsToken: settings.metrics.token,
-    // The administration of the platform: the twelve endpoints of the
+    // The administration of the platform: the fifteen endpoints of the
     // specification, and nothing else.
     administration: createAdministrationService({
       tenants: repositories.tenants,
+      providers: repositories.providers,
       users: repositories.users,
       groups: new GroupRepository(traced),
       roles: new RoleRepository(traced),
@@ -509,6 +510,9 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
       previousToken: settings.admin.previousToken,
       credentials: readAdminCredentials(settings.admin.credentials),
       publicUrl: settings.public.publicUrl,
+      // The cipher of the secrets at rest: the secret of a provider is
+      // encrypted before it is written (spec §4.3).
+      ...(secrets ? { secrets } : {}),
       // The key that opens the administration of a tenant: the key the
       // console reads in the context of its caller (spec §6.4).
       tenantAdminPermission: settings.admin.tenantAdminPermission,

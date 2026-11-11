@@ -9,18 +9,6 @@
  */
 
 /**
- * The slug of the default provider of a tenant.
- *
- * The default provider is the one the administration writes: the row of
- * the tenant carries its registration, and the logins of the tenant that
- * name no provider use it (spec §3.11).
- *
- * The slug is the same in the identity domain and in the platform: the
- * domains do not share a constant, and the specification names it.
- */
-export const DEFAULT_PROVIDER_SLUG = 'default'
-
-/**
  * A provider of a tenant, as the identity domain knows it.
  *
  * A tenant signs its people in at one or more providers, and the slug of

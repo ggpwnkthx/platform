@@ -15,7 +15,8 @@ import {
 } from '../../../../components/operators'
 import { Badge, KeyValues, Moment, Refusal, refusalOf } from '../../../../components/page'
 import { TenantForm, tenantInputOf } from '../../../../components/tenant-form'
-import { formOf } from '../../../../middleware/forms'
+import { ProviderForm, ProviderRow } from '../../../../components/provider-form'
+import { formOf, listOf } from '../../../../middleware/forms'
 import { operatorScope } from '../../../../middleware/scope'
 import { flash } from '../../../../middleware/session'
 
@@ -35,7 +36,32 @@ export const POST = createRoute(async (c) => {
   const scope = await operatorScope(c)
   const ability = consoleAbility(scope)
   const form = await formOf(c)
+  const base = tenantPath(slug)
   try {
+    if (form.get('_action') === 'save-provider') {
+      const { provider, created } = await access.admin.saveProvider({
+        tenant: slug,
+        slug: form.get('slug').trim(),
+        ...(form.get('displayName').trim() ? { displayName: form.get('displayName').trim() } : {}),
+        issuer: form.get('issuer').trim(),
+        idpClientId: form.get('idpClientId').trim(),
+        idpClientSecret: form.get('idpClientSecret'),
+        idpRedirectUri: form.get('idpRedirectUri').trim(),
+        ...(form.get('idpScopes').trim() ? { idpScopes: listOf(form.get('idpScopes')) } : {}),
+      })
+      flash(c, {
+        kind: 'ok',
+        text: created
+          ? `The provider ${provider.slug} was registered.`
+          : `The provider ${provider.slug} was updated.`,
+      })
+      return c.redirect(base)
+    }
+    if (form.get('_action') === 'remove-provider') {
+      await access.admin.removeProvider(form.get('id').trim())
+      flash(c, { kind: 'ok', text: 'The provider was removed.' })
+      return c.redirect(base)
+    }
     await access.admin.saveTenant(
       tenantInputOf(form, ability.can(CONSOLE_ACTIONS.platform, CONSOLE_SUBJECT), current)
     )
@@ -61,9 +87,10 @@ export default createRoute(async (c) => {
   if (!tenant) return c.notFound()
   let audit = null
   let refusal = null
-  const [groups, roles] = await Promise.all([
+  const [groups, roles, providers] = await Promise.all([
     access.admin.groups({ tenant: slug, limit: 1 }).catch(() => null),
     access.admin.roles({ tenant: slug, limit: 1 }).catch(() => null),
+    access.admin.providers({ tenant: slug }).catch(() => null),
   ])
   try {
     audit = await access.admin.audit({ tenant: slug, limit: 8 })
@@ -158,6 +185,29 @@ export default createRoute(async (c) => {
           />
         </aside>
       </div>
+      <section class="card">
+        <h2>Providers</h2>
+        <p class="muted small">
+          The tenant signs its people in at the default provider, and at every other provider below.
+          A login that names none asks the caller which one it signs in at.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <tbody>
+              {(providers?.rows ?? []).map((provider) => (
+                <ProviderRow key={provider.id} provider={provider} action={base} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {(providers?.rows ?? []).length === 0 ? (
+          <p class="muted">The tenant has no provider.</p>
+        ) : null}
+        <details class="disclosure">
+          <summary>Register a provider</summary>
+          <ProviderForm action={base} />
+        </details>
+      </section>
       <details class="card disclosure">
         <summary>Edit tenant</summary>
         <TenantForm

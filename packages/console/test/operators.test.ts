@@ -29,6 +29,7 @@ const grant = (extra: Partial<Grant>): Grant => ({
 const alice: Principal = {
   id: 'u-alice',
   tenant: 'acme',
+  provider: 'default',
   externalSubject: 'user-alice',
   email: 'alice@acme.test',
   displayName: 'Alice',
