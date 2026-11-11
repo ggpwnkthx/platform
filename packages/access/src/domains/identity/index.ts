@@ -39,7 +39,7 @@ export {
   isAlive,
   LoginStateError,
 } from './state'
-export type { ProviderOfLogin, TenantOfLogin } from './tenant'
+export type { ProviderOfLogin, RouteOfLogin, TenantOfLogin } from './tenant'
 export { domainOf, resolveTenant, TenantResolutionError } from './tenant'
 
 export { validateProviderToken } from './token'

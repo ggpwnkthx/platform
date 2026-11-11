@@ -62,6 +62,24 @@ export const ProviderBody = z.object({
 })
 
 /**
+ * The body of the creation and of the change of a route.
+ */
+export const RouteBody = z.object({
+  kind: z.enum(['domain', 'address']).optional(),
+  key: z.string().min(1, 'the key of the route is needed'),
+  tenant: z.string().regex(SLUG_PATTERN, 'the tenant is the slug of a tenant of the platform'),
+  provider: z.string().min(1).nullable().optional(),
+})
+
+/**
+ * The body of the verification of a route.
+ */
+export const RouteVerificationBody = z.object({
+  status: z.enum(['verified', 'rejected']),
+  verification: z.enum(['dns', 'operator']),
+})
+
+/**
  * The body of the creation and of the change of a credential.
  *
  * The password is the one of the account: it is hashed before it is

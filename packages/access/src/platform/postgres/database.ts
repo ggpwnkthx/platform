@@ -1,7 +1,7 @@
 /**
  * The port of the database.
  *
- * Access stores its nine tables in PostgreSQL. The port is the same for the
+ * Access stores its eleven tables in PostgreSQL. The port is the same for the
  * two drivers: a PostgreSQL server of a deployment and the embedded
  * PostgreSQL of a development machine. The domains and the repositories
  * never know which one they talk to.

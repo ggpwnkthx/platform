@@ -8,6 +8,7 @@
  */
 
 import { createAccessApp, createAccessHandler } from '../app/app'
+import { txtOf } from '../platform/bun/dns'
 import type { AdminCredential } from '../domains/administration'
 import {
   LocalAuthenticator,
@@ -16,6 +17,7 @@ import {
   LoginService,
   ProviderClient,
   createStateCipher,
+  type RouteOfLogin,
 } from '../domains/identity'
 import type {
   CredentialLookup,
@@ -58,6 +60,7 @@ import {
   PermissionRepository,
   ProviderRepository,
   resolveMigrationsDirectory,
+  RouteRepository,
   RoleRepository,
   roleOf,
   runMigrations,
@@ -68,6 +71,7 @@ import type {
   CredentialRow,
   Database,
   ProviderRow,
+  RouteRow,
   SecretCipher,
   TenantRow,
 } from '../platform/postgres'
@@ -84,11 +88,11 @@ export interface AccessRuntime {
   logger: Logger
   /** The observer of the service. */
   observer: Observer
-  /** The database of the nine tables. */
+  /** The database of the eleven tables. */
   database: Database
   /** The cipher of the client secrets, when the deployment has a key. */
   secrets?: SecretCipher
-  /** The storage of the nine tables. */
+  /** The storage of the eleven tables. */
   repositories: AccessRepositories
   /** The listener of the service. */
   listener: StartedListener
@@ -102,11 +106,13 @@ export interface AccessRuntime {
   close: () => Promise<void>
 }
 
-/** The storage of the nine tables, as the domains receive it. */
+/** The storage of the eleven tables, as the domains receive it. */
 interface AccessRepositories {
   tenants: TenantRepository
   /** The providers of the tenants (spec §3.11). */
   providers: ProviderRepository
+  /** The routes of the logins (spec §3.13). */
+  routes: RouteRepository
   /** The credentials of the local providers (spec §3.12). */
   credentials: CredentialRepository
   users: UserRepository
@@ -130,7 +136,7 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
   })
   const observer = new MetricsStore()
 
-  // The database of the nine tables. A deployment talks to a PostgreSQL
+  // The database of the eleven tables. A deployment talks to a PostgreSQL
   // server and a development machine runs the embedded PostgreSQL of the
   // process: both are PostgreSQL and the migrations are the same.
   const database = await createDatabase({
@@ -190,6 +196,7 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
   const repositories: AccessRepositories = {
     tenants: new TenantRepository(traced, secrets),
     providers: new ProviderRepository(traced, secrets),
+    routes: new RouteRepository(traced),
     credentials: new CredentialRepository(traced),
     users: new UserRepository(traced),
     permissions: new PermissionRepository(traced),
@@ -320,7 +327,25 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
     }
   }
 
+  // The route of an address names the tenant of the login and the
+  // provider it signs in at: the route is read in the scope of the
+  // platform, because a login may name any tenant of it.
+  const routeOfLogin = async (row: RouteRow | null): Promise<RouteOfLogin | null> => {
+    if (!row) return null
+    const tenant = await tenantOfLogin(await repositories.tenants.findById(row.tenantId))
+    if (!tenant) return null
+    const provider = row.providerSlug
+      ? tenant.providers.find((candidate) => candidate.slug === row.providerSlug)
+      : undefined
+    return { tenant, ...(provider ? { provider } : {}) }
+  }
+
   const login = new LoginService({
+    routes: {
+      findByAddress: async (address) =>
+        routeOfLogin(await repositories.routes.findByAddress(address)),
+      findByDomain: async (domain) => routeOfLogin(await repositories.routes.findByDomain(domain)),
+    },
     tenants: {
       findByClientId: async (clientId: string) =>
         tenantOfLogin(await repositories.tenants.findByClientId(clientId)),
@@ -581,11 +606,14 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
     accessContexts: new AccessContextRepository(traced),
     accessContextCredentials: parseAccessContextCredentials(settings.access.contextTokens),
     metricsToken: settings.metrics.token,
-    // The administration of the platform: the eighteen endpoints of the
+    // The administration of the platform: the twenty-one endpoints of the
     // specification, and nothing else.
     administration: createAdministrationService({
       tenants: repositories.tenants,
       providers: repositories.providers,
+      routes: repositories.routes,
+      // The proof of a domain: the record its owner publishes (spec §10.18).
+      proof: { txtOf: async (name: string) => await txtOf(name) },
       credentials: repositories.credentials,
       hasher: new BunPasswordHasher(),
       users: repositories.users,

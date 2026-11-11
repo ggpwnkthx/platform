@@ -52,6 +52,8 @@ export type { NewTenant, TenantRow, TenantSummary } from './tenants'
 export { TenantRepository } from './tenants'
 export type { ProviderRow } from './providers'
 export { ProviderRepository } from './providers'
+export type { RouteRow } from './routes'
+export { RouteRepository } from './routes'
 export type { UserRow } from './users'
 export { UserRepository } from './users'
 

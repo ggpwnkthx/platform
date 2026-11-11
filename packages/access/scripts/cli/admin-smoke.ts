@@ -1,13 +1,14 @@
 #!/usr/bin/env bun
 /**
- * The eighteen calls of the administration (spec §10.14).
+ * The twenty-one calls of the administration (spec §10.14).
  *
  * The script is the smoke test of a deployment: it creates a tenant, it
  * lists the tenants, it creates a principal, it lists the principals, it
  * registers a local provider, it lists the providers, it writes a
  * credential, it lists the credentials, it grants a permission, it lists
  * the grants, it creates a group, it lists the groups, it creates a role,
- * it lists the roles, it removes the role, it removes the credential, it
+ * it lists the roles, it registers a route, it lists the routes, it
+ * verifies the route, it removes the role, it removes the credential, it
  * removes the provider and it revokes the grant. It reads the environment
  * of the process: it is an operator tool and not part of the service.
  *
@@ -205,31 +206,59 @@ async function main(): Promise<void> {
     fail('the role is not in the list', roles)
   }
 
-  // 15. the removal of the role: a role that no grant names goes away
+  // 15. the route of the domain of the tenant: the address of a caller
+  // names the tenant of the login, and the route waits for its proof
+  const route = await call('/v1/admin/routes', 'POST', {
+    tenant: slug,
+    kind: 'domain',
+    key: 'smoke.example',
+  })
+  if (route.status !== 201 && route.status !== 200) {
+    fail('the route could not be created', route)
+  }
+  const routeId = (route.body.route as { id: string }).id
+
+  // 16. the routes of the tenant
+  const routes = await call(`/v1/admin/routes?tenant=${slug}`, 'GET')
+  if (routes.status !== 200) fail('the routes could not be listed', routes)
+  const listedRoutes = (routes.body.routes ?? []) as { id: string }[]
+  if (!listedRoutes.some((row) => row.id === routeId)) {
+    fail('the route is not in the list', routes)
+  }
+
+  // 17. the proof of the route: the operator of the platform vouches for
+  // the domain of the smoke test
+  const verified = await call(`/v1/admin/routes/${routeId}/verify`, 'POST', {
+    status: 'verified',
+    verification: 'operator',
+  })
+  if (verified.status !== 200) fail('the route could not be verified', verified)
+
+  // 18. the removal of the role: a role that no grant names goes away
   const removed = await call(`/v1/admin/roles/${role.body.id}`, 'DELETE')
   if (removed.status !== 204) fail('the role could not be removed', removed)
 
-  // 16. the removal of the credential: the account of the local provider
+  // 19. the removal of the credential: the account of the local provider
   const removedCredential = await call(`/v1/admin/credentials/${credentialId}`, 'DELETE')
   if (removedCredential.status !== 204) {
     fail('the credential could not be removed', removedCredential)
   }
 
-  // 17. the removal of the provider: a provider that holds no principal
+  // 20. the removal of the provider: a provider that holds no principal
   // goes away
   const removedProvider = await call(`/v1/admin/providers/${providerId}`, 'DELETE')
   if (removedProvider.status !== 204) {
     fail('the provider could not be removed', removedProvider)
   }
 
-  // 18. the revocation, when Access has to end
+  // 21. the revocation, when Access has to end
   const revoked = await call(`/v1/admin/grants/${grant.body.id}`, 'DELETE')
   if (revoked.status !== 204) fail('the grant could not be revoked', revoked)
 
   console.log(
     JSON.stringify({
       level: 'info',
-      msg: 'the eighteen calls of the administration answered',
+      msg: 'the twenty-one calls of the administration answered',
       tenant: tenantId,
       principal: principal.body.id,
       grant: grant.body.id,

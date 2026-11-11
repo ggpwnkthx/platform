@@ -29,6 +29,7 @@ import {
   resolveTenant,
   TenantResolutionError,
   type ProviderOfLogin,
+  type RouteLookup,
   type TenantLookup,
   type TenantOfLogin,
   type TenantResolution,
@@ -197,6 +198,8 @@ export interface CompletedLogin {
 export interface LoginOptions {
   /** The storage of the tenants. */
   tenants: TenantLookup
+  /** The storage of the routes of the logins (spec §3.13). */
+  routes: RouteLookup
   /** The storage of the principals. */
   principals: PrincipalLookup
   /** The cipher of the state of a login. */
@@ -236,7 +239,22 @@ export class LoginService {
       }
     }
     const tenant = resolution.tenant
-    const provider = choiceOf(tenant, request.provider)
+    // A tenant that signs its people in at several providers asks the
+    // caller for the address of the login: the address of the caller is
+    // what names the provider the caller signs in at (spec §5.2.1).
+    if (
+      resolution.provider === undefined &&
+      request.provider === undefined &&
+      request.loginHint === undefined &&
+      enabledOf(tenant).length > 1
+    ) {
+      return {
+        kind: 'discover',
+        cookie: this.options.state.encrypt(this.pendingOf(request, tenant)),
+        tenant: tenant.slug,
+      }
+    }
+    const provider = choiceOf(tenant, request.provider, resolution.provider)
     if (!provider) {
       // The tenant signs its people in at several providers, it has no
       // default one and the request names none: the caller chooses
@@ -437,7 +455,7 @@ export class LoginService {
   /** Resolves the tenant of a login and turns the failures into refusals. */
   private async resolve(request: AuthorizationRequest): Promise<TenantResolution> {
     try {
-      return await resolveTenant(this.options.tenants, {
+      return await resolveTenant(this.options.tenants, this.options.routes, {
         clientId: request.clientId,
         redirectUri: request.redirectUri,
         tenant: request.tenant,
@@ -564,6 +582,17 @@ export class LoginService {
 }
 
 /**
+ * The providers of a tenant that are asked to sign somebody in.
+ *
+ * A disabled provider signs nobody in, and it is not one of them.
+ *
+ * @param tenant the tenant of the login.
+ */
+function enabledOf(tenant: TenantOfLogin): ProviderOfLogin[] {
+  return tenant.providers.filter((provider) => provider.enabled)
+}
+
+/**
  * The scopes that belong to the platform and not to the provider.
  *
  * `offline_access` asks for a refresh token of Access (§7.6): no
@@ -650,8 +679,12 @@ export function providerOf(tenant: TenantOfLogin, requested?: string): ProviderO
  * @param tenant the tenant of the login.
  * @param requested the provider the request names, when it names one.
  */
-function choiceOf(tenant: TenantOfLogin, requested?: string): ProviderOfLogin | null {
-  const providers = tenant.providers.filter((provider) => provider.enabled)
+function choiceOf(
+  tenant: TenantOfLogin,
+  requested?: string,
+  routed?: ProviderOfLogin
+): ProviderOfLogin | null {
+  const providers = enabledOf(tenant)
   if (requested !== undefined && requested !== '') {
     const named = providers.find((provider) => provider.slug === requested)
     if (!named) {
@@ -662,9 +695,13 @@ function choiceOf(tenant: TenantOfLogin, requested?: string): ProviderOfLogin | 
     }
     return named
   }
+  // The route of the address names the provider of the login: the
+  // address of the caller is what names it (spec §5.2.1).
+  if (routed !== undefined && providers.some((provider) => provider.slug === routed.slug)) {
+    return routed
+  }
   // The default provider of the tenant is the one its own registration
-  // names: a caller is never asked to choose between the providers of a
-  // tenant that has one (spec §5.2.1).
+  // names: it answers the address that names no route (spec §5.2.1).
   const fallback = providers.find((provider) => provider.slug === DEFAULT_PROVIDER_SLUG)
   if (fallback) return fallback
   if (providers.length === 1) return providers[0]!

@@ -2,10 +2,15 @@
  * The tenant of a login (spec §5.2).
  *
  * The tenant of a login is resolved in this order: the client of the
- * request, the parameter of the tenant, the hint of the e-mail and the
- * tenant that is the default. The parameter and the hint are only usable
- * when the tenant of the client is shared: a shared client is a
+ * request, the parameter of the tenant, the address of the caller and the
+ * tenant that is the default. The parameter and the address are only
+ * usable when the tenant of the client is shared: a shared client is a
  * deliberate weakening and it is refused by default.
+ *
+ * The **route** of an address is what names the tenant and the provider
+ * of a login (§3.13): a domain of addresses, or an address of its own,
+ * names them, and the platform proves the route before it routes
+ * anything.
  */
 
 /**
@@ -125,6 +130,8 @@ export type TenantResolution =
       readonly tenant: TenantOfLogin
       /** The tenant that owns the client of the request. */
       readonly client: TenantOfLogin
+      /** The provider the route of the address names, when it names one. */
+      readonly provider?: ProviderOfLogin
       /** The login names its tenant. */
       readonly discovery: false
     }
@@ -133,6 +140,8 @@ export type TenantResolution =
       readonly tenant?: undefined
       /** The tenant that owns the client of the request. */
       readonly client: TenantOfLogin
+      /** The route of the address names no provider. */
+      readonly provider?: undefined
       /** The caller has to be asked for the address of the login. */
       readonly discovery: true
     }
@@ -151,6 +160,7 @@ export type TenantResolution =
  */
 export async function resolveTenant(
   lookup: TenantLookup,
+  routes: RouteLookup,
   request: AuthorizationRequest
 ): Promise<TenantResolution> {
   const client = await lookup.findByClientId(request.clientId)
@@ -172,8 +182,9 @@ export async function resolveTenant(
   }
 
   let tenant = client
+  let provider: ProviderOfLogin | undefined
 
-  // The parameter of the tenant and the hint are only usable when the
+  // The parameter of the tenant and the address are only usable when the
   // client is shared: a parameter that a caller controls may not move a
   // login to another tenant.
   if (client.sharedClient) {
@@ -187,10 +198,10 @@ export async function resolveTenant(
       }
       tenant = named
     } else if (request.loginHint) {
-      const domain = domainOf(request.loginHint)
-      const hinted = domain ? await lookup.findByEmailDomain(domain) : null
-      if (hinted) {
-        tenant = hinted
+      const route = await routeOf(routes, request.loginHint)
+      if (route) {
+        tenant = route.tenant
+        provider = route.provider
       } else {
         // An address that names no tenant is not a refusal: the login
         // goes on with the default tenant of the platform (spec §5.2).
@@ -203,17 +214,68 @@ export async function resolveTenant(
       // (spec §5.2.2).
       return { client, discovery: true }
     }
+  } else if (request.loginHint) {
+    // A client that is not shared stays with its tenant: the address may
+    // name the provider of that tenant, and it never names another one.
+    const route = await routeOf(routes, request.loginHint)
+    if (route && route.tenant.id === client.id) provider = route.provider
   }
 
   if (!tenant.enabled) {
     throw new TenantResolutionError('tenant_disabled', 'the tenant of the login is disabled')
   }
-  return { tenant, client, discovery: false }
+  return { tenant, client, ...(provider ? { provider } : {}), discovery: false }
 }
 
-/** The domain of an e-mail, when the value is one. */
+/**
+ * A route of a login: the tenant and the provider it names.
+ *
+ * The tenant is the tenant of the login, and the provider is the one the
+ * login signs in at. A route that names no provider names the default
+ * provider of its tenant.
+ */
+export interface RouteOfLogin {
+  /** The tenant the route names. */
+  readonly tenant: TenantOfLogin
+  /** The provider the route names, when it names one. */
+  readonly provider?: ProviderOfLogin
+}
+
+/** The storage of the routes. */
+export interface RouteLookup {
+  /** The route of an address, when the address names a verified one. */
+  findByAddress(address: string): Promise<RouteOfLogin | null>
+  /** The route of a domain, when the domain names a verified one. */
+  findByDomain(domain: string): Promise<RouteOfLogin | null>
+}
+
+/**
+ * The domain of an address, when the value is one.
+ *
+ * The domain is the part after the `@`: it is what a route of a domain
+ * is keyed by.
+ *
+ * @param hint the value the caller typed.
+ */
 export function domainOf(hint: string): string | null {
   const at = hint.lastIndexOf('@')
   if (at <= 0 || at === hint.length - 1) return null
   return hint.slice(at + 1).toLowerCase()
+}
+
+/**
+ * The route of an address.
+ *
+ * The address names a route of its own, or the route of its domain: an
+ * address whose domain names no route names no route at all.
+ *
+ * @param routes the storage of the routes.
+ * @param address the address of the caller.
+ */
+async function routeOf(routes: RouteLookup, address: string): Promise<RouteOfLogin | null> {
+  const exact = await routes.findByAddress(address.trim().toLowerCase())
+  if (exact) return exact
+  const domain = domainOf(address)
+  if (!domain) return null
+  return await routes.findByDomain(domain)
 }

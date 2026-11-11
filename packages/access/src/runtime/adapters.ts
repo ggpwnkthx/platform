@@ -26,10 +26,13 @@ import {
   type PermissionStore,
   type CredentialFilter,
   type CredentialStore,
+  type DomainProof,
   type PrincipalFilter,
   type PrincipalStore,
   type ProviderFilter,
   type ProviderStore,
+  type Route,
+  type RouteStore,
   type Role,
   type RoleFilter,
   type RoleStore,
@@ -54,6 +57,8 @@ import {
   type PermissionRow,
   type ProviderRepository,
   type ProviderRow,
+  type RouteRepository,
+  type RouteRow,
   type SecretCipher,
   type RoleRepository,
   type RoleRow,
@@ -307,6 +312,15 @@ export interface AdministrationDependencies {
   tenants: TenantRepository
   /** The providers of the tenants (spec §3.11). */
   providers: ProviderRepository
+  /** The routes of the logins (spec §3.13). */
+  routes: RouteRepository
+  /**
+   * The proof of a domain (spec §10.18).
+   *
+   * The owner of a domain publishes a record that carries the challenge
+   * of its route, and the platform reads it.
+   */
+  proof: DomainProof
   /** The credentials of the local providers (spec §3.12). */
   credentials: CredentialRepository
   /**
@@ -810,6 +824,53 @@ export function createAdministrationService(
     },
   }
 
+  /** Turns a row of a route into a row of the domain. */
+  const toRoute = (row: RouteRow): Route => ({
+    id: row.id,
+    kind: row.kind,
+    key: row.key,
+    tenant: row.tenantSlug,
+    provider: row.providerSlug,
+    status: row.status,
+    verification: row.verification,
+    challenge: row.challenge ?? '',
+    verifiedAt: row.verifiedAt,
+    verifiedBy: row.verifiedBy,
+    createdAt: row.createdAt,
+  })
+
+  const routeStore: RouteStore = {
+    findById: async (id, scope) => {
+      const row = await run(async () => await dependencies.routes.findByIdInScope(id, scope))
+      return row ? toRoute(row) : null
+    },
+    findByKey: async (kind, key, scope) => {
+      const row = await run(async () => await dependencies.routes.findByKey(kind, key, scope))
+      return row ? toRoute(row) : null
+    },
+    list: async (filter) => {
+      const page = await run(async () => await dependencies.routes.list(filter))
+      return {
+        routes: page.rows.map(toRoute),
+        total: page.total,
+        limit: filter.limit,
+        offset: filter.offset,
+      }
+    },
+    create: async (registration, audit) => {
+      const row = await run(async () => await dependencies.routes.create(registration, audit))
+      return toRoute(row)
+    },
+    update: async (id, changes, scope, audit) => {
+      const row = await run(async () => await dependencies.routes.update(id, changes, scope, audit))
+      return row ? toRoute(row) : null
+    },
+    verify: async (id, input, scope, audit) => {
+      const row = await run(async () => await dependencies.routes.verify(id, input, scope, audit))
+      return row ? toRoute(row) : null
+    },
+  }
+
   /** Turns a row of the audit into a row of the domain. */
   const toAudit = (row: AuditRow): AuditRecord => ({
     id: row.id,
@@ -837,6 +898,8 @@ export function createAdministrationService(
   return new AdministrationService({
     tenants: tenantStore,
     providers: providerStore,
+    routes: routeStore,
+    proof: dependencies.proof,
     localCredentials: credentialStore,
     hasher: dependencies.hasher,
     principals: principalStore,

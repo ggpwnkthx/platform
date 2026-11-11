@@ -17,7 +17,7 @@ import type {
   TenantSummary,
 } from './ports'
 import { change, type AuditEntry } from './audit'
-import { refuseOutsideScope } from './scope'
+import { refuseOutsideScope, statementScope } from './scope'
 
 /**
  * The registration of a tenant that is created.
@@ -158,6 +158,7 @@ export async function upsertTenant(
       creationOf(options, registration),
       change('tenant.created', registration.slug, context)
     )
+    await routeOfDomain(options, scope, tenant, registration, context)
     return {
       tenant,
       created: true,
@@ -173,11 +174,60 @@ export async function upsertTenant(
   if (!tenant) {
     throw new AdministrationError('not_found', 'the tenant does not exist')
   }
+  await routeOfDomain(options, scope, tenant, registration, context)
   return {
     tenant,
     created: false,
     audit: { action: 'tenant.updated', id: tenant.id, tenant: tenant.slug },
   }
+}
+
+/**
+ * The route of the domain of a tenant.
+ *
+ * The domain of the tenant is a route of the logins (§3.13): the
+ * address of a caller names the tenant of the login. The route of a
+ * domain that is already there is the one the platform routes, and it is
+ * not changed here: the operator changes it with the routes of the
+ * administration (§10.18).
+ *
+ * The operator of the platform vouches for the domain of a tenant: the
+ * route it writes is verified. A credential of a tenant proves its own
+ * domain, and the route it writes waits for the proof.
+ */
+async function routeOfDomain(
+  options: AdministrationOptions,
+  scope: AdminScope,
+  tenant: Tenant,
+  registration: TenantRegistration,
+  context: AuditContext
+): Promise<void> {
+  const domain = registration.emailDomain?.trim().toLowerCase()
+  if (!domain) return
+  const found = await options.routes.findByKey(
+    'domain',
+    domain,
+    await statementScope(options, scope)
+  )
+  if (found) return
+  await options.routes.create(
+    {
+      kind: 'domain',
+      key: domain,
+      tenantId: tenant.id,
+      providerSlug: null,
+      challenge: aChallenge(),
+      // The operator of the platform vouches for the domain; a tenant
+      // proves its own.
+      status: scope.tenant === null ? 'verified' : 'pending',
+    },
+    change('route.created', tenant.slug, context)
+  )
+}
+
+/** A fresh challenge of a route. */
+function aChallenge(): string {
+  return crypto.randomUUID().replace(/-/g, '')
 }
 
 /** The tenants of the platform, with their numbers. */

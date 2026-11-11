@@ -128,7 +128,12 @@ platformctl access providers create --tenant acme --catalog okta \
   --issuer https://acme.okta.example --idp-client-id … --idp-client-secret …
 ```
 
-The domain of the addresses of a tenant is what names it when the platform serves several of them: a caller types its address and the browser goes to the provider of its tenant.
+The domain of the addresses of a tenant is what names it when the platform serves several of them: a caller types its address and the browser goes to the provider of its tenant. A route names the tenant and the provider, and it waits for its proof: the owner of the domain publishes the challenge of the route as a TXT record of `_access` of the domain, or the operator of the platform vouches for it.
+
+```bash
+platformctl access routes create --tenant acme --key acme.example --provider okta
+platformctl access routes verify <id> --verification operator
+```
 
 ## The interface of the operator
 

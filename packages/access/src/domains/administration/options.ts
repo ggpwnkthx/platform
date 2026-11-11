@@ -18,8 +18,10 @@ import type {
   PrincipalStore,
   ProviderStore,
   RoleStore,
+  RouteStore,
   TenantStore,
 } from './ports'
+import type { DomainProof } from './ports'
 
 export interface AdministrationOptions {
   /** The storage of the tenants. */
@@ -28,6 +30,15 @@ export interface AdministrationOptions {
   principals: PrincipalStore
   /** The storage of the providers of the tenants. */
   providers: ProviderStore
+  /** The storage of the routes of the logins (spec §3.13). */
+  routes: RouteStore
+  /**
+   * The proof of a domain (spec §10.18).
+   *
+   * The owner of a domain proves that it owns it by publishing a record
+   * that carries the challenge of the route.
+   */
+  proof: DomainProof
   /** The storage of the credentials of the local providers. */
   localCredentials: CredentialStore
   /**

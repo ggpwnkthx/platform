@@ -20,6 +20,7 @@ import type {
   CredentialFilter,
   CredentialHasher,
   CredentialStore,
+  DomainProof,
   Grant,
   GrantFilter,
   GrantStore,
@@ -35,6 +36,12 @@ import type {
   Provider,
   ProviderFilter,
   ProviderStore,
+  Route,
+  RouteFilter,
+  RouteKind,
+  RouteStatus,
+  RouteStore,
+  RouteVerification,
   Role,
   RoleFilter,
   RolePage,
@@ -253,6 +260,112 @@ class FakeProviders implements ProviderStore {
     if (index < 0) return false
     this.rows.splice(index, 1)
     return true
+  }
+}
+
+/** The storage of the routes of the tests. */
+class FakeRoutes implements RouteStore {
+  readonly rows: Route[] = []
+
+  constructor(private readonly tenants: FakeTenants) {}
+
+  async findById(id: string, _scope?: Scope): Promise<Route | null> {
+    return this.rows.find((row) => row.id === id) ?? null
+  }
+
+  async findByKey(kind: RouteKind, key: string, _scope?: Scope): Promise<Route | null> {
+    return this.rows.find((row) => row.kind === kind && row.key === key) ?? null
+  }
+
+  async list(filter: RouteFilter) {
+    const matching = this.rows.filter((row) => {
+      if (filter.tenantId !== null && row.tenant !== filter.tenantId) return false
+      if (filter.kind !== null && row.kind !== filter.kind) return false
+      return true
+    })
+    return {
+      routes: matching.slice(filter.offset, filter.offset + filter.limit),
+      total: matching.length,
+      limit: filter.limit,
+      offset: filter.offset,
+    }
+  }
+
+  async create(
+    registration: {
+      kind: RouteKind
+      key: string
+      tenantId: string
+      providerSlug: string | null
+      challenge: string
+      status?: RouteStatus
+    },
+    _audit?: ChangeAudit
+  ): Promise<Route> {
+    const route: Route = {
+      id: `route-${this.rows.length + 1}`,
+      kind: registration.kind,
+      key: registration.key,
+      tenant: this.tenants.rows.find((row) => row.id === registration.tenantId)?.slug ?? '',
+      provider: registration.providerSlug,
+      status: registration.status ?? 'pending',
+      verification: null,
+      challenge: registration.challenge,
+      verifiedAt: null,
+      verifiedBy: null,
+      createdAt: new Date('2026-01-08T10:05:00.000Z'),
+    }
+    this.rows.push(route)
+    return route
+  }
+
+  async update(
+    id: string,
+    changes: { tenantId: string; providerSlug: string | null },
+    _scope?: Scope,
+    _audit?: ChangeAudit
+  ): Promise<Route | null> {
+    const route = this.rows.find((row) => row.id === id)
+    if (!route) return null
+    route.tenant =
+      this.tenants.rows.find((row) => row.id === changes.tenantId)?.slug ?? route.tenant
+    route.provider = changes.providerSlug
+    Object.assign(route, {
+      status: 'pending',
+      verification: null,
+      verifiedAt: null,
+      verifiedBy: null,
+    })
+    return route
+  }
+
+  async verify(
+    id: string,
+    input: {
+      status: RouteStatus
+      verification: RouteVerification
+      verifiedBy: string | null
+    },
+    _scope?: Scope,
+    _audit?: ChangeAudit
+  ): Promise<Route | null> {
+    const route = this.rows.find((row) => row.id === id)
+    if (!route) return null
+    Object.assign(route, input, { verifiedAt: new Date('2026-01-08T10:05:00.000Z') })
+    return route
+  }
+}
+
+/** The proof of a domain, as the tests answer it. */
+class FakeProof implements DomainProof {
+  /** The records of the names, by name. */
+  readonly records: Record<string, string[]> = {}
+  /** The names the platform asked for. */
+  readonly asked: string[] = []
+
+  async txtOf(name: string): Promise<readonly string[]> {
+    this.asked.push(name)
+    return this.records[name] ?? []
   }
 }
 
@@ -924,6 +1037,10 @@ export interface Fakes {
   tenants: FakeTenants
   /** The storage of the providers. */
   providers: FakeProviders
+  /** The storage of the routes of the logins. */
+  routes: FakeRoutes
+  /** The proof of a domain. */
+  proof: FakeProof
   /** The storage of the credentials of the local providers. */
   localCredentials: FakeCredentials
   /** The storage of the principals. */
@@ -959,6 +1076,8 @@ export function createFakes(): Fakes {
   return {
     tenants,
     providers,
+    routes: new FakeRoutes(tenants),
+    proof: new FakeProof(),
     localCredentials,
     principals,
     permissions,
@@ -994,6 +1113,8 @@ export function serviceOf(fakes: Fakes, options: ServiceOptions = {}): Administr
   return new AdministrationService({
     tenants: fakes.tenants,
     providers: fakes.providers,
+    routes: fakes.routes,
+    proof: fakes.proof,
     localCredentials: fakes.localCredentials,
     hasher: new FakeHasher(),
     principals: fakes.principals,

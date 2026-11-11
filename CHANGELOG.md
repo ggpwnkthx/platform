@@ -20,6 +20,18 @@ The provider of a login is the default provider of its tenant now, and the speci
 
 **Contract:** [access spec §5.2](docs/access/spec.md#52-resolving-the-tenant), [access spec §5.2.1](docs/access/spec.md#521-resolving-the-provider), [access spec §5.2.2](docs/access/spec.md#522-the-address-of-the-login).
 
+### A domain names the tenant and the provider of a login
+
+The routes of the logins are a table of their own now, `sso_routes`: a domain of addresses, and an address of its own, name the tenant of a login and the provider the login signs in at. A tenant holds several domains, and a domain of a tenant may name a provider of its own — the staff of a tenant sign in at one directory and its contractors at another, and nobody is asked to choose.
+
+A route is a hint that the platform proves before it routes anything. The owner of a domain publishes a TXT record of `_access` of the domain that carries the challenge of the route, and the operator of the platform may vouch for a domain instead: a tenant proves its own domains and nobody else's, and a route that waits for its proof routes nothing. The address of a caller that names no proven route goes on with the default tenant of the platform, and the default provider of that tenant.
+
+The login of a tenant that signs its people in at several providers asks the caller for the address of the login now, and the address names the provider the caller signs in at. A tenant with one provider asks nothing: the browser goes straight to the directory of the tenant, as it did.
+
+The domains the tenants of the platform already carry are proven: the operator of the platform wrote them, and the operator is the proof of a domain. The domain of a tenant that a tenant credential writes waits for its proof.
+
+**Contract:** [access spec §3.13](docs/access/spec.md#313-sso_routes), [access spec §5.2.2](docs/access/spec.md#522-the-address-of-the-login), [access spec §10.18](docs/access/spec.md#1018-the-routes-of-the-logins).
+
 ### The catalog of the providers of the platform
 
 Every provider of a tenant is an OpenID Connect provider, and there is no vendor in the code of the login — but registering one meant knowing the issuer of the vendor, the scopes it knows and the steps of its registration.

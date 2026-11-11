@@ -6,7 +6,7 @@
 -- deployment are shipped, are kept and are searchable; a table answers
 -- it for as long as the table is there.
 --
--- The table is not one of the nine tables of the domain model: it holds
+-- The table is not one of the eleven tables of the domain model: it holds
 -- no tenant, no principal and no grant, and it is not scoped by the
 -- isolation of the tenants, because the administration of the platform is
 -- not the administration of a tenant. It is a table of the infrastructure,

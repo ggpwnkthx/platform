@@ -20,5 +20,6 @@ export {
   removeCredentialHandler,
 } from './local-credentials'
 export { providerHandler, providersHandler, removeProviderHandler } from './providers'
+export { routeHandler, routesHandler, verifyRouteHandler } from './routes'
 export { removeRoleHandler, roleHandler, rolesHandler } from './roles'
 export { tenantHandler, tenantsHandler } from './tenants'

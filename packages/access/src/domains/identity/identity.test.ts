@@ -55,6 +55,29 @@ function tenant(overrides: Partial<TenantOfLogin> = {}): TenantOfLogin {
   }
 }
 
+/** A route of the tests. */
+interface RouteFixture {
+  /** The address the route names, when it names one of its own. */
+  address?: string
+  /** The domain the route names, when it names one. */
+  domain?: string
+  /** The tenant the route names. */
+  tenant: TenantOfLogin
+  /** The provider the route names. */
+  provider?: ProviderOfLogin
+}
+
+/** The storage of the routes of the tests. */
+function routes(entries: RouteFixture[] = []) {
+  const found = (entry: RouteFixture | undefined) =>
+    entry ? { tenant: entry.tenant, ...(entry.provider ? { provider: entry.provider } : {}) } : null
+  return {
+    findByAddress: async (address: string) =>
+      found(entries.find((entry) => entry.address === address)),
+    findByDomain: async (domain: string) => found(entries.find((entry) => entry.domain === domain)),
+  }
+}
+
 /** The storage of the tenants of the tests. */
 function lookup(tenants: TenantOfLogin[]) {
   return {
@@ -150,7 +173,7 @@ describe('the provider of a login', () => {
 
 describe('the tenant of a login', () => {
   test('the client of the request names the tenant', async () => {
-    const resolved = await resolveTenant(lookup([tenant()]), {
+    const resolved = await resolveTenant(lookup([tenant()]), routes(), {
       clientId: 'gateway-acme',
       redirectUri: REDIRECT,
     })
@@ -159,7 +182,7 @@ describe('the tenant of a login', () => {
 
   test('a client that names no tenant is refused', async () => {
     await expect(
-      resolveTenant(lookup([tenant()]), { clientId: 'unknown', redirectUri: REDIRECT })
+      resolveTenant(lookup([tenant()]), routes(), { clientId: 'unknown', redirectUri: REDIRECT })
     ).rejects.toThrow(TenantResolutionError)
   })
 
@@ -167,7 +190,7 @@ describe('the tenant of a login', () => {
     // The url the browser comes back to is a value the caller controls:
     // one that is not registered for the client is never sent a code.
     await expect(
-      resolveTenant(lookup([tenant()]), {
+      resolveTenant(lookup([tenant()]), routes(), {
         clientId: 'gateway-acme',
         redirectUri: 'https://evil.example/steal',
       })
@@ -175,7 +198,7 @@ describe('the tenant of a login', () => {
   })
 
   test('a redirect uri that is registered is accepted', async () => {
-    const resolved = await resolveTenant(lookup([tenant()]), {
+    const resolved = await resolveTenant(lookup([tenant()]), routes(), {
       clientId: 'gateway-acme',
       redirectUri: REDIRECT,
     })
@@ -184,7 +207,7 @@ describe('the tenant of a login', () => {
 
   test('a tenant with no registered redirect uri refuses every login', async () => {
     await expect(
-      resolveTenant(lookup([tenant({ clientRedirectUris: [] })]), {
+      resolveTenant(lookup([tenant({ clientRedirectUris: [] })]), routes(), {
         clientId: 'gateway-acme',
         redirectUri: REDIRECT,
       })
@@ -193,7 +216,7 @@ describe('the tenant of a login', () => {
 
   test('a tenant that is disabled is refused', async () => {
     await expect(
-      resolveTenant(lookup([tenant({ enabled: false })]), {
+      resolveTenant(lookup([tenant({ enabled: false })]), routes(), {
         clientId: 'gateway-acme',
         redirectUri: REDIRECT,
       })
@@ -202,7 +225,7 @@ describe('the tenant of a login', () => {
 
   test('the parameter of the tenant is ignored when the client is not shared', async () => {
     const other = tenant({ slug: 'other', clientId: 'gateway-other' })
-    const resolved = await resolveTenant(lookup([tenant(), other]), {
+    const resolved = await resolveTenant(lookup([tenant(), other]), routes(), {
       clientId: 'gateway-acme',
       redirectUri: REDIRECT,
       tenant: 'other',
@@ -213,7 +236,7 @@ describe('the tenant of a login', () => {
   test('the parameter of the tenant names it when the client is shared', async () => {
     const shared = tenant({ sharedClient: true })
     const other = tenant({ slug: 'other', clientId: 'gateway-other' })
-    const resolved = await resolveTenant(lookup([shared, other]), {
+    const resolved = await resolveTenant(lookup([shared, other]), routes(), {
       clientId: 'gateway-acme',
       redirectUri: REDIRECT,
       tenant: 'other',
@@ -221,31 +244,74 @@ describe('the tenant of a login', () => {
     expect(resolved.tenant?.slug).toBe('other')
   })
 
-  test('the hint of the e-mail is ignored when the client is not shared', async () => {
-    const other = tenant({ slug: 'other', clientId: 'gateway-other', emailDomain: 'other.example' })
-    const resolved = await resolveTenant(lookup([tenant(), other]), {
-      clientId: 'gateway-acme',
-      redirectUri: REDIRECT,
-      loginHint: 'alice@other.example',
-    })
+  test('the address of the caller never names another tenant when the client is not shared', async () => {
+    // A client that is not shared stays with its tenant: the address may
+    // name the provider of that tenant, and it never names another one.
+    const other = tenant({ slug: 'other', clientId: 'gateway-other' })
+    const resolved = await resolveTenant(
+      lookup([tenant(), other]),
+      routes([{ domain: 'other.example', tenant: other }]),
+      {
+        clientId: 'gateway-acme',
+        redirectUri: REDIRECT,
+        loginHint: 'alice@other.example',
+      }
+    )
     expect(resolved.tenant?.slug).toBe('acme')
+    expect(resolved.provider).toBeUndefined()
   })
 
-  test('the hint of the e-mail names the tenant when the client is shared', async () => {
-    const shared = tenant({ sharedClient: true })
-    const other = tenant({ slug: 'other', clientId: 'gateway-other', emailDomain: 'other.example' })
-    const resolved = await resolveTenant(lookup([shared, other]), {
-      clientId: 'gateway-acme',
-      redirectUri: REDIRECT,
-      loginHint: 'alice@other.example',
+  test('the address of the caller names the provider of the tenant when the client is not shared', async () => {
+    const acme = tenant({
+      providers: [provider(), provider({ slug: 'okta', displayName: 'Okta' })],
     })
+    const resolved = await resolveTenant(
+      lookup([acme]),
+      routes([{ domain: 'acme.example', tenant: acme, provider: acme.providers[1] }]),
+      {
+        clientId: 'gateway-acme',
+        redirectUri: REDIRECT,
+        loginHint: 'alice@acme.example',
+      }
+    )
+    expect(resolved.tenant?.slug).toBe('acme')
+    expect(resolved.provider?.slug).toBe('okta')
+  })
+
+  test('the address of the caller names the tenant when the client is shared', async () => {
+    const shared = tenant({ sharedClient: true })
+    const other = tenant({ slug: 'other', clientId: 'gateway-other' })
+    const resolved = await resolveTenant(
+      lookup([shared, other]),
+      routes([{ domain: 'other.example', tenant: other }]),
+      {
+        clientId: 'gateway-acme',
+        redirectUri: REDIRECT,
+        loginHint: 'alice@other.example',
+      }
+    )
+    expect(resolved.tenant?.slug).toBe('other')
+  })
+
+  test('an address of its own names the tenant of the login', async () => {
+    const shared = tenant({ sharedClient: true })
+    const other = tenant({ slug: 'other', clientId: 'gateway-other' })
+    const resolved = await resolveTenant(
+      lookup([shared, other]),
+      routes([{ address: 'alice@contractor.example', tenant: other }]),
+      {
+        clientId: 'gateway-acme',
+        redirectUri: REDIRECT,
+        loginHint: 'alice@contractor.example',
+      }
+    )
     expect(resolved.tenant?.slug).toBe('other')
   })
 
   test('the default tenant is the fallback of a shared client', async () => {
     const shared = tenant({ sharedClient: true })
     const fallback = tenant({ slug: 'fallback', clientId: 'gateway-fallback', isDefault: true })
-    const resolved = await resolveTenant(lookup([shared, fallback]), {
+    const resolved = await resolveTenant(lookup([shared, fallback]), routes(), {
       clientId: 'gateway-acme',
       redirectUri: REDIRECT,
       loginHint: 'alice@nowhere.example',
@@ -258,7 +324,7 @@ describe('the tenant of a login', () => {
     // caller is what names the one of the login (spec §5.2.2).
     const shared = tenant({ sharedClient: true })
     const fallback = tenant({ slug: 'fallback', clientId: 'gateway-fallback', isDefault: true })
-    const resolved = await resolveTenant(lookup([shared, fallback]), {
+    const resolved = await resolveTenant(lookup([shared, fallback]), routes(), {
       clientId: 'gateway-acme',
       redirectUri: REDIRECT,
     })
@@ -267,7 +333,7 @@ describe('the tenant of a login', () => {
   })
 
   test('a client that is not shared is never asked for an address', async () => {
-    const resolved = await resolveTenant(lookup([tenant()]), {
+    const resolved = await resolveTenant(lookup([tenant()]), routes(), {
       clientId: 'gateway-acme',
       redirectUri: REDIRECT,
     })

@@ -266,7 +266,7 @@ curl -sS -X PUT $ACCESS/v1/admin/grants \
 ## Related
 
 - [Access operations: first tenant](../access/operations.md#first-tenant) and [tenant cutover](../access/operations.md#tenant-cutover), for moving an existing tenant from another service
-- [Access API: session in eighteen calls](../access/api.md#session-in-eighteen-calls)
+- [Access API: session in twenty-one calls](../access/api.md#session-in-twenty-one-calls)
 - [Manage access](manage-access.md)
 - [Rotate secrets](rotate-secrets.md)
 - [Troubleshoot a request](troubleshoot-a-request.md)

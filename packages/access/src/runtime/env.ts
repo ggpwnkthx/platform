@@ -49,7 +49,7 @@ interface PublicSettings {
   publicUrl: string
 }
 
-/** The settings of the database of the nine tables. */
+/** The settings of the database of the eleven tables. */
 interface DatabaseSettings {
   /** The driver of the database. */
   driver: 'postgres' | 'pglite'
@@ -75,7 +75,7 @@ interface StoreSettings {
 
 /** The settings of the administration. */
 interface AdminSettings {
-  /** The bearer token of the eighteen administrative endpoints. */
+  /** The bearer token of the twenty-one administrative endpoints. */
   token?: string
   /**
    * The token that the current one replaced.
@@ -482,7 +482,7 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
   const production = parsed.ACCESS_ENVIRONMENT === 'production'
   const problems: string[] = []
 
-  // The database of the nine tables. A deployment talks to a PostgreSQL
+  // The database of the eleven tables. A deployment talks to a PostgreSQL
   // server: the replicas share their tables. A development machine runs
   // the embedded PostgreSQL of the process when nothing is named.
   const rawDatabase = parsed.ACCESS_DATABASE_URL?.trim()
@@ -492,7 +492,7 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
   if (!rawDatabase) {
     if (production) {
       problems.push(
-        'ACCESS_DATABASE_URL must be set in a production environment: it names the PostgreSQL of the nine tables of Access'
+        'ACCESS_DATABASE_URL must be set in a production environment: it names the PostgreSQL of the eleven tables of Access'
       )
     } else {
       databasePath = DEFAULT_EMBEDDED_DATABASE_PATH
@@ -536,7 +536,7 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
   if (production) {
     if (!parsed.ACCESS_ADMIN_TOKEN && !parsed.ACCESS_ADMIN_TOKENS) {
       problems.push(
-        'ACCESS_ADMIN_TOKEN must be set in a production environment: it is the bearer token of the eighteen administrative endpoints, unless the deployment names its credentials in ACCESS_ADMIN_TOKENS'
+        'ACCESS_ADMIN_TOKEN must be set in a production environment: it is the bearer token of the twenty-one administrative endpoints, unless the deployment names its credentials in ACCESS_ADMIN_TOKENS'
       )
     }
     if (!parsed.ACCESS_STATE_SECRET) {

@@ -2,7 +2,7 @@
 
 The normative contract of Access: login brokering, identity mapping, tokens, decisions, the access context and the administration, with their invariants, limits and error codes. It is written for implementers and reviewers; change it first when behavior changes.
 
-Access is a Bun service that brokers logins against each tenant's OpenID Connect (OIDC) provider, maps external identities to principals, answers gateway decision requests from a table of grants, and is administered through the eighteen administrative endpoints plus one endpoint that reads the audit.
+Access is a Bun service that brokers logins against each tenant's OpenID Connect (OIDC) provider, maps external identities to principals, answers gateway decision requests from a table of grants, and is administered through the twenty-one administrative endpoints plus one endpoint that reads the audit.
 
 Access is a separate deployable, not a gateway feature. It sits between browsers, tenant identity providers and gateways. The gateway keeps its single provider, its single Access deployment and its whole configuration, and gains **zero** new features: a gateway deployment simply points at Access.
 
@@ -19,7 +19,7 @@ Status: 1.3.1. Runtime: Bun ≥ 1.4.3. Listener: HTTP on `ACCESS_HOST:ACCESS_POR
 | **Brokers the login** | It is an OIDC client of each tenant's provider *and* the OIDC provider of the gateway. The browser logs in at the tenant's provider; the gateway sees a provider it already knows how to talk to. |
 | **Maps the identity** | The provider's `(tenant, subject)` pair maps to exactly one **principal row**. The row is the platform identity; the external identity is only the way in. |
 | **Answers decisions** | It implements the decision contract the gateway already speaks, `POST /v1/decisions`, computed over a table of **grants**. |
-| **Is administered with eighteen endpoints** | Tenants, principals, grants, groups and roles are created, revoked and **listed** with eighteen `curl` calls; a nineteenth reads the audit. No console, portal or wizard. |
+| **Is administered with twenty-one endpoints** | Tenants, principals, grants, groups and roles are created, revoked and **listed** with twenty-one `curl` calls; a twenty-second reads the audit. No console, portal or wizard. |
 
 ### 1.2 What it does not do
 
@@ -75,7 +75,7 @@ Access is multi-tenant; the gateway is not. That is the price of "the gateway ga
 | **decision** | The answer of `POST /v1/decisions`: may this principal use this workspace on this route? |
 | **access context** | The answer of `POST /v1/access-context`: which permissions does this principal hold for this workspace and route (§9)? |
 | **gateway** | A gateway deployment: a client of Access and a consumer of its decisions. |
-| **operator** | The person who runs Access and calls the eighteen administrative endpoints. |
+| **operator** | The person who runs Access and calls the twenty-one administrative endpoints. |
 
 ### 2.1 Invariants
 
@@ -93,7 +93,7 @@ None is configurable. Each is enforced in code and has a test.
 
 ## 3. Tables
 
-The domain model is ten tables, and only these. Protocol state that is not a domain concept (the authorization codes) lives in the shared store (§5.5), not in the database.
+The domain model is eleven tables, and only these. Protocol state that is not a domain concept (the authorization codes) lives in the shared store (§5.5), not in the database.
 
 Two infrastructure tables share the database but are not part of the model: the migration ledger `access_schema_migrations` (§3.8) and the administration audit `admin_audit` (§10.1). The audit holds no tenant, principal or grant: only what changed, when, and who changed it.
 
@@ -306,9 +306,9 @@ A **production** environment must name a PostgreSQL server, because the embedded
 
 ### 3.10 Tenant isolation
 
-The application isolates tenants: the keys of the ten tables carry the tenant, a grant's foreign key refuses another tenant's principal, and every statement reads a tenant by its id.
+The application isolates tenants: the keys of the eleven tables carry the tenant, a grant's foreign key refuses another tenant's principal, and every statement reads a tenant by its id.
 
-The database is the **backstop**. The ten tables have PostgreSQL row level security, and the scope of a statement is written in two settings, local to the transaction:
+The database is the **backstop**. The eleven tables have PostgreSQL row level security, and the scope of a statement is written in two settings, local to the transaction:
 
 - `access.scope` names the kind of the scope and `access.tenant_id` names the tenant of it.
 - A statement in the scope of a **tenant** (`access.scope` is `tenant`) sees that tenant's rows and nothing else.
@@ -367,6 +367,32 @@ One row per account of a **local** provider: the address the caller signs in wit
 Unique: `(tenant_id, email)`. The address is the name of the account: a credential of a tenant and a provider of another tenant never share an address.
 
 The table is scoped like the other tables of the model: a statement in the scope of a tenant sees the credentials of that tenant and nothing else (§3.10).
+
+### 3.13 `sso_routes`
+
+One row per route of a login: a domain of addresses, or an address of its own, names the tenant of the login and the provider the login signs in at.
+
+| Column | Type | Rule |
+| --- | --- | --- |
+| `id` | `uuid` | Primary key. |
+| `kind` | `text` | `domain` or `address`. Default `domain`. The kind of the key of the route. |
+| `key` | `text` | The key of the route: the domain, or the address. Lowercased. |
+| `tenant_id` | `uuid` | The tenant the route names. Foreign key to `tenants`. |
+| `provider_slug` | `text` | The provider of the tenant the login signs in at. `null` is the default provider of the tenant. |
+| `status` | `text` | `pending`, `verified` or `rejected`. Default `pending`. **Only a verified route routes a login.** |
+| `verification` | `text` | `dns` or `operator`, or `null`. The method of the verification. |
+| `challenge` | `text` | The token the owner of the domain publishes to prove that it owns it. |
+| `verified_at` | `timestamptz` | The moment the route was verified. |
+| `verified_by` | `text` | The operator that verified the route, when an operator did. |
+| `created_at`, `updated_at` | `timestamptz` | |
+
+Unique: `(kind, key)`. A domain names one route, and a route names one tenant: two tenants never share a domain of addresses.
+
+**A route is a hint that the platform proves.** A route that waits for its proof routes nothing: the login of an address that names no verified route goes on with the default tenant of the platform (§5.2.2). The proof is one of two: the owner of the domain publishes the record that carries the challenge of the route, or the operator of the platform vouches for the domain (§10.18).
+
+A route that names another tenant waits for its proof again: the proof is about the domain, and the tenant is who owns it.
+
+The table is scoped like the other tables of the model: a statement in the scope of a tenant sees the routes of that tenant and nothing else (§3.10).
 
 ## 4. Environment
 
@@ -429,10 +455,10 @@ With `ACCESS_ENVIRONMENT=production`, the service refuses to start when a requir
 
 | Variable | Why it is required |
 | --- | --- |
-| `ACCESS_DATABASE_URL` | Holds the ten tables. Production must name a server (§3.9). |
+| `ACCESS_DATABASE_URL` | Holds the eleven tables. Production must name a server (§3.9). |
 | `ACCESS_ISSUER` | The `iss` of every issued token and the issuer the gateway is configured with. |
 | `ACCESS_REDIS_URL` | Replicas must share authorization codes, unless `ACCESS_ALLOW_MEMORY_STATE=true` marks a single-node deployment. |
-| `ACCESS_ADMIN_TOKEN` | The bearer token of the eighteen administrative endpoints, unless the deployment names its credentials in `ACCESS_ADMIN_TOKENS` (§4.6). |
+| `ACCESS_ADMIN_TOKEN` | The bearer token of the twenty-one administrative endpoints, unless the deployment names its credentials in `ACCESS_ADMIN_TOKENS` (§4.6). |
 | `ACCESS_STATE_SECRET` | Signs and encrypts the login state. At least 32 bytes. |
 | `ACCESS_SECRET_ENCRYPTION_KEY` | Encrypts client secrets at rest. At least 32 bytes. |
 | `ACCESS_SIGNING_KEY` | The private key that signs issued tokens, in PEM. |
@@ -515,9 +541,8 @@ The login's tenant is resolved in this order; the first match wins.
 
 1. **The request's client.** The authorization request's `client_id` names the tenant that owns it. This is the normal case and the only one a gateway can reach (§1.4).
 2. **The `tenant` parameter.** When the client's tenant has `shared_client = true`, the request may name another tenant in `tenant`, and that tenant is used. The parameter is ignored for a client that is not shared, so it cannot move a login to another tenant.
-3. **The hint.** When the request carries a `login_hint` that is an e-mail, its domain names the tenant with that `email_domain`. Only usable when the client's tenant is shared.
-4. **The address.** When the client's tenant is shared and nothing named a tenant, the caller is asked for the address of the login: the domain of the address names the tenant with that `email_domain` (§5.2.2).
-5. **The default tenant.** When the client's tenant is shared and no tenant was named, the tenant with `is_default = true` is used.
+3. **The address.** When the request carries an address — a `login_hint`, or the answer of the page of the address — the route of that address names the tenant (§5.2.2). Only usable when the client's tenant is shared: a client that is not shared stays with its tenant, and the address may only name the provider of that tenant.
+4. **The default tenant.** When the client's tenant is shared and no tenant was named, the tenant with `is_default = true` is used.
 
 A client that names no tenant → `400 invalid_request`. A disabled tenant → `403 tenant_disabled`.
 
@@ -526,14 +551,15 @@ A client that names no tenant → `400 invalid_request`. A disabled tenant → `
 The tenant is resolved first, and the **provider** of the login is a provider of that tenant (§3.11).
 
 1. **The parameter of the provider.** The request may name a provider in `provider`. It names a provider of the tenant of the login, and nothing else: a slug that belongs to no provider of that tenant → `400 invalid_request`.
-2. **The default provider.** A request that names no provider is a request at the **default** provider of the tenant: the one whose slug is `default`.
-3. **The only provider.** A tenant whose default provider row is missing but which has exactly one enabled provider is a tenant with that provider.
+2. **The route.** The route of the address names the provider of the login: the address of the caller is what names the provider (§5.2.2).
+3. **The default provider.** A request that names no provider and no route is a request at the **default** provider of the tenant: the one whose slug is `default`.
+4. **The only provider.** A tenant whose default provider row is missing but which has exactly one enabled provider is a tenant with that provider.
 
 A tenant that has no enabled provider refuses the login with `400 invalid_request`: it has no provider to sign the caller in at.
 
-The default provider of a tenant is the provider its own registration names, and a request that names none signs in at it: a caller is never asked to choose between the providers of a tenant that has one.
+A tenant whose providers are several **asks the caller for the address of the login**: the address of the caller names the provider it signs in at (§5.2.2), and the default provider answers the address that names no route.
 
-A tenant whose default provider is disabled or missing, whose providers are several and whose request names none **asks the caller which one** it signs in at: Access answers the authorization with a page that lists the providers of the tenant, and every entry is a link back to the authorization with the same request and the slug of the provider. The page carries no script and no style of another site, and no state is written before the choice: the login begins again, with the provider named, when the browser comes back.
+A tenant whose default provider is disabled or missing, whose providers are several and whose request names none and whose address names no route **asks the caller which one** it signs in at: Access answers the authorization with a page that lists the providers of the tenant, and every entry is a link back to the authorization with the same request and the slug of the provider. The page carries no script and no style of another site, and no state is written before the choice: the login begins again, with the provider named, when the browser comes back.
 
 The choice is the caller's, and the parameters of the request are the caller's too: the page never carries a parameter the request did not have.
 
@@ -552,15 +578,19 @@ The check is on the **client**, not the login's tenant. With a shared client the
 
 ### 5.2.2 The address of the login
 
-A shared client serves several tenants, and the tenant of a login is the one the address of the caller belongs to. Access asks for that address with a page of its own: one field, one button, no script and no style of another site.
+A shared client serves several tenants, and a tenant that signs its people in at several providers serves them at more than one. The address of the caller is what names the tenant and the provider of a login, and Access asks for that address with a page of its own: one field, one button, no script and no style of another site.
 
-The page is served when the client's tenant is shared, when the request names no tenant and when the request carries no hint. The answer of the form is the address of the caller, and the login goes on with it: the domain of the address names the tenant with that `email_domain`, and the provider of that tenant is the one the login signs in at (§5.2.1).
+The page is served when the client's tenant is shared and the request names no tenant, and when the tenant of the login signs its people in at several providers. The answer of the form is the address of the caller, and the login goes on with it.
 
-The address names a tenant, never a principal: the mapping of an identity is `(tenant, provider, subject)` (§6.2), and an address is not one of them. An address that names no tenant is not a refusal: the login goes on with the default tenant of the platform (§5.2).
+**The route of an address** is the route of the address itself, or the route of its domain (§3.13). The route names the tenant of the login and the provider the login signs in at. A route that is not verified names nothing: the login of an address that names no verified route goes on with the default tenant of the platform (§5.2), and with the default provider of that tenant (§5.2.1).
+
+The address names a tenant, never a principal: the mapping of an identity is `(tenant, provider, subject)` (§6.2), and an address is not one of them. A client that is not shared stays with its tenant: the address of the caller may name the provider of that tenant, and it never names another tenant.
 
 The page never says whether a domain is known. An answer that says "this domain is unknown" is an answer that tells a caller which tenants the platform holds, and the refusal of the provider is the refusal of the provider.
 
 The state of the login travels in a cookie of its own: the cookie is `HttpOnly`, `Secure` in production, `SameSite=Lax`, `Path=/oauth/discover`, and it lives ten minutes. The form carries the token of the state, and the token is bound to the state of the login: a form that carries none is a form of no login.
+
+**A route is proved before it routes.** The owner of a domain proves that it owns it by publishing a record that carries the challenge of the route, and the operator of the platform may vouch for a domain instead (§10.18).
 
 ### 5.3 Login state
 
@@ -1173,9 +1203,9 @@ Each role carries the keys of the permissions it holds and of the roles it names
 
 Removes a role that no grant names. A role named by a grant → `409 conflict`: grants are kept, so the operator revokes them first. Unknown role → `404 not_found`.
 
-### 10.14 Full session in eighteen calls
+### 10.14 Full session in twenty-one calls
 
-A tenant's whole lifecycle, from registration to revocation, takes one call to each administrative endpoint; the walkthrough is in [API](api.md#session-in-eighteen-calls).
+A tenant's whole lifecycle, from registration to revocation, takes one call to each administrative endpoint; the walkthrough is in [API](api.md#session-in-twenty-one-calls).
 
 ### 10.15 `GET /v1/admin/audit`
 
@@ -1273,6 +1303,42 @@ The answer never carries the verifier of a password, and it never carries the pa
 Removes a credential. `204` when removed. An unknown identifier → `404 not_found`.
 
 The principal the credential created stays: it cannot be signed in with any more, and the operator revokes its rights.
+
+### 10.18 The routes of the logins
+
+A route names the tenant of a login and the provider the login signs in at (§3.13). A route is a hint that the platform proves before it routes anything: a route that is not verified routes nothing, and the login of an address that names no verified route goes on with the default tenant of the platform (§5.2.2).
+
+#### `POST /v1/admin/routes`
+
+Creates a route, or changes the route of that `(kind, key)` pair.
+
+An **upsert** keyed by the pair. `201` when created, `200` when changed. A route that names another tenant waits for its proof again: the proof is about the domain, and the tenant is the one that owns it.
+
+- The key of a domain is a name of a domain, and the key of an address is an address. A key that is neither → `400 invalid_request`.
+- A provider that does not belong to the tenant → `404 not_found`.
+- An unknown tenant → `404 not_found`.
+- A credential of a tenant may only write the routes of its own tenant → `403 forbidden`.
+
+The answer is the route, and it carries the **challenge** of the route: the token the owner of the domain publishes to prove that it owns it.
+
+#### `GET /v1/admin/routes`
+
+The routes of the deployment. Filters: `tenant`, `kind`; paging: `limit`, `offset` (§10.1). An unknown tenant → `404 not_found`.
+
+A credential of a tenant sees its own tenant and nothing else.
+
+#### `POST /v1/admin/routes/{id}/verify`
+
+The proof of a route, or its refusal.
+
+The body names the **status** of the route (`verified` or `rejected`) and the **method** of the proof (`dns` or `operator`).
+
+- The proof of a **domain** is the record its owner publishes: the service reads the TXT records of `_access` of the domain and compares them with the challenge of the route. A record that does not carry the challenge → `409 conflict`: the owner of the domain has not published it yet.
+- The proof of an **address** is the operator of the platform: an address publishes no record.
+- The **operator** of the platform vouches for a domain: a credential of a tenant may not verify a route that way → `403 forbidden`.
+- An unknown identifier → `404 not_found`.
+
+The answer is the route, and it carries the moment it was verified and the operator that verified it.
 
 ## 11. Decision outcomes
 
@@ -1379,7 +1445,7 @@ One comes back only when **a named customer pays for it**. Not "it seems useful"
 | --- | --- | --- |
 | **SAML** | A tenant whose provider speaks SAML instead of OIDC. | A tenant whose provider is not an OIDC provider is not served. |
 | **Account linking** | One principal, several external identities (a second subject at the same provider). | The mapping key `(tenant, provider, subject)` is one to one. A person who signs in at two providers of a tenant has two principals and two sets of grants. |
-| **Console** | A web interface for the administration. | The eighteen endpoints of §10 and `curl`. |
+| **Console** | A web interface for the administration. | The twenty-one endpoints of §10 and `curl`. |
 | **SCIM** | Principal provisioning by a provider. | Principals are created by the §10.4 endpoint or by the tenant's auto-provisioning. |
 | **Directory sync** | Scheduled import of a tenant's directory from a source of truth. | Principals are created one at a time, by hand or by a script calling the endpoints. |
 | **The reset of a password** | A caller that forgot its password changes it. | The operator writes the password of an account (§10.17): the platform holds the accounts of the local providers and gives them their first password. |

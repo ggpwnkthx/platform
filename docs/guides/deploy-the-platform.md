@@ -6,7 +6,7 @@ This guide takes an empty environment to a first production deployment of the ga
 
 | You need | Why | Reference |
 | --- | --- | --- |
-| A PostgreSQL server you administer | Access keeps its nine tables there and Data its business data; the gateway can keep its shared state there too. The repository is tested on PostgreSQL 18, and Data's backup scripts need PostgreSQL 15 or later. | [Access database role](../access/operations.md#database-role), [Data database roles](../data/operations.md#database-roles) |
+| A PostgreSQL server you administer | Access keeps its eleven tables there and Data its business data; the gateway can keep its shared state there too. The repository is tested on PostgreSQL 18, and Data's backup scripts need PostgreSQL 15 or later. | [Access database role](../access/operations.md#database-role), [Data database roles](../data/operations.md#database-roles) |
 | A Redis server | Access stores login codes in it, and the gateway stores sessions, rate-limit windows and cached decisions in it unless you choose PostgreSQL. | [Access requirements](../access/operations.md#requirements), [gateway shared state](../gateway/operations.md#shared-state) |
 | An OpenID Connect provider per tenant, reachable over `https` | Access sends each tenant's logins to its own provider. | [Access hardening](../access/operations.md#hardening) |
 | An ingress that terminates TLS, and DNS names for the gateway's public hosts, the Access issuer and the console | No service terminates TLS itself. | [Gateway ingress](../gateway/operations.md#ingress) |

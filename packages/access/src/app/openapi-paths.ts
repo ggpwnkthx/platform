@@ -382,6 +382,37 @@ export function apiPaths(): Record<string, unknown> {
         },
       },
     },
+    '/v1/admin/routes': {
+      post: {
+        summary: 'The registration of a route of the logins.',
+        description:
+          'It creates a route, or it changes the route of that `(kind, key)` pair: the call is an upsert. A route waits for its proof: it routes nothing until the owner of the domain publishes the challenge, or the operator of the platform vouches for it.',
+        responses: {
+          201: jsonResponse('The route is registered.'),
+          403: errorResponse('The caller does not hold the administration of the tenant.'),
+        },
+      },
+      get: {
+        summary: 'The list of the routes.',
+        description: 'The routes of the deployment, filtered by tenant and by kind.',
+        responses: {
+          200: jsonResponse('The routes of the deployment.'),
+          403: errorResponse('The caller does not hold the administration of the tenant.'),
+        },
+      },
+    },
+    '/v1/admin/routes/{id}/verify': {
+      post: {
+        summary: 'The proof of a route.',
+        description:
+          'The proof of a domain is the record its owner publishes: the service reads the record of `_access` of the domain and compares it with the challenge of the route. The operator of the platform may vouch for a domain instead, and only the operator of the platform may.',
+        responses: {
+          200: jsonResponse('The route is verified, or refused.'),
+          403: errorResponse('The caller does not hold the administration of the tenant.'),
+          409: errorResponse('The owner of the domain has not published the challenge yet.'),
+        },
+      },
+    },
     '/v1/admin/credentials': {
       post: {
         summary: 'The registration of a credential of a local provider.',

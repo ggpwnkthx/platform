@@ -32,6 +32,11 @@ import type {
   Provider,
   ProviderPage,
   ProviderRegistration,
+  Route,
+  RoutePage,
+  RouteRegistration,
+  RouteStatus,
+  RouteVerification,
   Role,
   RolePage,
   RoleRegistration,
@@ -60,6 +65,7 @@ import {
 } from './principals'
 import { listTenants, upsertTenant } from './tenants'
 import { listProviders, removeProvider, upsertProvider } from './providers'
+import { listRoutes, upsertRoute, verifyRoute } from './routes'
 import { listCredentials, removeCredential, upsertCredential } from './local-credentials'
 import { bootstrapAdministrator } from './bootstrap'
 
@@ -173,6 +179,48 @@ export class AdministrationService {
    */
   async removeProvider(scope: AdminScope, id: string, context: AuditContext): Promise<AuditEntry> {
     return await removeProvider(this.options, scope, id, context)
+  }
+
+  /**
+   * Creates a route of the logins, or changes the route of that key.
+   *
+   * A route is a hint that the platform proves before it routes
+   * anything: a route that is created waits for its proof.
+   */
+  async upsertRoute(
+    scope: AdminScope,
+    registration: RouteRegistration,
+    context: AuditContext
+  ): Promise<{ route: Route; created: boolean; audit: AuditEntry }> {
+    return await upsertRoute(this.options, scope, registration, context)
+  }
+
+  /** The routes that match a filter, and their number. */
+  async listRoutes(
+    scope: AdminScope,
+    query: {
+      tenant?: string | null
+      kind?: string | null
+      limit?: string | null
+      offset?: string | null
+    }
+  ): Promise<RoutePage> {
+    return await listRoutes(this.options, scope, query)
+  }
+
+  /**
+   * Verifies a route, or refuses it.
+   *
+   * The proof of a domain is the record its owner publishes; the
+   * operator of the platform may vouch for a domain instead.
+   */
+  async verifyRoute(
+    scope: AdminScope,
+    id: string,
+    body: { status: RouteStatus; verification: RouteVerification },
+    context: AuditContext
+  ): Promise<{ route: Route; audit: AuditEntry }> {
+    return await verifyRoute(this.options, scope, id, body, context)
   }
 
   /**

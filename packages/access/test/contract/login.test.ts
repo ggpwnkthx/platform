@@ -61,6 +61,9 @@ async function startLogin(
   const cookie = cookieOf(authorize)
   if (authorize.status !== 302) return { response: authorize, cookie }
   const location = authorize.headers.get('location') ?? ''
+  // The login asked for the address of the caller: the browser goes to
+  // the page of the address, and the test follows it.
+  if (location.startsWith('/')) return { response: authorize, cookie }
   const atProvider = await fetch(location, { redirect: 'manual' })
   const callback = atProvider.headers.get('location') ?? ''
   const response = await fetch(callback, {
@@ -122,10 +125,9 @@ describe('the login of Access', () => {
     expect(location.searchParams.get('code')).toBeTruthy()
   })
 
-  test('a tenant with several providers signs its callers in at the default one', async () => {
-    // The default provider of the tenant is the one its own registration
-    // names: a caller is never asked to choose between the providers of a
-    // tenant that has one (spec §5.2.1).
+  test('a tenant with several providers asks the caller for the address', async () => {
+    // The address of the caller names the provider the login signs in at
+    // (spec §5.2.1).
     await admin('/v1/admin/providers', 'POST', {
       tenant: 'acme',
       slug: 'okta',
@@ -135,14 +137,17 @@ describe('the login of Access', () => {
       idpClientSecret: provider.clientSecret,
       idpRedirectUri: `${service.base}/oauth/tenant/callback`,
     })
-    const { response } = await startLogin()
-    expect(response.status).toBe(302)
-
-    // The provider is removed again: the tests that follow log in at the
-    // only provider of the tenant.
-    const providers = await admin('/v1/admin/providers?tenant=acme&slug=okta', 'GET', {})
-    const rows = (providers.providers ?? []) as { id: string }[]
-    await client.call(`/v1/admin/providers/${rows[0]!.id}`, 'DELETE', undefined)
+    try {
+      const { response } = await startLogin()
+      expect(response.status).toBe(302)
+      expect(response.headers.get('location')).toBe('/oauth/discover')
+    } finally {
+      // The provider is removed again: the tests that follow log in at
+      // the only provider of the tenant.
+      const providers = await admin('/v1/admin/providers?tenant=acme&slug=okta', 'GET', {})
+      const rows = (providers.providers ?? []) as { id: string }[]
+      await client.call(`/v1/admin/providers/${rows[0]!.id}`, 'DELETE', undefined)
+    }
   })
 
   test('a tenant whose default provider is disabled asks the caller which one', async () => {
@@ -173,30 +178,43 @@ describe('the login of Access', () => {
     await service.runtime.database.exec(
       "update tenant_providers set enabled = false where slug = 'default'"
     )
-    const query = new URLSearchParams({
-      client_id: 'gateway-acme',
-      redirect_uri: GATEWAY_REDIRECT,
-      response_type: 'code',
-      scope: 'openid profile email',
-      state: 'the-state-of-the-gateway',
-      nonce: 'the-nonce-of-the-gateway',
-      code_challenge: CHALLENGE,
-      code_challenge_method: 'S256',
-    })
-    const authorize = await fetch(`${service.base}/oauth/authorize?${query.toString()}`, {
-      redirect: 'manual',
-    })
-    expect(authorize.status).toBe(200)
-    const page = await authorize.text()
-    expect(page).toContain('provider=okta')
-    expect(page).toContain('provider=keycloak')
-    // The request of the caller is carried by the links of the page.
-    expect(page).toContain('client_id=gateway-acme')
-    expect(page).toContain(`state=${encodeURIComponent('the-state-of-the-gateway')}`)
+    try {
+      // The tenant signs its people in at several providers and it has
+      // no default one: the login asks for the address of the caller,
+      // and the address that names no route leaves the choice to the
+      // caller (spec §5.2.1).
+      const { response } = await startLogin()
+      expect(response.status).toBe(302)
+      expect(response.headers.get('location')).toBe('/oauth/discover')
 
-    await service.runtime.database.exec(
-      "update tenant_providers set enabled = true where slug = 'default'"
-    )
+      const page = await fetch(`${service.base}/oauth/discover`, {
+        redirect: 'manual',
+        headers: { cookie: cookieOf(response) },
+      })
+      expect(page.status).toBe(200)
+      const body = await page.text()
+      const token = /name="token" value="([^"]+)"/.exec(body)?.[1] ?? ''
+      const answer = await fetch(`${service.base}/oauth/discover`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: {
+          cookie: cookieOf(response),
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({ email: 'alice@acme.example', token }).toString(),
+      })
+      expect(answer.status).toBe(200)
+      const chooser = await answer.text()
+      expect(chooser).toContain('provider=okta')
+      expect(chooser).toContain('provider=keycloak')
+      // The request of the caller is carried by the links of the page.
+      expect(chooser).toContain('client_id=gateway-acme')
+      expect(chooser).toContain(`state=${encodeURIComponent('the-state-of-the-gateway')}`)
+    } finally {
+      await service.runtime.database.exec(
+        "update tenant_providers set enabled = true where slug = 'default'"
+      )
+    }
     const providers = await admin('/v1/admin/providers?tenant=acme&slug=okta', 'GET', {})
     const rows = (providers.providers ?? []) as { id: string }[]
     await client.call(`/v1/admin/providers/${rows[0]!.id}`, 'DELETE', undefined)

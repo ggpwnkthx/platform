@@ -24,6 +24,9 @@ import {
   removeCredentialHandler,
   removeRoleHandler,
   revokeGrantHandler,
+  routeHandler,
+  routesHandler,
+  verifyRouteHandler,
   roleHandler,
   rolesHandler,
   tenantHandler,
@@ -196,7 +199,7 @@ export function createAccessApp(dependencies: AccessDependencies): Hono<AccessEn
   // The metrics of the service.
   app.get('/metrics', async (context) => await metricsHandler(context, dependencies))
 
-  // The administration of the platform: eighteen endpoints and the audit
+  // The administration of the platform: twenty-one endpoints and the audit
   // that reads it, and they are the whole surface.
   app.post('/v1/admin/tenants', async (context) => await tenantHandler(context, dependencies))
   app.get('/v1/admin/tenants', async (context) => await tenantsHandler(context, dependencies))
@@ -204,6 +207,12 @@ export function createAccessApp(dependencies: AccessDependencies): Hono<AccessEn
   app.get('/v1/admin/users', async (context) => await principalsHandler(context, dependencies))
   app.post('/v1/admin/providers', async (context) => await providerHandler(context, dependencies))
   app.get('/v1/admin/providers', async (context) => await providersHandler(context, dependencies))
+  app.post('/v1/admin/routes', async (context) => await routeHandler(context, dependencies))
+  app.get('/v1/admin/routes', async (context) => await routesHandler(context, dependencies))
+  app.post(
+    '/v1/admin/routes/:id/verify',
+    async (context) => await verifyRouteHandler(context, dependencies)
+  )
   app.delete(
     '/v1/admin/providers/:id',
     async (context) => await removeProviderHandler(context, dependencies)

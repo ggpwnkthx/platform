@@ -49,7 +49,7 @@ A **modular monolith**: one process, one image, one database, four independent d
 | `src/main.ts` | Process entry point. |
 | `src/domains/identity/` | Provider token validation, principal mapping, tenant resolution, login state, the driver of a provider and the provider client. |
 | `src/domains/authorization/` | The decision rule, grant reads, reasons. |
-| `src/domains/administration/` | The eighteen endpoints, body validation, auditing every change. |
+| `src/domains/administration/` | The twenty-one endpoints, body validation, auditing every change. |
 | `src/domains/provider/` | The tokens Access issues, the JWKS, the discovery document, code exchange. |
 | `src/observability/` | Logs, metrics, secret comparison. |
 | `src/runtime/env.ts` | Environment schema and validation; the only reader of `process.env`. |
@@ -57,9 +57,11 @@ A **modular monolith**: one process, one image, one database, four independent d
 | `src/app/app.ts` | Pipeline: request id, probes, routes, unknown-path refusal, error handler. |
 | `src/app/{login,oauth,provider,discovery}.ts` | Login, token endpoint, discovery, JWKS, the address of the caller. |
 | `src/app/decision-contract.ts`, `access-context-contract.ts` | The two read contracts. |
-| `src/app/administration/`, `src/domains/administration/` | The eighteen endpoints of the administration and the audit that reads it, one file per resource (tenants, principals, groups, roles, grants, audit); the domain also holds validation, the limiter, authentication and storage `ports/`. |
+| `src/app/administration/`, `src/domains/administration/` | The twenty-one endpoints of the administration and the audit that reads it, one file per resource (tenants, principals, groups, roles, grants, audit); the domain also holds validation, the limiter, authentication and storage `ports/`. |
 | `src/app/{errors,pages,metrics,endpoints,state,cookies}.ts` | Refusals, login pages, metrics, probes, request state, the cookies of the login. |
+| `src/app/discovery.ts` | The page that asks for the address of the caller, and the answer of the form (spec §5.2.2). |
 | `src/platform/postgres/` | Pool, migrations, repositories, statement tracing, tenant scope, audit table. |
+| `src/platform/bun/dns.ts` | The proof of a domain: the TXT record its owner publishes (spec §10.18). |
 | `src/platform/redis/`, `src/platform/bun/` | Code store; listener, request and response, address guard. |
 | `scripts/` | `cli/` (smoke test, secret rotation, decision plan, database provisioning), `compat/` (shadow comparison, compatibility runner), `gates/` (architecture, release version), `ops/` (load), `support/`. |
 | `scripts/compat/compatibility.ts` | The compatibility suite runner. Outside the application: no `src/` file imports it, and the service depends on no package of the reference. |
@@ -83,7 +85,7 @@ The rule that every rule needs a test is in [platform internals](../platform/int
 | Kind | Where | What it proves |
 | --- | --- | --- |
 | Unit | `src/domains/*/*.test.ts` | Provider token validation, mapping, the decision rule, tenant resolution. |
-| Contract | `test/contract/` | The whole flow against Access fixtures: browser login, code exchange, decision, the eighteen administrative endpoints, the audit, secret rotation. |
+| Contract | `test/contract/` | The whole flow against Access fixtures: browser login, code exchange, decision, the twenty-one administrative endpoints, the audit, secret rotation. |
 | Integration | `test/integration/` | Decisions against real PostgreSQL and Redis, tenant isolation, migrations, the statement deadline, the decision rule against randomly built policies. |
 | Compatibility | `test/compatibility/` | **The unchanged gateway against Access.** The gateway reference's fixtures are replaced by Access, and the gateway's contract suite runs against it. |
 | Architecture | `test/architecture/` | Import boundaries, the absence of deferred features, the documented routes and counts, and every `§` reference. |
@@ -98,7 +100,7 @@ The rule that every rule needs a test is in [platform internals](../platform/int
 | Test | Holds |
 | --- | --- |
 | `routes.test.ts` | Every route registered in `src/app/app.ts` appears as `METHOD /path` in `docs/access/api.md` or `docs/access/operations.md`, and every such pattern in those two files is a real route. |
-| `counts.test.ts` | Every phrase that counts the administration (the eighteen administrative endpoints, the eighteen calls of the session) uses the number of routes the code registers. |
+| `counts.test.ts` | Every phrase that counts the administration (the twenty-one administrative endpoints, the twenty-one calls of the session) uses the number of routes the code registers. |
 | `spec-references.test.ts` | Every `§N` in the code, the tests and `docs/access/` names a heading of `docs/access/spec.md`. |
 | `version.test.ts` | The release version agrees across the files listed in [Release and delivery](#release-and-delivery). |
 
@@ -237,7 +239,7 @@ Model: login state is encrypted, authenticated and single use; codes are opaque,
 | 17 | An unregistered gateway redirect URI is refused with `400 invalid_request` before the tenant is resolved, and never gets a code. | Fixed | `src/domains/identity/tenant.ts`, `src/app/login.ts` |
 | 18 | State cookie: `HttpOnly`, `SameSite=Lax`, `Secure` in production, path is the callback. | Fixed | `src/app/login.ts` |
 | 19 | Tenant credentials asking about another tenant's principal get "principal does not exist"; the bearer token is unscoped. | Fixed | `src/app/decision-contract.ts` |
-| 20 | Row level security on all nine tables, transaction-local scope, production refuses a bypassing role. | Fixed | `src/platform/postgres/scope.ts`, `src/platform/postgres/migrations/0003_tenant_isolation.sql` |
+| 20 | Row level security on all eleven tables, transaction-local scope, production refuses a bypassing role. | Fixed | `src/platform/postgres/scope.ts`, `src/platform/postgres/migrations/0003_tenant_isolation.sql` |
 | 21 | Rotation without a gap: a replaced gateway secret stays valid 24 hours; environment tokens use two variables. | Fixed | `src/app/decision-contract.ts`, `src/app/oauth.ts`, `src/domains/administration/service.ts`, `docs/access/spec.md` §4.3.1 |
 | 22 | The audit is a table naming the credential's fingerprint, written by the same statement as the change. | Fixed | `src/platform/postgres/audited.ts`, `src/platform/postgres/audit.ts`, `src/app/administration/` |
 | 23 | Server-side `statement_timeout` frees the connection at the decision deadline. | Fixed | `src/platform/postgres/postgres.ts`, `src/platform/postgres/decision-facts.ts` |

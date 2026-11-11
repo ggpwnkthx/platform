@@ -1,6 +1,6 @@
 # HTTP API
 
-Every Access endpoint with its request, response, errors and a `curl` example, ending with a tenant's whole session in eighteen calls. It is written for developers and operators who call Access; the rules behind each endpoint are in the [specification](spec.md), cited as `§N`.
+Every Access endpoint with its request, response, errors and a `curl` example, ending with a tenant's whole session in twenty-one calls. It is written for developers and operators who call Access; the rules behind each endpoint are in the [specification](spec.md), cited as `§N`.
 
 ## Conventions
 
@@ -267,7 +267,7 @@ Unknown or mistyped fields are refused; the body is at most 64 KiB.
 
 ## Administration
 
-The eighteen administrative endpoints live under `/v1/admin`, next to `GET /v1/admin/audit`; every call sends `Authorization: Bearer <credential>`. The credential is `ACCESS_ADMIN_TOKEN` or one from `ACCESS_ADMIN_TOKENS` (§4.6); a tenant credential acts only for its tenant, and naming another is `403 forbidden`. Limits, pagination, error codes and auditing: §10.1.
+The twenty-one administrative endpoints live under `/v1/admin`, next to `GET /v1/admin/audit`; every call sends `Authorization: Bearer <credential>`. The credential is `ACCESS_ADMIN_TOKEN` or one from `ACCESS_ADMIN_TOKENS` (§4.6); a tenant credential acts only for its tenant, and naming another is `403 forbidden`. Limits, pagination, error codes and auditing: §10.1.
 
 ### `POST /v1/admin/tenants`
 
@@ -543,6 +543,94 @@ curl -sS -X DELETE https://access.example.com/v1/admin/providers/d4e5… \
 ```
 
 `204` when the provider is removed. `400 invalid_request` when the provider is the default one of its tenant, `409 conflict` when it holds principals, `404 not_found` when the identifier names no provider.
+
+### `POST /v1/admin/routes`
+
+Upsert by `(kind, key)` (§10.18). A route that is created waits for its proof: it routes nothing until the owner of the domain publishes the challenge.
+
+```bash
+curl -sS -X POST https://access.example.com/v1/admin/routes \
+  -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{
+        "tenant": "acme",
+        "kind": "domain",
+        "key": "acme.example",
+        "provider": "okta"
+      }'
+```
+
+| Field | Rule |
+| --- | --- |
+| `tenant` | Required. The tenant slug. |
+| `kind` | Optional. `domain` (default) or `address`. |
+| `key` | Required. The domain, or the address. |
+| `provider` | Optional. The provider of the tenant the login signs in at. Absent: the default provider of the tenant. |
+
+`400 invalid_request` when the key is neither a domain nor an address. `404 not_found` when the tenant is unknown or when the provider belongs to no tenant. `403 forbidden` when a credential of a tenant names another tenant.
+
+```json
+{
+  "route": {
+    "id": "e7f8…", "kind": "domain", "key": "acme.example",
+    "tenant": "acme", "provider": "okta",
+    "status": "pending", "verification": null,
+    "challenge": "9f2c1d4b8e7a6350",
+    "verifiedAt": null, "verifiedBy": null,
+    "createdAt": "2026-01-08T10:05:00.000Z"
+  }
+}
+```
+
+The challenge is the token the owner of the domain publishes as a TXT record of `_access.acme.example`.
+
+### `GET /v1/admin/routes`
+
+```bash
+curl -sS "https://access.example.com/v1/admin/routes?tenant=acme" \
+  -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
+```
+
+| Parameter | Rule |
+| --- | --- |
+| `tenant` | Optional. A tenant slug. Absent: every tenant. |
+| `kind` | Optional. `domain` or `address`. |
+| `limit` | Optional. Default `50`, maximum `200`. |
+| `offset` | Optional. Default `0`. |
+
+```json
+{
+  "routes": [
+    {
+      "id": "e7f8…", "kind": "domain", "key": "acme.example",
+      "tenant": "acme", "provider": "okta",
+      "status": "verified", "verification": "dns",
+      "challenge": "9f2c1d4b8e7a6350",
+      "verifiedAt": "2026-01-08T10:06:00.000Z", "verifiedBy": null,
+      "createdAt": "2026-01-08T10:05:00.000Z"
+    }
+  ],
+  "total": 1, "limit": 50, "offset": 0
+}
+```
+
+### `POST /v1/admin/routes/{id}/verify`
+
+The proof of a route, or the refusal of one.
+
+```bash
+curl -sS -X POST https://access.example.com/v1/admin/routes/e7f8…/verify \
+  -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"status": "verified", "verification": "dns"}'
+```
+
+| Field | Rule |
+| --- | --- |
+| `status` | Required. `verified` or `rejected`. |
+| `verification` | Required. `dns` or `operator`. |
+
+The proof of a domain is the TXT record of `_access` of the domain: the service reads it and compares it with the challenge of the route. `409 conflict` when the record does not carry the challenge — the owner of the domain has not published it yet. `403 forbidden` when a credential of a tenant tries to verify a route with the operator of the platform. `404 not_found` when the identifier names no route.
 
 ### `POST /v1/admin/credentials`
 
@@ -916,9 +1004,9 @@ id,at,action,targetId,tenant,operator,address,requestId
 0f2c…,2026-01-08T10:30:00.000Z,grant.revoked,9fbfda13-…,acme,6b1f2c9d0e3a,10.0.0.7,8452a08e-…
 ```
 
-## Session in eighteen calls
+## Session in twenty-one calls
 
-The eighteen calls of the session take a tenant from registration to revocation, using each administration endpoint once. You need `curl` and `jq`.
+The twenty-one calls of the session take a tenant from registration to revocation, using each administration endpoint once. You need `curl` and `jq`.
 
 ```bash
 export ACCESS=https://access.example.com
@@ -993,16 +1081,30 @@ ROLE_ID=$(curl -sS -X PUT $ACCESS/v1/admin/roles \
 curl -sS "$ACCESS/v1/admin/roles?tenant=acme" \
   -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
 
-# 15. Remove the role (no grant names it)
+# 15. Register the route of the domain of the tenant
+ROUTE_ID=$(curl -sS -X POST $ACCESS/v1/admin/routes \
+  -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" -H "content-type: application/json" \
+  -d '{"tenant":"acme","kind":"domain","key":"acme.example"}' | jq -r .route.id)
+
+# 16. List the tenant's routes
+curl -sS "$ACCESS/v1/admin/routes?tenant=acme" \
+  -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
+
+# 17. Verify the route: the operator of the platform vouches for the domain
+curl -sS -X POST $ACCESS/v1/admin/routes/$ROUTE_ID/verify \
+  -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" -H "content-type: application/json" \
+  -d '{"status":"verified","verification":"operator"}'
+
+# 18. Remove the role (no grant names it)
 curl -sS -X DELETE $ACCESS/v1/admin/roles/$ROLE_ID -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
 
-# 16. Remove the credential
+# 19. Remove the credential
 curl -sS -X DELETE $ACCESS/v1/admin/credentials/$CREDENTIAL_ID -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
 
-# 17. Remove the provider (it holds no principal)
+# 20. Remove the provider (it holds no principal)
 curl -sS -X DELETE $ACCESS/v1/admin/providers/$PROVIDER_ID -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
 
-# 18. Revoke the grant when access must end
+# 21. Revoke the grant when access must end
 curl -sS -X DELETE $ACCESS/v1/admin/grants/$GRANT_ID -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
 ```
 

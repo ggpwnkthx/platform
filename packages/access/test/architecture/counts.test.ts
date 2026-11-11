@@ -7,8 +7,9 @@ const root = resolve(import.meta.dir, '..', '..')
 /**
  * The numbers that the documents and the code have to agree on.
  *
- * The administration is a fixed surface: eighteen endpoints, and the whole
- * session of a tenant is eighteen calls. A document that says "the eight
+ * The administration is a fixed surface: twenty-one endpoints, and the
+ * whole session of a tenant is twenty-one calls. A document that says
+ * "the eight
  * administrative endpoints" is a lie about the contract of the service,
  * and a reader that counts the routes finds it.
  *
@@ -21,9 +22,9 @@ const root = resolve(import.meta.dir, '..', '..')
 /**
  * The route that reads the audit.
  *
- * The audit is not one of the eighteen: the eighteen are the endpoints that
- * create, revoke and list, and the audit is read with a tenth (spec
- * §1.1).
+ * The audit is not one of the twenty-one: the twenty-one are the
+ * endpoints that create, revoke and list, and the audit is read with a
+ * tenth (spec §1.1).
  */
 const AUDIT_ROUTE = '/v1/admin/audit'
 
@@ -55,8 +56,8 @@ async function routesOfTheCode(): Promise<number> {
 /**
  * The numbers in words, for the counts the documents carry.
  *
- * The documents say "the eighteen administrative endpoints": the number is a
- * word, and the word is what the test reads.
+ * The documents say "the twenty-one administrative endpoints": the number
+ * is a word, and the word is what the test reads.
  */
 const WORDS: Record<number, string> = {
   5: 'five',
@@ -72,9 +73,11 @@ const WORDS: Record<number, string> = {
   15: 'fifteen',
   16: 'sixteen',
   17: 'seventeen',
-  18: 'eighteen',
+  18: 'twenty-one',
   19: 'nineteen',
   20: 'twenty',
+  21: 'twenty-one',
+  22: 'twenty-two',
 }
 
 /** The word of a number, when the documents may carry it. */
@@ -112,10 +115,10 @@ describe('the numbers of the documentation', () => {
       for (let index = 0; index < lines.length; index += 1) {
         const line = lines[index]!
         // The phrases that carry the count of the administration: "the
-        // eighteen administrative endpoints", "the eighteen calls of the
-        // session", "the eighteen calls of the administration".
+        // twenty-one administrative endpoints", "the twenty-one calls of
+        // the session", "the twenty-one calls of the administration".
         for (const match of line.matchAll(
-          /the (five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty) (administrative endpoints|calls of the (session|administration))/g
+          /the (five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|twenty-one|nineteen|twenty|twenty-one|twenty-two) (administrative endpoints|calls of the (session|administration))/g
         )) {
           claims.push({
             file: relative(root, file),

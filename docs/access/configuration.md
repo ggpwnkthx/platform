@@ -27,7 +27,7 @@ Development values are in [`packages/access/.env.example`](../../packages/access
 
 | Variable | Default | Production | Meaning |
 | --- | --- | --- | --- |
-| `ACCESS_DATABASE_URL` | embedded PostgreSQL in `./.access/pglite` (development only) | required, a server | PostgreSQL holding the nine tables. `postgres://…` or `postgresql://…` names a server; `pglite://<path>` names the embedded database (§3.9). Any other value is refused. |
+| `ACCESS_DATABASE_URL` | embedded PostgreSQL in `./.access/pglite` (development only) | required, a server | PostgreSQL holding the eleven tables. `postgres://…` or `postgresql://…` names a server; `pglite://<path>` names the embedded database (§3.9). Any other value is refused. |
 | `ACCESS_REDIS_URL` | none: codes live in process memory | required, unless `ACCESS_ALLOW_MEMORY_STATE=true` | Shared store for authorization codes and the administration's failed-authentication counts. Required when more than one replica runs. |
 | `ACCESS_ALLOW_MEMORY_STATE` | `false` | optional | `true`, `false`, `1` or `0`. Replaces the shared store with process memory. Single-node deployments only: codes die with the process. |
 
@@ -35,7 +35,7 @@ Development values are in [`packages/access/.env.example`](../../packages/access
 
 | Variable | Default | Production | Meaning |
 | --- | --- | --- | --- |
-| `ACCESS_ADMIN_TOKEN` | none | required, unless `ACCESS_ADMIN_TOKENS` is set | The bearer token of the eighteen administrative endpoints: a platform credential. Without it and without `ACCESS_ADMIN_TOKENS`, the administration refuses every call. |
+| `ACCESS_ADMIN_TOKEN` | none | required, unless `ACCESS_ADMIN_TOKENS` is set | The bearer token of the twenty-one administrative endpoints: a platform credential. Without it and without `ACCESS_ADMIN_TOKENS`, the administration refuses every call. |
 | `ACCESS_ADMIN_TOKENS` | none | optional | Administration credentials: a JSON object of bearer tokens and their scopes ([format](#administration-credentials), §4.6). |
 | `ACCESS_PREVIOUS_ADMIN_TOKEN` | none | optional | The token the current one replaced. Accepted until the deployment removes it (§4.3.1). |
 | `ACCESS_DECISION_TOKEN` | none | optional, deprecated | Bearer token the gateway presents on `POST /v1/decisions`. Unscoped: without it, only tenant credentials are accepted (§8.8). |

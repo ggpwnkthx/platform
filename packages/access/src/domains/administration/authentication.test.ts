@@ -43,6 +43,8 @@ describe('the authentication of the administration', () => {
     const administration = new AdministrationService({
       tenants: fakes.tenants,
       providers: fakes.providers,
+      routes: fakes.routes,
+      proof: { txtOf: async () => [] },
       localCredentials: fakes.localCredentials,
       hasher: { hash: async (clear: string) => `hashed:${clear}` },
       principals: fakes.principals,

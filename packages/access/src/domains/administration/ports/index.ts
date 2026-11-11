@@ -1,7 +1,7 @@
 /**
  * The ports of the administration.
  *
- * The domain owns the rules of the eighteen endpoints; the storage is a port
+ * The domain owns the rules of the twenty-one endpoints; the storage is a port
  * that the composition root fulfils. The domain knows nothing about
  * PostgreSQL and nothing about the shape of the rows.
  *
@@ -46,6 +46,17 @@ export type {
   ProviderRegistration,
   ProviderStore,
 } from './providers'
+export type {
+  DomainProof,
+  Route,
+  RouteFilter,
+  RouteKind,
+  RoutePage,
+  RouteRegistration,
+  RouteStatus,
+  RouteStore,
+  RouteVerification,
+} from './routes'
 export type {
   Tenant,
   TenantCreation,

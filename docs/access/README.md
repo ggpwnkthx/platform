@@ -8,7 +8,7 @@ Access is the platform's OpenID Connect broker and access decision service: it a
 - **Maps identities.** A provider's `(tenant, subject)` pair becomes exactly one principal, the platform identity.
 - **Answers decisions.** The gateway asks `POST /v1/decisions` on every request; grants alone decide.
 - **Serves the access context.** Data reads a principal's permissions for a workspace and route through `POST /v1/access-context`.
-- **Is administered over HTTP.** The eighteen administrative endpoints, plus one that reads the change audit, are the whole administration: `curl`, with platform or per-tenant credentials.
+- **Is administered over HTTP.** The twenty-one administrative endpoints, plus one that reads the change audit, are the whole administration: `curl`, with platform or per-tenant credentials.
 
 It does not proxy traffic, does not have a policy language of its own, and does not manage routes, upstreams or workspaces; the gateway owns those. SAML, SCIM, directory sync, account linking and a console are deferred features (§14).
 
@@ -18,7 +18,7 @@ It does not proxy traffic, does not have a policy language of its own, and does 
   browser ──login──▶ gateway ──OIDC──▶ Access ──OIDC──▶ tenant identity provider
                         │                 ▲
                         └── decisions ────┘
-  Data ───────── access context ─────────▶ Access ──▶ PostgreSQL (nine tables), Redis (codes)
+  Data ───────── access context ─────────▶ Access ──▶ PostgreSQL (eleven tables), Redis (codes)
 ```
 
 The gateway (`packages/gateway/`, read-only here) logs callers in through Access and asks it for a decision on every request. The gateway itself is unchanged, and the compatibility suite proves it against the repository's revision of the gateway. Shared concerns are in [Platform](../platform/README.md).
@@ -36,7 +36,7 @@ The gateway (`packages/gateway/`, read-only here) logs callers in through Access
 | Decision | The allow or deny answer the gateway receives, with a reason only the operator sees. |
 | Administration | Twelve `curl` endpoints plus one that reads the change audit. |
 
-The domain model is nine tables: `tenants`, `tenant_providers`, `users`, `permissions`, `grants`, `groups`, `roles`, `role_permissions`, `role_roles` (§3).
+The domain model is eleven tables: `tenants`, `tenant_providers`, `users`, `permissions`, `grants`, `groups`, `roles`, `role_permissions`, `role_roles`, `local_credentials`, `sso_routes` (§3).
 
 ## Find your way
 

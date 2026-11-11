@@ -6,13 +6,13 @@ How to run Access in production: requirements, deployment, the first tenant, mon
 
 | What | Variable |
 | --- | --- |
-| PostgreSQL for the nine tables | `ACCESS_DATABASE_URL` |
+| PostgreSQL for the eleven tables | `ACCESS_DATABASE_URL` |
 | Redis for login codes, shared by all replicas | `ACCESS_REDIS_URL` |
 | URL browsers and the gateway use | `ACCESS_ISSUER` |
 | PEM key that signs the service's tokens | `ACCESS_SIGNING_KEY`, `ACCESS_SIGNING_KID` |
 | Secret that signs and encrypts login state | `ACCESS_STATE_SECRET` |
 | Key that encrypts tenant client secrets at rest | `ACCESS_SECRET_ENCRYPTION_KEY` |
-| Token that guards the eighteen administrative endpoints | `ACCESS_ADMIN_TOKEN` |
+| Token that guards the twenty-one administrative endpoints | `ACCESS_ADMIN_TOKEN` |
 | Tenant gateway credentials, scoped to the tenant | Tenant registration (§3.1) |
 | Shared decision token: **optional, deprecated**, unscoped | `ACCESS_DECISION_TOKEN` |
 
@@ -82,7 +82,7 @@ kubectl -n platform rollout status deployment/platform-access
 2. **Register principals**, one per external identity ([`POST /v1/admin/users`](api.md#post-v1adminusers)).
 3. **Create grants**, one per permission on a workspace and route ([`PUT /v1/admin/grants`](api.md#put-v1admingrants)).
 4. **Configure the gateway**; values must match character for character (§13.2). The last two variables below are the gateway's own; gateway `1.0.0` and later refuse to start in production without them.
-5. **Check** with the eighteen calls of the session (`scripts/cli/admin-smoke.ts`).
+5. **Check** with the twenty-one calls of the session (`scripts/cli/admin-smoke.ts`).
 
 Step 1:
 
@@ -161,7 +161,7 @@ To retire the shared token, remove `ACCESS_DECISION_TOKEN` and `ACCESS_PREVIOUS_
 
 ## Backup and restore
 
-The nine tables are the only data; login state lives in the cookie, codes for sixty seconds in the store, and tokens are signed. Back up the database only.
+The eleven tables are the only data; login state lives in the cookie, codes for sixty seconds in the store, and tokens are signed. Back up the database only.
 
 ```bash
 pg_dump --format=custom --compress=9 --no-owner --no-privileges \
@@ -240,7 +240,7 @@ Never during cutover: gateway code changes, data migration from the old service,
 
 - [ ] Tenant, principals and grants registered.
 - [ ] A day at zero shadow differences; compatibility suite green.
-- [ ] The eighteen calls of the session answer (`scripts/cli/admin-smoke.ts`).
+- [ ] The twenty-one calls of the session answer (`scripts/cli/admin-smoke.ts`).
 - [ ] Signing key is the environment's; the gateway uses the same issuer.
 - [ ] Gateway rollback written down; dashboards watched the first day.
 
