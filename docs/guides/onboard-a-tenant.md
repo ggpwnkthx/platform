@@ -39,7 +39,7 @@ Write these down before the first call; several services must agree on them late
 | Gateway client id | `gateway-acme` | Unique across all tenants; a second tenant claiming it gets `409 conflict`. |
 | Gateway client secret | from your secret manager | Stored encrypted by Access and never returned. |
 | Gateway callback | `https://gateway-acme.example.com/auth/callback` | Must equal the gateway's `GATEWAY_OIDC_REDIRECT_URI` exactly. |
-| E-mail domain | `acme.example` | Optional and unique; only a hint for shared clients ([Access spec §5.2](../access/spec.md#52-resolving-the-tenant)). |
+| E-mail domain | `acme.example` | Optional and unique. It is the route of the tenant: the domain names the tenant of a login, and it waits for its proof ([Access spec §3.13](../access/spec.md#313-sso_routes)). |
 
 ### 2. Register the tenant and its identity provider
 
@@ -70,6 +70,15 @@ platformctl access tenants create --slug acme --display-name "Acme Inc" \
 ```
 
 In the console, a platform operator creates the tenant from **Operators** ([console user guide](../console/user-guide.md#administer-a-tenant)).
+
+The domain of the tenant is a route of the logins, and it is written with the tenant: the callers of the domain sign in at the provider of the tenant. The route waits for its proof before it routes anything, and the proof is the record the owner of the domain publishes — a TXT record of `_access` of the domain, carrying the challenge of the route. The tenant's own domain was written by the operator of the platform, so it is proved; another domain of the tenant is proved by the owner of that domain:
+
+```bash
+platformctl access routes create --tenant acme --key acme.example
+platformctl access routes verify <id> --verification dns
+```
+
+The console does the same from the tenant's page ([console user guide](../console/user-guide.md#administer-a-tenant)).
 
 Keep the defaults unless you have a reason: `autoProvision` stays `false`, so nobody gets a principal just by signing in, and `sharedClient` stays `false`, so the tenant's gateway logs in only this tenant's people. Note the `id` in the answer: it is the tenant UUID that Data and the access context credentials use. A `201` means created, a `200` means an existing slug was updated.
 
@@ -246,7 +255,7 @@ curl -sS -X PUT $ACCESS/v1/admin/grants \
 4. On the metrics, `access_logins_total{tenant="acme",result="success"}` and `access_decisions_total{tenant="acme",result="allow"}` rise while `gateway_auth_failures_total` stays flat.
 5. The audit holds `tenant.created`, `principal.created` and `grant.created` for the tenant: `platformctl access audit list --tenant acme`.
 
-`scripts/cli/admin-smoke.ts` exercises all eighteen administration calls against a deployment. It works on its own tenant (`ACCESS_SMOKE_SLUG`, default `smoke`), not on `acme` ([Access configuration: variables of the scripts and tests](../access/configuration.md#variables-of-the-scripts-and-tests)).
+`scripts/cli/admin-smoke.ts` exercises all twenty-one administration calls against a deployment. It works on its own tenant (`ACCESS_SMOKE_SLUG`, default `smoke`), not on `acme` ([Access configuration: variables of the scripts and tests](../access/configuration.md#variables-of-the-scripts-and-tests)).
 
 ## If something goes wrong
 

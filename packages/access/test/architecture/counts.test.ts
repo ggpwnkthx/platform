@@ -92,7 +92,41 @@ interface Claim {
   word: string
 }
 
+/**
+ * The claims of a line of the documentation.
+ *
+ * The phrases that carry the count of the administration: the number of
+ * the administrative endpoints, the calls of the session, the calls of
+ * the administration, the administration calls and the administration
+ * session.
+ *
+ * @param line the line of a document.
+ */
+function claimsOf(line: string): Claim[] {
+  const claims: Claim[] = []
+  for (const match of line.matchAll(
+    /(?:(?:the|all) (five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|twenty-one|twenty-two) (administrative endpoints|calls of the (session|administration)|administration calls)|the (five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|twenty-one|twenty-two)-call administration session)/gi
+  )) {
+    claims.push({ file: '', line: 0, word: match[1] ?? match[3]! })
+  }
+  return claims
+}
+
 describe('the numbers of the documentation', () => {
+  test('the check refuses a document that carries another number', () => {
+    // The check is proved by a wrong number: a document that names
+    // another size of the administration is a lie about the contract of
+    // the service, and the check names it.
+    //
+    // The phrases are assembled here: the file is read by the check
+    // above, and a phrase written in one line would be a claim of the
+    // file about the size of the administration.
+    const wrong = ['the', 'eighteen', 'administrative endpoints'].join(' ')
+    expect(claimsOf(wrong).map((claim) => claim.word)).toEqual(['eighteen'])
+    const right = ['all', 'twenty-one', 'administration calls'].join(' ')
+    expect(claimsOf(right).map((claim) => claim.word)).toEqual(['twenty-one'])
+  })
+
   test('the documents and the code agree on the size of the administration', async () => {
     const routes = await routesOfTheCode()
     // The number is the one of the code: a change of the surface changes
@@ -116,15 +150,11 @@ describe('the numbers of the documentation', () => {
         const line = lines[index]!
         // The phrases that carry the count of the administration: "the
         // twenty-one administrative endpoints", "the twenty-one calls of
-        // the session", "the twenty-one calls of the administration".
-        for (const match of line.matchAll(
-          /the (five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|twenty-one|nineteen|twenty|twenty-one|twenty-two) (administrative endpoints|calls of the (session|administration))/g
-        )) {
-          claims.push({
-            file: relative(root, file),
-            line: index + 1,
-            word: match[1]!,
-          })
+        // the session", "the twenty-one calls of the administration",
+        // "all twenty-one administration calls" and "the twenty-one-call
+        // administration session".
+        for (const claim of claimsOf(line)) {
+          claims.push({ ...claim, file: relative(root, file), line: index + 1 })
         }
       }
     }

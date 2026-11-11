@@ -4,8 +4,8 @@ Access is the platform's OpenID Connect broker and access decision service: it a
 
 ## What it does
 
-- **Brokers logins.** Access is a client of every tenant's OpenID Connect provider and, at the same time, the single provider the gateway knows.
-- **Maps identities.** A provider's `(tenant, subject)` pair becomes exactly one principal, the platform identity.
+- **Brokers logins.** Access is a client of the OpenID Connect providers of the tenants and, at the same time, the single provider the gateway knows.
+- **Maps identities.** A provider's `(tenant, provider, subject)` triple becomes exactly one principal, the platform identity.
 - **Answers decisions.** The gateway asks `POST /v1/decisions` on every request; grants alone decide.
 - **Serves the access context.** Data reads a principal's permissions for a workspace and route through `POST /v1/access-context`.
 - **Is administered over HTTP.** The twenty-one administrative endpoints, plus one that reads the change audit, are the whole administration: `curl`, with platform or per-tenant credentials.
@@ -27,14 +27,15 @@ The gateway (`packages/gateway/`, read-only here) logs callers in through Access
 
 | Concept | Meaning |
 | --- | --- |
-| Tenant | A customer with its own identity provider and one gateway client. |
-| Principal | A tenant's user, keyed by `(tenant, subject)` from the provider. Its id is the `sub` of every token Access issues. |
+| Tenant | A customer with its own identity providers and one gateway client. |
+| Principal | A tenant's user, keyed by `(tenant, provider, subject)`. Its id is the `sub` of every token Access issues. |
 | Permission | A named capability such as `workspace.read`; it travels in the `roles` claim. |
 | Grant | A permission or role a principal or group holds on a workspace and route, until revoked or expired. Grants alone decide access. |
 | Group | A set of a tenant's principals; a grant to the group holds for every member. |
 | Role | A named set of permissions and other roles that a grant can name. |
 | Decision | The allow or deny answer the gateway receives, with a reason only the operator sees. |
-| Administration | Twelve `curl` endpoints plus one that reads the change audit. |
+| Administration | Twenty-one `curl` endpoints plus one that reads the change audit. |
+| Route | A domain of addresses, or one address, that names the tenant of a login and the provider the callers of it sign in at. It routes nothing until the platform proves it. |
 
 The domain model is eleven tables: `tenants`, `tenant_providers`, `users`, `permissions`, `grants`, `groups`, `roles`, `role_permissions`, `role_roles`, `local_credentials`, `sso_routes` (§3).
 

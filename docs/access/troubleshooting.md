@@ -2,7 +2,7 @@
 
 Symptom-first help for Access: find what you see, then the likely cause, how to check it and how to fix it. It is written for operators and developers; each entry links to the rule in the [specification](spec.md), and the alerts that lead here are in [Operations](operations.md#monitoring).
 
-Every answer carries `x-request-id`, and every log line carries the same id: search the service log for it first. Decision reasons, login refusal reasons and the refused `(tenant, subject)` are in the log, never in the answer the caller sees (§12.3).
+Every answer carries `x-request-id`, and every log line carries the same id: search the service log for it first. Decision reasons, login refusal reasons and the refused `(tenant, provider, subject)` are in the log, never in the answer the caller sees (§12.3).
 
 ## Failed logins
 
@@ -15,7 +15,7 @@ A refused login ends on a page served by Access with a status and an error code.
 | `502 upstream_unavailable`, the page names one tenant | That tenant's provider is unreachable, slower than `ACCESS_IDP_TIMEOUT_MS`, answers more than one MiB, or resolves to a private address in production (§6.1). | `curl -sS -o /dev/null -w '%{http_code}\n' https://login.acme.example/.well-known/openid-configuration`, also from a pod. | Wait: other tenants work, and logins resume once the provider is back (caches last ten minutes). Don't raise `ACCESS_IDP_TIMEOUT_MS` (5 s). |
 | `403 provider_error` | The provider's discovery document is not JSON or lacks `issuer`, `authorization_endpoint`, `token_endpoint` or `jwks_uri`. | Fetch `{issuer}/.well-known/openid-configuration` and read it. | Fix the provider, or register the right `issuer`. |
 | `403 identity_rejected` | The provider token failed a check of §6.1: issuer not exactly `idp_issuer` (a trailing slash counts), wrong audience, nonce, algorithm or signature, clock outside `ACCESS_CLOCK_SKEW_SECONDS`, or an empty `sub`. A discovery document naming another issuer is refused the same way. | The service log names the failed check for the request id. | Correct `issuer`, `idpClientId` or `idpAlgorithms` in the tenant registration, or fix the clock of the host that drifted. |
-| `403 identity_unknown` | No principal exists for `(tenant, subject)` and the tenant does not auto-provision. | See [Unknown identity](#unknown-identity). | Register the principal. |
+| `403 identity_unknown` | No principal exists for `(tenant, provider, subject)` and the tenant does not auto-provision. | See [Unknown identity](#unknown-identity). | Register the principal. |
 | `403 principal_disabled` | The principal's `status` is `disabled` (§3.2). | `curl -sS "$ACCESS/v1/admin/users?tenant=acme&status=disabled" -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"` | Re-send the principal with `"status": "active"` ([`POST /v1/admin/users`](api.md#post-v1adminusers)). |
 | `400 login_state_invalid` | The state cookie is missing, expired (it lives ten minutes), already used, unreadable, or its `state` does not match (§5.3). Replicas with different `ACCESS_STATE_SECRET` values cannot read each other's cookies, and changing the secret drops in-flight logins. | Is `ACCESS_STATE_SECRET` the same on every replica? Did the login take longer than ten minutes? Does the browser keep the cookie on `/oauth/tenant/callback`? | Start a new login. Give every replica the same state secret. |
 | `500 internal_error` | An unexpected failure; the answer never carries a dependency's error. | The service log for the request id. | Fix what the log names. |
@@ -28,13 +28,13 @@ A refused login ends on a page served by Access with a status and an error code.
 
 **You see** `403 identity_unknown`, with a page saying the identity is not known to the platform.
 
-**Cause.** Access maps a login by `(tenant, subject)`, where the subject is the provider's `sub` (§6.2). No principal holds that pair, and the tenant has `autoProvision: false` (§6.4). Common reasons:
+**Cause.** Access maps a login by `(tenant, provider, subject)`, where the subject is the provider's `sub` (§6.2). No principal holds that triple, and the tenant has `autoProvision: false` (§6.4). Common reasons:
 
 - the principal was registered with its e-mail as `externalSubject`; the e-mail is never a key (§6.3);
 - the principal was registered under another tenant than the one the login resolved to (§5.2);
 - the provider's `sub` changed, for example after the provider was replaced; two subjects are two principals (§14).
 
-**Check.** The log line of the refusal carries the refused `(tenant, subject)`. List the tenant's principals and look for that `externalSubject`:
+**Check.** The log line of the refusal carries the refused `(tenant, provider, subject)`. List the tenant's principals and look for that `externalSubject`:
 
 ```bash
 curl -sS "$ACCESS/v1/admin/users?tenant=acme" -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
@@ -54,6 +54,22 @@ platformctl access tenants create --slug acme --display-name "Acme Inc" \
 ```
 
 The upsert changes the flags the body names and resets the ones it does not, so the call carries the whole tenant: the credentials of the provider and of the gateway are part of it.
+
+## The callers of a domain sign in at the wrong provider
+
+**You see.** The callers of one domain of a tenant sign in at the default provider of the tenant, and the callers of another domain of the same tenant should sign in somewhere else. Or: a caller types an address and lands at the directory of the wrong tenant.
+
+**Cause.** The route of the domain names the provider the callers of it sign in at (§3.13). A route routes nothing until the platform proves it: the owner of the domain publishes the record the route names, or the operator of the platform vouches for it. A route that waits for its proof is not used, and the login goes on with the default provider of the tenant, or with the default tenant of the platform when the address names no tenant at all (§5.2.2).
+
+**Check.** List the routes of the tenant and read their state:
+
+```bash
+curl -sS "$ACCESS/v1/admin/routes?tenant=acme" -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"
+```
+
+A route in `pending` is the one that routes nothing. Its `challenge` and the name of the record are in the answer.
+
+**Fix.** Publish the record the route names — a TXT record of `_access` of the domain, carrying the challenge — and prove the route with `POST /v1/admin/routes/{id}/verify` and the method `dns`. A platform operator may vouch for the domain with the method `operator` instead.
 
 ## A tenant that provisions its identities
 

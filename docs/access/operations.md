@@ -79,10 +79,12 @@ kubectl -n platform rollout status deployment/platform-access
 ## First tenant
 
 1. **Register the tenant** with its provider and gateway (upsert by slug, [`POST /v1/admin/tenants`](api.md#post-v1admintenants)).
-2. **Register principals**, one per external identity ([`POST /v1/admin/users`](api.md#post-v1adminusers)).
-3. **Create grants**, one per permission on a workspace and route ([`PUT /v1/admin/grants`](api.md#put-v1admingrants)).
-4. **Configure the gateway**; values must match character for character (§13.2). The last two variables below are the gateway's own; gateway `1.0.0` and later refuse to start in production without them.
-5. **Check** with the twenty-one calls of the session (`scripts/cli/admin-smoke.ts`).
+2. **Register the routes** of the tenant: a domain of addresses, or one address, names the tenant of a login and the provider the callers of it sign in at ([`POST /v1/admin/routes`](api.md#post-v1adminroutes)). The route of the domain of the tenant is written with the tenant and waits for its proof.
+3. **Prove the routes**: the owner of the domain publishes the record the route names — a TXT record of `_access` of the domain, carrying the challenge of the route — and the route is proved with [`POST /v1/admin/routes/{id}/verify`](api.md#post-v1adminroutesidverify). A platform operator may vouch for the domain instead, with the method `operator`.
+4. **Register principals**, one per external identity ([`POST /v1/admin/users`](api.md#post-v1adminusers)).
+5. **Create grants**, one per permission on a workspace and route ([`PUT /v1/admin/grants`](api.md#put-v1admingrants)).
+6. **Configure the gateway**; values must match character for character (§13.2). The last two variables below are the gateway's own; gateway `1.0.0` and later refuse to start in production without them.
+7. **Check** with the twenty-one calls of the session (`scripts/cli/admin-smoke.ts`).
 
 Step 1:
 
@@ -97,7 +99,19 @@ curl -sS -X POST $ACCESS/v1/admin/tenants \
        "emailDomain":"acme.example","clientId":"gateway-acme","clientSecret":"…","clientRedirectUris":["https://gateway-acme.example.com/auth/callback"]}'
 ```
 
-Step 4:
+Step 3:
+
+```bash
+curl -sS -X POST $ACCESS/v1/admin/routes \
+  -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" -H "content-type: application/json" \
+  -d '{"tenant":"acme","kind":"domain","key":"acme.example"}'
+
+curl -sS -X POST $ACCESS/v1/admin/routes/<id>/verify \
+  -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" -H "content-type: application/json" \
+  -d '{"status":"verified","verification":"dns"}'
+```
+
+Step 6:
 
 ```bash
 GATEWAY_OIDC_ISSUER=https://access.example.com
@@ -110,7 +124,7 @@ GATEWAY_SESSION_SECRET=the-secret-of-the-sessions
 GATEWAY_IDENTITY_SIGNING_KEY=the-private-key-of-the-deployment
 ```
 
-Step 5:
+Step 7:
 
 ```bash
 ACCESS_URL=https://access.example.com ACCESS_ADMIN_TOKEN=… bun run scripts/cli/admin-smoke.ts

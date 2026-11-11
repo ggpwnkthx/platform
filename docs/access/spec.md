@@ -16,8 +16,8 @@ Status: 1.4.0. Runtime: Bun ≥ 1.4.3. Listener: HTTP on `ACCESS_HOST:ACCESS_POR
 
 | | |
 | --- | --- |
-| **Brokers the login** | It is an OIDC client of each tenant's provider *and* the OIDC provider of the gateway. The browser logs in at the tenant's provider; the gateway sees a provider it already knows how to talk to. |
-| **Maps the identity** | The provider's `(tenant, subject)` pair maps to exactly one **principal row**. The row is the platform identity; the external identity is only the way in. |
+| **Brokers the login** | It is an OIDC client of the providers of the tenants *and* the OIDC provider of the gateway. The browser logs in at the provider the route of the caller names; the gateway sees a provider it already knows how to talk to. |
+| **Maps the identity** | The provider's `(tenant, provider, subject)` triple maps to exactly one **principal row**. The row is the platform identity; the external identity is only the way in. |
 | **Answers decisions** | It implements the decision contract the gateway already speaks, `POST /v1/decisions`, computed over a table of **grants**. |
 | **Is administered with twenty-one endpoints** | Tenants, principals, grants, groups and roles are created, revoked and **listed** with twenty-one `curl` calls; a twenty-second reads the audit. No console, portal or wizard. |
 
@@ -65,8 +65,8 @@ Access is multi-tenant; the gateway is not. That is the price of "the gateway ga
 
 | Term | Meaning |
 | --- | --- |
-| **tenant** | A customer of the platform. Owns one identity provider, one principal population and one set of grants. |
-| **provider (of a tenant)** | The tenant's OIDC provider. Exactly one per tenant. |
+| **tenant** | A customer of the platform. Owns one or more identity providers, one principal population and one set of grants. |
+| **provider (of a tenant)** | One of the OIDC providers a tenant signs its people in at. A tenant may have several; the one whose slug is `default` is the registration of the tenant itself. |
 | **principal** | The `users` row that carries a caller's platform identity. It is the `subject` of every token Access issues and of every decision request. |
 | **permission** | A named capability, e.g. `workspace.read`. It is a platform *role*: it travels in the `roles` claim and is what a grant gives. |
 | **grant** | A permission a principal holds on a workspace and route, until revoked or expired. |
@@ -82,10 +82,10 @@ Access is multi-tenant; the gateway is not. That is the price of "the gateway ga
 None is configurable. Each is enforced in code and has a test.
 
 1. **A caller is only authenticated against its tenant's provider.** The provider token's issuer, audience, nonce and algorithm are checked before the identity is read.
-2. **An external identity is never mapped by e-mail.** The key is `(tenant, subject)`; an e-mail is mutable and is not an identity.
+2. **An external identity is never mapped by e-mail.** The key is `(tenant, provider, subject)`; an e-mail is mutable and is not an identity.
 3. **A principal with no grant is refused.** Existing is not access.
 4. **A decision that cannot be computed is denied.** An unreachable database produces a denial, never an allowance.
-5. **The administrative endpoints are the whole administration surface.** There is no second way to change a tenant, principal or grant. Seven change something, five read a list and one reads the audit; nothing else writes.
+5. **The administrative endpoints are the whole administration surface.** There is no second way to change a tenant, principal or grant. Thirteen change something, eight read a list and one reads the audit; nothing else writes.
 6. **Every change is audited, durably.** The change and its audit row are written by **one statement**, so both commit or neither does: an unaudited change does not exist. The row names the operator, never the credential (§10.1). A log line is not the audit; the audit is a table.
 7. **A secret is never returned, logged or sent through a browser.** Provider client secrets, gateway client secrets and tokens are write-only.
 8. **A gateway never learns a reason.** A decision's reason is for the operator; neither the gateway nor Access forwards it to a caller.
@@ -272,6 +272,9 @@ The administration call **replaces** the memberships (§10.11): the listed permi
      ├──< tenant_providers (the providers the tenant signs in at)
      │        (the slug of the provider is the third part of the key
      │         of a principal)
+     │
+     ├──< sso_routes (the domains and the addresses that name the
+     │        tenant of a login and the provider it signs in at)
      │
      └── the registration of the default provider and of the gateway
 ```
@@ -1220,7 +1223,7 @@ A tenant's whole lifecycle, from registration to revocation, takes one call to e
 
 The audit of changes, newest first. Read-only, paginated like the other lists (§10.1).
 
-Filters: `tenant` (an unknown tenant slug → `404 not_found`) and `action` (`tenant.created`, `tenant.updated`, `provider.created`, `provider.updated`, `provider.removed`, `credential.created`, `credential.updated`, `credential.removed`, `principal.created`, `principal.updated`, `group.created`, `group.updated`, `grant.created`, `grant.updated`, `grant.revoked`, `role.created`, `role.updated`, `role.removed`, `role.permission.granted`, `role.permission.revoked`, `role.role.nested`, `role.role.unnested`).
+Filters: `tenant` (an unknown tenant slug → `404 not_found`) and `action` (`tenant.created`, `tenant.updated`, `provider.created`, `provider.updated`, `provider.removed`, `route.created`, `route.updated`, `route.verified`, `route.rejected`, `credential.created`, `credential.updated`, `credential.removed`, `principal.created`, `principal.updated`, `group.created`, `group.updated`, `grant.created`, `grant.updated`, `grant.revoked`, `role.created`, `role.updated`, `role.removed`, `role.permission.granted`, `role.permission.revoked`, `role.role.nested`, `role.role.unnested`).
 
 `format` defaults to `json`; `csv` and `jsonl` are **exports** that a spreadsheet or script can read, with the list filters applied. Any other format → `400 invalid_request`.
 
