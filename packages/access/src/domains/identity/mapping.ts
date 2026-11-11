@@ -114,7 +114,14 @@ export class MappingError extends Error {
   constructor(
     /** The code of the failure. */
     readonly code: 'identity_unknown' | 'principal_disabled',
-    message: string
+    message: string,
+    /**
+     * The subject of the identity that was refused.
+     *
+     * It is the key of the mapping that found nothing: it is in the log
+     * of the service and never in the answer of the browser (spec §5.6).
+     */
+    readonly subject?: string
   ) {
     super(message)
     this.name = 'MappingError'
@@ -164,7 +171,11 @@ export async function mapIdentity(
   // provisions the identities that sign in (spec §6.4).
   const known = provider.kind === 'local'
   if (!known && !tenant.autoProvision) {
-    throw new MappingError('identity_unknown', 'the identity is unknown to the platform')
+    throw new MappingError(
+      'identity_unknown',
+      'the identity is unknown to the platform',
+      identity.subject
+    )
   }
 
   // The principal that is created first is the first of its tenant: the

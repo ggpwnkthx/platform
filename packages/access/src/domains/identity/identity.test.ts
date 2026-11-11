@@ -5,6 +5,8 @@ import {
   createStateCipher,
   domainOf,
   isAlive,
+  LoginError,
+  LoginService,
   LoginStateError,
   mapIdentity,
   MappingError,
@@ -18,6 +20,8 @@ import {
   type ProviderOfLogin,
   type TenantOfLogin,
 } from './index'
+import { ProviderError, refusalOfProvider, reasonOfVerification } from './provider-client'
+import { providerStateOf } from './provider-state'
 
 /** The redirect uri the gateway of the tests is registered with. */
 const REDIRECT = 'https://gateway-acme.example.com/auth/callback'
@@ -559,5 +563,143 @@ describe('the mapping of an identity', () => {
         { subject: 'the-subject' }
       )
     ).rejects.toThrow(/disabled/)
+  })
+})
+
+describe('the reason of a refusal', () => {
+  /** The secret of the state of the tests. */
+  const SECRET = 'the-secret-of-the-tests'
+
+  /** A state of a login that is in flight. */
+  function stateOf(overrides: Partial<LoginState> = {}): LoginState {
+    return {
+      tenant: 'acme',
+      provider: 'default',
+      clientId: 'gateway-acme',
+      redirectUri: REDIRECT,
+      state: 'the-state-of-the-gateway',
+      nonce: 'the-nonce-of-the-login',
+      verifier: aVerifier(),
+      scopes: ['openid'],
+      startedAt: Date.now(),
+      ...overrides,
+    }
+  }
+
+  /**
+   * A service of logins whose provider fails the way it is told to.
+   *
+   * @param failure the failure of the exchange of the code.
+   */
+  function serviceOf(failure: unknown): LoginService {
+    return new LoginService({
+      tenants: lookup([tenant()]),
+      routes: routes(),
+      principals: {
+        findByExternalSubject: async () => null,
+        countByTenant: async () => 1,
+        create: async () => {
+          throw new Error('the principal should not be created')
+        },
+      },
+      state: createStateCipher(SECRET),
+      driverOf: async () => ({
+        kind: 'oidc' as const,
+        authorizationUrl: async () => 'https://login.acme.example/authorize',
+        exchange: async () => {
+          throw failure
+        },
+      }),
+      secret: SECRET,
+    })
+  }
+
+  /** Finishes a login whose provider fails. */
+  async function refusedBy(failure: unknown): Promise<LoginError> {
+    const state = stateOf()
+    const service = serviceOf(failure)
+    try {
+      await service.complete({
+        cookie: createStateCipher(SECRET).encrypt(state),
+        providerState: providerStateOf(state, SECRET),
+        code: 'the-code-of-the-provider',
+      })
+    } catch (error) {
+      if (error instanceof LoginError) return error
+      throw error
+    }
+    throw new Error('the login should have been refused')
+  }
+
+  test('the reason of a provider that refuses the exchange is carried by the refusal', async () => {
+    const refusal = await refusedBy(
+      new ProviderError(
+        'provider_error',
+        'the provider refused the exchange of the code (invalid_grant, AADSTS7000218)'
+      )
+    )
+    expect(refusal.code).toBe('identity_rejected')
+    // The answer of the browser names what happened and nothing else.
+    expect(refusal.message).toBe('the provider of the tenant was refused')
+    // The reason is in the log of the service.
+    expect(refusal.reason).toContain('invalid_grant')
+    expect(refusal.reason).toContain('AADSTS7000218')
+  })
+
+  test('a provider that is not reachable is refused with its reason', async () => {
+    const refusal = await refusedBy(
+      new ProviderError('upstream_unavailable', 'the provider of the tenant is not reachable')
+    )
+    expect(refusal.code).toBe('upstream_unavailable')
+    expect(refusal.reason).toBe('the provider of the tenant is not reachable')
+  })
+
+  test('a failure that is not a refusal of the provider is not a refusal', async () => {
+    // A failure of the service is not a provider that refused: it is
+    // raised again, and the service answers that it failed.
+    await expect(
+      (async () => {
+        const state = stateOf()
+        const service = serviceOf(new Error('the defect of the service'))
+        await service.complete({
+          cookie: createStateCipher(SECRET).encrypt(state),
+          providerState: providerStateOf(state, SECRET),
+          code: 'the-code-of-the-provider',
+        })
+      })()
+    ).rejects.toThrow(/the defect of the service/)
+  })
+})
+
+describe('the answer of a provider that refuses', () => {
+  test('the code of the refusal is named', () => {
+    expect(
+      refusalOfProvider(
+        JSON.stringify({
+          error: 'invalid_grant',
+          error_description: 'AADSTS7000218: The provided authorization code is invalid.',
+        })
+      )
+    ).toBe('invalid_grant, AADSTS7000218')
+  })
+
+  test('an answer that is not json names nothing', () => {
+    expect(refusalOfProvider('not json')).toBe('unknown')
+  })
+
+  test('an answer that names no code names nothing', () => {
+    expect(refusalOfProvider(JSON.stringify({ error: 'a code with spaces' }))).toBe('unknown')
+  })
+
+  test('the reason of a verification names the failure', () => {
+    expect(reasonOfVerification({ code: 'ERR_JWKS_NO_MATCHING_KEY' })).toContain(
+      'does not publish the key'
+    )
+    expect(reasonOfVerification({ code: 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED' })).toContain(
+      'signature'
+    )
+    expect(reasonOfVerification(new Error('anything else'))).toBe(
+      'the token of the provider was refused'
+    )
   })
 })

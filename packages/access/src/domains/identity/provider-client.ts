@@ -101,6 +101,64 @@ export interface ProviderDiscovery {
   jwks_uri: string
 }
 
+/**
+ * The reason of the refusal of a provider, as its answer names it.
+ *
+ * The answer of a provider that refuses an exchange carries a code —
+ * `invalid_grant`, `invalid_client` — and a description. The code names
+ * the failure, and the description of Entra ID names it a second time
+ * with a code of its own (`AADSTS7000218`). Nothing else of the answer
+ * is kept: a description is the answer of the provider, and it may
+ * carry anything.
+ *
+ * @param body the body of the answer of the provider.
+ * @returns the codes of the refusal, or `unknown`.
+ */
+export function refusalOfProvider(body: string): string {
+  let parsed: { error?: unknown; error_description?: unknown }
+  try {
+    parsed = JSON.parse(body) as { error?: unknown; error_description?: unknown }
+  } catch {
+    return 'unknown'
+  }
+  const names: string[] = []
+  const code = typeof parsed.error === 'string' ? parsed.error.trim() : ''
+  if (/^[A-Za-z0-9_.-]{1,64}$/.test(code)) names.push(code)
+  const description = typeof parsed.error_description === 'string' ? parsed.error_description : ''
+  const own = description.match(/AADSTS\d+/i)?.[0]
+  if (own) names.push(own.toUpperCase())
+  return names.length > 0 ? names.join(', ') : 'unknown'
+}
+
+/**
+ * The reason of a refusal of the signature of a token.
+ *
+ * The library of the tokens names the failure of the verification, and
+ * the name says which one it was: a token signed with a key the
+ * provider does not publish is not a token with a bad signature.
+ *
+ * @param error the failure of the verification.
+ * @returns the reason of the refusal.
+ */
+export function reasonOfVerification(error: unknown): string {
+  const code = (error as { code?: unknown })?.code
+  switch (code) {
+    case 'ERR_JWKS_NO_MATCHING_KEY':
+      return 'the provider does not publish the key that signed the token'
+    case 'ERR_JWKS_MULTIPLE_MATCHING_KEYS':
+      return 'the provider publishes several keys that could have signed the token'
+    case 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED':
+      return 'the signature of the token is not the one of the provider'
+    case 'ERR_JWT_EXPIRED':
+      return 'the token has expired'
+    case 'ERR_JWT_INVALID':
+    case 'ERR_JWS_INVALID':
+      return 'the token is not a valid token of the provider'
+    default:
+      return 'the token of the provider was refused'
+  }
+}
+
 /** The client of an OpenID Connect provider of a tenant. */
 export class ProviderClient implements ProviderDriver {
   readonly kind = 'oidc' as const
@@ -216,9 +274,13 @@ export class ProviderClient implements ProviderDriver {
       )
     }
     if (document.issuer !== this.options.issuer) {
+      // The two issuers are in the reason: a tenant that registered the
+      // issuer with a trailing slash, or in another case, or with the
+      // name of the domain instead of the identifier of the tenant, is
+      // refused here — and the reason says which of the two is which.
       throw new ProviderError(
         'identity_rejected',
-        'the issuer of the provider is not the issuer of the tenant'
+        `the issuer of the provider is not the issuer of the tenant (the document names ${document.issuer}, the tenant names ${this.options.issuer})`
       )
     }
     const complete: ProviderDiscovery = {
@@ -322,7 +384,15 @@ export class ProviderClient implements ProviderDriver {
       body: body.toString(),
     })
     if (response.status !== 200) {
-      throw new ProviderError('provider_error', 'the provider refused the exchange of the code')
+      // The reason of the refusal of the provider is in the log and
+      // never in the answer of the browser: the code of the answer of
+      // the provider names the failure (`invalid_grant`, `invalid_client`),
+      // and Entra ID names it a second time in its own code
+      // (`AADSTS7000218`). Nothing else of the answer is kept.
+      throw new ProviderError(
+        'provider_error',
+        `the provider refused the exchange of the code (${refusalOfProvider(response.body)})`
+      )
     }
     let parsed: unknown
     try {
@@ -367,7 +437,9 @@ export class ProviderClient implements ProviderDriver {
       })
     } catch (error) {
       if (error instanceof IdentityError) {
-        throw new ProviderError('identity_rejected', 'the token of the provider was refused')
+        // The message of the failure names the check that failed: it is
+        // the reason of the refusal, and it is in the log.
+        throw new ProviderError('identity_rejected', error.message)
       }
       throw error
     }
@@ -403,8 +475,8 @@ export class ProviderClient implements ProviderDriver {
         email: typeof payload.email === 'string' ? payload.email : undefined,
         name: typeof payload.name === 'string' ? payload.name : undefined,
       }
-    } catch {
-      throw new ProviderError('identity_rejected', 'the token of the provider was refused')
+    } catch (error) {
+      throw new ProviderError('identity_rejected', reasonOfVerification(error))
     }
   }
 

@@ -14,7 +14,7 @@ A refused login ends on a page served by Access with a status and an error code.
 | `403 tenant_disabled` | The tenant has `enabled = false` (§3.1). | `curl -sS $ACCESS/v1/admin/tenants -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"` and read `enabled`. | Re-send the tenant with `"enabled": true`. |
 | `502 upstream_unavailable`, the page names one tenant | That tenant's provider is unreachable, slower than `ACCESS_IDP_TIMEOUT_MS`, answers more than one MiB, or resolves to a private address in production (§6.1). | `curl -sS -o /dev/null -w '%{http_code}\n' https://login.acme.example/.well-known/openid-configuration`, also from a pod. | Wait: other tenants work, and logins resume once the provider is back (caches last ten minutes). Don't raise `ACCESS_IDP_TIMEOUT_MS` (5 s). |
 | `403 provider_error` | The provider's discovery document is not JSON or lacks `issuer`, `authorization_endpoint`, `token_endpoint` or `jwks_uri`. | Fetch `{issuer}/.well-known/openid-configuration` and read it. | Fix the provider, or register the right `issuer`. |
-| `403 identity_rejected` | The provider token failed a check of §6.1: issuer not exactly `idp_issuer` (a trailing slash counts), wrong audience, nonce, algorithm or signature, clock outside `ACCESS_CLOCK_SKEW_SECONDS`, or an empty `sub`. A discovery document naming another issuer is refused the same way. | The service log names the failed check for the request id. | Correct `issuer`, `idpClientId` or `idpAlgorithms` in the tenant registration, or fix the clock of the host that drifted. |
+| `403 identity_rejected` | The provider token failed a check of §6.1: issuer not exactly `idp_issuer` (a trailing slash counts), wrong audience, nonce, algorithm or signature, clock outside `ACCESS_CLOCK_SKEW_SECONDS`, or an empty `sub`. A discovery document naming another issuer is refused the same way. | The service log names the failed check for the request id: the line `the login was refused` carries `code`, `tenant` and `reason`, and the reason names the check that failed or the code of the refusal of the provider (`invalid_grant`, `AADSTS7000218`). | Correct `issuer`, `idpClientId` or `idpAlgorithms` in the tenant registration, or fix the clock of the host that drifted. |
 | `403 identity_unknown` | No principal exists for `(tenant, provider, subject)` and the tenant does not auto-provision. | See [Unknown identity](#unknown-identity). | Register the principal. |
 | `403 principal_disabled` | The principal's `status` is `disabled` (§3.2). | `curl -sS "$ACCESS/v1/admin/users?tenant=acme&status=disabled" -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"` | Re-send the principal with `"status": "active"` ([`POST /v1/admin/users`](api.md#post-v1adminusers)). |
 | `400 login_state_invalid` | The state cookie is missing, expired (it lives ten minutes), already used, unreadable, or its `state` does not match (§5.3). Replicas with different `ACCESS_STATE_SECRET` values cannot read each other's cookies, and changing the secret drops in-flight logins. | Is `ACCESS_STATE_SECRET` the same on every replica? Did the login take longer than ten minutes? Does the browser keep the cookie on `/oauth/tenant/callback`? | Start a new login. Give every replica the same state secret. |
@@ -23,6 +23,40 @@ A refused login ends on a page served by Access with a status and an error code.
 | The gateway's code exchange gets `400 invalid_grant` | The code was already used, is older than 60 s, or was exchanged with another client, redirect URI or PKCE verifier (§5.5). Several replicas on process memory each hold their own codes. | The gateway log for a retried exchange; whether more than one replica runs without `ACCESS_REDIS_URL`. | Give replicas a shared store; make the gateway send the same redirect URI it used at `/oauth/authorize`. |
 | The gateway's code exchange gets `401 invalid_client` | `GATEWAY_OIDC_CLIENT_SECRET` is not the tenant's `clientSecret`, or a rotation's 24-hour window has closed (§4.3.1). | Compare the two values (§13.2). | Send the gateway's secret as `clientSecret`, or update the gateway. |
 | One tenant's logins fail right after registration | A wrong issuer, client id or redirect URI in the registration; the provider client is cached ten minutes (§6.6). | `curl -sS $ACCESS/v1/admin/tenants -H "authorization: Bearer $ACCESS_ADMIN_TOKEN"` | Repeat the [create call](api.md#post-v1admintenants) with the right values; wait ten minutes or roll for the cache. A client id owned by another tenant gets `409 conflict`. |
+
+## A login refused at Entra ID
+
+**You see** `403 identity_rejected`, with a page saying that the provider of the tenant was refused, and the browser coming back from `https://login.microsoftonline.com`.
+
+**Cause.** Access refused the token of Entra ID, or Entra ID refused the exchange of the code. The reason is in the log of Access, in the `reason` of the line `the login was refused`, and never in the page of the refusal.
+
+**Check.** Read the log of Access for the request id of the callback, and read the reason:
+
+```bash
+az containerapp logs show --name platform-production-access \
+  --resource-group platform-production | grep 'the login was refused'
+```
+
+The reason names the failure:
+
+| The reason names | What it means | Fix |
+| --- | --- | --- |
+| `the issuer of the provider is not the issuer of the tenant` | The discovery document of Entra ID names another issuer than the registration of the tenant. The two are in the reason, character for character. | Register the issuer the document names: it is the second version of the endpoint of the directory, `https://login.microsoftonline.com/{tenant-id}/v2.0`, and the identifier of the tenant is in lower case. |
+| `the issuer of the token is not the one of the tenant` | The token of Entra ID names another issuer than the registration. The two are in the reason. | The same: the registration and the directory have to name the same issuer, character for character. |
+| `the provider refused the exchange of the code (invalid_grant)` | Entra ID refused the code of the login. | Read the code of Entra ID in the reason (`AADSTS7000218`: the code is spent or was minted for another callback; `AADSTS7000215`: the secret of the client is wrong; `AADSTS7000222`: the code has expired). |
+| `the provider refused the exchange of the code (invalid_client)` | Entra ID refused the secret of the client of Access. | The secret of the registration is the secret of the application of Access at Entra ID; a rotation of the secret is a rotation of the registration of the tenant. |
+| `the token is not for the client of the tenant` | The token was minted for another client. | The `idpClientId` of the registration is the client id of the application of Access at Entra ID. |
+| `the nonce of the token is not the one of the login` | The token was not minted for this login. | Nothing: a login that is refused this way is a login that was started somewhere else. Start a new one. |
+| `the signature of the token is not the one of the provider` | The signature of the token is not one of the keys of Entra ID. | Nothing: Entra ID signs with a key that it publishes. Wait for the keys of the provider to be read again (§6.6). |
+
+**The check that does not need the log.** The issuer of the registration and the issuer of the directory are two strings that have to be the same, and the deployment of Azure reads the document of the directory before the first login and says so when they are not:
+
+```bash
+curl -sS https://login.microsoftonline.com/{tenant-id}/v2.0/.well-known/openid-configuration \
+  | grep '"issuer"'
+```
+
+The issuer it names is the one the registration of the tenant has to carry. A trailing slash, another case in the identifier of the tenant and the first version of the endpoint of the directory are three issuers that refuse every login.
 
 ## Unknown identity
 

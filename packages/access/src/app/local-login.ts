@@ -81,6 +81,7 @@ export async function localLoginHandler(
       dependencies.logger.warn('the sign-in at a local provider was refused', {
         code: error.code,
         requestId: context.get('requestId'),
+        reason: error.message,
       })
       if (error.code === 'too_many_requests') {
         return refusalPage('too_many_requests', error.message, 429)

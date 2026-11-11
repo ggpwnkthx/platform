@@ -82,11 +82,13 @@ export function validateProviderToken(options: ValidationOptions): ValidatedIden
   const now = options.now ?? Math.floor(Date.now() / 1000)
 
   // The issuer is exactly the one of the tenant: a comparison that
-  // ignores the case or the trailing slash is not allowed.
+  // ignores the case or the trailing slash is not allowed. The two
+  // issuers are in the reason: they are the two strings that have to be
+  // the same, and they are in the log of the service.
   if (token.issuer !== options.expectedIssuer) {
     throw new IdentityError(
       'identity_rejected',
-      'the issuer of the token is not the one of the tenant'
+      `the issuer of the token is not the one of the tenant (the token names ${token.issuer ?? 'nothing'}, the tenant names ${options.expectedIssuer})`
     )
   }
 
@@ -111,7 +113,10 @@ export function validateProviderToken(options: ValidationOptions): ValidatedIden
     audiences.includes(options.expectedAudience) ||
     token.authorizedParty === options.expectedAudience
   if (!audienceOk) {
-    throw new IdentityError('identity_rejected', 'the token is not for the client of the tenant')
+    throw new IdentityError(
+      'identity_rejected',
+      `the token is not for the client of the tenant (the token names ${audiences.join(', ') || 'no audience'})`
+    )
   }
 
   // The nonce is the nonce of the login in flight.

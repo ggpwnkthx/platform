@@ -471,6 +471,16 @@ not the first: the discovery document of the first version names another
 issuer, and Access refuses a provider whose document names an issuer
 that is not the issuer of the tenant.
 
+The identifier of the tenant is in lower case in that issuer, and it is
+in lower case in the identifier of the tenant of the templates: Entra ID
+names the tenant of its issuer in lower case, and Access compares the
+issuer of the registration with the issuer of the token and with the
+issuer of the discovery document character for character. An issuer that
+carries the identifier of the tenant in another case refuses every login
+of the tenant, and the wizard of the deployment says so before the first
+login: it reads the document of the directory and it names the two
+issuers when they are not the same.
+
 The scopes of the provider are the ones its discovery document names:
 `openid`, `profile` and `email`. The gateway and the console ask for
 the groups of a caller as well, and Entra ID does not name that scope:

@@ -1981,6 +1981,19 @@ async function tenantWithEntra(context: AfterApply, waits: Waits): Promise<strin
       : `the tenant ${body.slug} of the deployment is registered with the application of Access at Entra ID as its provider: the callers of the tenant sign in at Entra ID`
   )
 
+  // The issuer of the tenant is the one of the provider, character for
+  // character: Access compares the issuer of the registration with the
+  // issuer of the token and with the issuer of the discovery document of
+  // the provider, and it refuses every login when they differ. The
+  // deployment says so before the first login, and it names the two
+  // issuers when they are not the same.
+  const named = await issuerNamedBy(entraIssuer)
+  if (named !== null) {
+    notes.push(
+      `the issuer of the provider of the deployment is not the one the provider names: the deployment registers ${entraIssuer} and the provider names ${named}: every login of the tenant is refused until the issuer of the registration is the one the provider names`
+    )
+  }
+
   // The identifier of the tenant is the scope of the access context of
   // the deployment, and the values of the deployment name it.
   if (registered.id !== id && context.file !== undefined) {
@@ -1992,6 +2005,36 @@ async function tenantWithEntra(context: AfterApply, waits: Waits): Promise<strin
     }
   }
   return notes
+}
+
+/**
+ * The issuer that the discovery document of a provider names.
+ *
+ * The document of a provider names the issuer of the provider, and the
+ * issuer of the tenant of the platform has to be that one, character for
+ * character: Access compares the two and refuses every login when they
+ * differ. The deployment reads the document before the first login, and
+ * it says so when the two are not the same.
+ *
+ * A document that cannot be read names nothing: the deployment of a
+ * provider that is not reachable is not a deployment that is refused.
+ *
+ * @param issuer the issuer of the provider.
+ * @returns the issuer the document names, or null.
+ */
+async function issuerNamedBy(issuer: string): Promise<string | null> {
+  try {
+    const answer = await fetch(`${issuer.replace(/\/$/, '')}/.well-known/openid-configuration`, {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(10_000),
+    })
+    if (answer.status !== 200) return null
+    const document = (await answer.json()) as { issuer?: unknown }
+    if (typeof document.issuer !== 'string' || document.issuer === '') return null
+    return document.issuer === issuer ? null : document.issuer
+  } catch {
+    return null
+  }
 }
 
 /**

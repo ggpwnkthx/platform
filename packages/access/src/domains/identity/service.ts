@@ -48,7 +48,15 @@ export class LoginError extends Error {
       | 'principal_disabled'
       | 'tenant_disabled'
       | 'upstream_unavailable',
-    message: string
+    message: string,
+    /**
+     * The reason of the refusal.
+     *
+     * It names the failure of the provider or the check of the token that
+     * failed: it is in the log of the service and never in the answer of
+     * the browser (spec §5.6).
+     */
+    readonly reason?: string
   ) {
     super(message)
     this.name = 'LoginError'
@@ -380,7 +388,11 @@ export class LoginService {
       )
     } catch (error) {
       if (error instanceof MappingError) {
-        throw new LoginError(error.code, error.message)
+        throw new LoginError(
+          error.code,
+          error.message,
+          error.subject ? `the subject of the refused identity is ${error.subject}` : undefined
+        )
       }
       throw error
     }
@@ -439,17 +451,36 @@ export class LoginService {
     }
   }
 
-  /** Turns the failure of the provider into a refusal of the login. */
+  /**
+   * Turns the failure of the provider into a refusal of the login.
+   *
+   * The reason of the failure is carried by the refusal, and it is in the
+   * log of the service: the answer of the browser names what happened and
+   * nothing else (spec §5.6).
+   *
+   * A failure that is not a refusal of the provider is not a refusal at
+   * all: it is raised again, and the service answers `internal_error`
+   * with the failure in its log.
+   */
   private refusalOf(error: unknown): LoginError {
     if (error instanceof ProviderError) {
       if (error.code === 'upstream_unavailable') {
-        return new LoginError('upstream_unavailable', 'the provider of the tenant is not reachable')
+        return new LoginError(
+          'upstream_unavailable',
+          'the provider of the tenant is not reachable',
+          error.message
+        )
       }
-      return new LoginError('identity_rejected', 'the provider of the tenant was refused')
+      return new LoginError(
+        'identity_rejected',
+        'the provider of the tenant was refused',
+        error.message
+      )
     }
-    return error instanceof LoginError
-      ? error
-      : new LoginError('identity_rejected', 'the provider of the tenant was refused')
+    if (error instanceof LoginError) {
+      return error
+    }
+    throw error
   }
 
   /** Resolves the tenant of a login and turns the failures into refusals. */

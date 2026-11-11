@@ -22,7 +22,11 @@ provider "azurerm" {
   # The tenant of the deployment is the tenant of the subscription of
   # the deployment: the vault of the deployment lives in it, and the
   # provider of the identity writes the application of Access in it.
-  tenant_id = var.tenant_id
+  #
+  # The identifier is in lower case: Entra ID names the tenant of its
+  # issuer in lower case, and the issuer of the tenant of the deployment
+  # is built from the identifier of the tenant.
+  tenant_id = lower(var.tenant_id)
 }
 
 # The identity provider of the deployment is Entra ID: the templates
@@ -30,7 +34,7 @@ provider "azurerm" {
 # tenant of the deployment, and not in the tenant of the session of the
 # operator.
 provider "azuread" {
-  tenant_id = var.tenant_id
+  tenant_id = lower(var.tenant_id)
 }
 
 # The secrets of the deployment are generated, and the key that signs

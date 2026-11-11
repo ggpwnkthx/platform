@@ -62,7 +62,13 @@ locals {
   # discovery document of the first version names another issuer, and
   # Access refuses a provider whose document names an issuer that is
   # not the issuer of the tenant.
-  entra_issuer = "https://login.microsoftonline.com/${var.tenant_id}/v2.0"
+  #
+  # The identifier of the tenant is in lower case: Entra ID names the
+  # tenant of its issuer in lower case, and Access compares the issuer
+  # of the tenant with the issuer of the token and with the issuer of
+  # the discovery document character for character. An issuer written
+  # with an identifier in another case refuses every login.
+  entra_issuer = "https://login.microsoftonline.com/${lower(var.tenant_id)}/v2.0"
 
   # The callback of Access at Entra ID: the address Entra ID sends the
   # browser back to, with the code of the login. It is the redirect URI

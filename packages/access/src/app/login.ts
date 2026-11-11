@@ -277,7 +277,14 @@ export function chooserLinks(
 /** Turns the failure of the login into the page of the refusal. */
 function refusalOf(error: unknown, dependencies: AccessDependencies, tenant = 'unknown'): Response {
   if (error instanceof LoginError) {
-    dependencies.logger.warn('the login was refused', { code: error.code, tenant })
+    // The reason of the refusal is in the log and never in the answer of
+    // the browser: it names the check that failed or the failure of the
+    // provider, and it is what the operator reads (spec §5.6, §12.3).
+    dependencies.logger.warn('the login was refused', {
+      code: error.code,
+      tenant,
+      ...(error.reason ? { reason: error.reason } : {}),
+    })
     const status =
       error.code === 'invalid_request' || error.code === 'login_state_invalid'
         ? 400
