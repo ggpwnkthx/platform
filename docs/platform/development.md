@@ -182,7 +182,7 @@ Root commands cover every workspace:
 | `bun run coverage:check` | Check every CI job points at a workspace that exists, and every test in the repository runs in some job |
 | `bun run test` | Platform tests, then every workspace's tests |
 | `bun run cli` | Run the CLI (`platformctl`) |
-| `bun run test:fast` | The tests that need no PostgreSQL server and no container |
+| `bun run test:fast` | The tests that need no PostgreSQL server and no container, the integration suite of Access among them |
 | `bun run compatibility` | Run the three services together ([Compatibility](internals.md#compatibility)) |
 | `bun run atlas` | Open the [atlas](atlas.html) |
 
@@ -211,7 +211,7 @@ bun test --cwd packages/console test                # console core, and its buil
 
 Data's contract suite needs a **real PostgreSQL server**, because the rules it proves are enforced by the database. It starts one itself, from the machine's binaries or from a container.
 
-`bun run test:fast` runs everything that needs neither a server nor a container: the platform tests, the gateway, Access and console suites, and Data's unit and architecture suites.
+`bun run test:fast` runs everything that needs neither a server nor a container: the platform tests, the gateway, Access and console suites, and Data's unit and architecture suites. The integration suite of Access belongs to it: it runs on the embedded PostgreSQL of the process, and the tests of it that need a real server are skipped when there is none.
 
 ### Integration tests
 
