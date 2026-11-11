@@ -48,6 +48,34 @@ The OpenAPI description of the served paths and response shapes. The repository'
 
 Response: `302` to the tenant's provider, `400 invalid_request` (no tenant, bad parameters, unregistered `redirect_uri`) or `403 tenant_disabled`.
 
+A shared client that names no tenant and carries no hint answers `302` to `/oauth/discover`: the caller is asked for the address of the login (§5.2.2).
+
+### `GET /oauth/discover`
+
+The page that asks for the address of the caller (§5.2.2). The caller never leaves the origin of the service.
+
+The page needs a login that is in flight: the cookie of the page holds its state, and a login that is not in flight has no page.
+
+```html
+<form method="post" action="/oauth/discover">
+  <input type="hidden" name="token" value="…" />
+  <input id="email" name="email" type="email" required autocomplete="username" />
+</form>
+```
+
+The page names no tenant of the platform: an answer that says whether a domain is known tells the caller which tenants the platform holds.
+
+### `POST /oauth/discover`
+
+The answer of the form of the address (§5.2.2).
+
+| Field | Rule |
+| --- | --- |
+| `token` | Required. The state of the provider: it is bound to the state of the login. |
+| `email` | Required. The address of the caller. |
+
+The answer is `302` to the provider of the tenant the domain of the address names. A login that is not in flight, a token that does not match it and an address that is no address answer `400 login_state_invalid` with a page saying that the login has to start again.
+
 ### `GET /oauth/local/authorize`
 
 The page that asks for the password of a local provider (§5.4.1). Access serves it: the caller never leaves the origin of the service.

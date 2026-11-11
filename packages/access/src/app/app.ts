@@ -34,6 +34,7 @@ import { decisionHandler } from './decision-contract'
 import { accessContextDiscoveryHandler, accessContextHandler } from './access-context-contract'
 import { authorizeHandler, callbackHandler } from './login'
 import { localAuthorizeHandler, localLoginHandler } from './local-login'
+import { discoveryAnswerHandler, discoveryPageHandler } from './discovery'
 import { tokenHandler } from './oauth'
 import { healthHandler, readyHandler } from './endpoints'
 import { openapiDocument } from './openapi'
@@ -143,6 +144,13 @@ export function createAccessApp(dependencies: AccessDependencies): Hono<AccessEn
   // provider of the tenant sends it back.
   app.get('/oauth/authorize', async (context) => await authorizeHandler(context, dependencies))
   app.get('/oauth/tenant/callback', async (context) => await callbackHandler(context, dependencies))
+  // The address of the caller: the page that asks for it and the answer
+  // of the form (spec §5.2.2).
+  app.get('/oauth/discover', async (context) => await discoveryPageHandler(context, dependencies))
+  app.post(
+    '/oauth/discover',
+    async (context) => await discoveryAnswerHandler(context, dependencies)
+  )
   // The sign-in at a local provider: the page of the password and the
   // answer of the form (spec §5.4).
   app.get(

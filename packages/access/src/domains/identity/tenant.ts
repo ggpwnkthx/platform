@@ -103,6 +103,41 @@ export interface TenantLookup {
 }
 
 /**
+ * The slug of the default provider of a tenant (spec §3.11).
+ *
+ * The default provider is the one the tenant row carries: it is the
+ * registration of the tenant, and it is written with it. The slug never
+ * changes, and a principal carries it (spec §6.2).
+ */
+export const DEFAULT_PROVIDER_SLUG = 'default'
+
+/**
+ * The resolution of the tenant of a login.
+ *
+ * A tenant of the login is the tenant of the request. A resolution that
+ * asks for the address of the caller is the resolution of a shared client
+ * that names no tenant: the address of the caller is what names the
+ * tenant of the login (spec §5.2).
+ */
+export type TenantResolution =
+  | {
+      /** The tenant of the login. */
+      readonly tenant: TenantOfLogin
+      /** The tenant that owns the client of the request. */
+      readonly client: TenantOfLogin
+      /** The login names its tenant. */
+      readonly discovery: false
+    }
+  | {
+      /** The tenant of the login is not known yet. */
+      readonly tenant?: undefined
+      /** The tenant that owns the client of the request. */
+      readonly client: TenantOfLogin
+      /** The caller has to be asked for the address of the login. */
+      readonly discovery: true
+    }
+
+/**
  * Resolves the tenant of a login.
  *
  * The first match wins. A client that names no tenant is an
@@ -117,7 +152,7 @@ export interface TenantLookup {
 export async function resolveTenant(
   lookup: TenantLookup,
   request: AuthorizationRequest
-): Promise<TenantOfLogin> {
+): Promise<TenantResolution> {
   const client = await lookup.findByClientId(request.clientId)
   if (!client) {
     throw new TenantResolutionError(
@@ -153,20 +188,27 @@ export async function resolveTenant(
       tenant = named
     } else if (request.loginHint) {
       const domain = domainOf(request.loginHint)
-      if (domain) {
-        const hinted = await lookup.findByEmailDomain(domain)
-        if (hinted) tenant = hinted
+      const hinted = domain ? await lookup.findByEmailDomain(domain) : null
+      if (hinted) {
+        tenant = hinted
+      } else {
+        // An address that names no tenant is not a refusal: the login
+        // goes on with the default tenant of the platform (spec §5.2).
+        const fallback = await lookup.findDefault()
+        if (fallback) tenant = fallback
       }
     } else {
-      const fallback = await lookup.findDefault()
-      if (fallback) tenant = fallback
+      // A shared client that names no tenant is a client that serves
+      // several tenants: the address of the caller is what names the one
+      // (spec §5.2.2).
+      return { client, discovery: true }
     }
   }
 
   if (!tenant.enabled) {
     throw new TenantResolutionError('tenant_disabled', 'the tenant of the login is disabled')
   }
-  return tenant
+  return { tenant, client, discovery: false }
 }
 
 /** The domain of an e-mail, when the value is one. */

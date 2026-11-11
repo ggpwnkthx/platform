@@ -197,6 +197,26 @@ export function apiPaths(): Record<string, unknown> {
         },
       },
     },
+    '/oauth/discover': {
+      get: {
+        summary: 'The page that asks for the address of the caller.',
+        description:
+          'Access serves the page itself: the caller types its address, and the domain of the address names the tenant of the login.',
+        responses: {
+          200: jsonResponse('The page of the address.'),
+          400: errorResponse('The login has to start again.'),
+        },
+      },
+      post: {
+        summary: 'The answer of the form of the address.',
+        description:
+          'The browser is sent to the provider of the tenant the domain of the address names.',
+        responses: {
+          302: { description: 'The browser is sent to the provider of the tenant.' },
+          400: errorResponse('The login has to start again.'),
+        },
+      },
+    },
     '/oauth/local/authorize': {
       get: {
         summary: 'The page that asks for the password of a local provider.',

@@ -10,6 +10,16 @@ in the same commit as the code.
 
 ## Unreleased
 
+### A caller is asked for the address of its login
+
+A shared client serves several tenants, and the login had nowhere to ask which one the caller belongs to: the tenant of the login was the default tenant of the platform, and a caller of another tenant was sent to the provider of the wrong one.
+
+Access asks for the address of the caller now, with a page of its own: one field, one button, no script and no style of another site. The domain of the address names the tenant with that `email_domain`, and the browser goes to the provider of that tenant. The page names no tenant of the platform: an answer that says whether a domain is known tells a caller which tenants the platform holds. An address that names no tenant is the default tenant of the platform, and the login goes on.
+
+The provider of a login is the default provider of its tenant now, and the specification said so already: the registration of the tenant is the default provider, and a caller is never asked to choose between the providers of a tenant that has one. A tenant whose default provider is disabled and that has several providers still answers with the page that lists them.
+
+**Contract:** [access spec §5.2](docs/access/spec.md#52-resolving-the-tenant), [access spec §5.2.1](docs/access/spec.md#521-resolving-the-provider), [access spec §5.2.2](docs/access/spec.md#522-the-address-of-the-login).
+
 ### The tree of the platform holds no advisory of node-forge
 
 Four advisories of `node-forge` were published on the tenth of November: an Ed25519 verification that accepts small-order public keys, a TLS client that crashes on a handshake it does not like, and a regular expression that a header of an answer of `forge.http` may make slow. The tree of the platform holds `node-forge` — the gateway asks for the certificates of a deployment with it — and the lockfile held the version the advisories are about, so the audit of the dependencies refused every build of the platform, and the tag of the release with it.

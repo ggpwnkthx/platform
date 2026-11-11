@@ -6,7 +6,7 @@
  * login and it finishes it.
  */
 
-import { createHash, createHmac } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { ProviderError } from './provider-client'
 import {
   mapIdentity,
@@ -23,12 +23,15 @@ import {
   type LoginState,
   type StateCipher,
 } from './state'
+import { providerStateOf } from './provider-state'
 import {
+  DEFAULT_PROVIDER_SLUG,
   resolveTenant,
   TenantResolutionError,
   type ProviderOfLogin,
   type TenantLookup,
   type TenantOfLogin,
+  type TenantResolution,
 } from './tenant'
 import type { ProviderDriver, ProviderIdentity } from './provider-driver'
 
@@ -120,6 +123,21 @@ export type BegunLogin =
       /** The providers the caller may sign in at. */
       providers: ProviderChoice[]
     }
+  | {
+      /**
+       * The caller is asked for the address of the login.
+       *
+       * A shared client serves several tenants, and the address of the
+       * caller is what names the tenant of the login (spec §5.2.2). The
+       * page is served by Access itself, and the state of the login
+       * travels in a cookie of its own.
+       */
+      kind: 'discover'
+      /** The value of the cookie of the state. */
+      cookie: string
+      /** The slug of the tenant that owns the client of the login. */
+      tenant: string
+    }
 
 /** A provider the caller may sign in at. */
 interface ProviderChoice {
@@ -127,6 +145,18 @@ interface ProviderChoice {
   slug: string
   /** The name shown to a human. */
   displayName: string
+}
+
+/**
+ * The form of the page of the address (spec §5.2.2).
+ *
+ * The form carries the token of the state, and the token is bound to the
+ * state of the login: a form that carries another one is a form of no
+ * login.
+ */
+export interface DiscoveryForm {
+  /** The token of the form: the state of the provider. */
+  token: string
 }
 
 /** The end of a login. */
@@ -191,13 +221,26 @@ export class LoginService {
    *
    * The tenant of the login is resolved, the state of the login is
    * created and the browser is sent to the provider of the tenant.
+   *
+   * A shared client that names no tenant is a client that serves several
+   * tenants: the login asks the caller for the address of the login, and
+   * the address names the tenant (spec §5.2.2).
    */
   async begin(request: AuthorizationRequest): Promise<BegunLogin> {
-    const tenant = await this.resolve(request)
+    const resolution = await this.resolve(request)
+    if (resolution.discovery) {
+      return {
+        kind: 'discover',
+        cookie: this.options.state.encrypt(this.pendingOf(request, resolution.client)),
+        tenant: resolution.client.slug,
+      }
+    }
+    const tenant = resolution.tenant
     const provider = choiceOf(tenant, request.provider)
     if (!provider) {
-      // The tenant signs its people in at several providers and the
-      // request names none: the caller chooses (spec §5.2.1).
+      // The tenant signs its people in at several providers, it has no
+      // default one and the request names none: the caller chooses
+      // (spec §5.2.1).
       return {
         kind: 'choose',
         tenant: tenant.slug,
@@ -228,7 +271,7 @@ export class LoginService {
     let url: string
     try {
       url = await driver.authorizationUrl({
-        state: this.providerStateOf(state),
+        state: providerStateOf(state, this.options.secret),
         nonce,
         challenge: createHash('sha256').update(verifier, 'ascii').digest('base64url'),
         scopes: providerScopesOf(provider, request.scopes),
@@ -392,7 +435,7 @@ export class LoginService {
   }
 
   /** Resolves the tenant of a login and turns the failures into refusals. */
-  private async resolve(request: AuthorizationRequest): Promise<TenantOfLogin> {
+  private async resolve(request: AuthorizationRequest): Promise<TenantResolution> {
     try {
       return await resolveTenant(this.options.tenants, {
         clientId: request.clientId,
@@ -409,6 +452,102 @@ export class LoginService {
   }
 
   /**
+   * The state of a login that waits for the address of the caller.
+   *
+   * The provider is empty: the address of the caller is what names the
+   * tenant of the login and the provider of that tenant (spec §5.2.2).
+   */
+  private pendingOf(request: AuthorizationRequest, tenant: TenantOfLogin): LoginState {
+    return {
+      tenant: tenant.slug,
+      provider: '',
+      clientId: request.clientId,
+      redirectUri: request.redirectUri,
+      state: request.state ?? '',
+      nonce: request.nonce ?? aNonce(),
+      verifier: aVerifier(),
+      scopes: request.scopes,
+      ...(request.codeChallenge ? { codeChallenge: request.codeChallenge } : {}),
+      startedAt: Date.now(),
+    }
+  }
+
+  /**
+   * The request of a login that is in flight.
+   *
+   * The parameters of the request are the ones the caller of the gateway
+   * sent, and the page of the choice of a provider carries them back to
+   * the authorization (spec §5.2.1).
+   *
+   * @param cookie the cookie of the state of the login.
+   */
+  requestOf(cookie: string | undefined): AuthorizationRequest | null {
+    const state = this.readState(cookie)
+    if (!state) return null
+    return {
+      clientId: state.clientId,
+      redirectUri: state.redirectUri,
+      state: state.state,
+      nonce: state.nonce,
+      scopes: state.scopes,
+      ...(state.codeChallenge ? { codeChallenge: state.codeChallenge } : {}),
+    }
+  }
+
+  /**
+   * The form of the page of the address.
+   *
+   * The form is written for a login that is in flight: the cookie of the
+   * state names the client of the login, and the token of the form is the
+   * state of the provider (spec §5.2.2).
+   *
+   * @param cookie the cookie of the state of the login.
+   */
+  discoveryForm(cookie: string | undefined): DiscoveryForm {
+    const state = this.readState(cookie)
+    if (!state) {
+      throw new LoginError('login_state_invalid', 'the state of the login is not readable')
+    }
+    return { token: providerStateOf(state, this.options.secret) }
+  }
+
+  /**
+   * Continues a login that asked for the address of the caller.
+   *
+   * The address of the caller is the hint of the login: the domain of
+   * the address names the tenant of the login, and the provider of that
+   * tenant is the one the login signs in at (spec §5.2.2).
+   *
+   * @param options the cookie of the state, the address and the token of
+   *   the form.
+   */
+  async discover(options: {
+    cookie: string | undefined
+    address: string
+    token: string
+  }): Promise<BegunLogin> {
+    const state = this.readState(options.cookie)
+    if (!state) {
+      throw new LoginError('login_state_invalid', 'the state of the login is not readable')
+    }
+    if (!isAlive(state)) {
+      throw new LoginError('login_state_invalid', 'the state of the login is too old')
+    }
+    if (providerStateOf(state, this.options.secret) !== options.token) {
+      throw new LoginError('login_state_invalid', 'the token of the form does not match')
+    }
+    return await this.begin({
+      clientId: state.clientId,
+      redirectUri: state.redirectUri,
+      state: state.state,
+      nonce: state.nonce,
+      scopes: state.scopes,
+      ...(state.codeChallenge ? { codeChallenge: state.codeChallenge } : {}),
+      loginHint: options.address,
+    })
+  }
+
+  /**
    * The state of the provider.
    *
    * It is bound to the state cookie: it is derived from the fields of the
@@ -417,15 +556,10 @@ export class LoginService {
    * provider too: a code that was minted for one provider is not a code
    * for another one.
    */
-  private providerStateOf(state: LoginState): string {
-    return createHmac('sha256', this.options.secret)
-      .update(`${state.tenant}:${state.provider}:${state.startedAt}:${state.nonce}`)
-      .digest('base64url')
-  }
 
   /** Reports whether the state of the provider is the one of the login. */
   private sameProviderState(state: LoginState, received: string): boolean {
-    return this.providerStateOf(state) === received
+    return providerStateOf(state, this.options.secret) === received
   }
 }
 
@@ -501,9 +635,14 @@ export function providerOf(tenant: TenantOfLogin, requested?: string): ProviderO
  *
  * The provider named by the request wins, when it names one that belongs
  * to the tenant of the login and is enabled. A request that names no
- * provider is a request at the only provider of the tenant: a tenant
- * that has several is a tenant whose caller chooses, and the choice is
- * the caller's.
+ * provider is a request at the **default** provider of the tenant: the
+ * one whose slug is `default`. A tenant whose default provider is
+ * disabled or missing, and that has exactly one enabled provider, is a
+ * tenant with that provider.
+ *
+ * A tenant whose providers are several and that has no default one is a
+ * tenant whose caller chooses: the choice is the caller's, and it is
+ * made by the browser (spec §5.2.1).
  *
  * A slug that names no enabled provider of the tenant is refused: the
  * parameter names a provider of the tenant of the login and nothing else.
@@ -523,6 +662,11 @@ function choiceOf(tenant: TenantOfLogin, requested?: string): ProviderOfLogin | 
     }
     return named
   }
+  // The default provider of the tenant is the one its own registration
+  // names: a caller is never asked to choose between the providers of a
+  // tenant that has one (spec §5.2.1).
+  const fallback = providers.find((provider) => provider.slug === DEFAULT_PROVIDER_SLUG)
+  if (fallback) return fallback
   if (providers.length === 1) return providers[0]!
   if (providers.length === 0) {
     throw new LoginError(

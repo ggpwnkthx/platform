@@ -13,45 +13,11 @@
 
 import type { Context } from 'hono'
 import { LocalLoginError } from '../domains/identity'
+import { LOCAL_STATE_COOKIE, readCookie } from './cookies'
 import type { AccessDependencies } from './dependencies'
 import { localLoginPage } from './local'
 import { refusalPage } from './pages'
 import type { AccessEnv } from './state'
-
-/** The cookie of the state of a local sign-in. */
-const LOCAL_STATE_COOKIE = 'access_local_state'
-
-/** The attributes of the cookie of the state of a local sign-in. */
-function localStateCookie(value: string, secure: boolean, maxAgeSeconds: number): string {
-  const parts = [
-    `${LOCAL_STATE_COOKIE}=${value}`,
-    // The cookie is sent to the page and to the answer of the form, and
-    // to nothing else.
-    'Path=/oauth/local',
-    'HttpOnly',
-    'SameSite=Lax',
-    `Max-Age=${maxAgeSeconds}`,
-  ]
-  if (secure) parts.push('Secure')
-  return parts.join('; ')
-}
-
-/** Reads a cookie of a request. */
-function readCookie(request: Request, name: string): string | undefined {
-  const header = request.headers.get('cookie')
-  if (!header) return undefined
-  for (const part of header.split(';')) {
-    const [key, ...rest] = part.trim().split('=')
-    if (key !== name) continue
-    const value = rest.join('=')
-    try {
-      return decodeURIComponent(value)
-    } catch {
-      return undefined
-    }
-  }
-  return undefined
-}
 
 /**
  * `GET /oauth/local/authorize`: the page that asks for the password.
@@ -127,6 +93,3 @@ export async function localLoginHandler(
     throw error
   }
 }
-
-/** The cookie of the state of a local sign-in, for the other handlers. */
-export { localStateCookie }

@@ -114,7 +114,7 @@ The registration of the default provider is written here because it is what the 
 | `is_default` | `boolean` | Default `false`. At most one tenant is the default (§5.2). |
 | `auto_provision` | `boolean` | Default `false`. Whether an unknown external identity gets a principal row on its first login (§6.4). |
 | `auto_provision_admin` | `boolean` | Default `true`. Whether the first principal of the tenant administers the tenant (§6.4). |
-| `email_domain` | `text` | The tenant's domain, or `null`. Unique when set. A **hint**, never an authorization (§5.2, §6.3). |
+| `email_domain` | `text` | The tenant's domain, or `null`. Unique when set. It names the tenant of an address (§5.2, §5.2.2). A **hint**, never an authorization (§6.3). |
 | `idp_issuer` | `text` | The provider's issuer. A token whose `iss` does not match it exactly is refused. |
 | `idp_client_id` | `text` | The client id of Access at the provider. |
 | `idp_client_secret` | `bytea` | The client secret of Access at the provider, encrypted at rest (§4.3). |
@@ -478,6 +478,8 @@ A credential is at least 16 characters, and a malformed value stops the service:
 | --- | --- |
 | `GET /oauth/authorize` | Authorization endpoint. The gateway sends the browser here. |
 | `GET /oauth/tenant/callback` | Callback registered at each tenant's provider. The provider sends the browser here. |
+| `GET /oauth/discover` | The page that asks for the address of the caller (spec §5.2.2). |
+| `POST /oauth/discover` | The answer of the form of the address (spec §5.2.2). |
 | `GET /oauth/local/authorize` | The page that asks for the password of a local provider (spec §5.4). |
 | `POST /oauth/local/login` | The answer of the form of the password (spec §5.4). |
 | `POST /oauth/token` | Token endpoint, where the gateway exchanges the code and the console exchanges a refresh token (§7.6). The client authenticates with `client_secret_basic`; a client without a secret is refused. |
@@ -514,7 +516,8 @@ The login's tenant is resolved in this order; the first match wins.
 1. **The request's client.** The authorization request's `client_id` names the tenant that owns it. This is the normal case and the only one a gateway can reach (§1.4).
 2. **The `tenant` parameter.** When the client's tenant has `shared_client = true`, the request may name another tenant in `tenant`, and that tenant is used. The parameter is ignored for a client that is not shared, so it cannot move a login to another tenant.
 3. **The hint.** When the request carries a `login_hint` that is an e-mail, its domain names the tenant with that `email_domain`. Only usable when the client's tenant is shared.
-4. **The default tenant.** When the client's tenant is shared and nothing else matched, the tenant with `is_default = true` is used.
+4. **The address.** When the client's tenant is shared and nothing named a tenant, the caller is asked for the address of the login: the domain of the address names the tenant with that `email_domain` (§5.2.2).
+5. **The default tenant.** When the client's tenant is shared and no tenant was named, the tenant with `is_default = true` is used.
 
 A client that names no tenant → `400 invalid_request`. A disabled tenant → `403 tenant_disabled`.
 
@@ -528,7 +531,9 @@ The tenant is resolved first, and the **provider** of the login is a provider of
 
 A tenant that has no enabled provider refuses the login with `400 invalid_request`: it has no provider to sign the caller in at.
 
-A tenant whose providers are several and whose request names none **asks the caller which one** it signs in at: Access answers the authorization with a page that lists the providers of the tenant, and every entry is a link back to the authorization with the same request and the slug of the provider. The page carries no script and no style of another site, and no state is written before the choice: the login begins again, with the provider named, when the browser comes back.
+The default provider of a tenant is the provider its own registration names, and a request that names none signs in at it: a caller is never asked to choose between the providers of a tenant that has one.
+
+A tenant whose default provider is disabled or missing, whose providers are several and whose request names none **asks the caller which one** it signs in at: Access answers the authorization with a page that lists the providers of the tenant, and every entry is a link back to the authorization with the same request and the slug of the provider. The page carries no script and no style of another site, and no state is written before the choice: the login begins again, with the provider named, when the browser comes back.
 
 The choice is the caller's, and the parameters of the request are the caller's too: the page never carries a parameter the request did not have.
 
@@ -544,6 +549,18 @@ With a shared client, the operator accepts that a hint the caller controls may c
 - A tenant with no registered URL refuses every login, until the deployment registers its gateway's URL.
 
 The check is on the **client**, not the login's tenant. With a shared client the login's tenant may differ, but the return URL always belongs to the gateway that presented the client id.
+
+### 5.2.2 The address of the login
+
+A shared client serves several tenants, and the tenant of a login is the one the address of the caller belongs to. Access asks for that address with a page of its own: one field, one button, no script and no style of another site.
+
+The page is served when the client's tenant is shared, when the request names no tenant and when the request carries no hint. The answer of the form is the address of the caller, and the login goes on with it: the domain of the address names the tenant with that `email_domain`, and the provider of that tenant is the one the login signs in at (§5.2.1).
+
+The address names a tenant, never a principal: the mapping of an identity is `(tenant, provider, subject)` (§6.2), and an address is not one of them. An address that names no tenant is not a refusal: the login goes on with the default tenant of the platform (§5.2).
+
+The page never says whether a domain is known. An answer that says "this domain is unknown" is an answer that tells a caller which tenants the platform holds, and the refusal of the provider is the refusal of the provider.
+
+The state of the login travels in a cookie of its own: the cookie is `HttpOnly`, `Secure` in production, `SameSite=Lax`, `Path=/oauth/discover`, and it lives ten minutes. The form carries the token of the state, and the token is bound to the state of the login: a form that carries none is a form of no login.
 
 ### 5.3 Login state
 

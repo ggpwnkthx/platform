@@ -13,6 +13,7 @@ import type {
   AuthorizationRequest,
   BegunLogin,
   CompletedLogin,
+  DiscoveryForm,
   LocalAuthenticator,
 } from '../domains/identity'
 import type { ProviderService, TokenPair } from '../domains/provider'
@@ -22,6 +23,21 @@ import type { Logger, Observer } from '../observability'
 interface LoginPort {
   /** Starts a login. */
   begin: (request: AuthorizationRequest) => Promise<BegunLogin>
+  /**
+   * The form of the page of the address.
+   *
+   * The form is written for a login that is in flight: the cookie of the
+   * state names the client of the login.
+   */
+  discoveryForm: (cookie: string | undefined) => DiscoveryForm
+  /** Continues a login that asked for the address of the caller. */
+  discover: (options: {
+    cookie: string | undefined
+    address: string
+    token: string
+  }) => Promise<BegunLogin>
+  /** The request of a login that is in flight. */
+  requestOf: (cookie: string | undefined) => AuthorizationRequest | null
   /** Finishes a login. */
   complete: (options: {
     cookie: string | undefined

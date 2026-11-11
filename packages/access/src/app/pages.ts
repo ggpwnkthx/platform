@@ -55,6 +55,42 @@ export function refusalPage(code: string, message: string, status: number): Resp
 }
 
 /**
+ * Builds the page that asks for the address of the caller (spec §5.2.2).
+ *
+ * The page asks for an address and nothing else: it names no tenant of
+ * the platform and no domain it knows, because an answer that says
+ * whether a domain is known tells the caller which tenants the platform
+ * holds.
+ *
+ * @param form the token of the form.
+ */
+export function discoveryPage(form: { token: string }): Response {
+  const body = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Sign in</title>
+  </head>
+  <body>
+    <h1>Sign in</h1>
+    <form method="post" action="/oauth/discover">
+      <input type="hidden" name="token" value="${escapeHtml(form.token)}" />
+      <p>
+        <label for="email">E-mail</label>
+        <input id="email" name="email" type="email" required autocomplete="username" />
+      </p>
+      <p><button type="submit">Continue</button></p>
+    </form>
+  </body>
+</html>
+`
+  return new Response(body, {
+    status: 200,
+    headers: { 'content-type': 'text/html; charset=utf-8' },
+  })
+}
+
+/**
  * Builds the page of the choice of a provider (spec §5.2.1).
  *
  * The page lists the providers of the tenant and nothing else: every

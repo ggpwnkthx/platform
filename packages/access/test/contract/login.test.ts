@@ -122,10 +122,10 @@ describe('the login of Access', () => {
     expect(location.searchParams.get('code')).toBeTruthy()
   })
 
-  test('a tenant with several providers asks the caller which one', async () => {
-    // The tenant signs its people in at two providers: the caller
-    // chooses, and the page carries the request of the caller and the
-    // slug of every provider (spec §5.2.1).
+  test('a tenant with several providers signs its callers in at the default one', async () => {
+    // The default provider of the tenant is the one its own registration
+    // names: a caller is never asked to choose between the providers of a
+    // tenant that has one (spec §5.2.1).
     await admin('/v1/admin/providers', 'POST', {
       tenant: 'acme',
       slug: 'okta',
@@ -135,6 +135,44 @@ describe('the login of Access', () => {
       idpClientSecret: provider.clientSecret,
       idpRedirectUri: `${service.base}/oauth/tenant/callback`,
     })
+    const { response } = await startLogin()
+    expect(response.status).toBe(302)
+
+    // The provider is removed again: the tests that follow log in at the
+    // only provider of the tenant.
+    const providers = await admin('/v1/admin/providers?tenant=acme&slug=okta', 'GET', {})
+    const rows = (providers.providers ?? []) as { id: string }[]
+    await client.call(`/v1/admin/providers/${rows[0]!.id}`, 'DELETE', undefined)
+  })
+
+  test('a tenant whose default provider is disabled asks the caller which one', async () => {
+    // The chooser is the last resort of the login: a tenant whose
+    // default provider is disabled and that has several providers asks
+    // the caller (spec §5.2.1).
+    await admin('/v1/admin/providers', 'POST', {
+      tenant: 'acme',
+      slug: 'okta',
+      displayName: 'Okta',
+      issuer: provider.issuer,
+      idpClientId: provider.clientId,
+      idpClientSecret: provider.clientSecret,
+      idpRedirectUri: `${service.base}/oauth/tenant/callback`,
+    })
+    await admin('/v1/admin/providers', 'POST', {
+      tenant: 'acme',
+      slug: 'keycloak',
+      displayName: 'Keycloak',
+      issuer: provider.issuer,
+      idpClientId: provider.clientId,
+      idpClientSecret: provider.clientSecret,
+      idpRedirectUri: `${service.base}/oauth/tenant/callback`,
+    })
+    // The default provider of a tenant is the registration of the tenant,
+    // and the administration does not disable it: the flag is read from
+    // the database.
+    await service.runtime.database.exec(
+      "update tenant_providers set enabled = false where slug = 'default'"
+    )
     const query = new URLSearchParams({
       client_id: 'gateway-acme',
       redirect_uri: GATEWAY_REDIRECT,
@@ -150,17 +188,21 @@ describe('the login of Access', () => {
     })
     expect(authorize.status).toBe(200)
     const page = await authorize.text()
-    expect(page).toContain('provider=default')
     expect(page).toContain('provider=okta')
+    expect(page).toContain('provider=keycloak')
     // The request of the caller is carried by the links of the page.
     expect(page).toContain('client_id=gateway-acme')
     expect(page).toContain(`state=${encodeURIComponent('the-state-of-the-gateway')}`)
 
-    // The provider is removed again: the tests that follow log in at the
-    // only provider of the tenant.
+    await service.runtime.database.exec(
+      "update tenant_providers set enabled = true where slug = 'default'"
+    )
     const providers = await admin('/v1/admin/providers?tenant=acme&slug=okta', 'GET', {})
     const rows = (providers.providers ?? []) as { id: string }[]
     await client.call(`/v1/admin/providers/${rows[0]!.id}`, 'DELETE', undefined)
+    const others = await admin('/v1/admin/providers?tenant=acme&slug=keycloak', 'GET', {})
+    const others_ = (others.providers ?? []) as { id: string }[]
+    await client.call(`/v1/admin/providers/${others_[0]!.id}`, 'DELETE', undefined)
   })
 
   test('a login that names a provider that does not exist is refused', async () => {

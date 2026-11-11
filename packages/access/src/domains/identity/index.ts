@@ -27,6 +27,7 @@ export type {
   AuthorizationRequest,
   BegunLogin,
   CompletedLogin,
+  DiscoveryForm,
 } from './service'
 export { LoginError, LoginService } from './service'
 export { providerOf, providerScopesOf } from './service'

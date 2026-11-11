@@ -10,50 +10,18 @@
 import type { Context } from 'hono'
 import { LoginError } from '../domains/identity'
 import { acceptedScopes } from '../domains/provider'
+import {
+  deletedStateCookie,
+  discoveryStateCookie,
+  localStateCookie,
+  readCookie,
+  stateCookie,
+  STATE_COOKIE,
+  STATE_TTL_SECONDS,
+} from './cookies'
 import type { AccessDependencies } from './dependencies'
-import { localStateCookie } from './local-login'
 import { providerChooserPage, refusalPage } from './pages'
 import type { AccessEnv } from './state'
-
-/** The cookie of the state of a login. */
-const STATE_COOKIE = 'access_login_state'
-
-/** The attributes of the cookie of the state of a login. */
-function stateCookie(value: string, secure: boolean, maxAgeSeconds: number): string {
-  const parts = [
-    `${STATE_COOKIE}=${value}`,
-    'Path=/oauth/tenant/callback',
-    'HttpOnly',
-    'SameSite=Lax',
-    `Max-Age=${maxAgeSeconds}`,
-  ]
-  if (secure) parts.push('Secure')
-  return parts.join('; ')
-}
-
-/** The cookie that deletes the state of a login. */
-function deletedStateCookie(secure: boolean): string {
-  return stateCookie('', secure, 0)
-}
-
-/** Reads a cookie of a request. */
-function readCookie(request: Request, name: string): string | undefined {
-  const header = request.headers.get('cookie')
-  if (!header) return undefined
-  for (const part of header.split(';')) {
-    const [key, ...rest] = part.trim().split('=')
-    if (key !== name) continue
-    const value = rest.join('=')
-    // A value that is not a valid escape is not a cookie: the state of the
-    // login is unreadable, and the callback refuses the login.
-    try {
-      return decodeURIComponent(value)
-    } catch {
-      return undefined
-    }
-  }
-  return undefined
-}
 
 /**
  * `GET /oauth/authorize`: the beginning of a login.
@@ -105,21 +73,39 @@ export async function authorizeHandler(
       // chooses, and the choice is made by the browser (spec §5.2.1).
       return providerChooserPage(begun.providers, chooserLinks(begun.providers, query))
     }
+    if (begun.kind === 'discover') {
+      // The tenant of the login is not known: the caller is asked for the
+      // address of the login, and the address names the tenant
+      // (spec §5.2.2).
+      const headers = new Headers()
+      headers.set('location', '/oauth/discover')
+      headers.append(
+        'set-cookie',
+        discoveryStateCookie(begun.cookie, dependencies.cookieSecure, STATE_TTL_SECONDS)
+      )
+      return new Response(null, { status: 302, headers })
+    }
     if (begun.kind === 'local') {
       // The provider is a local one: the browser goes to the page of the
       // password, and the state of the login travels in two cookies: the
       // one of the callback and the one of the page (spec §5.4).
       const headers = new Headers()
       headers.set('location', begun.url)
-      headers.append('set-cookie', stateCookie(begun.cookie, dependencies.cookieSecure, 600))
-      headers.append('set-cookie', localStateCookie(begun.cookie, dependencies.cookieSecure, 600))
+      headers.append(
+        'set-cookie',
+        stateCookie(begun.cookie, dependencies.cookieSecure, STATE_TTL_SECONDS)
+      )
+      headers.append(
+        'set-cookie',
+        localStateCookie(begun.cookie, dependencies.cookieSecure, STATE_TTL_SECONDS)
+      )
       return new Response(null, { status: 302, headers })
     }
     return new Response(null, {
       status: 302,
       headers: {
         location: begun.url,
-        'set-cookie': stateCookie(begun.cookie, dependencies.cookieSecure, 600),
+        'set-cookie': stateCookie(begun.cookie, dependencies.cookieSecure, STATE_TTL_SECONDS),
       },
     })
   } catch (error) {
@@ -268,7 +254,7 @@ export async function callbackHandler(
  * with the same request, and the login begins again with the provider
  * named.
  */
-function chooserLinks(
+export function chooserLinks(
   providers: { slug: string }[],
   query: Record<string, string | undefined>
 ): Map<string, string> {

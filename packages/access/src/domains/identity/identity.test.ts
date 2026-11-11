@@ -127,6 +127,25 @@ describe('the provider of a login', () => {
     const one = tenant({ providers: [provider({ slug: 'okta' })] })
     expect(providerOf(one).slug).toBe('okta')
   })
+
+  test('a tenant with several providers signs its callers in at the default one', () => {
+    // The default provider of a tenant is the one its own registration
+    // names, and a caller is never asked to choose between the providers
+    // of a tenant that has one (spec §5.2.1).
+    const two = tenant({
+      providers: [provider(), provider({ slug: 'okta', displayName: 'Okta' })],
+    })
+    expect(providerOf(two).slug).toBe('default')
+  })
+
+  test('a disabled default provider is not the default one', () => {
+    // A disabled provider signs nobody in, and the only enabled
+    // provider of the tenant is the one the login signs in at.
+    const two = tenant({
+      providers: [provider({ enabled: false }), provider({ slug: 'okta', displayName: 'Okta' })],
+    })
+    expect(providerOf(two).slug).toBe('okta')
+  })
 })
 
 describe('the tenant of a login', () => {
@@ -135,7 +154,7 @@ describe('the tenant of a login', () => {
       clientId: 'gateway-acme',
       redirectUri: REDIRECT,
     })
-    expect(resolved.slug).toBe('acme')
+    expect(resolved.tenant?.slug).toBe('acme')
   })
 
   test('a client that names no tenant is refused', async () => {
@@ -160,7 +179,7 @@ describe('the tenant of a login', () => {
       clientId: 'gateway-acme',
       redirectUri: REDIRECT,
     })
-    expect(resolved.slug).toBe('acme')
+    expect(resolved.tenant?.slug).toBe('acme')
   })
 
   test('a tenant with no registered redirect uri refuses every login', async () => {
@@ -188,7 +207,7 @@ describe('the tenant of a login', () => {
       redirectUri: REDIRECT,
       tenant: 'other',
     })
-    expect(resolved.slug).toBe('acme')
+    expect(resolved.tenant?.slug).toBe('acme')
   })
 
   test('the parameter of the tenant names it when the client is shared', async () => {
@@ -199,7 +218,7 @@ describe('the tenant of a login', () => {
       redirectUri: REDIRECT,
       tenant: 'other',
     })
-    expect(resolved.slug).toBe('other')
+    expect(resolved.tenant?.slug).toBe('other')
   })
 
   test('the hint of the e-mail is ignored when the client is not shared', async () => {
@@ -209,7 +228,7 @@ describe('the tenant of a login', () => {
       redirectUri: REDIRECT,
       loginHint: 'alice@other.example',
     })
-    expect(resolved.slug).toBe('acme')
+    expect(resolved.tenant?.slug).toBe('acme')
   })
 
   test('the hint of the e-mail names the tenant when the client is shared', async () => {
@@ -220,7 +239,7 @@ describe('the tenant of a login', () => {
       redirectUri: REDIRECT,
       loginHint: 'alice@other.example',
     })
-    expect(resolved.slug).toBe('other')
+    expect(resolved.tenant?.slug).toBe('other')
   })
 
   test('the default tenant is the fallback of a shared client', async () => {
@@ -229,8 +248,31 @@ describe('the tenant of a login', () => {
     const resolved = await resolveTenant(lookup([shared, fallback]), {
       clientId: 'gateway-acme',
       redirectUri: REDIRECT,
+      loginHint: 'alice@nowhere.example',
     })
-    expect(resolved.slug).toBe('fallback')
+    expect(resolved.tenant?.slug).toBe('fallback')
+  })
+
+  test('a shared client that names no tenant asks for the address of the caller', async () => {
+    // A shared client serves several tenants, and the address of the
+    // caller is what names the one of the login (spec §5.2.2).
+    const shared = tenant({ sharedClient: true })
+    const fallback = tenant({ slug: 'fallback', clientId: 'gateway-fallback', isDefault: true })
+    const resolved = await resolveTenant(lookup([shared, fallback]), {
+      clientId: 'gateway-acme',
+      redirectUri: REDIRECT,
+    })
+    expect(resolved.discovery).toBe(true)
+    expect(resolved.tenant).toBeUndefined()
+  })
+
+  test('a client that is not shared is never asked for an address', async () => {
+    const resolved = await resolveTenant(lookup([tenant()]), {
+      clientId: 'gateway-acme',
+      redirectUri: REDIRECT,
+    })
+    expect(resolved.discovery).toBe(false)
+    expect(resolved.tenant?.slug).toBe('acme')
   })
 
   test('the domain of an e-mail', () => {

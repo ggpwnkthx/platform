@@ -55,10 +55,10 @@ A **modular monolith**: one process, one image, one database, four independent d
 | `src/runtime/env.ts` | Environment schema and validation; the only reader of `process.env`. |
 | `src/runtime/composition.ts`, `lifecycle.ts` | Wiring; listener and drain deadline. |
 | `src/app/app.ts` | Pipeline: request id, probes, routes, unknown-path refusal, error handler. |
-| `src/app/{login,oauth,provider}.ts` | Login, token endpoint, discovery, JWKS. |
+| `src/app/{login,oauth,provider,discovery}.ts` | Login, token endpoint, discovery, JWKS, the address of the caller. |
 | `src/app/decision-contract.ts`, `access-context-contract.ts` | The two read contracts. |
 | `src/app/administration/`, `src/domains/administration/` | The eighteen endpoints of the administration and the audit that reads it, one file per resource (tenants, principals, groups, roles, grants, audit); the domain also holds validation, the limiter, authentication and storage `ports/`. |
-| `src/app/{errors,pages,metrics,endpoints,state}.ts` | Refusals, login pages, metrics, probes, request state. |
+| `src/app/{errors,pages,metrics,endpoints,state,cookies}.ts` | Refusals, login pages, metrics, probes, request state, the cookies of the login. |
 | `src/platform/postgres/` | Pool, migrations, repositories, statement tracing, tenant scope, audit table. |
 | `src/platform/redis/`, `src/platform/bun/` | Code store; listener, request and response, address guard. |
 | `scripts/` | `cli/` (smoke test, secret rotation, decision plan, database provisioning), `compat/` (shadow comparison, compatibility runner), `gates/` (architecture, release version), `ops/` (load), `support/`. |
