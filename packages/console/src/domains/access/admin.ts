@@ -26,8 +26,11 @@ import type {
   CredentialInput,
   Principal,
   PrincipalInput,
+  CatalogEntry,
   Provider,
   ProviderInput,
+  Route,
+  RouteInput,
   Role,
   RoleInput,
   Tenant,
@@ -131,6 +134,55 @@ export class AdminClient {
   async removeProvider(id: string): Promise<void> {
     try {
       await this.#client.removeProvider(id)
+    } catch (error) {
+      throw failureOf(error)
+    }
+  }
+
+  /**
+   * The catalog of the providers of the platform.
+   *
+   * The catalog is a description of the platform: it holds no secret and
+   * no row of a tenant, and the call carries no credential.
+   */
+  async catalog(): Promise<readonly CatalogEntry[]> {
+    try {
+      return await this.#client.catalog()
+    } catch (error) {
+      throw failureOf(error)
+    }
+  }
+
+  /** The routes of the logins of a tenant. */
+  async routes(query: {
+    tenant?: string
+    kind?: string
+    limit?: number
+    offset?: number
+  }): Promise<AdminPage<Route>> {
+    try {
+      return await this.#client.routes(query)
+    } catch (error) {
+      throw failureOf(error)
+    }
+  }
+
+  /** Registers a route, or changes the route of that key. */
+  async saveRoute(input: RouteInput): Promise<{ route: Route; created: boolean }> {
+    try {
+      return await this.#client.saveRoute(input)
+    } catch (error) {
+      throw failureOf(error)
+    }
+  }
+
+  /** Verifies a route, or refuses it. */
+  async verifyRoute(
+    id: string,
+    input: { status: 'verified' | 'rejected'; verification: 'dns' | 'operator' }
+  ): Promise<Route> {
+    try {
+      return await this.#client.verifyRoute(id, input)
     } catch (error) {
       throw failureOf(error)
     }

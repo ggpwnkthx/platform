@@ -32,6 +32,12 @@ The domains the tenants of the platform already carry are proven: the operator o
 
 **Contract:** [access spec §3.13](docs/access/spec.md#313-sso_routes), [access spec §5.2.2](docs/access/spec.md#522-the-address-of-the-login), [access spec §10.18](docs/access/spec.md#1018-the-routes-of-the-logins).
 
+### The operator administers the routes of the logins in the console
+
+The tenant of the console shows its routes: the domains and the addresses that name it, the provider the callers of each of them sign in at, the state of the proof, and the challenge of the route. The operator registers a route with a form, and proves it with a button: **Check the record** reads the record the owner of the domain published, and a platform operator may **Vouch for it** instead. A route that waits for its proof routes nothing, and the row says so.
+
+Registering a provider offers the presets of the platform: picking one fills the issuer, the scopes and the algorithms, and shows the steps of the registration of the client of Access at the vendor. Every field stays the operator's.
+
 ### The catalog of the providers is the one of the platform
 
 The presets of the providers live in Access now, and `GET /v1/catalog` answers them: Entra ID, Okta, Auth0, Keycloak, Google Workspace, and a free-form entry for a provider of a tenant's own. The console offers them when the operator registers a provider: picking one fills the issuer, the scopes and the algorithms, and shows the steps of the registration of the client of Access at the vendor. Every field stays the operator's.

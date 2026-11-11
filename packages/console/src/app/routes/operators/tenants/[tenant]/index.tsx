@@ -21,6 +21,7 @@ import {
   ProviderRow,
   RemoveCredential,
 } from '../../../../components/provider-form'
+import { RouteForm, RouteRow } from '../../../../components/route-form'
 import { formOf, listOf } from '../../../../middleware/forms'
 import { operatorScope } from '../../../../middleware/scope'
 import { flash } from '../../../../middleware/session'
@@ -66,6 +67,31 @@ export const POST = createRoute(async (c) => {
           ? `The provider ${provider.slug} was registered.`
           : `The provider ${provider.slug} was updated.`,
       })
+      return c.redirect(base)
+    }
+    if (form.get('_action') === 'save-route') {
+      const provider = form.get('provider').trim()
+      const { route, created } = await access.admin.saveRoute({
+        tenant: slug,
+        kind: form.get('kind') === 'address' ? 'address' : 'domain',
+        key: form.get('key').trim(),
+        ...(provider ? { provider } : {}),
+      })
+      flash(c, {
+        kind: 'ok',
+        text: created
+          ? `The route ${route.key} was registered. It routes nothing until it is proved.`
+          : `The route ${route.key} was changed. It waits for its proof again.`,
+      })
+      return c.redirect(base)
+    }
+    if (form.get('_action') === 'verify-route') {
+      const method = form.get('verification') === 'operator' ? 'operator' : 'dns'
+      const route = await access.admin.verifyRoute(form.get('id').trim(), {
+        status: 'verified',
+        verification: method,
+      })
+      flash(c, { kind: 'ok', text: `The route ${route.key} was proved.` })
       return c.redirect(base)
     }
     if (form.get('_action') === 'save-credential') {
@@ -125,6 +151,10 @@ export default createRoute(async (c) => {
     access.admin.credentials({ tenant: slug }).catch(() => null),
   ])
   const localProviders = (providers?.rows ?? []).filter((provider) => provider.kind === 'local')
+  const [routes, catalog] = await Promise.all([
+    access.admin.routes({ tenant: slug }).catch(() => null),
+    access.admin.catalog().catch(() => []),
+  ])
   try {
     audit = await access.admin.audit({ tenant: slug, limit: 8 })
   } catch (error) {
@@ -238,7 +268,7 @@ export default createRoute(async (c) => {
         ) : null}
         <details class="disclosure">
           <summary>Register a provider</summary>
-          <ProviderForm action={base} />
+          <ProviderForm action={base} catalog={catalog} />
         </details>
         {localProviders.map((provider) => (
           <div key={provider.id}>
@@ -277,6 +307,33 @@ export default createRoute(async (c) => {
             </details>
           </div>
         ))}
+      </section>
+      <section class="card">
+        <h2>Routes</h2>
+        <p class="muted small">
+          A route names the tenant of a login and the provider the callers of a domain sign in at. A
+          route routes nothing until it is proved: the owner of the domain publishes the record
+          below, or the operator of the platform vouches for it.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <tbody>
+              {(routes?.rows ?? []).map((route) => (
+                <RouteRow
+                  key={route.id}
+                  route={route}
+                  action={base}
+                  platform={ability.can(CONSOLE_ACTIONS.platform, CONSOLE_SUBJECT)}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {(routes?.rows ?? []).length === 0 ? <p class="muted">The tenant has no route.</p> : null}
+        <details class="disclosure">
+          <summary>Register a route</summary>
+          <RouteForm action={base} providers={providers?.rows ?? []} />
+        </details>
       </section>
       <details class="card disclosure">
         <summary>Edit tenant</summary>

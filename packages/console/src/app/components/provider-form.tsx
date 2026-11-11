@@ -5,19 +5,21 @@
  * The default provider of a tenant is the registration of the tenant,
  * and it is written with it: it is not registered here, and it is not
  * removed here. The other providers of the tenant are the ones a caller
- * may sign in at, and the login asks the caller which one when there
- * are several.
+ * may sign in at, and the route of the address of the caller names the
+ * one when there are several.
  */
 
-import type { Provider } from '../../domains/access'
+import type { CatalogEntry, Provider } from '../../domains/access'
+import PresetPicker from '../islands/preset-picker'
 import { Badge } from './page'
 
 /** The form that registers a provider of a tenant. */
-export function ProviderForm(props: { action: string }) {
+export function ProviderForm(props: { action: string; catalog: readonly CatalogEntry[] }) {
   return (
-    <form method="post" action={props.action} class="form">
+    <form method="post" action={props.action} class="form" data-provider>
       <input type="hidden" name="_action" value="save-provider" />
       <div class="form-grid">
+        <PresetPicker catalog={props.catalog} />
         <label class="field">
           <span>Slug</span>
           <input name="slug" required pattern="[a-z0-9-]{2,63}" />
