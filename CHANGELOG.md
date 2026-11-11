@@ -10,6 +10,33 @@ in the same commit as the code.
 
 ## Unreleased
 
+## 1.3.0
+
+### A tenant signs its people in at several providers
+
+A tenant held the registration of one provider in its own row, and the platform could not serve a tenant that signs its people in at two: the login had nowhere to ask the caller which one it signs in at, and the administration had no endpoint for a second provider.
+
+The providers of a tenant are rows of their own now, `tenant_providers`, and the row of the tenant keeps the registration of the **default** provider — the one the administration writes — because that is the surface the administration already had. The two are written by the same statements: the default provider of a tenant and the tenant itself are one change, and a tenant whose default provider row is missing refuses every login.
+
+The slug of a provider is the handle a login names, and it never changes: the mapping key of a principal is the triple `(tenant, provider, subject)` now, because two providers of a tenant hand out the same `sub`. A person who signs in at two providers of a tenant has two principals and two sets of grants, and the two know nothing of each other; linking two external identities to one principal stays deferred.
+
+The login of a tenant that has several providers and a request that names none is a **choice**: Access answers the authorization with a page that lists the providers of the tenant, and every entry is a link back to the authorization with the request of the caller and the slug of the provider. The choice is the caller's, the page writes no state before it, and it carries no script and no style of another site.
+
+The administration has three endpoints for the providers of a tenant, and the default provider is not one of them: it is the registration of the tenant, and it is changed with the tenant. A provider that is created carries a complete registration, a change that names another provider and no secret of it is refused, and a provider that holds principals is not removed. **Contract:** [access spec §3.11](docs/access/spec.md#311-tenant_providers), [access spec §5.2.1](docs/access/spec.md#521-resolving-the-provider), [access spec §10.16](docs/access/spec.md#1016-the-providers-of-a-tenant).
+
+### A tenant signs its people in with a password of its own
+
+A tenant whose people sign in somewhere else had no way to hold an account of its own: the platform was a broker and nothing else, and a tenant without a provider of its own had nothing to offer its callers.
+
+A **local** provider is a provider of the platform: it holds its own identities, and the caller signs in at Access itself with an address and a password. The accounts live in a table of their own, `local_credentials`, with the argon2id verifier of the password. The credential is the identity of the caller — the `sub` of a local provider is the id of the row — and the principal it creates belongs to the provider and to the tenant.
+
+The answer of a refused sign-in says nothing about the accounts of the tenant: an address that names no account, a wrong password, a disabled account and a locked account are the same refusal, with the same code and the same text. When the address names no account, the service verifies the password against nothing, so the time of the answer does not tell the accounts apart. The guessing is expensive too: the failures of an address are counted in the shared store under a namespace of their own, and the failures of a credential lock it at the fifth one, and the lock doubles with every failure.
+
+The page of the password is served by Access: the caller never leaves the origin of the service, and the state of the login travels in two cookies — the one of the callback and the one of the page. The verifier of the PKCE of the gateway never leaves the cookie, and the form carries the state of the provider, which cannot be forged.
+
+The operator writes the accounts: three endpoints answer the credentials of the local providers of a tenant, and the answer never carries the verifier of a password. A local provider is refused on a tenant that shares its client, because a caller that chooses a password to sign in at would move between the tenants of the platform. The reset of a password and the second factor are deferred: the operator writes the password of an account, and the password is the only secret of it for now. **Contract:** [access spec §3.12](docs/access/spec.md#312-local_credentials), [access spec §5.4.1](docs/access/spec.md#541-the-local-provider), [access spec §10.17](docs/access/spec.md#1017-the-credentials-of-the-local-providers).
+
+
 ### The interface reads the credential of the deployment when the shell holds another one
 
 The interface of the operator asks the administration of Access with the credential of the shell, and the credential of the shell comes first: a shell that names a deployment means it. A shell that holds the credential of *another* deployment was refused by this one, and the interface showed the refusal of the service — `GET /users: a valid administration token is required` — and stopped there. The interface holds the credential of the deployment it works on, in the state of the deployment, and it asks again with it: the credential of the shell is refused, the interface says so, and the page is read.
@@ -35,6 +62,7 @@ The deployment wrote the record in the zone it manages and bound the names anywa
 The wizard checks the delegation before it applies the plan that binds the names, and it refuses the deployment with the reason: the zone of the names is served by `ns1-05.azure-dns.com` and the delegation of the zone names `ns1-01.azure-dns.com`, and the records to write at the registrar are named. The refusal is made before the apply and not at its end: an apply that binds the names takes minutes, and it fails at its end with a reason the operator cannot act on. The wizard tells the delegation after every apply as well — the delegation is the one record the operator writes — and the zone of the names is not destroyed with the deployment: a zone that dies with it is a zone that is created again, and a zone that is created again is served by other name servers.
 
 A zone of a name is delegated once: the same name in two groups of resources, or in two subscriptions, is two zones with two sets of name servers, and only one of them can be delegated at the registrar. **Contract:** [CLI spec §5.8](docs/cli/spec.md#58-deploy).
+
 
 ## 1.2.1
 
