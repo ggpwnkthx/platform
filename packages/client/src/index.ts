@@ -85,6 +85,7 @@ export type {
   ProviderInput,
   Route,
   RouteInput,
+  CatalogEntry,
   RecordValue,
   RelationAttributes,
   Role,

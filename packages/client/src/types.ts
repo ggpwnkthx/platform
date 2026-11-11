@@ -279,6 +279,24 @@ export interface Provider {
   readonly createdAt: string
 }
 
+/** A provider the platform supports out of the box: the preset of a registration. */
+export interface CatalogEntry {
+  /** The key of the preset: the name the operator names. */
+  readonly key: string
+  /** The name shown to a human. */
+  readonly displayName: string
+  /** The slug the provider of a tenant carries. */
+  readonly slug: string
+  /** The shape of the issuer of the provider. */
+  readonly issuer: string
+  /** The scopes Access asks the provider for. */
+  readonly scopes: readonly string[]
+  /** The algorithms a token of the provider may be signed with. */
+  readonly algorithms: readonly string[]
+  /** The steps of the registration of the client of Access at the vendor. */
+  readonly steps: readonly string[]
+}
+
 /** A route of the logins: a domain, or an address, names a tenant and a provider. */
 export interface Route {
   readonly id: string

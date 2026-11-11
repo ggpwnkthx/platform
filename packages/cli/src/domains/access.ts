@@ -23,6 +23,7 @@ import {
   decide as platformDecide,
 } from '@platform/client'
 import { failureOf } from './answer'
+import type { CatalogEntry } from './catalog'
 import type { HttpPort } from './contracts'
 import { transportOf } from './transport'
 
@@ -111,6 +112,18 @@ export async function writeProvider(call: AccessCall, provider: unknown): Promis
  */
 export async function removeProvider(call: AccessCall, id: string): Promise<unknown> {
   return await read(() => clientOf(call).send('DELETE', `/providers/${id}`).then(bodyOf))
+}
+
+/**
+ * The catalog of the providers of the platform.
+ *
+ * The catalog is a description of the platform: it holds no secret and
+ * no row of a tenant, and the call carries no credential.
+ *
+ * @param call the parameters of the call.
+ */
+export async function listCatalog(call: AccessCall): Promise<readonly CatalogEntry[]> {
+  return await read(() => clientOf(call).catalog())
 }
 
 /**

@@ -37,6 +37,7 @@ import type {
   ProviderInput,
   Route,
   RouteInput,
+  CatalogEntry,
   Role,
   RoleInput,
   Tenant,
@@ -83,6 +84,25 @@ export class AccessClient {
   /** The credential of the client, when it has one. */
   credentialOf(): string | undefined {
     return this.#options.credential
+  }
+
+  /**
+   * The catalog of the providers of the platform.
+   *
+   * The catalog is a description of the platform: it holds no secret and
+   * no row of a tenant, and the call carries no credential. It is not
+   * under the administration, and it is asked with the path of the
+   * service.
+   */
+  async catalog(): Promise<readonly CatalogEntry[]> {
+    const answer = await this.#options.transport.send({
+      method: 'GET',
+      url: `${this.#options.baseUrl}/v1/catalog`,
+      headers: { accept: 'application/json' },
+    })
+    expectSuccess(answer, 'GET /v1/catalog')
+    const body = bodyOf(answer) as { providers?: CatalogEntry[] }
+    return body.providers ?? []
   }
 
   /**

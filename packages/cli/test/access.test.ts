@@ -268,22 +268,46 @@ describe('the tenants of the administration', () => {
  * the issuer, the scopes and the algorithms of one.
  */
 describe('the catalog of the providers', () => {
+  /** The answer of Access when it is asked for the catalog. */
+  const CATALOG = {
+    providers: [
+      {
+        key: 'okta',
+        displayName: 'Okta',
+        slug: 'okta',
+        issuer: 'https://{org}.okta.com',
+        scopes: ['openid', 'email', 'profile'],
+        algorithms: ['RS256'],
+        steps: [
+          'Create an OIDC web application at Okta, with the sign-in redirect URI {ACCESS_PUBLIC_URL}/oauth/tenant/callback.',
+        ],
+      },
+      {
+        key: 'entra',
+        displayName: 'Microsoft Entra ID',
+        slug: 'entra',
+        issuer: 'https://login.microsoftonline.com/{tenant-id}/v2.0',
+        scopes: ['openid', 'email', 'profile'],
+        algorithms: ['RS256'],
+        steps: ['Register an application of type web at Entra ID.'],
+      },
+    ],
+  }
+
   test('the catalog holds the providers the platform supports', async () => {
-    const http = new FakeHttp(FakeHttp.json(200, {}))
+    const http = new FakeHttp(FakeHttp.json(200, CATALOG))
     const { runtime, out } = runtimeOf(http)
     const status = await run(runtime, ['access', 'catalog', 'list'])
     expect(status).toBe(0)
+    // The catalog is the one of Access: the CLI reads it there.
+    expect(http.last.url).toBe('https://access.example.com/v1/catalog')
     const lines = out.join('\n')
     expect(lines).toContain('entra')
     expect(lines).toContain('okta')
-    expect(lines).toContain('auth0')
-    expect(lines).toContain('keycloak')
-    expect(lines).toContain('google')
-    expect(lines).toContain('custom')
   })
 
   test('the steps of a preset say how the client of Access is registered', async () => {
-    const http = new FakeHttp(FakeHttp.json(200, {}))
+    const http = new FakeHttp(FakeHttp.json(200, CATALOG))
     const { runtime, out } = runtimeOf(http)
     const status = await run(runtime, ['access', 'catalog', 'steps', '--key', 'okta'])
     expect(status).toBe(0)
@@ -293,7 +317,7 @@ describe('the catalog of the providers', () => {
   })
 
   test('a preset that the catalog does not hold is refused', async () => {
-    const http = new FakeHttp(FakeHttp.json(200, {}))
+    const http = new FakeHttp(FakeHttp.json(200, CATALOG))
     const { runtime } = runtimeOf(http)
     await expect(run(runtime, ['access', 'catalog', 'steps', '--key', 'nowhere'])).rejects.toThrow(
       /the catalog holds no preset named "nowhere"/
@@ -301,7 +325,7 @@ describe('the catalog of the providers', () => {
   })
 
   test('a provider of a preset is written with the scopes of the vendor', async () => {
-    const http = new FakeHttp(FakeHttp.json(200, { slug: 'okta' }))
+    const http = new FakeHttp(FakeHttp.json(200, CATALOG), FakeHttp.json(200, { slug: 'okta' }))
     const { runtime } = runtimeOf(http)
     const status = await run(runtime, [
       'access',
@@ -327,7 +351,7 @@ describe('the catalog of the providers', () => {
   })
 
   test('a tenant of a preset is written with the scopes of the vendor', async () => {
-    const http = new FakeHttp(FakeHttp.json(200, { slug: 'acme' }))
+    const http = new FakeHttp(FakeHttp.json(200, CATALOG), FakeHttp.json(200, { slug: 'acme' }))
     const { runtime } = runtimeOf(http)
     const status = await run(runtime, [
       'access',

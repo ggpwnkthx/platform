@@ -36,6 +36,8 @@ The domains the tenants of the platform already carry are proven: the operator o
 
 The presets of the providers live in Access now, and `GET /v1/catalog` answers them: Entra ID, Okta, Auth0, Keycloak, Google Workspace, and a free-form entry for a provider of a tenant's own. The console offers them when the operator registers a provider: picking one fills the issuer, the scopes and the algorithms, and shows the steps of the registration of the client of Access at the vendor. Every field stays the operator's.
 
+The CLI reads the same catalog, and it holds no copy of it: the platform answers the presets it supports.
+
 **Contract:** [access spec §5.4.3](docs/access/spec.md#543-the-catalog-of-the-providers).
 
 ### The routes of the logins are administered from the CLI

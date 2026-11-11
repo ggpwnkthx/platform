@@ -14,12 +14,14 @@ import { writeFile } from 'node:fs/promises'
 import type { GroupSpec } from '../../app/commands'
 import { tableOfRecords } from '../../app/output'
 import { listOf, numberOf, stringOf } from '../../app/commands'
-import { CATALOG, catalogOf, type CatalogEntry } from '../../domains/catalog'
+import type { AccessCall } from '../../domains/access'
+import type { CatalogEntry } from '../../domains/catalog'
 import { CliFailure } from '../../domains/failure'
 import {
   accessContext,
   audit,
   decide,
+  listCatalog,
   listCredentials,
   listGroups,
   listPrincipals,
@@ -88,8 +90,8 @@ function linesOf(rows: readonly Record<string, unknown>[], color: boolean): stri
  *
  * @param color true when the answer is painted.
  */
-function catalogLines(color: boolean): string[] {
-  const rows = CATALOG.map((entry) => ({
+function catalogLines(catalog: readonly CatalogEntry[], color: boolean): string[] {
+  const rows = catalog.map((entry) => ({
     key: entry.key,
     name: entry.displayName,
     slug: entry.slug,
@@ -119,11 +121,25 @@ function stepsOf(entry: CatalogEntry): string[] {
 /**
  * The preset of the catalog, when the operator names one.
  *
+ * The catalog is the one of Access: the platform answers the presets it
+ * supports, and the CLI reads them there.
+ *
+ * @param call the parameters of the call.
  * @param named the key the operator named.
  */
-function namedPreset(named: unknown): CatalogEntry | undefined {
+async function namedPreset(call: AccessCall, named: unknown): Promise<CatalogEntry | undefined> {
   if (typeof named !== 'string' || named === '') return undefined
-  return catalogOf(named)
+  const catalog = await listCatalog(call)
+  const found = catalog.find((entry) => entry.key === named)
+  if (!found) {
+    const known = catalog.map((entry) => entry.key).join(', ')
+    throw new CliFailure(
+      `the catalog holds no preset named "${named}": it holds ${known}`,
+      2,
+      'invalid_argument'
+    )
+  }
+  return found
 }
 
 /** The group of the administration of Access. */
@@ -139,8 +155,9 @@ export const accessGroup: GroupSpec = {
       description:
         'Every provider of a tenant is an OpenID Connect provider: the catalog is a table of defaults and not a table of drivers. A tenant that brings its own provider names the preset "custom".',
       async run(input) {
+        const catalog = await listCatalog(accessCall(input))
         const value = {
-          providers: CATALOG.map((entry) => ({
+          providers: catalog.map((entry) => ({
             key: entry.key,
             displayName: entry.displayName,
             slug: entry.slug,
@@ -149,7 +166,7 @@ export const accessGroup: GroupSpec = {
             algorithms: entry.algorithms,
           })),
         }
-        return { value, lines: catalogLines(input.globals.color) }
+        return { value, lines: catalogLines(catalog, input.globals.color) }
       },
     },
     {
@@ -161,7 +178,16 @@ export const accessGroup: GroupSpec = {
         if (!key) {
           throw new CliFailure('the key of the preset is needed', 2, 'missing_argument')
         }
-        const entry = catalogOf(key)
+        const catalog = await listCatalog(accessCall(input))
+        const entry = catalog.find((candidate) => candidate.key === key)
+        if (!entry) {
+          const known = catalog.map((candidate) => candidate.key).join(', ')
+          throw new CliFailure(
+            `the catalog holds no preset named "${key}": it holds ${known}`,
+            2,
+            'invalid_argument'
+          )
+        }
         return { value: { key: entry.key, steps: entry.steps }, lines: stepsOf(entry) }
       },
     },
@@ -231,7 +257,7 @@ export const accessGroup: GroupSpec = {
         if (!slug) {
           throw new CliFailure('the slug of the tenant is needed', 2, 'missing_argument')
         }
-        const preset = namedPreset(input.options.catalog)
+        const preset = await namedPreset(accessCall(input), input.options.catalog)
         const body: Record<string, unknown> = { slug }
         const displayName = stringOf(input.options, 'display-name')
         const issuer = stringOf(input.options, 'issuer')
@@ -313,7 +339,7 @@ export const accessGroup: GroupSpec = {
       ],
       async run(input) {
         const tenant = stringOf(input.options, 'tenant')
-        const preset = namedPreset(input.options.catalog)
+        const preset = await namedPreset(accessCall(input), input.options.catalog)
         const slug = stringOf(input.options, 'slug') ?? preset?.slug
         if (!tenant || !slug) {
           throw new CliFailure(
