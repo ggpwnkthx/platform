@@ -67,6 +67,7 @@ export {
   AdministrationService,
   type AuditEntry,
 } from './service'
+export { CATALOG } from './catalog'
 export { change } from './audit'
 export { DEFAULT_PROVIDER_SLUG } from './values'
 export { TENANT_ADMIN_PERMISSION } from './bootstrap'

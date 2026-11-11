@@ -502,6 +502,7 @@ A credential is at least 16 characters, and a malformed value stops the service:
 
 | Endpoint | Behavior |
 | --- | --- |
+| `GET /v1/catalog` | The providers the platform supports out of the box (§5.4.3). |
 | `GET /oauth/authorize` | Authorization endpoint. The gateway sends the browser here. |
 | `GET /oauth/tenant/callback` | Callback registered at each tenant's provider. The provider sends the browser here. |
 | `GET /oauth/discover` | The page that asks for the address of the caller (spec §5.2.2). |
@@ -638,6 +639,14 @@ A password is never stored: the service stores the argon2id verifier of it, and 
 **The guessing is expensive.** The failures of an address are counted in the shared store of the deployment, under a namespace of their own: the budget of the sign-ins is not the budget of the administration. The failures of a credential are counted in its row: at the fifth failure the credential is locked, and the lock doubles with every failure, up to a quarter of an hour. A credential that signs in is unlocked again.
 
 **The password is at least twelve characters long and at most a hundred and twenty-eight.** The operator writes the first password of an account, and the caller cannot change it yet: the reset of a password is deferred (§14).
+
+### 5.4.3 The catalog of the providers
+
+Every provider of a tenant is an OpenID Connect provider, and there is no vendor in the code of the login. The **catalog** is what the platform supports out of the box, and it is a table of defaults and not a table of drivers: a preset fills the issuer, the scopes and the algorithms of a provider, and it says how the client of Access is registered at the vendor.
+
+The catalog holds Entra ID, Okta, Auth0, Keycloak and Google Workspace, and a free-form entry for a provider of a tenant's own. A preset never constrains what a tenant registers: every field of a registration is the tenant's.
+
+`GET /v1/catalog` answers the catalog. It holds no secret and no row of a tenant, and every caller may read it.
 
 ### 5.5 Authorization code
 

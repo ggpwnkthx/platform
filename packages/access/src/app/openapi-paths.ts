@@ -148,6 +148,16 @@ export function apiPaths(): Record<string, unknown> {
         },
       },
     },
+    '/v1/catalog': {
+      get: {
+        summary: 'The providers the platform supports out of the box.',
+        description:
+          'The catalog is a description of the platform: a preset fills the issuer, the scopes and the algorithms of a provider, and it says how the client of Access is registered at the vendor. It holds no secret and no row of a tenant.',
+        responses: {
+          200: jsonResponse('The presets of the catalog.'),
+        },
+      },
+    },
     '/oauth/authorize': {
       get: {
         summary: 'The authorization endpoint.',

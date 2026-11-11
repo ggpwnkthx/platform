@@ -32,6 +32,12 @@ The domains the tenants of the platform already carry are proven: the operator o
 
 **Contract:** [access spec §3.13](docs/access/spec.md#313-sso_routes), [access spec §5.2.2](docs/access/spec.md#522-the-address-of-the-login), [access spec §10.18](docs/access/spec.md#1018-the-routes-of-the-logins).
 
+### The catalog of the providers is the one of the platform
+
+The presets of the providers live in Access now, and `GET /v1/catalog` answers them: Entra ID, Okta, Auth0, Keycloak, Google Workspace, and a free-form entry for a provider of a tenant's own. The console offers them when the operator registers a provider: picking one fills the issuer, the scopes and the algorithms, and shows the steps of the registration of the client of Access at the vendor. Every field stays the operator's.
+
+**Contract:** [access spec §5.4.3](docs/access/spec.md#543-the-catalog-of-the-providers).
+
 ### The routes of the logins are administered from the CLI
 
 The CLI reads and writes the routes of the logins: `platformctl access routes list` shows them, `platformctl access routes create` registers one, and `platformctl access routes verify` proves it. The command that registers a route prints the challenge of the domain and the record that has to carry it.

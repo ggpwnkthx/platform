@@ -231,3 +231,32 @@ describe('the routes of the logins', () => {
     expect(cookieOf(authorize)).toBeTruthy()
   })
 })
+
+describe('the catalog of the providers', () => {
+  test('the catalog names the providers the platform supports', async () => {
+    const answer = await fetch(`${service.base}/v1/catalog`)
+    expect(answer.status).toBe(200)
+    const body = (await answer.json()) as { providers: { key: string; steps: string[] }[] }
+    const keys = body.providers.map((entry) => entry.key)
+    expect(keys).toContain('entra')
+    expect(keys).toContain('okta')
+    expect(keys).toContain('auth0')
+    expect(keys).toContain('keycloak')
+    expect(keys).toContain('google')
+    expect(keys).toContain('custom')
+    // Every preset says how the client of Access is registered at the
+    // vendor, and the callback of Access is in the steps.
+    for (const entry of body.providers) {
+      expect(entry.steps.length).toBeGreaterThan(0)
+      expect(entry.steps.join(' ')).toContain('/oauth/tenant/callback')
+    }
+  })
+
+  test('the catalog answers a caller that holds no credential', async () => {
+    // The catalog is a description of the platform: it holds no row of a
+    // tenant, and every caller may read it.
+    const answer = await fetch(`${service.base}/v1/catalog`)
+    expect(answer.status).toBe(200)
+    expect(answer.headers.get('www-authenticate')).toBeNull()
+  })
+})

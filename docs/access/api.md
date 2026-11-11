@@ -164,6 +164,39 @@ curl -sS https://access.example.com/oauth/userinfo -H "authorization: Bearer $AC
 
 `401` when the token is expired, signed with another key, or issued for another audience.
 
+## The catalog of the providers
+
+### `GET /v1/catalog`
+
+The providers the platform supports out of the box (§5.4.3). The catalog is a description of the platform: a preset fills the issuer, the scopes and the algorithms of a provider, and it says how the client of Access is registered at the vendor. Every caller may read it.
+
+```bash
+curl -sS https://access.example.com/v1/catalog
+```
+
+```json
+{
+  "providers": [
+    {
+      "key": "entra",
+      "displayName": "Microsoft Entra ID",
+      "slug": "entra",
+      "issuer": "https://login.microsoftonline.com/{tenant-id}/v2.0",
+      "scopes": ["openid", "email", "profile"],
+      "algorithms": ["RS256"],
+      "steps": [
+        "Register an application of type web at Entra ID, with the redirect URI {ACCESS_PUBLIC_URL}/oauth/tenant/callback and no other.",
+        "Create a client secret of the application and copy its value: it is shown once.",
+        "Grant the delegated permissions openid, email and profile.",
+        "The issuer of the tenant is the one of the application: https://login.microsoftonline.com/{tenant-id}/v2.0."
+      ]
+    }
+  ]
+}
+```
+
+A preset never constrains what a tenant registers: every field of a registration belongs to the tenant.
+
 ## Decision contract
 
 ### `POST /v1/decisions`

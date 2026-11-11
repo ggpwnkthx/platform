@@ -33,6 +33,7 @@ import {
   tenantsHandler,
   auditHandler,
 } from './administration'
+import { catalogHandler } from './catalog'
 import { decisionHandler } from './decision-contract'
 import { accessContextDiscoveryHandler, accessContextHandler } from './access-context-contract'
 import { authorizeHandler, callbackHandler } from './login'
@@ -145,6 +146,10 @@ export function createAccessApp(dependencies: AccessDependencies): Hono<AccessEn
 
   // The login of the callers: the gateway sends the browser here and the
   // provider of the tenant sends it back.
+  // The catalog of the providers: a description of the platform that
+  // every caller may read (spec §5.4.3).
+  app.get('/v1/catalog', async (context) => await catalogHandler(context, dependencies))
+
   app.get('/oauth/authorize', async (context) => await authorizeHandler(context, dependencies))
   app.get('/oauth/tenant/callback', async (context) => await callbackHandler(context, dependencies))
   // The address of the caller: the page that asks for it and the answer
