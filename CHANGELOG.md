@@ -32,6 +32,12 @@ The domains the tenants of the platform already carry are proven: the operator o
 
 **Contract:** [access spec §3.13](docs/access/spec.md#313-sso_routes), [access spec §5.2.2](docs/access/spec.md#522-the-address-of-the-login), [access spec §10.18](docs/access/spec.md#1018-the-routes-of-the-logins).
 
+### The routes of the logins are administered from the CLI
+
+The CLI reads and writes the routes of the logins: `platformctl access routes list` shows them, `platformctl access routes create` registers one, and `platformctl access routes verify` proves it. The command that registers a route prints the challenge of the domain and the record that has to carry it.
+
+**Contract:** [cli spec §5.5](docs/cli/spec.md#55-access).
+
 ### The catalog of the providers of the platform
 
 Every provider of a tenant is an OpenID Connect provider, and there is no vendor in the code of the login — but registering one meant knowing the issuer of the vendor, the scopes it knows and the steps of its registration.

@@ -356,3 +356,78 @@ describe('the catalog of the providers', () => {
     expect(body.idpAlgorithms).toEqual(['RS256'])
   })
 })
+
+/**
+ * The routes of the logins.
+ *
+ * A route names the tenant of a login and the provider the login signs in
+ * at, and it waits for its proof: it routes nothing until the owner of
+ * the domain publishes the challenge, or the operator of the platform
+ * vouches for it.
+ */
+describe('the routes of the logins', () => {
+  test('a route is written with the challenge of the domain', async () => {
+    const http = new FakeHttp(
+      FakeHttp.json(201, { route: { id: 'the-route', challenge: 'the-challenge' } })
+    )
+    const { runtime, out } = runtimeOf(http)
+    const status = await run(runtime, [
+      'access',
+      'routes',
+      'create',
+      '--tenant',
+      'acme',
+      '--key',
+      'acme.example',
+      '--provider',
+      'okta',
+    ])
+    expect(status).toBe(0)
+    const body = JSON.parse(http.last.body ?? '{}') as Record<string, unknown>
+    expect(body.tenant).toBe('acme')
+    expect(body.key).toBe('acme.example')
+    expect(body.provider).toBe('okta')
+    // The challenge is the token the owner of the domain publishes.
+    expect(out.join('\n')).toContain('_access.acme.example')
+    expect(out.join('\n')).toContain('the-challenge')
+  })
+
+  test('the routes of the deployment are listed', async () => {
+    const http = new FakeHttp(
+      FakeHttp.json(200, { routes: [{ id: 'the-route', key: 'acme.example' }] })
+    )
+    const { runtime } = runtimeOf(http)
+    const status = await run(runtime, ['access', 'routes', 'list', '--tenant', 'acme'])
+    expect(status).toBe(0)
+    expect(http.last.url).toBe('https://access.example.com/v1/admin/routes?tenant=acme')
+  })
+
+  test('a route is proved with the method the operator names', async () => {
+    const http = new FakeHttp(
+      FakeHttp.json(200, { route: { id: 'the-route', status: 'verified' } })
+    )
+    const { runtime } = runtimeOf(http)
+    const status = await run(runtime, [
+      'access',
+      'routes',
+      'verify',
+      '--id',
+      'the-route',
+      '--verification',
+      'dns',
+    ])
+    expect(status).toBe(0)
+    expect(http.last.url).toBe('https://access.example.com/v1/admin/routes/the-route/verify')
+    const body = JSON.parse(http.last.body ?? '{}') as Record<string, unknown>
+    expect(body.status).toBe('verified')
+    expect(body.verification).toBe('dns')
+  })
+
+  test('a method of the proof that is neither is refused', async () => {
+    const http = new FakeHttp(FakeHttp.json(200, {}))
+    const { runtime } = runtimeOf(http)
+    await expect(
+      run(runtime, ['access', 'routes', 'verify', '--id', 'the-route', '--verification', 'nowhere'])
+    ).rejects.toThrow(/dns or operator/)
+  })
+})

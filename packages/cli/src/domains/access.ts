@@ -114,6 +114,57 @@ export async function removeProvider(call: AccessCall, id: string): Promise<unkn
 }
 
 /**
+ * The routes of the logins.
+ *
+ * A route names the tenant of a login and the provider the login signs in
+ * at: a domain of addresses, or an address of its own, names them.
+ *
+ * @param call the parameters of the call.
+ * @param query the query of the page.
+ */
+export async function listRoutes(
+  call: AccessCall,
+  query: Readonly<Record<string, string | number | undefined>>
+): Promise<unknown> {
+  return await read(() =>
+    clientOf(call)
+      .send('GET', '/routes', query as Record<string, string>)
+      .then(bodyOf)
+  )
+}
+
+/**
+ * Registers a route, or changes the route of that key.
+ *
+ * A route waits for its proof: it routes nothing until the owner of the
+ * domain publishes the challenge, or the operator of the platform vouches
+ * for it.
+ *
+ * @param call the parameters of the call.
+ * @param route the route.
+ */
+export async function writeRoute(call: AccessCall, route: unknown): Promise<unknown> {
+  return await read(() => clientOf(call).send('POST', '/routes', {}, route).then(bodyOf))
+}
+
+/**
+ * Verifies a route, or refuses it.
+ *
+ * @param call the parameters of the call.
+ * @param id the identifier of the route.
+ * @param verification the proof of the route.
+ */
+export async function verifyRoute(
+  call: AccessCall,
+  id: string,
+  verification: unknown
+): Promise<unknown> {
+  return await read(() =>
+    clientOf(call).send('POST', `/routes/${id}/verify`, {}, verification).then(bodyOf)
+  )
+}
+
+/**
  * The credentials of the deployment.
  *
  * @param call the parameters of the call.

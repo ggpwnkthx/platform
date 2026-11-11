@@ -279,6 +279,27 @@ export interface Provider {
   readonly createdAt: string
 }
 
+/** A route of the logins: a domain, or an address, names a tenant and a provider. */
+export interface Route {
+  readonly id: string
+  /** The kind of the key of the route. */
+  readonly kind: 'domain' | 'address'
+  /** The key of the route: the domain, or the address. */
+  readonly key: string
+  readonly tenant: string
+  /** The provider of the tenant the login signs in at; null is its default. */
+  readonly provider: string | null
+  /** The state of the route: only a verified one routes a login. */
+  readonly status: 'pending' | 'verified' | 'rejected'
+  /** The method of the verification, when the route is verified. */
+  readonly verification: 'dns' | 'operator' | null
+  /** The token the owner of the domain publishes to prove that it owns it. */
+  readonly challenge: string
+  readonly verifiedAt: string | null
+  readonly verifiedBy: string | null
+  readonly createdAt: string
+}
+
 /** A credential of a local provider. */
 export interface Credential {
   readonly id: string
@@ -307,6 +328,17 @@ export interface CredentialInput {
 }
 
 /** The body of the upsert of a provider. */
+/** The registration of a route of the logins. */
+export interface RouteInput {
+  readonly tenant: string
+  /** The kind of the key of the route. Default `domain`. */
+  readonly kind?: 'domain' | 'address'
+  /** The key of the route: the domain, or the address. */
+  readonly key: string
+  /** The provider of the tenant the login signs in at; null is its default. */
+  readonly provider?: string | null
+}
+
 export interface ProviderInput {
   readonly tenant: string
   /** The kind of the provider: an OpenID Connect one, or the local one. */

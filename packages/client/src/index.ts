@@ -83,6 +83,8 @@ export type {
   PrincipalInput,
   Provider,
   ProviderInput,
+  Route,
+  RouteInput,
   RecordValue,
   RelationAttributes,
   Role,

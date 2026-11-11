@@ -26,6 +26,7 @@ import {
   listGrants,
   listProviders,
   listRoles,
+  listRoutes,
   listTenants,
   removeCredential,
   removeProvider,
@@ -37,7 +38,9 @@ import {
   writeProvider,
   writePrincipal,
   writeRole,
+  writeRoute,
   writeTenant,
+  verifyRoute,
 } from '../../domains/access'
 import { confirm } from '../../app/prompt'
 import { accessCall } from './calls'
@@ -355,6 +358,106 @@ export const accessGroup: GroupSpec = {
         }
         const removed = await removeProvider(accessCall(input), id)
         return { value: removed, message: 'the provider is removed' }
+      },
+    },
+    {
+      name: 'routes list',
+      summary: 'the routes of the logins',
+      options: [
+        { name: 'tenant', kind: 'string', summary: 'the slug of the tenant' },
+        { name: 'kind', kind: 'string', summary: 'the kind of the key: domain or address' },
+        { name: 'limit', kind: 'string', summary: 'the size of the page', default: '50' },
+        { name: 'offset', kind: 'string', summary: 'the offset of the page', default: '0' },
+      ],
+      async run(input) {
+        const body = await listRoutes(accessCall(input), {
+          tenant: stringOf(input.options, 'tenant'),
+          kind: stringOf(input.options, 'kind'),
+          limit: numberOf(input.options, 'limit'),
+          offset: numberOf(input.options, 'offset'),
+        })
+        const rows = rowsOf(body, 'routes')
+        return { value: body, lines: linesOf(rows, input.globals.color) }
+      },
+    },
+    {
+      name: 'routes create',
+      summary: 'register a route of the logins, or change it',
+      description:
+        'A route names the tenant of a login and the provider the login signs in at. A route waits for its proof: it routes nothing until the owner of the domain publishes the challenge, or the operator of the platform vouches for it.',
+      options: [
+        { name: 'tenant', kind: 'string', summary: 'the slug of the tenant' },
+        { name: 'kind', kind: 'string', summary: 'the kind of the key: domain or address' },
+        { name: 'key', kind: 'string', summary: 'the domain of the addresses, or the address' },
+        {
+          name: 'provider',
+          kind: 'string',
+          summary: 'the provider of the tenant the login signs in at',
+        },
+      ],
+      examples: [
+        'platformctl access routes create --tenant acme --key acme.example',
+        'platformctl access routes create --tenant acme --key alice@partner.example --kind address',
+      ],
+      async run(input) {
+        const tenant = stringOf(input.options, 'tenant')
+        const key = stringOf(input.options, 'key')
+        if (!tenant || !key) {
+          throw new CliFailure(
+            'the tenant and the key of the route are needed',
+            2,
+            'missing_argument'
+          )
+        }
+        const body: Record<string, unknown> = { tenant, key }
+        const kind = stringOf(input.options, 'kind')
+        const provider = stringOf(input.options, 'provider')
+        if (kind) body.kind = kind
+        if (provider) body.provider = provider
+        const written = await writeRoute(accessCall(input), body)
+        const route = (written as { route?: Record<string, unknown> }).route ?? {}
+        return {
+          value: written,
+          message: `the route "${key}" is written`,
+          lines: [
+            `the route waits for its proof: publish the record _access.${key} with the challenge ${String(route.challenge ?? '')}`,
+          ],
+        }
+      },
+    },
+    {
+      name: 'routes verify',
+      summary: 'verify a route of the logins, or refuse it',
+      description:
+        'The proof of a domain is the record its owner publishes: the service reads the record of _access of the domain and compares it with the challenge of the route. The operator of the platform may vouch for a domain instead, and only the operator of the platform may.',
+      options: [
+        { name: 'id', kind: 'string', summary: 'the identifier of the route' },
+        {
+          name: 'verification',
+          kind: 'string',
+          summary: 'the method of the proof: dns or operator',
+          default: 'operator',
+        },
+        {
+          name: 'reject',
+          kind: 'boolean',
+          summary: 'refuse the route instead of verifying it',
+        },
+      ],
+      async run(input) {
+        const id = stringOf(input.options, 'id')
+        if (!id) {
+          throw new CliFailure('the identifier of the route is needed', 2, 'missing_argument')
+        }
+        const method = stringOf(input.options, 'verification') ?? 'operator'
+        if (method !== 'dns' && method !== 'operator') {
+          throw new CliFailure('the method of the proof is dns or operator', 2, 'invalid_argument')
+        }
+        const written = await verifyRoute(accessCall(input), id, {
+          status: input.options.reject === true ? 'rejected' : 'verified',
+          verification: method,
+        })
+        return { value: written, message: `the route "${id}" is proved` }
       },
     },
     {

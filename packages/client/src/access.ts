@@ -35,6 +35,8 @@ import type {
   PrincipalInput,
   Provider,
   ProviderInput,
+  Route,
+  RouteInput,
   Role,
   RoleInput,
   Tenant,
@@ -263,6 +265,28 @@ export class AccessAdminClient extends AccessClient {
   /** Removes a provider that holds no principal. */
   async removeProvider(id: string): Promise<void> {
     await this.send('DELETE', `/providers/${id}`)
+  }
+
+  /** A page of the routes of the logins. */
+  async routes(
+    query: { tenant?: string; kind?: string; limit?: number; offset?: number } = {}
+  ): Promise<AdminPage<Route>> {
+    return await this.page<Route>('/routes', 'routes', query)
+  }
+
+  /** Creates a route, or updates the route of that key. */
+  async saveRoute(input: RouteInput): Promise<{ route: Route; created: boolean }> {
+    const answer = await this.send('POST', '/routes', {}, input)
+    return { route: bodyOf(answer) as Route, created: answer.status === 201 }
+  }
+
+  /** Verifies a route, or refuses it. */
+  async verifyRoute(
+    id: string,
+    input: { status: 'verified' | 'rejected'; verification: 'dns' | 'operator' }
+  ): Promise<Route> {
+    const answer = await this.send('POST', `/routes/${id}/verify`, {}, input)
+    return bodyOf(answer) as Route
   }
 
   /** A page of the credentials of the local providers. */
