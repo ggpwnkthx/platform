@@ -54,11 +54,30 @@ async function tenant(slug: string, options: { default?: boolean } = {}): Promis
   return rows[0]!.id
 }
 
-/** Creates a principal and returns its id. */
-async function user(tenantId: string, subject: string): Promise<string> {
+/** Registers a provider of a tenant and returns its slug. */
+async function provider(tenantId: string, slug: string): Promise<string> {
+  await database.query(
+    `insert into tenant_providers (tenant_id, kind, slug, display_name, issuer,
+       idp_client_id, idp_client_secret, idp_redirect_uri)
+     values ($1, 'oidc', $2, $3, 'https://login.example.com', $4, $5,
+             'https://access.example.com/oauth/tenant/callback')`,
+    [tenantId, slug, slug, `access-${slug}`, Buffer.from('secret')]
+  )
+  return slug
+}
+
+/**
+ * Creates a principal and returns its id.
+ *
+ * @param tenantId the tenant of the principal.
+ * @param subject the subject the provider hands out.
+ * @param providerSlug the provider the principal was created at.
+ */
+async function user(tenantId: string, subject: string, providerSlug = 'default'): Promise<string> {
   const rows = await database.query<{ id: string }>(
-    `insert into users (tenant_id, external_subject) values ($1, $2) returning id`,
-    [tenantId, subject]
+    `insert into users (tenant_id, provider_slug, external_subject)
+     values ($1, $2, $3) returning id`,
+    [tenantId, providerSlug, subject]
   )
   return rows[0]!.id
 }
@@ -113,6 +132,7 @@ describe('the schema of Access', () => {
       '0015_provider_registry.sql',
       '0016_local_credentials.sql',
       '0017_auto_provision_admin_default.sql',
+      '0018_sso_routes.sql',
     ])
   })
 
@@ -212,11 +232,19 @@ describe('the schema of Access', () => {
     ).rejects.toThrow()
   })
 
-  test('the mapping key is the pair (tenant, subject)', async () => {
+  test('the mapping key is the triple (tenant, provider, subject)', async () => {
     const acme = await tenant('mapping')
+    await provider(acme, 'entra')
+    await provider(acme, 'okta')
     const subject = '00u1a2b3c4d5'
-    await user(acme, subject)
-    await expect(user(acme, subject)).rejects.toThrow()
+    // Two providers of a tenant hand out the same subject, and the two
+    // subjects are two principals: the subject alone does not name a
+    // principal (spec §6.2).
+    const first = await user(acme, subject, 'entra')
+    const second = await user(acme, subject, 'okta')
+    expect(first).not.toBe(second)
+    // The triple is refused when it is the same triple.
+    await expect(user(acme, subject, 'entra')).rejects.toThrow()
   })
 
   test('a grant can never name a principal of another tenant', async () => {
