@@ -4,15 +4,15 @@ The `packages/data/` workspace of [the platform](../../README.md): a headless, p
 
 Data holds workspaces, collections, data policies, records, audit and version history, and committed events. [Access](../access/) owns identity, tenants, groups and grants, and its access context contract (`/v1/access-context`) is a required dependency: without it, Data fails closed. It is written in TypeScript on Bun 1.4.3 with Hono, and runs on PostgreSQL 15 or later with row-level security.
 
-Version `1.3.1` is pre-production; see [Release status](../../docs/data/README.md#release-status).
+Version `1.4.0` is pre-production; see [Release status](../../docs/data/README.md#release-status).
 
 ## Install
 
 | Artifact | Where |
 | --- | --- |
-| Image | `ghcr.io/ggpwnkthx/data:1.3.1` |
-| Standalone binaries | Assets of [release `v1.3.1`](https://github.com/ggpwnkthx/platform/releases/tag/v1.3.1) |
-| Typed client | `@data-backend/client`, or `data-backend-client-1.3.1.tgz` from the same release ([Client](../../docs/data/client.md)) |
+| Image | `ghcr.io/ggpwnkthx/data:1.4.0` |
+| Standalone binaries | Assets of [release `v1.4.0`](https://github.com/ggpwnkthx/platform/releases/tag/v1.4.0) |
+| Typed client | `@data-backend/client`, or `data-backend-client-1.4.0.tgz` from the same release ([Client](../../docs/data/client.md)) |
 
 ## Commands
 
