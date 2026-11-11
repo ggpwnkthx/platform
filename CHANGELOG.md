@@ -20,6 +20,14 @@ The provider of a login is the default provider of its tenant now, and the speci
 
 **Contract:** [access spec §5.2](docs/access/spec.md#52-resolving-the-tenant), [access spec §5.2.1](docs/access/spec.md#521-resolving-the-provider), [access spec §5.2.2](docs/access/spec.md#522-the-address-of-the-login).
 
+### The catalog of the providers of the platform
+
+Every provider of a tenant is an OpenID Connect provider, and there is no vendor in the code of the login — but registering one meant knowing the issuer of the vendor, the scopes it knows and the steps of its registration.
+
+The CLI holds the catalog now: `platformctl access catalog list` shows the providers the platform supports out of the box, and `platformctl access catalog steps --key <key>` shows how the client of Access is registered at one of them. A preset fills the scopes and the algorithms of a provider of a tenant or of the tenant itself, and it never constrains what a tenant registers: the preset `custom` is the free-form path.
+
+**Contract:** [cli spec §5.5](docs/cli/spec.md#55-access).
+
 ### The tree of the platform holds no advisory of node-forge
 
 Four advisories of `node-forge` were published on the tenth of November: an Ed25519 verification that accepts small-order public keys, a TLS client that crashes on a handshake it does not like, and a regular expression that a header of an answer of `forge.http` may make slow. The tree of the platform holds `node-forge` — the gateway asks for the certificates of a deployment with it — and the lockfile held the version the advisories are about, so the audit of the dependencies refused every build of the platform, and the tag of the release with it.

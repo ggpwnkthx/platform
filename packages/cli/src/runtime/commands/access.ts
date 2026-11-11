@@ -14,6 +14,7 @@ import { writeFile } from 'node:fs/promises'
 import type { GroupSpec } from '../../app/commands'
 import { tableOfRecords } from '../../app/output'
 import { listOf, numberOf, stringOf } from '../../app/commands'
+import { CATALOG, catalogOf, type CatalogEntry } from '../../domains/catalog'
 import { CliFailure } from '../../domains/failure'
 import {
   accessContext,
@@ -79,6 +80,49 @@ function linesOf(rows: readonly Record<string, unknown>[], color: boolean): stri
   return tableOfRecords(rows, used, color)
 }
 
+/**
+ * The lines of the catalog of the providers.
+ *
+ * @param color true when the answer is painted.
+ */
+function catalogLines(color: boolean): string[] {
+  const rows = CATALOG.map((entry) => ({
+    key: entry.key,
+    name: entry.displayName,
+    slug: entry.slug,
+    issuer: entry.issuer,
+    scopes: entry.scopes.join(' '),
+  }))
+  const table = tableOfRecords(rows, ['key', 'name', 'slug', 'issuer', 'scopes'], color)
+  return [
+    ...table,
+    '',
+    'The steps of a preset are shown by: platformctl access catalog steps <key>',
+  ]
+}
+
+/**
+ * The lines of the steps of a preset of the catalog.
+ *
+ * @param entry the preset.
+ */
+function stepsOf(entry: CatalogEntry): string[] {
+  return [
+    `the issuer of ${entry.displayName} is ${entry.issuer}`,
+    ...entry.steps.map((step, index) => `  ${index + 1}. ${step}`),
+  ]
+}
+
+/**
+ * The preset of the catalog, when the operator names one.
+ *
+ * @param named the key the operator named.
+ */
+function namedPreset(named: unknown): CatalogEntry | undefined {
+  if (typeof named !== 'string' || named === '') return undefined
+  return catalogOf(named)
+}
+
 /** The group of the administration of Access. */
 export const accessGroup: GroupSpec = {
   name: 'access',
@@ -86,6 +130,38 @@ export const accessGroup: GroupSpec = {
   description:
     'The administration of Access is written through its API, and a tenant credential acts only for its own tenant.',
   commands: [
+    {
+      name: 'catalog list',
+      summary: 'list the providers the platform supports out of the box',
+      description:
+        'Every provider of a tenant is an OpenID Connect provider: the catalog is a table of defaults and not a table of drivers. A tenant that brings its own provider names the preset "custom".',
+      async run(input) {
+        const value = {
+          providers: CATALOG.map((entry) => ({
+            key: entry.key,
+            displayName: entry.displayName,
+            slug: entry.slug,
+            issuer: entry.issuer,
+            scopes: entry.scopes,
+            algorithms: entry.algorithms,
+          })),
+        }
+        return { value, lines: catalogLines(input.globals.color) }
+      },
+    },
+    {
+      name: 'catalog steps',
+      summary: 'show how the client of Access is registered at a provider',
+      options: [{ name: 'key', kind: 'string', summary: 'the key of the preset' }],
+      async run(input) {
+        const key = stringOf(input.options, 'key')
+        if (!key) {
+          throw new CliFailure('the key of the preset is needed', 2, 'missing_argument')
+        }
+        const entry = catalogOf(key)
+        return { value: { key: entry.key, steps: entry.steps }, lines: stepsOf(entry) }
+      },
+    },
     {
       name: 'tenants list',
       summary: 'list the tenants of the deployment',
@@ -103,6 +179,11 @@ export const accessGroup: GroupSpec = {
       options: [
         { name: 'slug', kind: 'string', summary: 'the slug of the tenant' },
         { name: 'display-name', kind: 'string', summary: 'the name of the tenant' },
+        {
+          name: 'catalog',
+          kind: 'string',
+          summary: 'the preset of the provider of the tenant: the platform supports a set of them',
+        },
         { name: 'issuer', kind: 'string', summary: 'the issuer of the provider of the tenant' },
         { name: 'idp-client-id', kind: 'string', summary: 'the client of the provider' },
         { name: 'idp-client-secret', kind: 'string', summary: 'the secret of the provider' },
@@ -147,6 +228,7 @@ export const accessGroup: GroupSpec = {
         if (!slug) {
           throw new CliFailure('the slug of the tenant is needed', 2, 'missing_argument')
         }
+        const preset = namedPreset(input.options.catalog)
         const body: Record<string, unknown> = { slug }
         const displayName = stringOf(input.options, 'display-name')
         const issuer = stringOf(input.options, 'issuer')
@@ -160,6 +242,12 @@ export const accessGroup: GroupSpec = {
         if (idpClientSecret) body.idpClientSecret = idpClientSecret
         const idpRedirectUri = stringOf(input.options, 'idp-redirect-uri')
         if (idpRedirectUri) body.idpRedirectUri = idpRedirectUri
+        // The preset fills the scopes and the algorithms of the provider
+        // of the tenant: they are the ones of the vendor.
+        if (preset) {
+          body.idpScopes = [...preset.scopes]
+          body.idpAlgorithms = [...preset.algorithms]
+        }
         const emailDomain = stringOf(input.options, 'email-domain')
         if (emailDomain) body.emailDomain = emailDomain
         if (clientId) body.clientId = clientId
@@ -203,6 +291,11 @@ export const accessGroup: GroupSpec = {
       options: [
         { name: 'tenant', kind: 'string', summary: 'the slug of the tenant' },
         { name: 'slug', kind: 'string', summary: 'the slug of the provider in its tenant' },
+        {
+          name: 'catalog',
+          kind: 'string',
+          summary: 'the preset of the provider: the platform supports a set of them',
+        },
         { name: 'kind', kind: 'string', summary: 'the kind of the provider: oidc or local' },
         { name: 'display-name', kind: 'string', summary: 'the name of the provider' },
         { name: 'issuer', kind: 'string', summary: 'the issuer of the provider' },
@@ -213,10 +306,12 @@ export const accessGroup: GroupSpec = {
       ],
       examples: [
         'platformctl access providers create --tenant acme --slug okta --issuer https://login.okta.example',
+        'platformctl access providers create --tenant acme --catalog okta --issuer https://acme.okta.example --idp-client-id … --idp-client-secret …',
       ],
       async run(input) {
         const tenant = stringOf(input.options, 'tenant')
-        const slug = stringOf(input.options, 'slug')
+        const preset = namedPreset(input.options.catalog)
+        const slug = stringOf(input.options, 'slug') ?? preset?.slug
         if (!tenant || !slug) {
           throw new CliFailure(
             'the tenant and the slug of the provider are needed',
@@ -227,7 +322,7 @@ export const accessGroup: GroupSpec = {
         const body: Record<string, unknown> = { tenant, slug }
         const kind = stringOf(input.options, 'kind')
         if (kind) body.kind = kind
-        const displayName = stringOf(input.options, 'display-name')
+        const displayName = stringOf(input.options, 'display-name') ?? preset?.displayName
         const issuer = stringOf(input.options, 'issuer')
         const idpClientId = stringOf(input.options, 'idp-client-id')
         const idpClientSecret = stringOf(input.options, 'idp-client-secret')
@@ -239,8 +334,14 @@ export const accessGroup: GroupSpec = {
         if (idpRedirectUri) body.idpRedirectUri = idpRedirectUri
         const scopes = listOf(input.options, 'idp-scope')
         if (scopes.length > 0) body.idpScopes = scopes
+        else if (preset) body.idpScopes = [...preset.scopes]
+        if (preset) body.idpAlgorithms = [...preset.algorithms]
         const written = await writeProvider(accessCall(input), body)
-        return { value: written, message: `the provider "${slug}" is written` }
+        return {
+          value: written,
+          message: `the provider "${slug}" is written`,
+          lines: preset ? stepsOf(preset) : [],
+        }
       },
     },
     {

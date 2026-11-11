@@ -112,6 +112,24 @@ platformctl data items list notes --output json
 
 Every command that changes something asks before it acts. Pass `--yes` when no one is there to answer, and `--dry-run` to see the request without sending it.
 
+## The identity of a tenant
+
+A tenant signs its people in at an OpenID Connect provider, and the platform supports a set of them out of the box. The catalog holds them, and the steps of a preset say how the client of Access is registered at the vendor:
+
+```bash
+platformctl access catalog list
+platformctl access catalog steps --key okta
+```
+
+A preset fills the issuer, the scopes and the algorithms of a provider, and it never constrains what a tenant registers. A tenant that brings a provider of its own names the preset `custom`:
+
+```bash
+platformctl access providers create --tenant acme --catalog okta \
+  --issuer https://acme.okta.example --idp-client-id … --idp-client-secret …
+```
+
+The domain of the addresses of a tenant is what names it when the platform serves several of them: a caller types its address and the browser goes to the provider of its tenant.
+
 ## The interface of the operator
 
 ```bash

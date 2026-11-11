@@ -173,6 +173,8 @@ Callers' sessions cannot be listed: the gateway has no endpoint for them, and th
 | --- | --- |
 | `access tenants list` | Lists the deployment's tenants. |
 | `access tenants create` | Registers a tenant, or changes it. |
+| `access catalog list` | The providers the platform supports out of the box. |
+| `access catalog steps <key>` | How the client of Access is registered at a provider. |
 | `access principals list` | A page of principals. |
 | `access principals create` | Registers a principal, or changes it. |
 | `access principals import --file <file>` | Registers a batch of principals. |

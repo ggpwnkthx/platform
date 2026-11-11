@@ -259,3 +259,100 @@ describe('the tenants of the administration', () => {
     expect(body.autoProvisionAdmin).toBe(false)
   })
 })
+
+/**
+ * The catalog of the providers.
+ *
+ * The catalog is a table of defaults and not a table of drivers: every
+ * provider of a tenant is an OpenID Connect provider, and a preset fills
+ * the issuer, the scopes and the algorithms of one.
+ */
+describe('the catalog of the providers', () => {
+  test('the catalog holds the providers the platform supports', async () => {
+    const http = new FakeHttp(FakeHttp.json(200, {}))
+    const { runtime, out } = runtimeOf(http)
+    const status = await run(runtime, ['access', 'catalog', 'list'])
+    expect(status).toBe(0)
+    const lines = out.join('\n')
+    expect(lines).toContain('entra')
+    expect(lines).toContain('okta')
+    expect(lines).toContain('auth0')
+    expect(lines).toContain('keycloak')
+    expect(lines).toContain('google')
+    expect(lines).toContain('custom')
+  })
+
+  test('the steps of a preset say how the client of Access is registered', async () => {
+    const http = new FakeHttp(FakeHttp.json(200, {}))
+    const { runtime, out } = runtimeOf(http)
+    const status = await run(runtime, ['access', 'catalog', 'steps', '--key', 'okta'])
+    expect(status).toBe(0)
+    const lines = out.join('\n')
+    expect(lines).toContain('https://{org}.okta.com')
+    expect(lines).toContain('/oauth/tenant/callback')
+  })
+
+  test('a preset that the catalog does not hold is refused', async () => {
+    const http = new FakeHttp(FakeHttp.json(200, {}))
+    const { runtime } = runtimeOf(http)
+    await expect(run(runtime, ['access', 'catalog', 'steps', '--key', 'nowhere'])).rejects.toThrow(
+      /the catalog holds no preset named "nowhere"/
+    )
+  })
+
+  test('a provider of a preset is written with the scopes of the vendor', async () => {
+    const http = new FakeHttp(FakeHttp.json(200, { slug: 'okta' }))
+    const { runtime } = runtimeOf(http)
+    const status = await run(runtime, [
+      'access',
+      'providers',
+      'create',
+      '--tenant',
+      'acme',
+      '--catalog',
+      'okta',
+      '--issuer',
+      'https://acme.okta.example',
+      '--idp-client-id',
+      'access-acme',
+      '--idp-client-secret',
+      'the-secret',
+    ])
+    expect(status).toBe(0)
+    const body = JSON.parse(http.last.body ?? '{}') as Record<string, unknown>
+    expect(body.slug).toBe('okta')
+    expect(body.displayName).toBe('Okta')
+    expect(body.idpScopes).toEqual(['openid', 'email', 'profile'])
+    expect(body.idpAlgorithms).toEqual(['RS256'])
+  })
+
+  test('a tenant of a preset is written with the scopes of the vendor', async () => {
+    const http = new FakeHttp(FakeHttp.json(200, { slug: 'acme' }))
+    const { runtime } = runtimeOf(http)
+    const status = await run(runtime, [
+      'access',
+      'tenants',
+      'create',
+      '--slug',
+      'acme',
+      '--display-name',
+      'Acme Inc',
+      '--catalog',
+      'entra',
+      '--issuer',
+      'https://login.microsoftonline.com/the-tenant/v2.0',
+      '--idp-client-id',
+      'access-acme',
+      '--idp-client-secret',
+      'the-secret',
+      '--client-id',
+      'gateway-acme',
+      '--client-secret',
+      'the-secret',
+    ])
+    expect(status).toBe(0)
+    const body = JSON.parse(http.last.body ?? '{}') as Record<string, unknown>
+    expect(body.idpScopes).toEqual(['openid', 'email', 'profile'])
+    expect(body.idpAlgorithms).toEqual(['RS256'])
+  })
+})
