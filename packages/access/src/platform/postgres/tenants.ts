@@ -315,7 +315,7 @@ export class TenantRepository {
       this.encrypted(input.clientSecret),
       input.clientRedirectUris ?? [],
       input.autoProvision ?? false,
-      input.autoProvisionAdmin ?? false,
+      input.autoProvisionAdmin ?? true,
       input.sharedClient ?? false,
       input.isDefault ?? false,
       input.enabled ?? true,

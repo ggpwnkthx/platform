@@ -90,7 +90,7 @@ Other surprises:
 | The token's `roles` claim and the decision disagree | The claim is a snapshot taken at login; the decision reads the grants table (§7.3, §8.4). | Expected. A new login refreshes the claim. |
 | The `roles` claim lacks some permissions | The claim is capped at 64 entries; the log counts the ones left out (§7.3). | Expected. Decisions still read every grant. |
 | An auto-provisioned principal is denied everywhere | Auto-provisioning creates no grant (§6.4). | Grant it something. |
-| The first identity of a tenant is not an administrator | The tenant does not hand its administration to its first identity (§6.4). | Set `autoProvisionAdmin` on the tenant. |
+| The first identity of a tenant is not an administrator | The tenant turned `autoProvisionAdmin` off, or another tenant shares its provider (§6.4). | Set `autoProvisionAdmin` to `true` on the tenant, or grant the administration of the tenant by hand. |
 
 ## Decision timeouts and outages
 

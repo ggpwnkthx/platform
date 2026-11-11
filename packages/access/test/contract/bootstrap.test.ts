@@ -120,7 +120,9 @@ beforeAll(async () => {
       clientSecret: 'the-secret-of-the-gateway',
       clientRedirectUris: ['https://gateway-acme.example.com/auth/callback'],
       autoProvision: true,
-      autoProvisionAdmin: true,
+      // The tenant names no flag for the administration of itself: the
+      // default gives the administration of the tenant to the first
+      // identity that signs in at it (§6.4).
     })
   )
 })

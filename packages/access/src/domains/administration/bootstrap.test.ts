@@ -7,8 +7,8 @@ import { PLATFORM_SCOPE } from './index'
  * (spec §6.4).
  *
  * The flag of the tenant is the work of its operator, and the flag is
- * off by default: the first person who signs in at the provider of a
- * tenant is not its administrator unless the tenant says so.
+ * on by default: the first person who signs in at the provider of a
+ * tenant is its administrator, unless the tenant says otherwise.
  */
 
 const fakes = createFakes()
@@ -16,17 +16,27 @@ const fakes = createFakes()
 /** Registers the tenant of the tests and its first principal. */
 async function tenantWithFirstPrincipal(
   administration: ReturnType<typeof serviceOf>,
-  tenant: { autoProvisionAdmin?: boolean } = {}
+  tenant: { autoProvisionAdmin?: boolean; slug?: string; clientId?: string; issuer?: string } = {}
 ): Promise<string> {
+  const slug = tenant.slug ?? TENANT.slug
   await administration.upsertTenant(
     PLATFORM_SCOPE,
-    { ...TENANT, autoProvisionAdmin: tenant.autoProvisionAdmin ?? false },
+    {
+      ...TENANT,
+      slug,
+      // A client id belongs to one tenant, and a provider that another
+      // tenant shares is the provider of the directory and not of the
+      // tenant (§6.4).
+      clientId: tenant.clientId ?? TENANT.clientId,
+      issuer: tenant.issuer ?? TENANT.issuer,
+      autoProvisionAdmin: tenant.autoProvisionAdmin ?? true,
+    },
     CONTEXT
   )
   const created = await administration.upsertPrincipal(
     PLATFORM_SCOPE,
     {
-      tenant: TENANT.slug,
+      tenant: slug,
       externalSubject: 'the-subject-of-the-first-principal',
       email: 'alice@acme.example',
       displayName: 'Alice',
@@ -54,9 +64,27 @@ describe('the administration of a tenant', () => {
     expect(grant?.userId).toBe(principal)
   })
 
-  test('a tenant that does not ask for it gives nothing', async () => {
+  test('a tenant that asks for nothing gives its administration to its first identity', async () => {
+    // The flag is on by default: a tenant that names it does not hand
+    // its administration to the first identity that signs in at it.
     const administration = serviceOf(fakes)
-    const principal = await tenantWithFirstPrincipal(administration)
+    // A tenant of its own: the fakes of the file are shared, and the
+    // tenant of the other tests has an administrator already.
+    const principal = await tenantWithFirstPrincipal(administration, {
+      slug: 'acme-default',
+      clientId: 'gateway-acme-default',
+      issuer: 'https://login.acme-default.example',
+    })
+    const grant = await administration.bootstrapAdministrator(
+      { id: principal, tenant: 'acme-default' },
+      CONTEXT
+    )
+    expect(grant).not.toBeNull()
+  })
+
+  test('a tenant that turns it off gives nothing', async () => {
+    const administration = serviceOf(fakes)
+    const principal = await tenantWithFirstPrincipal(administration, { autoProvisionAdmin: false })
     const grant = await administration.bootstrapAdministrator(
       { id: principal, tenant: TENANT.slug },
       CONTEXT

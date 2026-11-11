@@ -70,9 +70,29 @@ describe('the administration of Access', () => {
     expect(response.body.clientId).toBe('gateway-acme')
     expect(response.body.default).toBe(false)
     expect(response.body.enabled).toBe(true)
+    // The tenant names no flag for the administration of itself: the
+    // first identity that signs in at it administers it (§6.4).
+    expect(response.body.autoProvisionAdmin).toBe(true)
     expect(JSON.stringify(response.body)).not.toContain('the-secret-of-the-provider')
     expect(JSON.stringify(response.body)).not.toContain('the-secret-of-the-gateway')
     expect(response.body.id).toBeTruthy()
+  })
+
+  test('a tenant that turns the administration of itself off keeps it off', async () => {
+    const response = await call('/v1/admin/tenants', 'POST', {
+      slug: 'other',
+      displayName: 'Other',
+      issuer: 'https://login.other.example',
+      idpClientId: 'access-other',
+      idpClientSecret: 'the-secret-of-the-provider',
+      idpRedirectUri: 'https://access.example.com/oauth/tenant/callback',
+      clientId: 'gateway-other',
+      clientSecret: 'the-secret-of-the-gateway',
+      clientRedirectUris: ['https://gateway-other.example.com/auth/callback'],
+      autoProvisionAdmin: false,
+    })
+    expect(response.status).toBe(201)
+    expect(response.body.autoProvisionAdmin).toBe(false)
   })
 
   test('the same slug changes the tenant', async () => {

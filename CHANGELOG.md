@@ -10,6 +10,16 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The first identity of a tenant administers it
+
+A tenant that provisioned its identities kept its administration for the operator of the platform: the flag was off by default, and the first person who signed in at the provider of the tenant was nothing. Every tenant of a deployment had to be granted its administration by hand, one call per tenant, before anybody could do anything in it.
+
+The flag is on by default now. A tenant that is created and names neither hands the administration of itself to the first identity that signs in at it: the principal that is created first is given the grant that opens the administration of the tenant, and the ones that come after are given nothing. A tenant that provisions its identities by hand turns it off, and the operator of the platform grants its administration by hand.
+
+The rows that are already written keep the value they hold: the default is the value of a tenant that is created, and a tenant that exists keeps the administration it has. A change of a flag is the work of the operator of the tenant, and it is audited.
+
+**Contract:** [access spec §3.1](docs/access/spec.md#31-tenants), [access spec §6.4](docs/access/spec.md#64-unknown-identity).
+
 ## 1.3.0
 
 ### A tenant signs its people in at several providers

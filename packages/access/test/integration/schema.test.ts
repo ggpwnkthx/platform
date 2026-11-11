@@ -85,6 +85,7 @@ describe('the schema of Access', () => {
       '0014_tenant_auto_provision_admin.sql',
       '0015_provider_registry.sql',
       '0016_local_credentials.sql',
+      '0017_auto_provision_admin_default.sql',
     ])
 
     const second = await runMigrations({
@@ -110,6 +111,7 @@ describe('the schema of Access', () => {
       '0014_tenant_auto_provision_admin.sql',
       '0015_provider_registry.sql',
       '0016_local_credentials.sql',
+      '0017_auto_provision_admin_default.sql',
     ])
   })
 

@@ -125,7 +125,7 @@ class FakeTenants implements TenantStore {
       clientId: registration.clientId,
       clientRedirectUris: registration.clientRedirectUris,
       autoProvision: registration.autoProvision,
-      autoProvisionAdmin: registration.autoProvisionAdmin ?? false,
+      autoProvisionAdmin: registration.autoProvisionAdmin ?? true,
       sharedClient: registration.sharedClient,
       isDefault: registration.isDefault,
       enabled: registration.enabled,

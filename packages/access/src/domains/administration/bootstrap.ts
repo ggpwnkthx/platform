@@ -8,8 +8,8 @@
  * the ones that come after are given nothing.
  *
  * The flag of the tenant is the work of its operator, and the flag is
- * off by default: the first person who signs in at the provider of a
- * tenant is not its administrator unless the tenant says so.
+ * on by default: the first person who signs in at the provider of a
+ * tenant is its administrator, unless the tenant says otherwise.
  *
  * The grant is written by the same statement as the row of its audit: a
  * grant that is not audited does not exist (spec §10.1).

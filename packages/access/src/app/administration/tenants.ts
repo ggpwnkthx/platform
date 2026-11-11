@@ -59,7 +59,9 @@ export async function tenantHandler(
       clientSecret: body.clientSecret,
       clientRedirectUris: body.clientRedirectUris,
       autoProvision: body.autoProvision ?? false,
-      autoProvisionAdmin: body.autoProvisionAdmin ?? false,
+      // The first identity of a tenant administers it, unless the tenant
+      // says otherwise (spec §6.4).
+      autoProvisionAdmin: body.autoProvisionAdmin ?? true,
       sharedClient: body.sharedClient ?? false,
       isDefault: body.default ?? false,
       enabled: body.enabled ?? true,

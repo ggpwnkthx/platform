@@ -190,7 +190,7 @@ export function TenantForm(props: {
         <Flag
           name="autoProvisionAdmin"
           label="The first one administers the tenant"
-          value={tenant?.autoProvisionAdmin ?? false}
+          value={tenant?.autoProvisionAdmin ?? true}
           hint="the first person who signs in may add the users and the rights of the tenant"
         />
         <Flag
