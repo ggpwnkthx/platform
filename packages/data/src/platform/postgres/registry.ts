@@ -22,26 +22,19 @@ import {
 import type { DataStore } from '../../domains/records'
 import { ServiceError } from '../../protocol/errors'
 
-/** The row of the statement of the creation. */
-interface CreatedWorkspaceRow {
-  readonly id: string
-  readonly tenant_id: string
-  readonly slug: string
-  readonly display_name: string
-  readonly status: string
-}
-
 /**
  * The statement of the creation of a workspace.
  *
  * The slug of a workspace is unique in its tenant: a slug that the tenant
  * already holds is a conflict, and the statement refuses it with the
  * unique index of the registry.
+ *
+ * The statement returns nothing: the role of the api reads no column of
+ * the registry, and the service knows the values it wrote.
  */
 const CREATE_WORKSPACE = `
   insert into platform.workspaces (id, tenant_id, slug, display_name, status)
-  values ($1::uuid, $2::uuid, $3, $4, 'active')
-  returning id, tenant_id, slug, display_name, status`
+  values ($1::uuid, $2::uuid, $3, $4, 'active')`
 
 /** The writer of the registry of the workspaces. */
 export class PostgresWorkspaceCreator implements WorkspaceCreator {
@@ -62,9 +55,9 @@ export class PostgresWorkspaceCreator implements WorkspaceCreator {
     scope: WorkspaceWriteScope
   ): Promise<WorkspaceIdentity> {
     try {
-      const row = await this.#store.write(
+      const written = await this.#store.write(
         async (unit) =>
-          await unit.queryOne<CreatedWorkspaceRow>(CREATE_WORKSPACE, [
+          await unit.execute(CREATE_WORKSPACE, [
             registration.id,
             registration.tenantId,
             registration.slug,
@@ -79,15 +72,17 @@ export class PostgresWorkspaceCreator implements WorkspaceCreator {
           principalId: scope.principalId,
         }
       )
-      if (!row) {
+      if (written !== 1) {
         throw new WorkspaceCreationError('conflict', 'the workspace could not be created')
       }
+      // The row is the one the service wrote: the role of the api reads
+      // no column of the registry, and the values are its own.
       return {
-        id: row.id,
-        tenantId: row.tenant_id,
-        status: row.status === 'disabled' ? 'disabled' : 'active',
-        slug: row.slug,
-        displayName: row.display_name,
+        id: registration.id,
+        tenantId: registration.tenantId,
+        status: 'active',
+        slug: registration.slug,
+        displayName: registration.displayName,
       }
     } catch (error) {
       // The unique index of the slug is the conflict of the contract: the

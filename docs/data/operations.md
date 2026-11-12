@@ -66,7 +66,7 @@ Connections in an aborted or unknown state are destroyed, and committed mutation
 | Role | May |
 | --- | --- |
 | `data_owner` | Own schemas and tables, migrate, write the registry, back up and restore. |
-| `data_runtime` | Scoped business data, audit appends, events, receipts. No DDL, deliveries or history edits. |
+| `data_runtime` | Scoped business data, audit appends, events, receipts, and the creation of a workspace of its own tenant. No DDL, deliveries, history edits or reads of the registry. |
 | `data_registry` | Select `id`, `tenant_id`, `status`, `slug`, `display_name` from the registry. |
 | `data_delivery` | Claim and finish deliveries in every workspace. No business records. |
 | `data_maintenance` | Delete history past retention. No business writes. |
