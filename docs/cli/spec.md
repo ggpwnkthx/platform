@@ -438,6 +438,7 @@ The interface reads the keys of the terminal and nothing else: a script that dri
 | `n` | Opens the form of a new thing, according to the page. |
 | `a` | Applies the deployment of the selected profile again: it opens the form of that deployment with the answers of its environment and with the images of the release, and the deployment is applied when the reader sends the form and confirms it. A deployment this machine holds no files of is not applied again, and the interface says so. |
 | `e` | Opens the form of the selected profile or tenant. |
+| `m` | Makes the selected principal an administrator of its tenant: the grant of the role `admin` is written, and the reader confirms it first. A principal that names no tenant is refused, and the interface says why. |
 | `c` | Makes the selected profile the one of the machine. |
 | `d` | Removes the selected profile or revokes the selected grant, after the reader confirms it. |
 | `r` | Reads the page again. |

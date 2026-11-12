@@ -48,6 +48,7 @@ import {
 import type { Screen } from './screen'
 import {
   accessCallOf,
+  ADMIN_ROLE,
   answersFor,
   detailsOf,
   environmentOf,
@@ -528,6 +529,35 @@ export class Interface {
         await this.openGrant()
         return
       }
+      case 'admin-principal': {
+        const person = this.people.get(pending.id ?? '')
+        if (!person) return
+        const tenant = person.tenant || this.scope.tenant
+        if (!tenant) return
+        await this.at(async () => {
+          await this.administration(false, async (call) =>
+            grantOf(call, {
+              tenant,
+              userId: person.id,
+              role: ADMIN_ROLE,
+              // The workspace of the grant is the tenant itself: the
+              // console asks for the context of the tenant of its
+              // caller, and the slug of the tenant is the workspace it
+              // names. The route is left out: the grant is the
+              // administration of the tenant, and it is not the
+              // administration of one route of it.
+              workspaceId: tenant,
+              routeId: null,
+              ...(this.giver ? { grantedBy: this.giver } : {}),
+            })
+          )
+          this.dispatch({
+            type: 'message',
+            message: { text: `${person.label} administers the tenant ${tenant}`, kind: 'ok' },
+          })
+        })
+        return
+      }
       case 'deploy':
         if (pending.form) await this.onDeploy(pending.form, true)
         return
@@ -947,6 +977,11 @@ export class Interface {
             : this.scope
         } else if (this.state.page !== 'grants') this.scope = {}
         await this.openPage('grants')
+        return
+      case 'm':
+        // The principal that administers its tenant: the role of the
+        // administration is given to it.
+        this.onAdmin()
         return
       default:
         return
@@ -1494,12 +1529,42 @@ export class Interface {
     if (this.state.page === 'grants') {
       const row = this.selected()
       if (!row) return
-      const [tenant, principal, permission] = row.cells
+      const [tenant, principal, right] = row.cells
       this.ask(
-        `the grant of ${permission || 'the permission'} to ${principal || 'the principal'} in ${tenant || 'the tenant'} is revoked?`,
+        `the grant of ${right || 'the permission'} to ${principal || 'the principal'} in ${tenant || 'the tenant'} is revoked?`,
         { action: 'revoke-grant', id: row.id }
       )
     }
+  }
+
+  /**
+   * Makes the principal the reader has selected an administrator of its
+   * tenant.
+   *
+   * The role is the one Access creates with every tenant: it holds the
+   * permissions an administration needs, and the console reads them in
+   * the context of its caller. The reader confirms it: the right is a
+   * power over the tenant.
+   */
+  private onAdmin(): void {
+    if (this.state.page !== 'principals') return
+    const person = this.people.get(this.selected()?.id ?? '')
+    if (!person) return
+    const tenant = person.tenant || this.scope.tenant
+    if (!tenant) {
+      this.dispatch({
+        type: 'message',
+        message: {
+          text: `${person.label} names no tenant: the interface does not know what it administers`,
+          kind: 'error',
+        },
+      })
+      return
+    }
+    this.ask(`${person.label} administers the tenant ${tenant} from now on?`, {
+      action: 'admin-principal',
+      id: person.id,
+    })
   }
 
   /**
@@ -1985,7 +2050,7 @@ const SECTIONS: Partial<Record<Page, string>> = {
 const HEADS = {
   tenants: ['slug', 'name', 'id', 'users', 'grants', 'state'],
   principals: ['email', 'name', 'id', 'tenant', 'status', 'last login'],
-  grants: ['tenant', 'principal', 'permission', 'workspace', 'route', 'expires'],
+  grants: ['tenant', 'principal', 'right', 'workspace', 'route', 'expires'],
 } as const
 
 /**

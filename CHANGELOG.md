@@ -10,6 +10,16 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The interface makes a principal an admin of its tenant
+
+The interface writes a grant of a permission, and the role that administers a tenant is not one of them: an operator who needs a second administrator of a tenant had to leave the interface and write the grant by hand.
+
+The key `m` on the principals gives the principal the role `admin` of its tenant — the role Access creates with every tenant, which holds the permissions an administration needs. The interface asks before it writes, and the grant it writes is the one the console reads: the tenant itself as the workspace, and no route.
+
+The list of the grants shows the role of a grant that holds one, and the column that holds the permission or the role is named `right`.
+
+**Contract:** [cli spec §9.3](docs/cli/spec.md#93-the-keys), [access spec §6.4](docs/access/spec.md#64-unknown-identity).
+
 ## 1.4.4
 
 ### A capability of the platform is given by the platform

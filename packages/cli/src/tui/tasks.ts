@@ -130,9 +130,19 @@ export function principalRows(body: unknown): Row[] {
 }
 
 /**
+ * The key of the role that administers a tenant.
+ *
+ * The role is the one Access creates with every tenant: it holds the
+ * permissions an administration needs, and the console reads them in
+ * the context of its caller (spec §6.4 of Access).
+ */
+export const ADMIN_ROLE = 'admin'
+
+/**
  * The rows of the grants of a deployment.
  *
  * @param body the answer of Access.
+ * @param names the addresses of the principals, by their identifier.
  */
 export function grantRows(body: unknown, names: ReadonlyMap<string, string> = new Map()): Row[] {
   return rowsOf(body, 'grants').map((grant) => ({
@@ -142,7 +152,9 @@ export function grantRows(body: unknown, names: ReadonlyMap<string, string> = ne
       // A principal is read by its address, and not by its identifier,
       // when the interface knows the address.
       names.get(textOf(grant, 'userId')) ?? (textOf(grant, 'userId') || textOf(grant, 'group')),
-      textOf(grant, 'permission'),
+      // A grant holds a permission or a role, and not both: the row
+      // names the one it holds.
+      textOf(grant, 'permission') || textOf(grant, 'role'),
       textOf(grant, 'workspaceId'),
       textOf(grant, 'routeId'),
       textOf(grant, 'expiresAt') || 'never',

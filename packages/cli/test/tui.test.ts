@@ -1259,6 +1259,54 @@ describe('a principal and its grants', () => {
     expect(screen.frames.join('\n')).toContain('the principals of acme')
   })
 
+  test('a principal is made an admin of its tenant with one key', async () => {
+    const http = new FakeHttp(
+      FakeHttp.json(200, ONE_TENANT),
+      FakeHttp.json(200, { principals: [alice] }),
+      FakeHttp.json(200, { grants: [] }),
+      FakeHttp.json(200, { grants: [] })
+    )
+    const screen = new FakeScreen(
+      { kind: 'char', char: 't' },
+      { kind: 'char', char: 'p' },
+      // The key of the administration, and the question it asks.
+      { kind: 'char', char: 'm' },
+      { kind: 'char', char: 'y' }
+    )
+    await new Interface({ screen, services: servicesOf(http), environment: ADMINISTRATOR }).start()
+    // The grant is the role of the administration, on the tenant itself
+    // as the workspace: the console asks for the context of the tenant
+    // of its caller.
+    const written = http.requests.find((request) => request.method === 'PUT')
+    expect(JSON.parse(written?.body ?? '{}')).toMatchObject({
+      tenant: 'acme',
+      userId: ALICE,
+      role: 'admin',
+      workspaceId: 'acme',
+      routeId: null,
+    })
+    const frame = screen.frames.join('\n')
+    expect(frame).toContain('alice@acme.example administers the tenant acme from now on?')
+    expect(frame).toContain('alice@acme.example administers the tenant acme')
+  })
+
+  test('a principal that names no tenant is not made an admin of one', async () => {
+    const http = new FakeHttp(
+      FakeHttp.json(200, { principals: [{ ...alice, tenant: '' }] }),
+      FakeHttp.json(200, { principals: [{ ...alice, tenant: '' }] })
+    )
+    const screen = new FakeScreen(
+      // The principals of the deployment: the reader is in no tenant.
+      { kind: 'char', char: 'p' },
+      { kind: 'char', char: 'm' }
+    )
+    await new Interface({ screen, services: servicesOf(http), environment: ADMINISTRATOR }).start()
+    // Nothing was written: the interface does not know what the
+    // principal administers.
+    expect(http.requests.some((request) => request.method === 'PUT')).toBe(false)
+    expect(screen.frames.join('\n')).toContain('names no tenant')
+  })
+
   test('a principal is registered and given its first grant without a word typed twice', async () => {
     const http = new FakeHttp(
       FakeHttp.json(200, ONE_TENANT),

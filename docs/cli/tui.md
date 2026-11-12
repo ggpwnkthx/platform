@@ -32,6 +32,7 @@ The page of the deployments is the one the interface opens on. The reader goes f
 | `n` | Creates: a deployment, a tenant, a principal or a grant, according to the page. |
 | `a` | Applies the deployment that is selected again: it opens the form of that deployment with its answers and with the images of the release, and the deployment is applied when you send the form and confirm it. |
 | `e` | Edits the profile or the tenant that is selected. |
+| `m` | Makes the selected principal an administrator of its tenant: it is given the role of the administration, and the interface asks before it writes. |
 | `c` | Makes the selected profile the one of the machine. |
 | `d` | Removes the selected profile, or revokes the selected grant. The interface asks before it writes. |
 | `r` | Reads the page again. The pages of a deployment read themselves every five seconds. |
@@ -67,9 +68,11 @@ The short way from a tenant to a principal that may do something:
 
 To give a grant to a principal that is already there, select it on the principals and press `g`, then `n`.
 
+To make a principal an administrator of its tenant, select it on the principals and press `m`: the interface asks, and a yes writes the grant of the role `admin` — the role Access creates with every tenant, which holds the permissions an administration needs.
+
 A field of these forms offers what the interface knows: the tenants of the deployment, the principals of the tenant by their address, and the permissions, the workspaces, the routes and the operators that the grants it has read already name. The offer is drawn after what you typed and named under the fields; `→` at the end of the value takes it, and typing goes on with something else. A field takes any text: the offer is a shortcut and not a list of what is allowed. You name the principal of a grant by its address and the grant is written with its identifier, and the list of the grants shows the addresses.
 
-The forms give a permission to a principal. A grant of a role, or to a group, is given with `platformctl access grants put`.
+The forms give a permission to a principal. The role of the administration is given with `m`, and any other role, or a grant to a group, is given with `platformctl access grants put`.
 
 A question of the interface is answered by `y` or by `n`: a key that is neither leaves the question where it is.
 
