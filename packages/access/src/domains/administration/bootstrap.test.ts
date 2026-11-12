@@ -86,6 +86,7 @@ describe('the administration of a tenant', () => {
       'data.audit.read',
       'data.model.read',
       'data.model.write',
+      'data.workspace.create',
     ])
   })
 

@@ -9,8 +9,9 @@
 
 import type { Context, Hono, Next } from 'hono'
 import type { RequestContext } from '../domains/authorization'
-import { verifyGatewayRequest } from '../domains/gateway-context'
+import { verifyGatewayRequest, type VerifiedGatewayIdentity } from '../domains/gateway-context'
 import { ModelError, type ModelScope } from '../domains/model'
+import { type WorkspaceIdentity, WorkspaceCreationError } from '../domains/workspaces'
 import { ServiceError } from '../protocol/errors'
 import {
   collectionOf,
@@ -99,6 +100,93 @@ export function registerRoutes(app: Hono<AppEnv>, dependencies: AppDependencies)
   }
 
   const scope = '/ws/:workspaceId/v1'
+
+  /**
+   * Establishes the identity of a call of the tenant.
+   *
+   * The creation of a workspace is a call of the tenant and not of a
+   * workspace: the route names no workspace, and the gateway signs an
+   * identity that carries none. The tenant of the call is in its body,
+   * and Access says whether the caller may create a workspace of it.
+   */
+  const establishTenant = async (c: Context<AppEnv>, next: Next): Promise<void> => {
+    const url = new URL(c.req.url)
+    const identity = await verifyGatewayRequest(dependencies.bindings, {
+      method: c.req.method,
+      path: url.pathname,
+      query: url.search,
+      headers: c.req.raw.headers,
+    })
+    if (identity.workspaceId !== '') {
+      throw new ServiceError('NOT_FOUND')
+    }
+    c.set('gateway', identity)
+    await next()
+  }
+
+  app.post('/v1/workspaces', establishTenant, async (c) => {
+    const gateway = c.get('gateway')
+    if (!gateway) {
+      throw new ServiceError('UNAUTHENTICATED')
+    }
+    const body = await readJsonBody(c, dependencies.settings.requests.maxBodyBytes)
+    const tenant = String(body.tenant ?? '')
+    const tenantId = String(body.tenantId ?? '')
+    if (!isUuid(tenantId)) {
+      throw new ServiceError('INVALID_REQUEST', {
+        message: 'the tenant of the workspace is a uuid',
+      })
+    }
+    if (!TENANT_SLUG.test(tenant)) {
+      throw new ServiceError('INVALID_REQUEST', {
+        message: 'the tenant of the workspace is a slug',
+      })
+    }
+    // The capability of the caller is the answer of Access: the caller
+    // holds `data.workspace.create` in a grant of its tenant, and the
+    // workspace of that grant is the tenant itself or every workspace of
+    // the tenant.
+    const resolved = await dependencies.resolver.resolve(
+      {
+        subject: gateway.subject,
+        tenantId,
+        workspaceId: tenant,
+        routeId: gateway.routeId,
+      },
+      {
+        fresh: true,
+        source: 'gateway',
+        requestId: c.get('requestId') ?? 'unknown',
+      }
+    )
+    if (!resolved.context.permissionKeys.includes(WORKSPACE_CREATE)) {
+      throw new ServiceError('FORBIDDEN', {
+        message: 'the caller may not create a workspace of its tenant',
+      })
+    }
+    // The room of the tenant: the bound of the listener is the bound of
+    // the machine, and this one is the bound of the tenant inside it.
+    dependencies.limiter.enter(resolved.context.tenantId)
+    try {
+      const workspace = await createWorkspace(dependencies, gateway, body, tenantId)
+      return c.json(
+        {
+          data: {
+            id: workspace.id,
+            tenantId: workspace.tenantId,
+            tenant,
+            slug: workspace.slug ?? null,
+            displayName: workspace.displayName ?? null,
+            status: workspace.status,
+          },
+        },
+        201,
+        { 'cache-control': 'no-store' }
+      )
+    } finally {
+      dependencies.limiter.leave(resolved.context.tenantId)
+    }
+  })
 
   app.get(`${scope}/me`, establish, (c) => {
     const context = requireContext(c)
@@ -546,6 +634,58 @@ export function registerRoutes(app: Hono<AppEnv>, dependencies: AppDependencies)
 
 /** The methods that change the data. */
 const MUTATIONS = new Set(['POST', 'PATCH', 'PUT', 'DELETE'])
+
+/**
+ * Creates the workspace of a call of the tenant.
+ *
+ * The identifier of the workspace is the one of the service, and the
+ * registry holds the tenant of the caller: the row never names another
+ * tenant, and the isolation of the registry holds it.
+ */
+async function createWorkspace(
+  dependencies: AppDependencies,
+  gateway: VerifiedGatewayIdentity,
+  body: Record<string, unknown>,
+  tenantId: string
+): Promise<WorkspaceIdentity> {
+  try {
+    return await dependencies.workspaces.create(
+      {
+        id: crypto.randomUUID(),
+        tenantId,
+        slug: String(body.slug ?? ''),
+        displayName: String(body.displayName ?? ''),
+      },
+      { tenantId, principalId: gateway.subject }
+    )
+  } catch (error) {
+    if (error instanceof WorkspaceCreationError) {
+      if (error.code === 'conflict') {
+        throw new ServiceError('CONFLICT', { message: error.message })
+      }
+      throw new ServiceError('INVALID_REQUEST', { message: error.message })
+    }
+    throw error
+  }
+}
+
+/**
+ * The capability that lets a caller create a workspace.
+ *
+ * The capability is a permission of Data: Access says who holds it, and
+ * Data says what it means. It is held by a grant of the tenant — the
+ * grant names the tenant itself or every workspace of the tenant — and
+ * the grant names no route, so it holds on every route of the tenant.
+ */
+const WORKSPACE_CREATE = 'data.workspace.create'
+
+/** The slug of a tenant: the name of the tenant inside the platform. */
+const TENANT_SLUG = /^[a-z][a-z0-9-]{1,62}$/
+
+/** Reports whether a value is a uuid. */
+function isUuid(value: string): boolean {
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value)
+}
 
 /**
  * The capabilities that let an administrator read and change the model

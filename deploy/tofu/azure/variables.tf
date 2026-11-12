@@ -271,6 +271,18 @@ variable "workspace_path_prefix" {
   default     = "/ws/{workspaceId}/"
 }
 
+variable "workspaces_route_id" {
+  description = "The identifier of the route that creates the workspaces."
+  type        = string
+  default     = "workspaces"
+}
+
+variable "workspaces_path" {
+  description = "The path of the creation of the workspaces, as the route table names it."
+  type        = string
+  default     = "/v1/workspaces"
+}
+
 # --------------------------------------------------------------------------
 # The tenant and the workspace
 #

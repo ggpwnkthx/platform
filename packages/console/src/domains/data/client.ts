@@ -20,6 +20,7 @@ import type {
   Aggregate,
   AuditEntry,
   CollectionMetadata,
+  CreatedWorkspace,
   FieldAttributes,
   Me,
   Model,
@@ -28,12 +29,19 @@ import type {
   RelationAttributes,
   SchemaMetadata,
   VersionEntry,
+  WorkspaceCreation,
 } from './types'
 
 /** The options of the client of a workspace. */
 export interface DataClientOptions {
   /** The base url of the gateway. */
   readonly gatewayUrl: string
+  /**
+   * The workspace the calls work on.
+   *
+   * The empty string is the scope of the tenant: the creation of a
+   * workspace is a call of the tenant, and it names no workspace.
+   */
   readonly workspaceId: string
   /** The access token of the caller. */
   readonly token: string
@@ -101,6 +109,16 @@ export class DataClient {
   /** The identity of the caller in the workspace. */
   async me(): Promise<Me> {
     return await this.#data<Me>(() => this.#client.me())
+  }
+
+  /**
+   * Creates a workspace of the tenant of the caller.
+   *
+   * The creation is a call of the tenant: the client names no workspace,
+   * and the caller holds the capability that allows it.
+   */
+  async createWorkspace(input: WorkspaceCreation): Promise<CreatedWorkspace> {
+    return await this.#data<CreatedWorkspace>(() => this.#client.createWorkspace(input))
   }
 
   /** The metadata of the collections the caller may use. */

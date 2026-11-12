@@ -37,6 +37,13 @@ export interface Services {
   admin: (credential: string, callerAddress?: string) => AdminClient
   /** The client of the data of a workspace, for a caller. */
   data: (workspaceId: string, token: string) => DataClient
+  /**
+   * The client of the creation of the workspaces of the tenant.
+   *
+   * The creation is a call of the tenant: the client names no workspace,
+   * and the caller holds the capability that allows it.
+   */
+  workspaces: (token: string) => DataClient
   /** The status of the services of the platform. */
   probes: () => Promise<ServiceStatus[]>
   /** The identifier of a tenant, from its slug. */
@@ -95,6 +102,15 @@ export function compose(config: ConsoleConfig, stores?: Stores): Services {
       new DataClient({
         gatewayUrl: config.gatewayUrl,
         workspaceId,
+        token,
+        timeoutMs: config.requestTimeoutMs,
+      }),
+    workspaces: (token) =>
+      new DataClient({
+        gatewayUrl: config.gatewayUrl,
+        // The scope of the tenant: the creation of a workspace names no
+        // workspace.
+        workspaceId: '',
         token,
         timeoutMs: config.requestTimeoutMs,
       }),

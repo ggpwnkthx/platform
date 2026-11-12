@@ -36,6 +36,19 @@ You must open a workspace by ID when one of your rights covers every workspace i
 
 The workspace page lists the collections Data opens to you and what you may do with each.
 
+## Create a workspace
+
+If your tenant gave you the right `data.workspace.create`, the **Workspaces** page offers **New workspace**. The form asks for two things:
+
+| Field | What it is |
+| --- | --- |
+| Slug | The name of the workspace inside your tenant: letters, digits, dashes and underscores, starting with a letter. It never changes, and no two workspaces of a tenant share it. |
+| Name | The name people read. |
+
+Choose **Create the workspace** and the console takes you to it. Two things happen: Data registers the workspace under your tenant, and Access gives you the administration of it — the role `admin` of your tenant, granted on that workspace — so you may read and change its model, its audit and its records.
+
+A slug that your tenant already holds is refused, and the form says so. A caller without the right sees no button, and a call that asks for it anyway is refused.
+
 ## See what you may do
 
 Open the **Your access** tab of a workspace. Each collection has a grid: the rows are its records and each of its fields, the columns are read, create, change and delete. Every "no" carries a numbered note with its reason. Beside the grids are the permissions Access gives you on the workspace, which Data's policies read. A "yes" is the most you may do: Data still checks each record.

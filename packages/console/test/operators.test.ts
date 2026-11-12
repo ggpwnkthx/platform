@@ -3,7 +3,9 @@ import type { Grant, Group, Principal } from '../src/domains/access'
 import {
   CONSOLE_KEYS,
   credentialFor,
+  DATA_KEYS,
   isLive,
+  mayCreateWorkspaces,
   rightsOf,
   scopeOf,
   workspacesOf,
@@ -69,6 +71,17 @@ describe('the scope of an operator', () => {
 
   test('no key, no scope', () => {
     expect(scopeOf('acme', [], credentials).administers).toBeNull()
+  })
+
+  test('the right that creates a workspace is a right of the tenant', () => {
+    const scope = scopeOf('acme', [DATA_KEYS.workspaceCreate], credentials)
+    expect(mayCreateWorkspaces(scope)).toBe(true)
+  })
+
+  test('a caller without the right creates no workspace', () => {
+    const scope = scopeOf('acme', [CONSOLE_KEYS.admin], credentials)
+    expect(mayCreateWorkspaces(scope)).toBe(false)
+    expect(mayCreateWorkspaces(scopeOf('acme', [], credentials))).toBe(false)
   })
 })
 

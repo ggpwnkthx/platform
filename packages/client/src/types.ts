@@ -533,3 +533,36 @@ export interface AccessContext {
   readonly permissionKeys: readonly string[]
   readonly validUntil: string | null
 }
+
+/**
+ * The creation of a workspace of a tenant.
+ *
+ * The creation is a call of the tenant: the body names the tenant — its
+ * slug and its identifier — and the workspace to create.
+ */
+export interface WorkspaceCreation {
+  /** The slug of the tenant the workspace belongs to. */
+  readonly tenant: string
+  /** The identifier of the tenant the workspace belongs to. */
+  readonly tenantId: string
+  /** The short name of the workspace, unique in its tenant. */
+  readonly slug: string
+  /** The name of the workspace, for the humans. */
+  readonly displayName: string
+}
+
+/** The workspace that was created. */
+export interface CreatedWorkspace {
+  /** The identifier of the workspace. */
+  readonly id: string
+  /** The identifier of the tenant the workspace belongs to. */
+  readonly tenantId: string
+  /** The slug of the tenant the workspace belongs to. */
+  readonly tenant: string
+  /** The short name of the workspace. */
+  readonly slug: string | null
+  /** The name of the workspace, for the humans. */
+  readonly displayName: string | null
+  /** The state of the workspace. */
+  readonly status: string
+}

@@ -11,6 +11,7 @@ export type {
   Aggregate,
   AuditEntry,
   CollectionMetadata,
+  CreatedWorkspace,
   FieldAttributes,
   FieldMetadata,
   Me,
@@ -22,4 +23,5 @@ export type {
   RelationAttributes,
   SchemaMetadata,
   VersionEntry,
+  WorkspaceCreation,
 } from '@platform/client'

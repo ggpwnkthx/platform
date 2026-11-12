@@ -406,6 +406,21 @@ locals {
         websocket        = true
         accessCacheTtlMs = 0
       },
+      # The creation of a workspace: it is a call of the tenant, and it
+      # names no workspace. The route asks Access about the caller, and
+      # the service decides what the caller may create.
+      {
+        id = var.workspaces_route_id
+        match = {
+          host = local.gateway_hostname
+          path = var.workspaces_path
+        }
+        upstream = "http://${local.data_address}"
+        auth = {
+          mode = "any"
+        }
+        accessCheck = true
+      },
       # Access, the issuer of the tokens of the platform. It is reached
       # under the name of the deployment, and the upstream receives the
       # name of the environment and not the name of the caller.
@@ -493,6 +508,19 @@ locals {
           algorithm = "ES256"
           # The file is written by the init container of the service,
           # out of the vault of the deployment.
+          publicKeyFile = "/run/secrets/identity-signing.public.pem"
+        }
+      },
+      {
+        # The binding of the route of the tenant: it names no workspace,
+        # and the identity it carries holds none.
+        id                  = var.workspaces_route_id
+        host                = local.gateway_hostname
+        upstreamPathPattern = "${var.workspaces_path}/*"
+        routeId             = var.workspaces_route_id
+        identity = {
+          version   = "v5"
+          algorithm = "ES256"
           publicKeyFile = "/run/secrets/identity-signing.public.pem"
         }
       }

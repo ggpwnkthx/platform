@@ -10,6 +10,18 @@ in the same commit as the code.
 
 ## Unreleased
 
+### A tenant creates the workspaces of its tenant
+
+The registry of the workspaces was written by an operator command only: a tenant that wanted a second workspace had to leave the interface and ask the operator of the platform.
+
+**Data serves the creation of a workspace.** `POST /v1/workspaces` is a call of the tenant — the path names no workspace — and the body names the tenant, the slug of the workspace and its name. The caller holds the capability `data.workspace.create` in a grant of its tenant, and Access says whether it holds it: a caller that holds none is refused with `403 FORBIDDEN`, whatever the interface shows. The row is written by the role of the api, inside the scope of the tenant, and the isolation of the registry refuses a row that names another tenant. A slug that the tenant already holds is `409 CONFLICT`.
+
+**The interface creates one, and the caller administers it.** The **Workspaces** page offers **New workspace** to a caller that holds the right, and the form asks for the slug of the workspace and its name. The console creates the workspace through the API and writes the grant of the role `admin` of the tenant on it: the creator administers the workspace it created — its model, its audit and its records — without being an administrator of the tenant.
+
+The role `admin` of every tenant holds the capability, and an operator of the tenant may give it to anybody else. The grant that allows the creation names the tenant itself or every workspace of the tenant, and it names no route, so it holds on every route of the tenant.
+
+**Contract:** [data spec §9.11](docs/data/spec.md#911-creation-of-a-workspace), [data api](docs/data/api.md#create-a-workspace), [access spec §6.4](docs/access/spec.md#64-unknown-identity), [console spec §6.2](docs/console/spec.md#62-places).
+
 ### The interface makes a principal an admin of its tenant
 
 The interface writes a grant of a permission, and the role that administers a tenant is not one of them: an operator who needs a second administrator of a tenant had to leave the interface and write the grant by hand.

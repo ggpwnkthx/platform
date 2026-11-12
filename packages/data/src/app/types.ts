@@ -12,7 +12,7 @@ import type { CatalogProvider } from '../domains/catalog'
 import type { ModelService } from '../domains/model'
 import type { ResolvedBinding, VerifiedGatewayIdentity } from '../domains/gateway-context'
 import type { RecordsService } from '../domains/records'
-import type { WorkspaceIdentity } from '../domains/workspaces'
+import type { WorkspaceIdentity, WorkspaceCreationService } from '../domains/workspaces'
 import type { Logger } from '../observability/logger'
 import type { Metrics } from '../observability/metrics'
 import type { Clock } from '../protocol/clock'
@@ -41,6 +41,8 @@ export interface AppDependencies {
   readonly bindings: readonly ResolvedBinding[]
   /** The catalog of the workspace: its collections and its policies. */
   readonly catalog: CatalogProvider
+  /** The creation of the workspaces of the tenants. */
+  readonly workspaces: WorkspaceCreationService
   /** The model of the workspace: the logical shape of its collections. */
   readonly model: ModelService
   readonly auditReader: AuditReader

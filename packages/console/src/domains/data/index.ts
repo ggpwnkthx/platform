@@ -4,6 +4,7 @@ export { nextSortOf, PAGE_SIZES, pageUrl, readPageQuery, sortOf } from './query'
 export type {
   Aggregate,
   CollectionMetadata,
+  CreatedWorkspace,
   FieldAttributes,
   FieldMetadata,
   Me,
@@ -12,6 +13,7 @@ export type {
   ModelField,
   RecordValue,
   VersionEntry,
+  WorkspaceCreation,
 } from './types'
 export {
   displayOf,

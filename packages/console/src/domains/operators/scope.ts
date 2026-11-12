@@ -25,6 +25,17 @@ export const CONSOLE_KEYS = {
 } as const
 
 /**
+ * The keys of the capabilities of Data that the console reads.
+ *
+ * The creation of a workspace is a capability of Data: Access says who
+ * holds it, and the console only shows the page to a caller that holds
+ * it.
+ */
+export const DATA_KEYS = {
+  workspaceCreate: 'data.workspace.create',
+} as const
+
+/**
  * The keys of the capabilities that are not relative to a tenant.
  *
  * The console holds one: `console.platform` opens the administration of
@@ -85,6 +96,17 @@ export function scopeOf(
 /** A scope that opens nothing: the scope of a caller whose context could not be read. */
 export function emptyScope(tenant: string): OperatorScope {
   return { tenant, keys: [], status: false, administers: null }
+}
+
+/**
+ * Reports whether the caller may create a workspace of its tenant.
+ *
+ * The right is a capability of Data, and it is held by a grant of the
+ * tenant: the console shows the page to a caller that holds it, and
+ * Data refuses the creation of a caller that holds none.
+ */
+export function mayCreateWorkspaces(scope: OperatorScope): boolean {
+  return scope.keys.includes(DATA_KEYS.workspaceCreate)
 }
 
 /**

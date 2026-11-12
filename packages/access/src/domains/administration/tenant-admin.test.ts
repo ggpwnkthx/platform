@@ -25,6 +25,7 @@ const ADMIN_PERMISSIONS = [
   'data.audit.read',
   'data.model.read',
   'data.model.write',
+  'data.workspace.create',
 ]
 
 /** The roles of a tenant. */
@@ -112,6 +113,7 @@ describe('the role that administers a tenant', () => {
       'data.audit.read',
       'data.model.read',
       'data.model.write',
+      'data.workspace.create',
     ])
   })
 

@@ -136,6 +136,9 @@ const GROUP = 'editors'
 /** The route of Data. */
 const ROUTE = 'data-api'
 
+/** The route of the tenant: the creation of a workspace. */
+const WORKSPACES_ROUTE = 'workspaces'
+
 /** The route of the console in Access. */
 const CONSOLE_ROUTE = 'console'
 
@@ -411,6 +414,15 @@ async function writeFiles(): Promise<{
             websocket: true,
             accessCacheTtlMs: 0,
           },
+          {
+            // The route of the tenant: the creation of a workspace names
+            // no workspace, and the gateway asks Access about the route.
+            id: WORKSPACES_ROUTE,
+            match: { host: routeHost, path: '/v1/workspaces' },
+            upstream: `http://127.0.0.1:${PORTS.data}`,
+            auth: { mode: 'any' },
+            accessCheck: true,
+          },
         ],
       },
       null,
@@ -430,6 +442,15 @@ async function writeFiles(): Promise<{
             host: bindingHost,
             upstreamPathPattern: '/ws/{workspaceId}/v1/*',
             routeId: ROUTE,
+            identity: { version: 'v5', algorithm: 'ES256', publicKeyFile },
+          },
+          {
+            // The binding of the route of the tenant: it names no
+            // workspace, and the identity it carries holds none.
+            id: WORKSPACES_ROUTE,
+            host: bindingHost,
+            upstreamPathPattern: '/v1/workspaces/*',
+            routeId: WORKSPACES_ROUTE,
             identity: { version: 'v5', algorithm: 'ES256', publicKeyFile },
           },
         ],
@@ -577,6 +598,20 @@ async function seed(): Promise<string> {
       permission: 'console.status',
       workspaceId: TENANT.slug,
       routeId: CONSOLE_ROUTE,
+    },
+    'PUT'
+  )
+
+  // The right that creates a workspace of the tenant: it is the right of
+  // the tenant and not of a workspace, and it holds on every route.
+  await admin(
+    '/v1/admin/grants',
+    {
+      tenant: TENANT.slug,
+      userId: principalId,
+      permission: 'data.workspace.create',
+      workspaceId: TENANT.slug,
+      routeId: null,
     },
     'PUT'
   )

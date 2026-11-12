@@ -20,6 +20,7 @@ The **Stated in** column names the specification section that states each decisi
 | 8 | What is transactional? | Audit, committed events and creation receipts are part of a mutation's transaction. | §11 | resolved | `src/domains/audit/index.ts`, `test/integration/transactions.test.ts` |
 | 9 | How do trusted subscribers receive events? | With an explicit service-principal authority and at-least-once delivery. | §11.4 | resolved | `src/domains/events/index.ts`, `test/integration/worker.test.ts` |
 | 10 | What is deferred? | Assets, content lifecycle, public realtime, workflow configuration, GraphQL, MCP and AI, and other database engines need later specifications. | §2.2 | resolved | `docs/data/spec.md` §2.2 |
+| 11 | Who creates a workspace? | A tenant that holds the capability `data.workspace.create` creates the workspaces of its tenant through the API; the operator command stays for the deployments that do not expose the route. | §6.1, §9.11 | resolved | `src/app/routes.ts`, `migrations/0011_workspace_creation.sql` |
 
 ## Implementation decisions
 

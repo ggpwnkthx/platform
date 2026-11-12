@@ -185,11 +185,19 @@ export async function verifyGatewayRequest(
 
   // The values of the identity are validated only after the signature
   // has been verified: an unsigned request never reaches this point.
-  if (!isUuid(match.workspaceId)) reject()
   if (!isUuid(subject)) reject()
-  // The workspace of the path and the workspace of the signature are the
-  // same workspace: a request that names another one is refused.
-  if (signedWorkspace !== match.workspaceId) reject()
+  // A route that names no workspace — the creation of a workspace is a
+  // call of the tenant — carries no workspace in its identity, and a
+  // request that carries one is refused: the caller chose a workspace
+  // the route does not serve.
+  if (match.workspaceId === '') {
+    if (signedWorkspace !== undefined) reject()
+  } else {
+    if (!isUuid(match.workspaceId)) reject()
+    // The workspace of the path and the workspace of the signature are
+    // the same workspace: a request that names another one is refused.
+    if (signedWorkspace !== match.workspaceId) reject()
+  }
 
   return {
     subject,

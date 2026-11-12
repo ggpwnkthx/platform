@@ -149,6 +149,10 @@ function validateHost(host: string, where: string): void {
  * The pattern is a literal path with one placeholder and a terminal
  * remainder. It is not an expression: nothing in it is ever compiled, so
  * a pattern cannot carry a regular expression or a substitution.
+ *
+ * The placeholder is optional: a route of the tenant — the creation of a
+ * workspace is a call of the tenant and not of a workspace — names no
+ * workspace, and its pattern holds no placeholder.
  */
 function validatePattern(pattern: string, where: string): void {
   if (!pattern.startsWith('/')) {
@@ -185,9 +189,9 @@ function validatePattern(pattern: string, where: string): void {
       throw new BindingConfigError(`${where}: the path pattern has an invalid segment`)
     }
   }
-  if (placeholders !== 1) {
+  if (placeholders > 1) {
     throw new BindingConfigError(
-      `${where}: the path pattern must hold exactly one ${WORKSPACE_PLACEHOLDER} segment`
+      `${where}: the path pattern must hold at most one ${WORKSPACE_PLACEHOLDER} segment`
     )
   }
 }

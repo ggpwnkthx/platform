@@ -141,6 +141,64 @@ export function apiPaths(): Record<string, unknown> {
         },
       },
     },
+    '/v1/workspaces': {
+      post: {
+        summary: 'Creates a workspace of the tenant of the caller.',
+        description:
+          'The creation of a workspace is a call of the tenant: the route names no workspace. The body names the tenant (its slug and its identifier), the slug of the workspace and its name. The caller holds the permission `data.workspace.create` in a grant of its tenant, and Access says whether it holds it.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['tenant', 'tenantId', 'slug', 'displayName'],
+                properties: {
+                  tenant: { type: 'string', description: 'The slug of the tenant.' },
+                  tenantId: {
+                    type: 'string',
+                    format: 'uuid',
+                    description: 'The identifier of the tenant.',
+                  },
+                  slug: {
+                    type: 'string',
+                    description: 'The short name of the workspace, unique in its tenant.',
+                  },
+                  displayName: {
+                    type: 'string',
+                    description: 'The name of the workspace, for the humans.',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: shapedResponse('The workspace that was created.', {
+            type: 'object',
+            required: ['data'],
+            properties: {
+              data: {
+                type: 'object',
+                required: ['id', 'tenantId', 'tenant', 'slug', 'displayName', 'status'],
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  tenantId: { type: 'string', format: 'uuid' },
+                  tenant: { type: 'string' },
+                  slug: { type: 'string' },
+                  displayName: { type: 'string' },
+                  status: { type: 'string', enum: ['active', 'disabled'] },
+                },
+              },
+            },
+          }),
+          400: errorResponse('The body does not name a tenant and a workspace.'),
+          401: errorResponse('The request could not be authenticated.'),
+          403: errorResponse('The caller may not create a workspace of its tenant.'),
+          409: errorResponse('The tenant already holds a workspace with this slug.'),
+        },
+      },
+    },
     '/ws/{workspaceId}/v1/me': {
       get: {
         summary: 'The identity of the caller in the workspace.',

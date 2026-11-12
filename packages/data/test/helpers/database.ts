@@ -58,6 +58,8 @@ export interface TestDatabase {
   seed: (
     workspaces: readonly { id: string; tenantId: string; slug: string; name?: string }[]
   ) => Promise<void>
+  /** Runs a statement with the owner of the schema, for the assertions. */
+  query: <T = Record<string, unknown>>(sql: string, params?: readonly unknown[]) => Promise<T[]>
   /** Stops the server. */
   stop: () => void
 }
@@ -169,6 +171,20 @@ async function build(): Promise<TestDatabase> {
     }
   }
 
+  const query = async <T = Record<string, unknown>>(
+    sql: string,
+    params: readonly unknown[] = []
+  ): Promise<T[]> => {
+    const client = new Client({ connectionString: ownerUrl })
+    await client.connect()
+    try {
+      const result = await client.query(sql, params as unknown[])
+      return result.rows
+    } finally {
+      await client.end()
+    }
+  }
+
   return {
     ownerUrl,
     runtimeUrl,
@@ -178,6 +194,7 @@ async function build(): Promise<TestDatabase> {
     server,
     reset,
     seed,
+    query,
     stop: () => server.stop(),
   }
 }

@@ -174,7 +174,8 @@ The ability library has two wildcards, the action `manage` and the subject `all`
 | Place | Shows | Calls |
 | --- | --- | --- |
 | `/` | The places and service state. | The three services' probes. |
-| `/workspaces` | Workspaces named by the caller's grants, plus ones it opened. A workspace can also be opened by ID. | The caller's grants, read with its tenant's credential; `GET /ws/{id}/v1/me` per workspace. |
+| `/workspaces` | Workspaces named by the caller's grants, plus ones it opened. A workspace can also be opened by ID. A caller that holds `data.workspace.create` is offered the creation of a workspace. | The caller's grants, read with its tenant's credential; `GET /ws/{id}/v1/me` per workspace. |
+| `/workspaces/new` | The creation of a workspace of the tenant: its slug and its name. The caller that creates one is given the administration of it. | `POST /v1/workspaces`, and the grant of the role `admin` on the workspace. |
 | `/workspaces/{id}` | Collections the policies open to the caller, and what it may do with them. | `/me`, `/schema` |
 | `/workspaces/{id}/access` | What the caller may do with each collection, field by field, and the reason of every refusal. | `/me`, `/schema`, and the access context of the caller |
 | `/workspaces/{id}/collections/{key}` | Records: searched, filtered (by rows or as JSON), sorted, cursor-paged. | `/schema/{key}`, `/items/{key}` |

@@ -15,6 +15,7 @@ import { parsePolicyBundle } from '../../src/domains/authorization/policies'
 import { AccessAccessContextClient } from '../../src/domains/authorization/adapters/access-context'
 import { WorkspaceCatalogProvider } from '../../src/domains/catalog'
 import { ModelService } from '../../src/domains/model'
+import { WorkspaceCreationService } from '../../src/domains/workspaces'
 import type { ResolvedBinding } from '../../src/domains/gateway-context'
 import { RecordsService } from '../../src/domains/records'
 import { parseManifestBundle } from '../../src/domains/schema'
@@ -24,6 +25,7 @@ import {
   PostgresOutbox,
 } from '../../src/platform/postgres/adapters'
 import { PostgresCatalogStore } from '../../src/platform/postgres/catalog'
+import { PostgresWorkspaceCreator } from '../../src/platform/postgres/registry'
 import {
   PostgresCollectionRegistrar,
   PostgresColumnReader,
@@ -210,6 +212,22 @@ export async function createHarness(
         key: (await identityKeys()).publicKey,
       },
     },
+    {
+      // The route of the tenant: the creation of a workspace names no
+      // workspace, and the identity it carries holds none.
+      binding: {
+        id: 'workspaces',
+        host: HOST,
+        upstreamPathPattern: '/v1/workspaces/*',
+        routeId: 'workspaces',
+        identity: { version: 'v5', algorithm: 'ES256', keyFile: 'test' },
+      },
+      verification: {
+        version: 'v5',
+        algorithm: 'ES256',
+        key: (await identityKeys()).publicKey,
+      },
+    },
   ]
 
   const limiter = new TenantLimiter({
@@ -226,6 +244,7 @@ export async function createHarness(
     resolver,
     bindings,
     catalog,
+    workspaces: new WorkspaceCreationService(new PostgresWorkspaceCreator(store)),
     model,
     auditReader,
     metrics: createMetrics(),
@@ -269,7 +288,7 @@ export async function createHarness(
     const headers = new Headers(options.headers ?? {})
     headers.set('x-forwarded-host', host)
     headers.set('x-gateway-user', subject)
-    headers.set('x-gateway-workspace', workspaceId)
+    if (workspaceId !== '') headers.set('x-gateway-workspace', workspaceId)
     if (roles.length > 0) headers.set('x-gateway-roles', roles.join(','))
     if (email) headers.set('x-gateway-email', email)
     if (signature) headers.set('x-gateway-signature', signature)

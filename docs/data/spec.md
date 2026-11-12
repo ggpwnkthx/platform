@@ -345,7 +345,7 @@ Servers MUST keep their clocks synchronized within one second. A response evalua
 
 Creating and disabling a workspace are operator commands, not generic collection CRUD. The operator supplies an existing Access tenant. A workspace authorizes nobody until Access confirms the tenant and the user's grants.
 
-The registry stores external identifiers and grants no access by itself.
+The creation is also a request of a tenant: a caller that holds the capability `data.workspace.create` in a grant of its tenant creates a workspace of it through the API (§9.11). The registry stores external identifiers and grants no access by itself.
 
 ### 6.2 Request context
 
@@ -796,6 +796,24 @@ The history rules are in §11.6. Over HTTP:
 | Model | Model version, content digest, served schema version, served collections with fields and relations, and the deployment collections not served yet. | `data.model.read` or `data.model.write` (§7.6). |
 | Model writes | The changed model. | `data.model.write` (§7.6). |
 | Audit | Metadata of committed mutations, paged with `limit` and a cursor: identifiers and changed field names, never values (§11.2). It is not a revision history. | `data.audit.read` (§8.5). |
+
+### 9.11 Creation of a workspace
+
+The creation of a workspace is a call of the tenant, and it is the only path of the API that names no workspace.
+
+| Endpoint | Body | Answers |
+| --- | --- | --- |
+| `POST /v1/workspaces` | The tenant — its slug and its identifier — the slug of the workspace and its name. | `201` and the workspace that was created. |
+
+Rules:
+
+1. The route names no workspace, and the identity the gateway signs carries none: a request that carries a workspace is refused.
+2. The tenant of the body is the tenant of the caller: Access is asked for the context of the principal in that tenant, for the workspace of the tenant itself, and it answers the capabilities the principal holds.
+3. The caller holds the capability `data.workspace.create` in a grant of its tenant — the grant names the tenant itself or every workspace of the tenant — and it holds it on the route of the creation. A caller that holds none is refused with `403 FORBIDDEN`.
+4. The slug of a workspace starts with a letter and holds letters, digits, dashes and underscores; the name is a text of one to two hundred characters. A slug or a name the registry does not accept is `400 INVALID_REQUEST`.
+5. A slug that the tenant already holds is `409 CONFLICT`: the slug is the name of the workspace inside its tenant.
+6. The row is written by the role of the api, inside the scope of the tenant of the workspace: the isolation of the registry refuses a row that names another tenant.
+7. The creation grants nothing. The rights of the caller over the workspace it created are written in Access, and the console writes them when it creates one.
 
 ## 10. Mutations and transactions
 

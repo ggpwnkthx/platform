@@ -51,6 +51,25 @@ describe('the client of the data', () => {
     expect(calls[0]?.request.url).toBe('https://gateway.example.test/ws/workspace-1/v1/me')
   })
 
+  test('the creation of a workspace is a call of the tenant', async () => {
+    const { transport, calls } = transportOf({
+      'POST https://gateway.example.test/v1/workspaces': ok(
+        '{"data":{"id":"22222222-2222-4222-8222-222222222222","slug":"acme"}}',
+        { 'content-type': 'application/json' }
+      ),
+    })
+    const client = new DataClient({ ...OPTIONS, workspaceId: '', transport })
+    const created = await client.createWorkspace({
+      tenant: 'acme',
+      tenantId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      slug: 'acme',
+      displayName: 'Acme',
+    })
+    expect(calls[0]?.request.url).toBe('https://gateway.example.test/v1/workspaces')
+    expect(calls[0]?.request.method).toBe('POST')
+    expect(created.id).toBe('22222222-2222-4222-8222-222222222222')
+  })
+
   test('the credential of the caller travels in the headers', async () => {
     const { transport, calls } = transportOf({
       'GET https://gateway.example.test/ws/workspace-1/v1/me': ok('{}'),

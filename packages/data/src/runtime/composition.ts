@@ -19,6 +19,7 @@ import { parsePolicyBundle } from '../domains/authorization'
 import { AccessAccessContextClient } from '../domains/authorization/adapters/access-context'
 import { WorkspaceCatalogProvider } from '../domains/catalog'
 import { ModelService } from '../domains/model'
+import { WorkspaceCreationService } from '../domains/workspaces'
 import { type ResolvedBinding, legacyBindings, parseBindingsFile } from '../domains/gateway-context'
 import { RecordsService } from '../domains/records'
 import { parseManifestBundle } from '../domains/schema'
@@ -29,6 +30,7 @@ import {
   PostgresOutbox,
 } from '../platform/postgres/adapters'
 import { PostgresCatalogStore } from '../platform/postgres/catalog'
+import { PostgresWorkspaceCreator } from '../platform/postgres/registry'
 import {
   PostgresCollectionRegistrar,
   PostgresColumnReader,
@@ -161,6 +163,10 @@ export async function createRuntime(options: CompositionOptions = {}): Promise<R
     deployment: { manifest, bundle },
   })
 
+  // The creation of the workspaces: the registry is written by the role
+  // of the api, inside the scope of the tenant of the workspace.
+  const workspaces = new WorkspaceCreationService(new PostgresWorkspaceCreator(store))
+
   // The model of the workspaces: the logical shape of the collections of
   // a workspace, above the tables of the deployment.
   const model = new ModelService({
@@ -267,6 +273,7 @@ export async function createRuntime(options: CompositionOptions = {}): Promise<R
     resolver,
     bindings,
     catalog,
+    workspaces,
     model,
     auditReader,
     metrics,

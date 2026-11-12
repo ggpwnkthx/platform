@@ -126,6 +126,8 @@ entra_secret_rotation = ""
 
 route_id             = "data-api"
 workspace_path_prefix = "/ws/{workspaceId}/"
+workspaces_route_id  = "workspaces"
+workspaces_path      = "/v1/workspaces"
 
 # --------------------------------------------------------------------------
 # The tenant and the workspace

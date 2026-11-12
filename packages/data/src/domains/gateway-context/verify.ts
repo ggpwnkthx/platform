@@ -194,7 +194,7 @@ export function matchBinding(
   const matches: BindingMatch[] = []
   for (const binding of candidates) {
     const workspaceId = matchPattern(binding.upstreamPathPattern, path)
-    if (workspaceId) matches.push({ binding, workspaceId })
+    if (workspaceId !== null) matches.push({ binding, workspaceId })
   }
   if (matches.length !== 1) return null
   return matches[0]!
@@ -205,6 +205,10 @@ export function matchBinding(
  *
  * The workspace segment is a uuid: a segment that carries an encoded
  * separator, a backslash or a dot is not a workspace and never matches.
+ *
+ * A pattern that names no workspace matches the paths of a route of the
+ * tenant — the creation of a workspace is a call of the tenant and not of
+ * a workspace — and the workspace of the match is the empty string.
  */
 export function matchPattern(pattern: string, path: string): string | null {
   if (!path.startsWith('/')) return null
@@ -212,7 +216,7 @@ export function matchPattern(pattern: string, path: string): string | null {
   const pathSegments = path.split('/')
   // The first segment of a path is empty: the path starts with a slash.
   if (pathSegments.length < patternSegments.length + 1) return null
-  let workspaceId: string | null = null
+  let workspaceId: string | null = ''
   for (let index = 0; index < patternSegments.length; index += 1) {
     const expected = patternSegments[index]!
     const actual = pathSegments[index + 1] ?? ''

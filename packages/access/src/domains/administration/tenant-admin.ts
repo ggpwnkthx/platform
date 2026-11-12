@@ -63,6 +63,10 @@ export function tenantAdminPermission(options: AdministrationOptions): string {
  * - the capabilities that administer a workspace: its model and its
  *   audit. They are workspace-scoped, and they only reach the
  *   workspaces where the role is granted on them.
+ * - the capability that creates a workspace of the tenant, which is
+ *   the right of the tenant and not of a workspace: it is held by the
+ *   role of the administration, and an operator of the tenant may give
+ *   it to anybody else.
  *
  * The keys of the console and of Data are the ones those services read,
  * and they are fixed in their code. The capabilities of the records of a
@@ -76,6 +80,7 @@ function tenantAdminPermissions(options: AdministrationOptions): string[] {
     'data.model.read',
     'data.model.write',
     'data.audit.read',
+    'data.workspace.create',
   ]
 }
 

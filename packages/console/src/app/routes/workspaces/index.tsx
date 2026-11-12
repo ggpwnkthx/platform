@@ -4,11 +4,12 @@
 
 import { createRoute } from 'honox/factory'
 import { DataError, type Me } from '../../../domains/data'
-import { isUuid } from '../../../domains/operators'
+import { isUuid, mayCreateWorkspaces } from '../../../domains/operators'
 import { Badge, Empty, Notice, PageHead } from '../../components/page'
 import { workspaceName, workspacePath } from '../../components/workspace'
 import CopyText from '../../islands/copy-text'
 import { formOf } from '../../middleware/forms'
+import { operatorScope } from '../../middleware/scope'
 import { flash, sessionOf } from '../../middleware/session'
 import { knownWorkspaces } from '../../middleware/workspaces'
 
@@ -32,6 +33,7 @@ export const POST = createRoute(async (c) => {
 export default createRoute(async (c) => {
   const services = c.get('services')
   const session = sessionOf(c)
+  const scope = await operatorScope(c)
   const known = await knownWorkspaces(c)
   // Data answers whether the caller may read a workspace:
   // the console asks it for every workspace it knows, at most two dozen.
@@ -56,6 +58,13 @@ export default createRoute(async (c) => {
         title="Workspaces"
         lede="Workspaces your rights name, plus any you opened. Data decides what you can see in each."
       />
+      {mayCreateWorkspaces(scope) ? (
+        <p>
+          <a class="button" href="/workspaces/new">
+            New workspace
+          </a>
+        </p>
+      ) : null}
       {!known.rightsRead ? (
         <Notice tone="warn" title="Your rights could not be read">
           The console has no admin credential for your tenant, or Access did not answer. Only

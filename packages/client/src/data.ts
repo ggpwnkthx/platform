@@ -13,6 +13,7 @@
  * client.
  */
 
+import type { CreatedWorkspace, WorkspaceCreation } from './types'
 import {
   bodyOf,
   type ClientAnswer,
@@ -28,7 +29,12 @@ import {
 export interface DataClientOptions {
   /** The address of the gateway. */
   readonly baseUrl: string
-  /** The workspace the calls work on. */
+  /**
+   * The workspace the calls work on.
+   *
+   * The empty string is the scope of the tenant: the creation of a
+   * workspace is a call of the tenant, and it names no workspace.
+   */
   readonly workspaceId: string
   /** The credential of the caller, when the call carries one. */
   readonly token?: string
@@ -111,7 +117,11 @@ export class DataClient {
 
   /** The prefix of the paths of the workspace. */
   get #prefix(): string {
-    return `${this.#options.baseUrl}/ws/${encodeURIComponent(this.#options.workspaceId)}/v1`
+    const workspace = this.#options.workspaceId
+    // The scope of the tenant: the creation of a workspace is a call of
+    // the tenant and not of a workspace.
+    if (!workspace) return `${this.#options.baseUrl}/v1`
+    return `${this.#options.baseUrl}/ws/${encodeURIComponent(workspace)}/v1`
   }
 
   /**
@@ -182,6 +192,16 @@ export class DataClient {
   /** The metadata of the collections the caller may use. */
   async schema(): Promise<unknown> {
     return await this.body('GET', '/schema')
+  }
+
+  /**
+   * Creates a workspace of the tenant of the caller.
+   *
+   * The creation is a call of the tenant: the client names no workspace,
+   * and the caller holds the capability that allows it.
+   */
+  async createWorkspace(input: WorkspaceCreation): Promise<CreatedWorkspace> {
+    return await this.data<CreatedWorkspace>('POST', '/workspaces', { body: input })
   }
 
   /** The metadata of one collection. */

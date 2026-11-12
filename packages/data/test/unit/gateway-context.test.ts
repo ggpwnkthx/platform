@@ -371,6 +371,17 @@ describe('the matching of a pattern', () => {
       matchPattern('/ws/{workspaceId}/v1/*', '/ws/22222222-2222-4222-8222-222222222222/v2')
     ).toBeNull()
   })
+
+  test('a pattern of the tenant names no workspace', () => {
+    // The creation of a workspace is a call of the tenant: its pattern
+    // holds no placeholder, and the workspace of the match is empty.
+    const workspace = matchPattern('/v1/workspaces/*', '/v1/workspaces')
+    expect(workspace).toBe('')
+  })
+
+  test('a pattern of the tenant refuses another path', () => {
+    expect(matchPattern('/v1/workspaces/*', '/v1/items')).toBeNull()
+  })
 })
 
 describe('the file of the bindings', () => {
@@ -443,12 +454,24 @@ describe('the file of the bindings', () => {
     ).toThrow()
   })
 
-  test('it refuses a pattern without a placeholder', () => {
+  test('it accepts a pattern without a placeholder', () => {
+    // A route of the tenant — the creation of a workspace — names no
+    // workspace, and its pattern holds no placeholder.
+    const bindings = parseBindingsFile(
+      JSON.stringify({
+        version: 2,
+        bindings: [{ ...binding, upstreamPathPattern: '/v1/workspaces/*' }],
+      })
+    )
+    expect(bindings).toHaveLength(1)
+  })
+
+  test('it refuses a pattern with two placeholders', () => {
     expect(() =>
       parseBindingsFile(
         JSON.stringify({
           version: 2,
-          bindings: [{ ...binding, upstreamPathPattern: '/ws/*' }],
+          bindings: [{ ...binding, upstreamPathPattern: '/ws/{workspaceId}/{other}/*' }],
         })
       )
     ).toThrow()

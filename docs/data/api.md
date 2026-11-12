@@ -6,6 +6,7 @@ The v1 HTTP endpoints of Data, with example requests and answers for each. It is
 
 | Path | Method | Answers |
 | --- | --- | --- |
+| `/v1/workspaces` | `POST` | Create a workspace of the tenant of the caller. |
 | `/ws/{workspaceId}/v1/me` | `GET` | The caller's identity in the workspace. |
 | `/ws/{workspaceId}/v1/schema` | `GET` | Metadata of the collections the caller may use. |
 | `/ws/{workspaceId}/v1/schema/{collection}` | `GET` | Metadata of one collection. |
@@ -27,7 +28,7 @@ The v1 HTTP endpoints of Data, with example requests and answers for each. It is
 | `/ws/{workspaceId}/v1/openapi.json` | `GET` | The API description. |
 | `/healthz`, `/readyz`, `/metrics` | `GET` | Deployment probes. Not routed through workspace authorization. |
 
-A path missing from this table does not exist. Every workspace path is called through the gateway, which turns your session into the signed identity Data verifies; a direct call answers `401 UNAUTHENTICATED`.
+A path missing from this table does not exist. Every workspace path is called through the gateway, which turns your session into the signed identity Data verifies; a direct call answers `401 UNAUTHENTICATED`. The path of the creation of a workspace names no workspace, and it is called through the gateway as well.
 
 ## Headers
 
@@ -74,6 +75,49 @@ cookie: gateway_session=...
 ```
 
 A principal without a grant in the workspace gets `403 FORBIDDEN` here too.
+
+## Workspaces
+
+### Create a workspace
+
+The creation of a workspace is a call of the tenant: the path names no workspace, and the body names the tenant the workspace belongs to.
+
+```http
+POST /v1/workspaces
+cookie: gateway_session=...
+content-type: application/json
+
+{
+  "tenant": "acme",
+  "tenantId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "slug": "acme",
+  "displayName": "Acme"
+}
+```
+
+```json
+{
+  "data": {
+    "id": "33333333-3333-4333-8333-333333333333",
+    "tenantId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "tenant": "acme",
+    "slug": "acme",
+    "displayName": "Acme",
+    "status": "active"
+  }
+}
+```
+
+The caller holds the capability `data.workspace.create` in a grant of its tenant, and Access says whether it holds it ([spec §9.11](spec.md#911-creation-of-a-workspace)).
+
+| Situation | Answer |
+| --- | --- |
+| The caller holds no such grant | `403 FORBIDDEN` |
+| The slug is not one the registry accepts | `400 INVALID_REQUEST` |
+| The tenant already holds a workspace with this slug | `409 CONFLICT` |
+| The request did not come through the gateway | `401 UNAUTHENTICATED` |
+
+The creation does not grant anything: the rights of the caller over the workspace it created are written in Access, and the console writes them when it creates a workspace.
 
 ## Schema
 

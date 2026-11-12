@@ -19,9 +19,11 @@ export {
   type AdminCredentials,
   CONSOLE_KEYS,
   credentialFor,
+  DATA_KEYS,
   emptyScope,
   isPlatformKey,
   listingCredential,
+  mayCreateWorkspaces,
   type OperatorScope,
   scopeOf,
 } from './scope'

@@ -66,6 +66,7 @@ export type {
   AuditRecord,
   BatchOutcome,
   CollectionMetadata,
+  CreatedWorkspace,
   Credential,
   CredentialInput,
   FieldAttributes,
@@ -94,4 +95,5 @@ export type {
   Tenant,
   TenantInput,
   VersionEntry,
+  WorkspaceCreation,
 } from './types'
