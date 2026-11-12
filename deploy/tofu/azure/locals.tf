@@ -519,8 +519,8 @@ locals {
         upstreamPathPattern = "${var.workspaces_path}/*"
         routeId             = var.workspaces_route_id
         identity = {
-          version   = "v5"
-          algorithm = "ES256"
+          version       = "v5"
+          algorithm     = "ES256"
           publicKeyFile = "/run/secrets/identity-signing.public.pem"
         }
       }
