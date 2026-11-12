@@ -10,6 +10,8 @@ in the same commit as the code.
 
 ## Unreleased
 
+## 1.4.5
+
 ### A tenant creates the workspaces of its tenant
 
 The registry of the workspaces was written by an operator command only: a tenant that wanted a second workspace had to leave the interface and ask the operator of the platform.
@@ -31,6 +33,7 @@ The key `m` on the principals gives the principal the role `admin` of its tenant
 The list of the grants shows the role of a grant that holds one, and the column that holds the permission or the role is named `right`.
 
 **Contract:** [cli spec §9.3](docs/cli/spec.md#93-the-keys), [access spec §6.4](docs/access/spec.md#64-unknown-identity).
+
 
 ## 1.4.4
 
