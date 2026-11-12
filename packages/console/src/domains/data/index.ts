@@ -13,7 +13,6 @@ export type {
   ModelField,
   RecordValue,
   VersionEntry,
-  WorkspaceCreation,
 } from './types'
 export {
   displayOf,
