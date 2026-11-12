@@ -10,6 +10,8 @@ in the same commit as the code.
 
 ## Unreleased
 
+## 1.4.4
+
 ### A capability of the platform is given by the platform
 
 `console.platform` opens the administration of every tenant, and it is not relative to a tenant: nothing in the policy said so, because the row of that key was a tenant's row, created on demand like any other permission. The console read the key and acted with its platform credential, so the key was the platform's power in everything but the name — and a tenant administrator could grant it to a colleague of their own tenant, and that colleague administered every tenant.
@@ -31,6 +33,7 @@ A tenant that existed before this rule gets its role when it is needed: the firs
 The operator of the tenant gives the role the other rights its administrators need, and the capabilities of the records of a workspace are its own: the bundle of policies names them. The console shows the role on the **Roles** page of the tenant, and the **Rights** page grants it like any other role.
 
 **Contract:** [access spec §6.4](docs/access/spec.md#64-unknown-identity), [access spec §10.2](docs/access/spec.md#102-post-v1admintenants).
+
 
 ## 1.4.3
 
