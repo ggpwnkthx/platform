@@ -106,6 +106,7 @@ describe('the schema of Access', () => {
       '0016_local_credentials.sql',
       '0017_auto_provision_admin_default.sql',
       '0018_sso_routes.sql',
+      '0019_explicit_scope_of_the_providers.sql',
     ])
 
     const second = await runMigrations({
@@ -133,6 +134,7 @@ describe('the schema of Access', () => {
       '0016_local_credentials.sql',
       '0017_auto_provision_admin_default.sql',
       '0018_sso_routes.sql',
+      '0019_explicit_scope_of_the_providers.sql',
     ])
   })
 
@@ -185,10 +187,11 @@ describe('the schema of Access', () => {
       `select tablename, qual from pg_policies
         where schemaname = current_schema()
           and tablename in ('tenants', 'users', 'permissions', 'grants', 'groups',
-                            'roles', 'role_permissions', 'role_roles')
+                            'roles', 'role_permissions', 'role_roles',
+                            'tenant_providers', 'local_credentials', 'sso_routes')
         order by tablename`
     )
-    expect(rows.length).toBe(8)
+    expect(rows.length).toBe(11)
     const wrong = rows.filter((row) => {
       // PostgreSQL stores the casts of the settings in the policy: they
       // are removed before the policy is read, so that the form of the

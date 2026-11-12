@@ -423,10 +423,21 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
         throw new LoginError('invalid_request', 'the provider of the tenant does not exist')
       }
       const secret = await repositories.providers.readSecret(row.id)
+      // A secret that cannot be read is not an empty secret: the
+      // provider refuses an empty secret, and the refusal names the
+      // client and not the secret, and the operator reads it in the log
+      // of the service with nothing to act on. The refusal of the
+      // service is louder and names what it is.
+      if (secret === null) {
+        throw new LoginError(
+          'invalid_request',
+          'the secret of the provider of the tenant is not readable'
+        )
+      }
       const client = new ProviderClient({
         issuer: row.issuer ?? provider.issuer,
         clientId: row.idpClientId ?? provider.idpClientId,
-        clientSecret: secret ?? '',
+        clientSecret: secret,
         redirectUri: row.idpRedirectUri ?? provider.idpRedirectUri,
         scopes: row.idpScopes,
         algorithms: row.idpAlgorithms,

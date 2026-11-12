@@ -192,6 +192,72 @@ describe('the isolation of the tenants', () => {
     }
   })
 
+  test('the secret of the provider of a tenant is readable by the login path', async () => {
+    // The login of a tenant reads the row of its provider in the scope
+    // of the tenant, and the secret of that provider in the scope of the
+    // platform: the two statements are two transactions, and they are
+    // two connections of the pool.
+    //
+    // A connection of the pool that has run a scoped statement keeps the
+    // placeholder of the scope: the placeholder is empty. A policy that
+    // reads the placeholder of the tenant alone hides the row of the
+    // platform from the statement that asks for the scope of the
+    // platform, and the secret of the provider is not readable. A secret
+    // that is not readable is an empty secret, and the provider refuses
+    // the client: every login of the tenant is refused at the exchange
+    // of the code.
+    const schema = await database.query<{ name: string }>(`select current_schema() as name`)
+    const schemaName = schema[0]!.name
+    await dropRole('access_provider_secret_test')
+    await database.exec(`create role access_provider_secret_test`)
+    await database.exec(`grant usage on schema "${schemaName}" to access_provider_secret_test`)
+    await database.exec(`grant select on tenants, tenant_providers to access_provider_secret_test`)
+
+    // A pool of one connection: the two statements of the login are two
+    // transactions of the same session.
+    const session = await openTestSession()
+    try {
+      let providerId = ''
+      // The first statement of the login: the row of the provider, in the
+      // scope of the tenant.
+      await session.transaction(async (client) => {
+        await client.query(`set role access_provider_secret_test`)
+        await client.query(`select set_config('access.scope', 'tenant', true)`)
+        await client.query(`select set_config('access.tenant_id', $1, true)`, [acme])
+        const providers = await client.query<{ id: string }>(
+          `select id from tenant_providers where tenant_id = $1`,
+          [acme]
+        )
+        expect(providers).toHaveLength(1)
+        providerId = providers[0]!.id
+        await client.query(`reset role`)
+      })
+
+      // The second statement of the login: the secret of the provider,
+      // in the scope of the platform, on the connection that ran the
+      // statement of the tenant.
+      await session.transaction(async (client) => {
+        await client.query(`set role access_provider_secret_test`)
+        await client.query(`select set_config('access.scope', 'platform', true)`)
+        const secrets = await client.query<{ idp_client_secret: Uint8Array | null }>(
+          `select idp_client_secret from tenant_providers where id = $1`,
+          [providerId]
+        )
+        // The secret is there: it is the ciphertext of the secret of the
+        // provider, and it is never empty.
+        expect(secrets).toHaveLength(1)
+        expect(secrets[0]!.idp_client_secret).not.toBeNull()
+        expect(
+          Buffer.from(secrets[0]!.idp_client_secret ?? new Uint8Array()).length
+        ).toBeGreaterThan(0)
+        await client.query(`reset role`)
+      })
+    } finally {
+      if (session !== database) await session.close()
+      await dropRole('access_provider_secret_test')
+    }
+  })
+
   test('the role of the deployment is told when it bypasses the isolation', async () => {
     // The role of the test is a superuser: it is not subject to the
     // policies, and a production deployment refuses to start with it.
