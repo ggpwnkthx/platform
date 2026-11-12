@@ -13,6 +13,7 @@ import { knownPermissionsOf, permissionsOfRole } from '../../../../../../domains
 import {
   adminFor,
   HowRightsWork,
+  platformWrite,
   TenantHead,
   TenantTabs,
   tenantCrumbs,
@@ -43,7 +44,25 @@ export const POST = createRoute(async (c) => {
     return c.redirect(base)
   }
   try {
-    const role = await admin.saveRole(input)
+    // A capability that is not relative to a tenant is the platform's:
+    // only an operator that holds it may put it in a role, and the write
+    // is signed with the credential of the platform.
+    const write = await platformWrite(c, input.permissions ?? [])
+    if (write.kind === 'refused') {
+      keepDraft(
+        c,
+        roleDraftOf(form, [
+          {
+            field: 'permissions',
+            message: 'The capability of the platform is not yours to give.',
+          },
+        ])
+      )
+      flash(c, { kind: 'error', text: `The role ${input.key} was not created.` })
+      return c.redirect(base)
+    }
+    const client = write.kind === 'platform' ? write.client : admin
+    const role = await client.saveRole(input)
     flash(c, { kind: 'ok', text: `The role ${role.key} was created. Grant it on the Rights tab.` })
     return c.redirect(`${base}/${encodeURIComponent(role.key)}`)
   } catch (error) {

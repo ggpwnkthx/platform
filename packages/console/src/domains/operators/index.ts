@@ -20,6 +20,7 @@ export {
   CONSOLE_KEYS,
   credentialFor,
   emptyScope,
+  isPlatformKey,
   listingCredential,
   type OperatorScope,
   scopeOf,

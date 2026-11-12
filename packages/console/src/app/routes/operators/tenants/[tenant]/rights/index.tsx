@@ -24,6 +24,7 @@ import {
   GrantForm,
   HowRightsWork,
   holderOf,
+  platformWrite,
   RightsTable,
   TenantHead,
   TenantTabs,
@@ -49,6 +50,23 @@ export const POST = createRoute(async (c) => {
       if (!(error instanceof AccessError) || error.status >= 500) throw error
       flash(c, { kind: 'error', text: error.message, detail: `${error.status} ${error.code}` })
     }
+    return c.redirect(back)
+  }
+
+  // A capability that is not relative to a tenant is the platform's:
+  // only an operator that holds it may give it, and the write is signed
+  // with the credential of the platform. Access refuses the write of a
+  // credential of a tenant.
+  const write = await platformWrite(c, [form.get('permission')])
+  if (write.kind === 'refused') {
+    keepDraft(c, {
+      form: GRANT_FORM,
+      values: form.fields,
+      problems: [
+        { field: 'permission', message: 'The capability of the platform is not yours to give.' },
+      ],
+    })
+    flash(c, { kind: 'error', text: 'The right was not granted: the form needs a change.' })
     return c.redirect(back)
   }
 
@@ -79,6 +97,7 @@ export const POST = createRoute(async (c) => {
     flash(c, { kind: 'error', text: 'The right was not granted: the form needs a change.' })
     return c.redirect(back)
   }
+
   const session = sessionOf(c)
   const input: GrantInput = {
     tenant: slug,
@@ -86,7 +105,7 @@ export const POST = createRoute(async (c) => {
     grantedBy: session.principal.email ?? session.principal.id,
   }
   try {
-    const grant = await admin.saveGrant(input)
+    const grant = await (write.kind === 'platform' ? write.client : admin).saveGrant(input)
     flash(c, {
       kind: 'ok',
       text: grant.role

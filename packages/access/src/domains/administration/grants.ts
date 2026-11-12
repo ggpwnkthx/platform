@@ -20,6 +20,7 @@ import type {
 import { change, type AuditEntry } from './audit'
 import { platformScope, tenantScope } from './ports'
 import { refuseOutsideScope, statementScope, tenantOf } from './scope'
+import { isPlatformPermission } from './platform-permissions'
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, liveOf, wholeNumber } from './values'
 
 /**
@@ -131,6 +132,19 @@ export async function upsertGrant(
       'invalid_request',
       'the grant names a permission or a role, and not both'
     )
+  }
+
+  // A capability that is not relative to a tenant is the platform's:
+  // only a credential of the platform may give it to a principal. The
+  // credential of a tenant may not hand it to a colleague, whoever the
+  // colleague is.
+  if (permissionKey !== null && isPlatformPermission(options, permissionKey)) {
+    if (scope.tenant !== null) {
+      throw new AdministrationError(
+        'forbidden',
+        'the credential of a tenant may not give a capability of the platform'
+      )
+    }
   }
 
   let subjectId: string
@@ -290,6 +304,9 @@ export async function revokeGrant(
  * owns never becomes a permission of this one — the tenant creates
  * its own row, and the grant names that row.
  *
+ * A key of the platform is the exception: its row is the one of the
+ * catalogue, and every tenant grants that row.
+ *
  * @param options what the administration is built with.
  * @param tenantId the id of the tenant.
  * @param key the key of the permission.
@@ -300,6 +317,15 @@ export async function resolvePermission(
   key: string
 ): Promise<Permission> {
   const scope = tenantScope(tenantId)
+  if (isPlatformPermission(options, key)) {
+    // The capability is the platform's: its row is the one of the
+    // catalogue, and it is read and written in the scope of the
+    // platform.
+    const platform = platformScope()
+    const catalogue = await options.permissions.findCataloguePermission(key, platform)
+    if (catalogue) return catalogue
+    return await options.permissions.createOrFind({ tenantId: null, key }, platform)
+  }
   const catalogue = await options.permissions.findCataloguePermission(key, scope)
   if (catalogue) return catalogue
 

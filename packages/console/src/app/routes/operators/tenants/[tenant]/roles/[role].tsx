@@ -12,6 +12,7 @@ import { expandRole, knownPermissionsOf, rolesIncluding } from '../../../../../.
 import {
   adminFor,
   holderOf,
+  platformWrite,
   RightScope,
   RightState,
   TenantHead,
@@ -42,7 +43,26 @@ export const POST = createRoute(async (c) => {
       flash(c, { kind: 'ok', text: `The role ${key} was removed.` })
       return c.redirect(`${tenantPath(slug)}/roles`)
     }
-    await admin.saveRole({ ...roleInputOf(form, slug), key })
+    const input = roleInputOf(form, slug)
+    // A capability that is not relative to a tenant is the platform's:
+    // only an operator that holds it may put it in a role, and the write
+    // is signed with the credential of the platform.
+    const write = await platformWrite(c, input.permissions ?? [])
+    if (write.kind === 'refused') {
+      keepDraft(
+        c,
+        roleDraftOf(form, [
+          {
+            field: 'permissions',
+            message: 'The capability of the platform is not yours to give.',
+          },
+        ])
+      )
+      flash(c, { kind: 'error', text: 'The role was not saved: the form needs a change.' })
+      return c.redirect(path)
+    }
+    const client = write.kind === 'platform' ? write.client : admin
+    await client.saveRole({ ...input, key })
     flash(c, { kind: 'ok', text: `The role ${key} was saved.` })
   } catch (error) {
     if (!(error instanceof AccessError) || error.status >= 500) throw error

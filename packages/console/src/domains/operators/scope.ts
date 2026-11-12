@@ -24,6 +24,26 @@ export const CONSOLE_KEYS = {
   platform: 'console.platform',
 } as const
 
+/**
+ * The keys of the capabilities that are not relative to a tenant.
+ *
+ * The console holds one: `console.platform` opens the administration of
+ * every tenant, and it is the platform's. Only an operator that holds
+ * it may give it to somebody, and Access refuses the write of a
+ * credential of a tenant.
+ */
+export const PLATFORM_KEYS: readonly string[] = [CONSOLE_KEYS.platform]
+
+/**
+ * Reports whether a key names a capability that is not relative to a
+ * tenant.
+ *
+ * @param key the key of the permission.
+ */
+export function isPlatformKey(key: string | null | undefined): boolean {
+  return key !== null && key !== undefined && PLATFORM_KEYS.includes(key)
+}
+
 /** What the caller may do in the console. */
 export interface OperatorScope {
   /** The slug of the tenant of the caller. */

@@ -28,6 +28,7 @@ import type {
 } from './ports'
 import { change, type AuditEntry } from './audit'
 import { platformScope, tenantScope } from './ports'
+import { isPlatformPermission } from './platform-permissions'
 import { refuseOutsideScope, statementScope, tenantOf } from './scope'
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, wholeNumber } from './values'
 
@@ -112,6 +113,16 @@ export async function upsertRole(
   // The permissions of the role: every key names a permission of the
   // tenant, and a permission that does not exist is created.
   const permissionKeys = registration.permissionKeys ?? []
+  // A capability that is not relative to a tenant is the platform's:
+  // only a credential of the platform may put it in a role.
+  for (const key of permissionKeys) {
+    if (isPlatformPermission(options, key) && scope.tenant !== null) {
+      throw new AdministrationError(
+        'forbidden',
+        'the credential of a tenant may not give a capability of the platform'
+      )
+    }
+  }
   const permissions: Permission[] = []
   for (const key of permissionKeys) {
     permissions.push(await resolvePermission(options, tenant.id, key))

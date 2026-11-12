@@ -165,6 +165,8 @@ A catalogue permission (`tenant_id is null`) may be granted in every tenant; a t
 
 **A key is a name inside a tenant.** Two tenants may each hold a permission with the same key, as separate rows. A grant never names another tenant's permission: the tenant's own row is created on demand (§10.6).
 
+**The catalogue holds the capabilities that are not relative to a tenant.** `console.platform` opens the administration of every tenant, and it means the same thing in every one of them: the row of that key is the catalogue's, and every tenant grants that one row. The deployment names the keys it holds to be platform-wide (`ACCESS_PLATFORM_PERMISSIONS`), and Access creates their rows in the catalogue on demand. A capability of the platform is given by the platform: only a credential of the platform may grant it (§10.6).
+
 ### 3.4 `grants`
 
 The platform policy. A grant says: this principal (or this group) holds this permission on this workspace, on this route, until this date. A grant may hold a **role** instead of a permission (§3.6); the subject then holds the role's permissions.
@@ -478,7 +480,7 @@ Production also refuses to start when:
 
 The log level is the only value that never stops the service: a typo in it must not keep a deployment down.
 
-**Optional:** `ACCESS_DECISION_TOKEN`, which is deprecated and unscoped; keep it only while a gateway (such as the reference gateway) still sends it (§8.8). `ACCESS_CONTEXT_TOKENS`, needed only by a deployment that serves a data backend (§9). `ACCESS_TENANT_ADMIN_PERMISSION` names the key of the permission that opens the administration of a tenant, and it is `console.admin` by default: the key is what the console reads in the context of its caller, and it is what a tenant hands to its first identity when it lets it administer the tenant (§6.4).
+**Optional:** `ACCESS_DECISION_TOKEN`, which is deprecated and unscoped; keep it only while a gateway (such as the reference gateway) still sends it (§8.8). `ACCESS_CONTEXT_TOKENS`, needed only by a deployment that serves a data backend (§9). `ACCESS_TENANT_ADMIN_PERMISSION` names the key of the permission that opens the administration of a tenant, and it is `console.admin` by default: the key is what the console reads in the context of its caller, and it is what a tenant hands to its first identity when it lets it administer the tenant (§6.4). `ACCESS_PLATFORM_PERMISSIONS` names the keys of the capabilities that are not relative to a tenant, and it is `console.platform` by default: only a credential of the platform may grant them (§3.3, §10.6).
 
 ### 4.5 Secrets in files
 
@@ -1166,8 +1168,11 @@ Exactly one of `userId` and `group` is required. The permission row is **created
 | Group does not exist | `404 not_found` |
 | Group of another tenant | `403 forbidden` |
 | Neither a principal nor a group, or both | `400 invalid_request` |
+| A capability of the platform, by a credential of a tenant | `403 forbidden` |
 
 A permission in the platform catalogue is reused. A permission in another tenant is **not**: the tenant creates its own row and the grant names it, since a key is a name inside a tenant (§3.3).
+
+**Only the platform gives a capability of the platform.** A capability that is not relative to a tenant is granted by a credential of the platform; the credential of a tenant is refused with `403 forbidden`, whoever the principal of the grant is. A deployment that names a key of its own in `ACCESS_PLATFORM_PERMISSIONS` makes it a capability of the platform, and the rule follows the key.
 
 **Batch.** The body may carry a list of grants instead of one ([shape](api.md#batch-of-grants)). The principal batch rules of §10.4 apply: at most **1 000** grants, each item written on its own, every item's outcome reported, and the call idempotent.
 
@@ -1206,6 +1211,8 @@ Each group carries its members' **external subjects** (§10.9).
 Creates a role, or changes the one with that key. The call **replaces** the role's memberships: the **permissions** it holds and the **roles** it names (§3.6).
 
 Permissions are named by key; an unknown key is created in the tenant's scope, as for a grant (§10.6). Roles are named by key; an unknown role key → `404 not_found`, since a role cannot name a role that does not exist.
+
+A role of a tenant may not hold a capability of the platform: the credential of a tenant is refused with `403 forbidden`, and only a credential of the platform may put one in a role (§3.3).
 
 A role that names itself, directly or through other roles → `409 conflict`: the nesting would never end and the decision would never answer. The schema refuses the cycle too (§3.6.3).
 

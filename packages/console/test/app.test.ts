@@ -617,6 +617,77 @@ describe('the console', () => {
     expect(other.status).toBe(403)
   })
 
+  test('a capability of the platform is not the one of a tenant operator to give', async () => {
+    resetPolicy()
+    consoleKeys = ['console.admin', 'console.status']
+    const browser = new Browser()
+    await browser.signIn()
+    const fields = {
+      _action: 'grant',
+      _form: 'grant',
+      back: '/operators/tenants/acme/rights',
+      holder: `user:${PRINCIPAL}`,
+      kind: 'permission',
+      permission: 'console.platform',
+      workspace: 'one',
+      workspaceId: 'acme',
+      routeId: 'console',
+      expires: 'never',
+    }
+    const refused = await browser.post('/operators/tenants/acme/rights', fields)
+    expect(refused.status).toBe(302)
+    // Nothing was written: the capability of the platform is the
+    // platform's, and the operator of a tenant does not hold it.
+    expect(policy.writes).toEqual([])
+    const again = await (await browser.request('/operators/tenants/acme/rights')).text()
+    expect(again).toContain('not yours to give')
+  })
+
+  test('an operator of the platform gives the capability of the platform', async () => {
+    resetPolicy()
+    consoleKeys = ['console.platform', 'console.status']
+    const browser = new Browser()
+    await browser.signIn()
+    seen.adminCalls.length = 0
+    await browser.post('/operators/tenants/acme/rights', {
+      _action: 'grant',
+      _form: 'grant',
+      back: '/operators/tenants/acme/rights',
+      holder: `user:${PRINCIPAL}`,
+      kind: 'permission',
+      permission: 'console.platform',
+      workspace: 'one',
+      workspaceId: 'acme',
+      routeId: 'console',
+      expires: 'never',
+    })
+    expect(policy.writes.map((entry) => entry.body)).toEqual([
+      expect.objectContaining({ permission: 'console.platform', workspaceId: 'acme' }),
+    ])
+    // The write is signed with the credential of the platform: the
+    // credential of a tenant may not write it.
+    const write = seen.adminCalls.find((call) => call.startsWith('PUT /v1/admin/grants '))
+    expect(write).toContain('Bearer the-platform-token-0001')
+    consoleKeys = ['console.admin', 'console.status']
+  })
+
+  test('a role of a tenant operator may not hold a capability of the platform', async () => {
+    resetPolicy()
+    consoleKeys = ['console.admin', 'console.status']
+    const browser = new Browser()
+    await browser.signIn()
+    await browser.post('/operators/tenants/acme/roles', {
+      _action: 'save',
+      key: 'platform',
+      permissions: 'console.platform',
+    })
+    // Nothing was written: the capability of the platform is the
+    // platform's, and the operator of a tenant does not hold it.
+    expect(policy.writes).toEqual([])
+    const page = await (await browser.request('/operators/tenants/acme/roles')).text()
+    expect(page).toContain('not yours to give')
+  })
+
   test('the rights page names a role grant once, with what the role holds', async () => {
     resetPolicy()
     policy.grants.push({

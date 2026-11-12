@@ -754,7 +754,7 @@ curl -sS -X PUT https://access.example.com/v1/admin/grants \
 | `tenant` | Required. The tenant slug. |
 | `userId` | The principal id. Exactly one of `userId` and `group` is required. |
 | `group` | The group key. Exactly one of `userId` and `group` is required. |
-| `permission` | The permission key, created in the tenant's scope if missing. Exactly one of `permission` and `role` is required. |
+| `permission` | The permission key, created in the tenant's scope if missing. Exactly one of `permission` and `role` is required. A capability of the platform may only be granted by a credential of the platform (§3.3). |
 | `role` | The role key. The grant holds the role's permissions. An unknown role is `404 not_found`. |
 | `workspaceId` | Optional. `null` (default) means every workspace of the tenant. |
 | `routeId` | Optional. `null` (default) means every route. |
@@ -919,7 +919,7 @@ curl -sS -X PUT https://access.example.com/v1/admin/roles \
 | `key` | Required. `[a-z0-9][a-z0-9._-]{0,63}`. |
 | `displayName` | Optional. |
 | `description` | Optional. |
-| `permissions` | Optional. Permission keys the role holds. Missing keys are created in the tenant's scope. |
+| `permissions` | Optional. Permission keys the role holds. Missing keys are created in the tenant's scope. A capability of the platform may only be put in a role by a credential of the platform (§3.3). |
 | `roles` | Optional. Role keys the role names. An unknown key is `404 not_found`. |
 
 A role that names itself, directly or through others, is `409 conflict`.

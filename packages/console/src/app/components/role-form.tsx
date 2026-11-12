@@ -136,6 +136,7 @@ export function RoleForm(props: {
           }))}
           selected={draftList(draft ?? null, 'permissions') ?? [...(role?.permissions ?? [])]}
         />
+        {problem('permissions') ? <span class="problem">{problem('permissions')}</span> : null}
       </div>
       <div class="field">
         <label for="role-roles">Includes roles</label>

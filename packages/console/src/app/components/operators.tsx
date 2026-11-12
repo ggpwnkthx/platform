@@ -7,12 +7,19 @@
 
 import type { Context } from 'hono'
 import type { AdminClient, Grant, Group, Principal, Role } from '../../domains/access'
-import { isLive, knownPermissionsOf, permissionsOfRole } from '../../domains/operators'
+import { consoleAbility, CONSOLE_ACTIONS, CONSOLE_SUBJECT } from '../../domains/ability'
+import {
+  isLive,
+  isPlatformKey,
+  knownPermissionsOf,
+  permissionsOfRole,
+} from '../../domains/operators'
 import type { Draft } from '../../domains/session'
 import type { Crumb } from '../context'
 import ConfirmButton from '../islands/confirm-button'
 import GrantFields from '../islands/grant-fields'
 import { tenantCredential } from '../middleware/guards'
+import { operatorScope } from '../middleware/scope'
 import { Badge, Moment, PageHead, Tabs } from './page'
 
 /** The path of a tenant in the administration. */
@@ -88,8 +95,44 @@ export async function adminFor(
   }
 }
 
-/** The name of a user, as an operator knows it. */
-export function userLabel(user: Principal): string {
+/**
+ * The client of a write that gives a capability of the platform.
+ *
+ * A capability that is not relative to a tenant is the platform's: only
+ * an operator that holds it may give it, and the write is signed with
+ * the credential of the platform. Access refuses the write of a
+ * credential of a tenant (spec §10.6).
+ *
+ * The answer names the client of the write: the one of the tenant when
+ * the write names no capability of the platform, the one of the platform
+ * when it does, and the refusal when the operator does not hold it.
+ */
+export type PlatformWrite =
+  | { readonly kind: 'tenant' }
+  | { readonly kind: 'platform'; readonly client: AdminClient }
+  | { readonly kind: 'refused' }
+
+/** The client of the write, for the keys the form names. */
+export async function platformWrite(
+  c: Context,
+  keys: readonly (string | null | undefined)[]
+): Promise<PlatformWrite> {
+  if (!keys.some((key) => isPlatformKey(key))) return { kind: 'tenant' }
+  const ability = consoleAbility(await operatorScope(c))
+  const platform = c.get('services').credentials.platform
+  if (!ability.can(CONSOLE_ACTIONS.platform, CONSOLE_SUBJECT) || !platform) {
+    return { kind: 'refused' }
+  }
+  const caller = c.get('callerAddress')
+  return {
+    kind: 'platform',
+    client: c.get('services').admin(platform, ...(caller ? [caller] : [])),
+  }
+}
+
+/** The name of a user, as an operator knows it. */ export function userLabel(
+  user: Principal
+): string {
   return user.displayName ?? user.email ?? user.externalSubject
 }
 

@@ -130,6 +130,8 @@ The console asks Access for the caller's **access context** on the console's rou
 | `console.admin` | Administration of the caller's tenant. |
 | `console.platform` | Administration of every tenant. |
 
+`console.platform` is a capability of the **platform**: it is not relative to a tenant, and only the platform gives it. The console writes it with its platform credential (`CONSOLE_ADMIN_TOKEN`), and only for an operator that already holds it: an operator of a tenant cannot hand the capability of the platform to a colleague, and Access refuses the write of a credential of a tenant in any case (Access spec §10.6).
+
 Scope is **read, never assumed**. A context is a snapshot: the console keeps it until its `validUntil` and never longer, and reads it again on every page. A revoked right closes administration from the next page on. An unreadable context opens nothing.
 
 The console acts with the operator's **tenant credential** when it holds one (`CONSOLE_TENANT_ADMIN_TOKENS`), and with the **platform credential** (`CONSOLE_ADMIN_TOKEN`) otherwise. Access's audit names the operator of a tenant credential, so changes to a tenant are better signed by that tenant's own operator.

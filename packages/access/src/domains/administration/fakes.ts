@@ -1118,6 +1118,8 @@ export interface ServiceOptions {
   credentials?: AdminCredential[]
   /** The key of the permission that opens the administration of a tenant. */
   tenantAdminPermission?: string
+  /** The keys of the capabilities that are not relative to a tenant. */
+  platformPermissions?: readonly string[]
 }
 
 /**
@@ -1145,6 +1147,7 @@ export function serviceOf(fakes: Fakes, options: ServiceOptions = {}): Administr
     ...(options.tenantAdminPermission
       ? { tenantAdminPermission: options.tenantAdminPermission }
       : {}),
+    ...(options.platformPermissions ? { platformPermissions: options.platformPermissions } : {}),
     publicUrl: 'https://access.example.com',
     limiter: options.limiter ?? new FailedAuthenticationLimiter(options.failures ?? fakes.failures),
   })

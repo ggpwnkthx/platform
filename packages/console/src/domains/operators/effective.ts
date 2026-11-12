@@ -14,6 +14,7 @@
 
 import type { Grant, Role } from '../access'
 import { isLive, type Right } from './rights'
+import { PLATFORM_KEYS } from './scope'
 
 /** Where a permission of a user comes from. */
 export interface PermissionSource {
@@ -97,10 +98,17 @@ export function grantAppliesTo(grant: Grant, workspaceId: string, routeId: strin
   return workspace && route
 }
 
-/** The permissions a tenant names: in its grants, and in its roles. */
+/**
+ * The permissions a tenant names: in its grants, and in its roles.
+ *
+ * The capabilities that are not relative to a tenant are named too: the
+ * console knows them, and a reader sees the key and the reason it is
+ * refused rather than an absence.
+ */
 export function knownPermissionsOf(grants: readonly Grant[], roles: readonly Role[]): string[] {
   const keys = new Set<string>()
   for (const grant of grants) if (grant.permission) keys.add(grant.permission)
   for (const role of roles) for (const permission of role.permissions) keys.add(permission)
+  for (const key of PLATFORM_KEYS) keys.add(key)
   return [...keys].sort()
 }

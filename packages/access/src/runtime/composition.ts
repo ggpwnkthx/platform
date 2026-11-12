@@ -646,6 +646,9 @@ export async function createRuntime(settings: RuntimeSettings): Promise<AccessRu
       // The key that opens the administration of a tenant: the key the
       // console reads in the context of its caller (spec §6.4).
       tenantAdminPermission: settings.admin.tenantAdminPermission,
+      // The capabilities that are not relative to a tenant: only a
+      // credential of the platform may give them (spec §10.6).
+      platformPermissions: settings.admin.platformPermissions,
       // The registration of a tenant changed: the clients of its
       // providers are dropped, so that the next login builds new ones
       // with the new registration (spec §6.6).

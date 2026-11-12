@@ -66,7 +66,11 @@ describe('the roles of a tenant', () => {
   })
 
   test('the known permissions are the ones of the grants and of the roles', () => {
+    // The capabilities that are not relative to a tenant are named too:
+    // the console knows them, and a reader sees the key and the reason
+    // it is refused rather than an absence.
     expect(knownPermissionsOf([grant({ permission: 'files.read' })], roles)).toEqual([
+      'console.platform',
       'content.admin',
       'content.read',
       'content.write',

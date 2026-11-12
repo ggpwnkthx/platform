@@ -13,7 +13,7 @@
 
 import { readFileSync } from 'node:fs'
 import { z } from 'zod'
-import { TENANT_ADMIN_PERMISSION } from '../domains/administration'
+import { PLATFORM_PERMISSIONS, TENANT_ADMIN_PERMISSION } from '../domains/administration'
 import type { LogLevel } from '../observability'
 import { parseLogLevel } from '../observability'
 import {
@@ -101,6 +101,15 @@ interface AdminSettings {
    * lets it administer the tenant (spec §6.4).
    */
   tenantAdminPermission: string
+  /**
+   * The keys of the permissions that are not relative to a tenant.
+   *
+   * A permission of the catalogue of the platform is held by every
+   * tenant: its key names a capability of the platform and not of one
+   * tenant (spec §3.3). Only a credential of the platform may give
+   * such a capability to a principal (spec §10.6).
+   */
+  platformPermissions: string[]
 }
 
 /** The settings of the decision contract of the gateway. */
@@ -322,6 +331,7 @@ const EnvSchema = z.object({
   ACCESS_PREVIOUS_ADMIN_TOKEN: z.string().optional(),
   ACCESS_ADMIN_TOKENS: z.string().optional(),
   ACCESS_TENANT_ADMIN_PERMISSION: z.string().optional(),
+  ACCESS_PLATFORM_PERMISSIONS: z.string().optional(),
   ACCESS_DECISION_TOKEN: z.string().optional(),
   ACCESS_PREVIOUS_DECISION_TOKEN: z.string().optional(),
   ACCESS_CONTEXT_TOKENS: z.string().optional(),
@@ -343,6 +353,28 @@ const EnvSchema = z.object({
   ACCESS_LOG_LEVEL: z.string().optional(),
   ACCESS_ENVIRONMENT: z.enum(['development', 'production']).default('development'),
 })
+
+/**
+ * The keys of the capabilities that are not relative to a tenant.
+ *
+ * The value is a list of keys separated by commas. An empty value is
+ * the default: the one of the console.
+ */
+function platformPermissionsOf(raw: string | undefined): string[] {
+  if (!raw || raw.trim().length === 0) return [...PLATFORM_PERMISSIONS]
+  const keys = raw
+    .split(',')
+    .map((key) => key.trim())
+    .filter((key) => key.length > 0)
+  for (const key of keys) {
+    if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(key)) {
+      throw new Error(
+        `ACCESS_PLATFORM_PERMISSIONS holds the key "${key}": a key is [a-z0-9] and is 64 characters long at most`
+      )
+    }
+  }
+  return keys
+}
 
 /**
  * The number of bytes of a secret.
@@ -718,6 +750,7 @@ export function readEnv(env: Env = process.env): RuntimeSettings {
       previousToken: parsed.ACCESS_PREVIOUS_ADMIN_TOKEN,
       credentials: parsed.ACCESS_ADMIN_TOKENS,
       tenantAdminPermission: parsed.ACCESS_TENANT_ADMIN_PERMISSION ?? TENANT_ADMIN_PERMISSION,
+      platformPermissions: platformPermissionsOf(parsed.ACCESS_PLATFORM_PERMISSIONS),
     },
     access: {
       token: parsed.ACCESS_DECISION_TOKEN,

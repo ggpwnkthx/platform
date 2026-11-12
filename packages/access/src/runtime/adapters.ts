@@ -368,6 +368,13 @@ export interface AdministrationDependencies {
    */
   tenantAdminPermission?: string
   /**
+   * The keys of the capabilities that are not relative to a tenant.
+   *
+   * Only a credential of the platform may give such a capability to a
+   * principal (spec §10.6).
+   */
+  platformPermissions?: readonly string[]
+  /**
    * Called when the registration of a tenant changes.
    *
    * The clients of the providers of the tenant are dropped, so that the
@@ -919,6 +926,9 @@ export function createAdministrationService(
     ...(dependencies.adminCredentials ? { credentials: dependencies.adminCredentials } : {}),
     ...(dependencies.tenantAdminPermission
       ? { tenantAdminPermission: dependencies.tenantAdminPermission }
+      : {}),
+    ...(dependencies.platformPermissions
+      ? { platformPermissions: dependencies.platformPermissions }
       : {}),
     publicUrl: dependencies.publicUrl,
     limiter: new FailedAuthenticationLimiter(dependencies.failures),

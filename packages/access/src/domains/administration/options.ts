@@ -85,6 +85,14 @@ export interface AdministrationOptions {
    */
   tenantAdminPermission?: string
   /**
+   * The keys of the capabilities that are not relative to a tenant.
+   *
+   * A capability of the platform is held by the principals of a tenant
+   * and means the same thing in every one of them. Only a credential of
+   * the platform may give it to a principal (§10.6).
+   */
+  platformPermissions?: readonly string[]
+  /**
    * The limiter of the failed authentications.
    *
    * It is required: the composition root holds the count of the failures

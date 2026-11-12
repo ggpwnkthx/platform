@@ -163,3 +163,101 @@ describe('the grants of the administration', () => {
     ).rejects.toThrow(/the grant does not exist/)
   })
 })
+
+describe('the capabilities of the platform', () => {
+  test('the credential of a tenant may not give a capability of the platform', async () => {
+    const administration = serviceOf(fakes, {
+      adminCredentials: [{ token: 'the-token-of-acme', tenant: 'acme', operator: 'alice' }],
+    })
+    const principal = await administration.upsertPrincipal(
+      PLATFORM_SCOPE,
+      { tenant: 'acme', externalSubject: 'the-subject-of-a-platform-capability' },
+      CONTEXT
+    )
+    await expect(
+      administration.upsertGrant(
+        { tenant: 'acme', operator: 'alice' },
+        {
+          tenant: 'acme',
+          userId: principal.principal.id,
+          permission: 'console.platform',
+          workspaceId: 'acme',
+          routeId: 'console',
+        },
+        CONTEXT
+      )
+    ).rejects.toThrow(/may not give a capability of the platform/)
+    // Nothing was written: the capability of the platform is not a
+    // permission of the tenant.
+    expect(fakes.permissions.rows.some((row) => row.key === 'console.platform')).toBe(false)
+  })
+
+  test('the credential of the platform may give a capability of the platform', async () => {
+    const administration = serviceOf(fakes)
+    const principal = await administration.upsertPrincipal(
+      PLATFORM_SCOPE,
+      { tenant: 'acme', externalSubject: 'the-subject-of-a-platform-operator' },
+      CONTEXT
+    )
+    const grant = await administration.upsertGrant(
+      PLATFORM_SCOPE,
+      {
+        tenant: 'acme',
+        userId: principal.principal.id,
+        permission: 'console.platform',
+        workspaceId: 'acme',
+        routeId: 'console',
+      },
+      CONTEXT
+    )
+    expect(grant.grant.permission).toBe('console.platform')
+    // The row of the capability is the one of the catalogue: it is not
+    // relative to a tenant, and every tenant grants that row.
+    const permission = fakes.permissions.rows.find((row) => row.key === 'console.platform')
+    expect(permission?.tenantId).toBeNull()
+  })
+
+  test('a role of a tenant may not hold a capability of the platform', async () => {
+    const administration = serviceOf(fakes, {
+      adminCredentials: [{ token: 'the-token-of-acme', tenant: 'acme', operator: 'alice' }],
+    })
+    await expect(
+      administration.upsertRole(
+        { tenant: 'acme', operator: 'alice' },
+        { tenant: 'acme', key: 'platform', permissionKeys: ['console.platform'] },
+        CONTEXT
+      )
+    ).rejects.toThrow(/may not give a capability of the platform/)
+  })
+
+  test('the deployment names the capabilities that are not relative to a tenant', async () => {
+    const administration = serviceOf(fakes, { platformPermissions: ['data.platform'] })
+    const principal = await administration.upsertPrincipal(
+      PLATFORM_SCOPE,
+      { tenant: 'acme', externalSubject: 'the-subject-of-a-named-capability' },
+      CONTEXT
+    )
+    await expect(
+      administration.upsertGrant(
+        { tenant: 'acme', operator: 'alice' },
+        {
+          tenant: 'acme',
+          userId: principal.principal.id,
+          permission: 'data.platform',
+        },
+        CONTEXT
+      )
+    ).rejects.toThrow(/may not give a capability of the platform/)
+    const grant = await administration.upsertGrant(
+      PLATFORM_SCOPE,
+      {
+        tenant: 'acme',
+        userId: principal.principal.id,
+        permission: 'data.platform',
+      },
+      CONTEXT
+    )
+    expect(grant.grant.permission).toBe('data.platform')
+    expect(fakes.permissions.rows.find((row) => row.key === 'data.platform')?.tenantId).toBeNull()
+  })
+})

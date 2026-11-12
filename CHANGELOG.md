@@ -10,6 +10,16 @@ in the same commit as the code.
 
 ## Unreleased
 
+### A capability of the platform is given by the platform
+
+`console.platform` opens the administration of every tenant, and it is not relative to a tenant: nothing in the policy said so, because the row of that key was a tenant's row, created on demand like any other permission. The console read the key and acted with its platform credential, so the key was the platform's power in everything but the name — and a tenant administrator could grant it to a colleague of their own tenant, and that colleague administered every tenant.
+
+The catalogue of the platform now says it in the data: the key of a capability that is not relative to a tenant is the row of the catalogue, and every tenant grants that one row. The deployment names the keys it holds to be platform-wide (`ACCESS_PLATFORM_PERMISSIONS`, `console.platform` by default), and Access creates their rows in the catalogue on demand.
+
+**Only the platform gives a capability of the platform.** A credential of a tenant is refused with `403 forbidden` when it grants one, and when it puts one in a role. The console refuses it first, for the person and not for the secret: an operator who does not hold the capability cannot give it, and the write that does carry it is signed with the credential of the platform. The capability of the platform is no longer a power card that a tenant operator can mint.
+
+**Contract:** [access spec §3.3](docs/access/spec.md#33-permissions), [access spec §10.6](docs/access/spec.md#106-put-v1admingrants), [console spec §4](docs/console/spec.md#4-operator-scope).
+
 ### Every tenant has an Admin role
 
 A tenant is created with the role that administers it: the role `admin`. It holds the permissions an administration needs — the right to open the administration of the tenant (`console.admin`, or the key of `ACCESS_TENANT_ADMIN_PERMISSION`), the detail of the status of the services (`console.status`), and the capabilities that administer a workspace (`data.model.read`, `data.model.write` and `data.audit.read`). The role is written with the tenant and audited like every other change.
