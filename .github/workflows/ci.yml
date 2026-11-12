@@ -75,6 +75,12 @@ jobs:
         run: bun run --cwd ${{ matrix.path }} architecture
 
       - name: the tests of the domains and of the contracts
+        # The suite of the contracts of Data builds a PostgreSQL cluster
+        # in a hook, and a hook has the timeout of a test: the five
+        # seconds of the default are less than the work of the setup,
+        # and the suite fails on its own setup when the runner is slow.
+        # The script of the workspace carries the timeout, the way the
+        # script of the integration carries it.
         run: bun run --cwd ${{ matrix.path }} test
 
       - name: the network boundaries, the parsers and the soak of the gateway

@@ -585,7 +585,14 @@ export async function startPostgres(options: PostgresOptions = {}): Promise<Star
     { encoding: 'utf8', env: { ...process.env, LANG: 'C', LC_ALL: 'C' } }
   )
   if (start.status !== 0) {
-    throw new Error(`pg_ctl failed: ${start.stderr}\n${start.stdout}`)
+    // A process that is killed says nothing on its standard error:
+    // the reason of the failure is the signal, and a machine that is
+    // out of memory kills it. A server that waits for its port and is
+    // killed while it waits says nothing at all, and the reader of the
+    // failure is left without a reason.
+    const reason = start.error?.message ?? start.signal ?? `the exit code ${start.status}`
+    const said = `${start.stderr}\n${start.stdout}`.trim()
+    throw new Error(`pg_ctl failed: ${reason}${said === '' ? '' : `: ${said}`}`)
   }
 
   // The server of the working tree answers on the port of the machine:
