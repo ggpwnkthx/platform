@@ -113,6 +113,13 @@ export interface GrantStore {
     workspaceId: string | null
   ): Promise<Grant[]>
   /**
+   * The live grants that hold a role, in a workspace.
+   *
+   * The grants that hold a permission are not among them: a grant of a
+   * role and a grant of a permission of that role are two grants.
+   */
+  findLiveByRole(tenantId: string, role: string, workspaceId: string | null): Promise<Grant[]>
+  /**
    * Creates a grant.
    *
    * The row of the audit of the change is written by the same statement

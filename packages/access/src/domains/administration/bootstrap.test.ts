@@ -56,12 +56,37 @@ describe('the administration of a tenant', () => {
       CONTEXT
     )
     expect(grant).not.toBeNull()
-    expect(grant?.permission).toBe('console.admin')
+    // The grant names the role that administers the tenant, and not the
+    // permission: the role holds the permission, and the grant of the
+    // role holds it too.
+    expect(grant?.role).toBe('admin')
+    expect(grant?.permission).toBeNull()
     // The workspace of the grant is the tenant: the console asks for the
     // context of the tenant of its caller, and the slug of the tenant is
     // the workspace it names.
     expect(grant?.workspaceId).toBe(TENANT.slug)
     expect(grant?.userId).toBe(principal)
+  })
+
+  test('the role of the administration holds the permissions an administration needs', async () => {
+    const administration = serviceOf(fakes)
+    const principal = await tenantWithFirstPrincipal(administration, { autoProvisionAdmin: true })
+    await administration.bootstrapAdministrator({ id: principal, tenant: TENANT.slug }, CONTEXT)
+
+    const roles = await administration.listRoles(PLATFORM_SCOPE, {
+      tenant: TENANT.slug,
+      key: 'admin',
+      limit: '10',
+      offset: '0',
+    })
+    expect(roles.roles.length).toBe(1)
+    expect(roles.roles[0]?.permissionKeys).toEqual([
+      'console.admin',
+      'console.status',
+      'data.audit.read',
+      'data.model.read',
+      'data.model.write',
+    ])
   })
 
   test('a tenant that asks for nothing gives its administration to its first identity', async () => {

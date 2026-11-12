@@ -343,12 +343,14 @@ curl -sS -X POST https://access.example.com/v1/admin/tenants \
 | `clientSecret` | Required. Encrypted at rest, never returned. On replacement, the old secret stays valid for 24 hours alongside the new one. |
 | `clientRedirectUris` | Optional. Default `[]`. The gateway's callback URLs; a tenant with none refuses every login. |
 | `autoProvision` | Optional. Default `false`. A tenant that provisions its identities creates a principal at the first login of an identity it does not know (§6.4). |
-| `autoProvisionAdmin` | Optional. Default `true`. A tenant that hands its administration to its first identity gives the grant that opens the administration of the tenant to the principal that signs in first (§6.4). |
+| `autoProvisionAdmin` | Optional. Default `true`. A tenant that hands its administration to its first identity gives the role that administers it to the principal that signs in first (§6.4). |
 | `sharedClient` | Optional. Default `false`. Platform operators only (§10.1). |
 | `default` | Optional. Default `false`. At most one tenant. Platform operators only. |
 | `enabled` | Optional. Default `true`. |
 
 `409 conflict` when the client id belongs to another tenant or a second default would appear; `403 forbidden` when a tenant credential changes `sharedClient` or `default`; `400 invalid_request` when the call creates a tenant and names no provider of its identity, and when the call changes the provider of a tenant — the issuer or the client — and names no secret of it. The secret of a provider belongs to that provider.
+
+A tenant that is created holds the role that administers it, `admin`, and the role holds the permissions an administration needs: the right to open the administration of the tenant, the detail of the status of the services, and the capabilities that administer a workspace (§6.4).
 
 ```json
 {

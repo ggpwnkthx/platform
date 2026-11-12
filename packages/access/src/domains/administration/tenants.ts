@@ -18,6 +18,7 @@ import type {
 } from './ports'
 import { change, type AuditEntry } from './audit'
 import { refuseOutsideScope, statementScope } from './scope'
+import { ensureTenantAdminRole } from './tenant-admin'
 
 /**
  * The registration of a tenant that is created.
@@ -159,6 +160,10 @@ export async function upsertTenant(
       change('tenant.created', registration.slug, context)
     )
     await routeOfDomain(options, scope, tenant, registration, context)
+    // The tenant is created with the role that administers it: the role
+    // holds the permission that opens the administration of the tenant,
+    // and the first identity of the tenant is given the role (spec §6.4).
+    await ensureTenantAdminRole(options, { id: tenant.id, slug: tenant.slug }, context)
     return {
       tenant,
       created: true,
@@ -175,6 +180,10 @@ export async function upsertTenant(
     throw new AdministrationError('not_found', 'the tenant does not exist')
   }
   await routeOfDomain(options, scope, tenant, registration, context)
+  // The role that administers the tenant is there: it is created when it
+  // is missing, and it holds the permission that opens the
+  // administration of the tenant (spec §6.4).
+  await ensureTenantAdminRole(options, { id: tenant.id, slug: tenant.slug }, context)
   return {
     tenant,
     created: false,

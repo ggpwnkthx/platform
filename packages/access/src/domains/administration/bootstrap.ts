@@ -20,15 +20,7 @@ import type { AuditContext, Grant } from './ports'
 import { change } from './audit'
 import { platformScope } from './ports'
 import { resolvePermission } from './grants'
-
-/**
- * The permission that opens the administration of a tenant.
- *
- * The key is the one of the console, and the deployment may name
- * another one: the key is what the console reads in the context of its
- * caller.
- */
-export const TENANT_ADMIN_PERMISSION = 'console.admin'
+import { ensureTenantAdminRole, TENANT_ADMIN_ROLE, tenantAdminPermission } from './tenant-admin'
 
 /**
  * Hands the administration of a tenant to its first principal.
@@ -57,7 +49,7 @@ export async function bootstrapAdministrator(
   const owner = await options.principals.findById(principal.id, platformScope())
   if (!owner || owner.tenant !== tenant.slug) return null
 
-  const permission = options.tenantAdminPermission ?? TENANT_ADMIN_PERMISSION
+  const permission = tenantAdminPermission(options)
 
   // The provider of a tenant that another tenant shares is not the
   // provider of the tenant alone: the first identity that signs in is
@@ -71,17 +63,26 @@ export async function bootstrapAdministrator(
   if (sharing.length > 0) return null
 
   // The tenant that already has an administrator keeps it: the first
-  // identity of a tenant that has one is not its administrator.
-  const held = await options.grants.findLiveByPermission(tenant.id, permission, tenant.slug)
+  // identity of a tenant that has one is not its administrator. An
+  // administrator is a grant of the role of the administration, or a
+  // grant of the permission itself.
+  const held = await options.grants.findLiveByRole(tenant.id, TENANT_ADMIN_ROLE, tenant.slug)
   if (held.length > 0) return null
+  const direct = await options.grants.findLiveByPermission(tenant.id, permission, tenant.slug)
+  if (direct.length > 0) return null
+
+  // The role that administers the tenant: it holds the permission that
+  // opens the administration, and the grant of the role holds it too.
+  // A deployment without roles is given the grant of the permission.
+  const role = await ensureTenantAdminRole(options, { id: tenant.id, slug: tenant.slug }, context)
 
   const created = await options.grants.create(
     {
       tenantId: tenant.id,
       userId: principal.id,
       groupId: null,
-      permissionId: (await resolvePermission(options, tenant.id, permission)).id,
-      roleId: null,
+      permissionId: role ? null : (await resolvePermission(options, tenant.id, permission)).id,
+      roleId: role?.id ?? null,
       // The workspace of the grant is the tenant itself: the console
       // asks for the context of the tenant of its caller, and the slug of
       // the tenant is the workspace it names. The route is left out: the

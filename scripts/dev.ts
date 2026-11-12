@@ -554,19 +554,32 @@ async function seed(): Promise<string> {
   // holds for the caller on the route of the console. The workspace of
   // the grant is the tenant: the contract of the access context asks
   // about the tenant of the caller.
-  for (const permission of ['console.status', 'console.admin']) {
-    await admin(
-      '/v1/admin/grants',
-      {
-        tenant: TENANT.slug,
-        userId: principalId,
-        permission,
-        workspaceId: TENANT.slug,
-        routeId: CONSOLE_ROUTE,
-      },
-      'PUT'
-    )
-  }
+  //
+  // The administration of the tenant is the role `admin` that every
+  // tenant holds, and the status of the services is a permission of its
+  // own.
+  await admin(
+    '/v1/admin/grants',
+    {
+      tenant: TENANT.slug,
+      userId: principalId,
+      role: 'admin',
+      workspaceId: TENANT.slug,
+      routeId: CONSOLE_ROUTE,
+    },
+    'PUT'
+  )
+  await admin(
+    '/v1/admin/grants',
+    {
+      tenant: TENANT.slug,
+      userId: principalId,
+      permission: 'console.status',
+      workspaceId: TENANT.slug,
+      routeId: CONSOLE_ROUTE,
+    },
+    'PUT'
+  )
 
   return tenantId
 }

@@ -76,7 +76,7 @@ Integer variables must be whole numbers; an empty or non-numeric value stops the
 
 | Variable | Default | Production | Meaning |
 | --- | --- | --- | --- |
-| `ACCESS_TENANT_ADMIN_PERMISSION` | `console.admin` | optional | The key of the permission that opens the administration of a tenant (§6.4). It is what a tenant hands to its first identity when it lets it administer the tenant, and what the console reads in the context of its caller. |
+| `ACCESS_TENANT_ADMIN_PERMISSION` | `console.admin` | optional | The key of the permission that opens the administration of a tenant (§6.4). It is what the role `admin` of a tenant holds, and what the console reads in the context of its caller. |
 
 ## Secrets in files
 

@@ -259,6 +259,34 @@ export class GrantRepository {
   }
 
   /**
+   * The live grants that hold a role, in a workspace.
+   *
+   * The grants that hold a permission are not among them: a grant of a
+   * role and a grant of a permission of that role are two grants.
+   */
+  async findLiveByRole(
+    tenantId: string,
+    role: string,
+    workspaceId: string | null
+  ): Promise<GrantRow[]> {
+    const rows = await withTenantScope(
+      this.db,
+      tenantId,
+      async (client) =>
+        await client.query<GrantRecord>(
+          `select ${COLUMNS} ${JOINS}
+       where grants.tenant_id = $1
+         and roles.key = $2
+         and coalesce(grants.workspace_id, '') = coalesce($3, '')
+         and grants.revoked_at is null
+         and (grants.expires_at is null or grants.expires_at > now())`,
+          [tenantId, role, workspaceId]
+        )
+    )
+    return rows.map(toRow)
+  }
+
+  /**
    * The live grants of a principal: the roles of the token (spec §7.3).
    *
    * The grants of the **groups** of the principal are part of them: a

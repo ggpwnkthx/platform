@@ -801,6 +801,12 @@ export function createAdministrationService(
       )
       return rows.map(toGrant)
     },
+    findLiveByRole: async (tenantId, role, workspaceId) => {
+      const rows = await run(
+        async () => await dependencies.grants.findLiveByRole(tenantId, role, workspaceId)
+      )
+      return rows.map(toGrant)
+    },
     create: async (registration, audit) => {
       const row = await run(async () => await dependencies.grants.create(registration, audit))
       return toGrant(row)
@@ -911,6 +917,9 @@ export function createAdministrationService(
     token: dependencies.token,
     previousToken: dependencies.previousToken,
     ...(dependencies.adminCredentials ? { credentials: dependencies.adminCredentials } : {}),
+    ...(dependencies.tenantAdminPermission
+      ? { tenantAdminPermission: dependencies.tenantAdminPermission }
+      : {}),
     publicUrl: dependencies.publicUrl,
     limiter: new FailedAuthenticationLimiter(dependencies.failures),
   })

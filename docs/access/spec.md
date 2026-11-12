@@ -220,6 +220,8 @@ A named set of a tenant's permissions. A grant may name a role instead of a perm
 
 A role may name other roles, transitively: a named role's permissions are the naming role's. A role that names itself, directly or through others, would make a decision never answer, so the schema refuses the cycle and the administration refuses it before the write (§10.11).
 
+Every tenant holds the role that administers it, `admin`, created with the tenant (§10.2).
+
 Roles are three tables: the role, the permissions it names and the roles it names. The decision reads them in one statement, expanding the nesting recursively within that query.
 
 #### 3.6.1 `roles`
@@ -736,11 +738,15 @@ The default is `false`: an identity nobody registered does not get an account ju
 - The e-mail of a principal is a display value and never a key (§6.2): a provider that lets a caller choose its address may create a principal whose address is the one of a colleague. The grants name the principal by its id, and the two principals are never the same row.
 - The tenant that turns the auto-provisioning off gets a hand-made roster: no identity signs in before the operator registers it, and the login is refused with `identity_unknown`.
 
-**The first identity of a tenant is given the administration of the tenant.** A tenant that leaves `auto_provision_admin` at its default hands the administration of the tenant to the identity that signs in first: the principal that is created first is given the grant that opens the administration of the tenant, and the ones that come after are given nothing. A tenant that sets `auto_provision_admin = false` gives it to nobody, and the operator of the platform grants it by hand. The grant is the one of the key of `ACCESS_TENANT_ADMIN_PERMISSION` (`console.admin`), on the tenant itself as the workspace, and it is written by the same statement as the row of its audit.
+**The first identity of a tenant is given the administration of the tenant.** A tenant that leaves `auto_provision_admin` at its default hands the administration of the tenant to the identity that signs in first: the principal that is created first is given the grant of the role that administers the tenant, and the ones that come after are given nothing. A tenant that sets `auto_provision_admin = false` gives it to nobody, and the operator of the platform grants it by hand. The grant names the role `admin` of the tenant, on the tenant itself as the workspace, and it is written by the same statement as the row of its audit.
+
+The role holds the permissions an administration needs. The permission that opens the administration of the tenant is the key of `ACCESS_TENANT_ADMIN_PERMISSION` (`console.admin`): the console reads that key in the context of its caller, and a grant of the role holds it as a grant of the permission itself would. The role holds the detail of the status of the services (`console.status`) and the capabilities that administer a workspace of the tenant (`data.model.read`, `data.model.write` and `data.audit.read`).
+
+The capabilities of a workspace are workspace-scoped: they reach the workspaces where the role is granted on them, and the grant that names the tenant itself as its workspace is the administration of the tenant and nothing else. The capabilities of the records of a workspace are the deployment's own: the bundle of policies names them, and the operator of the tenant gives them to the role.
 
 The rules of the grant:
 
-- The tenant that already has an administrator keeps it: the first identity of a tenant that has one is not its administrator, and the grant is not written.
+- The tenant that already has an administrator keeps it: the first identity of a tenant that has one is not its administrator, and the grant is not written. An administrator is a live grant of the role `admin`, or a live grant of the permission that opens the administration.
 - The principal is the one of the tenant: a principal of another tenant is given nothing.
 - The tenant that **shares its provider** with another tenant is given nothing: the provider of a shared directory is the provider of several tenants, and the first identity that signs in at it is the first identity of the directory and not of the tenant. The operator of the platform grants the administration of such a tenant by hand.
 - The flag is **on by default**, and it is the work of the operator of the tenant: the first person who signs in at the provider of a tenant is its administrator, unless the tenant turns it off. A tenant that provisions its identities by hand turns it off, and the operator of the platform grants the administration of the tenant by hand.
@@ -1116,6 +1122,8 @@ A slug that belongs to another tenant of the same client id → `409 conflict`. 
 **The provider of a tenant is the tenant's own.** A tenant is created with the provider of its identity: a call that creates a tenant and names no `issuer`, no `idpClientId` and no `idpClientSecret` → `400 invalid_request`. A call that **changes** a tenant and names none of them keeps the ones the tenant has: the issuer, the client, the secret, the callback, the scopes and the algorithms of the provider are kept, and the caller that changes the name of a tenant does not have to know the secret of its provider. A call that changes the **issuer** or the **client** of the provider and names no secret of it → `400 invalid_request`: the secret of a provider belongs to that provider.
 
 The flags of a tenant are the work of its operator: `autoProvision` says whether the tenant provisions the identities that sign in, and `autoProvisionAdmin` says whether the first of them administers the tenant (§6.4). A tenant that is created and names neither keeps the defaults: it provisions no identity, and the first identity that signs in at it administers it.
+
+**A tenant is created with the role that administers it.** The role `admin` of the tenant is created with the tenant, and it holds the permissions an administration needs (§6.4). The role is created again when it is missing, and the permissions are given back to it when they are not held: the role of the administration is the administration of the tenant. The operator of the tenant gives the role the other rights its administrators need (§10.11).
 
 Both client secrets are encrypted at rest and never returned.
 

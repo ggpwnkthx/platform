@@ -223,13 +223,15 @@ Instead of sharing the platform token, add a tenant credential to `ACCESS_ADMIN_
 
 Each token is at least 16 characters. `ACCESS_ADMIN_TOKENS` has no `_FILE` form in this release, so set it in the environment. With this credential the operator can manage `acme`'s principals, groups, roles and grants, but cannot create tenants, touch another tenant, or change `sharedClient` or `default`.
 
-For the console, also put the token in `CONSOLE_TENANT_ADMIN_TOKENS` (`{"acme":"…"}`) and grant the operator `console.admin` on the `console` route with the slug as workspace ([console configuration: what it needs from Access](../console/configuration.md#what-it-needs-from-access)):
+For the console, also put the token in `CONSOLE_TENANT_ADMIN_TOKENS` (`{"acme":"…"}`) and grant the operator the role `admin` of the tenant on the `console` route with the slug as workspace ([console configuration: what it needs from Access](../console/configuration.md#what-it-needs-from-access)):
 
 ```bash
 curl -sS -X PUT $ACCESS/v1/admin/grants \
   -H "authorization: Bearer $ACCESS_ADMIN_TOKEN" -H "content-type: application/json" \
-  -d '{"tenant":"acme","userId":"'"$USER_ID"'","permission":"console.admin","workspaceId":"acme","routeId":"console"}'
+  -d '{"tenant":"acme","userId":"'"$USER_ID"'","role":"admin","workspaceId":"acme","routeId":"console"}'
 ```
+
+The role `admin` is created with the tenant, and it holds the permissions an administration needs ([Access spec §6.4](../access/spec.md#64-unknown-identity)). Granting the role is enough; granting `console.admin` by hand works as well.
 
 ## Check that it worked
 

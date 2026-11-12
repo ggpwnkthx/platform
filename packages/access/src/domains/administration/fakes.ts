@@ -652,6 +652,22 @@ class FakeGrants implements GrantStore {
     )
   }
 
+  async findLiveByRole(
+    tenantId: string,
+    role: string,
+    workspaceId: string | null
+  ): Promise<Grant[]> {
+    const now = new Date('2026-01-08T12:00:00.000Z')
+    return this.rows.filter(
+      (row) =>
+        row.tenant === this.tenants.rows.find((t) => t.id === tenantId)?.slug &&
+        row.role === role &&
+        row.workspaceId === workspaceId &&
+        row.revokedAt === null &&
+        (row.expiresAt === null || row.expiresAt > now)
+    )
+  }
+
   async create(
     registration: {
       tenantId: string
@@ -1100,6 +1116,8 @@ export interface ServiceOptions {
   failures?: AuthenticationFailures
   /** The credentials of the tenants. */
   credentials?: AdminCredential[]
+  /** The key of the permission that opens the administration of a tenant. */
+  tenantAdminPermission?: string
 }
 
 /**
@@ -1124,6 +1142,9 @@ export function serviceOf(fakes: Fakes, options: ServiceOptions = {}): Administr
     roles: fakes.roles,
     token: options.token ?? 'the-admin-token',
     ...(options.adminCredentials ? { credentials: options.adminCredentials } : {}),
+    ...(options.tenantAdminPermission
+      ? { tenantAdminPermission: options.tenantAdminPermission }
+      : {}),
     publicUrl: 'https://access.example.com',
     limiter: options.limiter ?? new FailedAuthenticationLimiter(options.failures ?? fakes.failures),
   })

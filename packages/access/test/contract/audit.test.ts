@@ -53,8 +53,21 @@ describe('the audit of the administration', () => {
     const body = await audit('?tenant=acme')
     const records = body.records as Record<string, unknown>[]
     expect(records.length).toBeGreaterThan(0)
-    expect(records[0]!.action).toBe('tenant.created')
-    expect(records[0]!.tenant).toBe('acme')
+    // The tenant is created with the role that administers it, and the
+    // role is written after the tenant: the creation of the tenant is
+    // among the rows, not the first of them.
+    const actions = records.map((record) => record.action)
+    expect(actions).toContain('tenant.created')
+    const created = records.find((record) => record.action === 'tenant.created')
+    expect(created?.tenant).toBe('acme')
+  })
+
+  test('the role that administers the tenant is audited', async () => {
+    const body = await audit('?tenant=acme')
+    const records = body.records as Record<string, unknown>[]
+    const actions = records.map((record) => record.action)
+    expect(actions).toContain('role.created')
+    expect(actions).toContain('role.permission.granted')
   })
 
   test('the audit names the operator by the fingerprint of its credential', async () => {

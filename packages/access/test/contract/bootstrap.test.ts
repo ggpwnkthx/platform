@@ -139,10 +139,27 @@ describe('the administration of a tenant', () => {
 
     const grants = await grantsOfTenant()
     expect(grants.length).toBe(1)
-    expect(grants[0]?.permission).toBe('console.admin')
+    // The grant names the role that administers the tenant, and the role
+    // holds the permission that opens the administration (§6.4).
+    expect(grants[0]?.role).toBe('admin')
+    expect(grants[0]?.permission).toBeNull()
     expect(grants[0]?.workspaceId).toBe('acme')
     expect(grants[0]?.routeId).toBeNull()
     expect(grants[0]?.userId).toBeTruthy()
+  })
+
+  test('the tenant holds the role that administers it', async () => {
+    const roles = await admin('/v1/admin/roles?tenant=acme', 'GET')
+    const rows = (roles.body.roles ?? []) as Record<string, unknown>[]
+    expect(rows.length).toBe(1)
+    expect(rows[0]?.key).toBe('admin')
+    expect(rows[0]?.permissions).toEqual([
+      'console.admin',
+      'console.status',
+      'data.audit.read',
+      'data.model.read',
+      'data.model.write',
+    ])
   })
 
   test('the identities that come after it are given nothing', async () => {

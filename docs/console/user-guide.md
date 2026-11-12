@@ -104,7 +104,7 @@ Open **Operators**. Platform operators see every tenant and can create one; an o
 | Groups | Create a group by key and name, then add members. A right granted to a group is held by every member. |
 | A group | Search and add members; the page marks changes that are not saved yet and asks before you leave with them. Grant and revoke the group's rights; rename it. |
 | Rights | Filter by holder, role or permission, and workspace; switch between live, revoked or ended, and all. Grant a role or a single permission to a user or group, on all workspaces or one, on a route, until never or a chosen moment; a line under the form says the right in words before you grant it. A permission that no grant or role of the tenant names is created only once you confirm it. Revoke a right. |
-| Roles | List roles with the permissions they hold in effect, the roles they include and how many live grants name them. Create a role. |
+| Roles | List roles with the permissions they hold in effect, the roles they include and how many live grants name them. Create a role. Every tenant has one: **admin**, the role of the administrators of the tenant. It holds the right to open the administration of the tenant, the detail of the status of the services, and the capabilities that administer a workspace — its model and its audit. Grant it to the people who administer the tenant. |
 | A role | Edit its name, description, permissions and included roles by adding and removing chips; see what it holds in effect and who holds it; remove it once no grant and no role names it. |
 | Audit | Every change to the tenant, newest first, filterable by action; export it as CSV or JSONL. |
 

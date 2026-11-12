@@ -10,6 +10,18 @@ in the same commit as the code.
 
 ## Unreleased
 
+### Every tenant has an Admin role
+
+A tenant is created with the role that administers it: the role `admin`. It holds the permissions an administration needs — the right to open the administration of the tenant (`console.admin`, or the key of `ACCESS_TENANT_ADMIN_PERMISSION`), the detail of the status of the services (`console.status`), and the capabilities that administer a workspace (`data.model.read`, `data.model.write` and `data.audit.read`). The role is written with the tenant and audited like every other change.
+
+The first identity of a tenant is now given the **role** instead of the permission. The console reads `console.admin` in the context of its caller, and a grant of a role holds the permissions of the role — so the first identity is the administrator of its tenant, and it is the administrator of a workspace as soon as the role is granted on that workspace. A tenant that already has an administrator keeps it: the first identity of a tenant that has one is not its administrator, and the grant is not written. The check counts a grant of the role and a grant of the permission, so the tenants that administered themselves with a direct grant keep it.
+
+A tenant that existed before this rule gets its role when it is needed: the first identity that signs in at it is given the role, and the role is created then.
+
+The operator of the tenant gives the role the other rights its administrators need, and the capabilities of the records of a workspace are its own: the bundle of policies names them. The console shows the role on the **Roles** page of the tenant, and the **Rights** page grants it like any other role.
+
+**Contract:** [access spec §6.4](docs/access/spec.md#64-unknown-identity), [access spec §10.2](docs/access/spec.md#102-post-v1admintenants).
+
 ## 1.4.3
 
 ### The secret of the provider of a tenant is readable by the login that exchanges the code
