@@ -10,6 +10,8 @@ in the same commit as the code.
 
 ## Unreleased
 
+## 1.4.3
+
 ### The secret of the provider of a tenant is readable by the login that exchanges the code
 
 A login of a tenant reads the row of the provider of the tenant in the scope of the tenant, and the secret of that provider in the scope of the platform. The two tables of the model were created after the scope of a statement became explicit, and their policies were written in the form that came before it: they read `access.tenant_id` alone, and they treat the absence of the setting as the scope of the platform.
@@ -23,6 +25,7 @@ The policies of the tables of the providers and of the local credentials are the
 A secret of a provider that cannot be read is refused by the service instead of being sent to the provider as an empty secret: the refusal names the secret, and the log of the service says which one it was. The refusal of a provider names the client and not the secret, and an operator reading `invalid_client` and `AADSTS7000218` in the log is told that no secret was sent at all.
 
 **Contract:** [access spec §3.10](docs/access/spec.md#310-tenant-isolation), [access spec §3.11](docs/access/spec.md#311-tenant_providers), [access spec §5.6](docs/access/spec.md#56-failed-logins).
+
 
 ## 1.4.2
 
