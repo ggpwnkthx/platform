@@ -10,6 +10,18 @@ in the same commit as the code.
 
 ## Unreleased
 
+### A value that is not provided is kept
+
+The administration of Access refused a body that sent an empty secret with a message that named the field and said it was required: `idpClientSecret: the client secret at the provider is required`. The interfaces of the platform send the fields of their forms, and a form sends the fields the reader left empty as empty strings: a tenant that was changed without its secret could not be changed at all.
+
+**A value that is not provided is kept.** A field that a call does not name is a field that does not change: a change keeps every value the tenant has — the name, the provider of its identity, the domain of its addresses, the client of its gateway, the secret of that client, the urls of the callbacks and the flags. A field that a call sends empty is a field the call does not name, and `null` clears the domain of the addresses. The values that were reset by a change that named none of them — the flags and the urls of the callbacks — are kept too.
+
+**A tenant that is created needs the values a tenant cannot do without.** The name of the tenant, the issuer of its provider, the client and the secret of Access at that provider, the client of its gateway and the secret of that client: a creation that does not name one of them is refused with `400 invalid_request` and with the message that says which one is missing. The values a creation does not need have their defaults.
+
+The CLI, whose forms are sent the same way, changes a tenant without knowing its secrets.
+
+**Contract:** [access spec §10.2](docs/access/spec.md#102-post-v1admintenants), [access api](docs/access/api.md#post-v1admintenants).
+
 ## 1.4.5
 
 ### A tenant creates the workspaces of its tenant

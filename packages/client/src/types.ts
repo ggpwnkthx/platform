@@ -232,12 +232,26 @@ export interface Tenant {
   readonly createdAt: string
 }
 
-/** The body of the upsert of a tenant. */
+/**
+ * The body of the upsert of a tenant.
+ *
+ * A field that is not named is a field that does not change: a change
+ * keeps the values the tenant has.
+ */
 export interface TenantInput {
   readonly slug: string
-  readonly displayName: string
-  readonly issuer: string
-  readonly idpClientId: string
+  /** The name of the tenant. */
+  readonly displayName?: string
+  /**
+   * The issuer of the provider of the tenant.
+   *
+   * A tenant that is created is created with the provider of its
+   * identity, and a tenant that is changed keeps the provider it has
+   * when the change names none of it.
+   */
+  readonly issuer?: string
+  /** The client of Access at the provider. */
+  readonly idpClientId?: string
   /**
    * The secret of Access at the provider.
    *
@@ -249,9 +263,18 @@ export interface TenantInput {
   readonly idpClientSecret?: string
   readonly idpRedirectUri?: string
   readonly idpScopes?: readonly string[]
-  readonly emailDomain?: string
-  readonly clientId: string
-  readonly clientSecret: string
+  /** The domain of the addresses of the tenant: `null` clears it. */
+  readonly emailDomain?: string | null
+  /** The client id of the tenant's gateway at Access. */
+  readonly clientId?: string
+  /**
+   * The secret of the gateway of the tenant.
+   *
+   * A tenant that is created is created with a secret, and a tenant
+   * that is changed keeps the secret it has when the change names
+   * none.
+   */
+  readonly clientSecret?: string
   readonly clientRedirectUris?: readonly string[]
   readonly autoProvision?: boolean
   readonly autoProvisionAdmin?: boolean

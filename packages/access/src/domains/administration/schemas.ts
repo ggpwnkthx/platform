@@ -15,24 +15,55 @@ const SLUG_PATTERN = /^[a-z0-9-]{2,63}$/
 /** The name of a permission. */
 const PERMISSION_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/
 
-/** The body of the creation and of the change of a tenant. */
+/**
+ * A value that is empty is not a name.
+ *
+ * A field that a call sends empty is a field the call does not name:
+ * a change that sends an empty secret keeps the secret the tenant has,
+ * and a tenant that is created with an empty secret is refused by the
+ * domain, which says what a tenant needs (spec §10.2).
+ *
+ * @param schema the schema of the field.
+ */
+function named<T extends z.ZodType>(schema: T) {
+  return z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    schema
+  )
+}
+
+/**
+ * The body of the creation and of the change of a tenant.
+ *
+ * Every field but the slug is optional: a field that a call does not
+ * name is a field that does not change, and a change keeps the values
+ * the tenant has (spec §10.2). A tenant that is created needs the
+ * fields a tenant cannot do without, and the domain says which they
+ * are.
+ */
 export const TenantBody = z.object({
   slug: z.string().regex(SLUG_PATTERN, 'the slug is [a-z0-9-] and is 2 to 63 characters long'),
-  displayName: z.string().min(1, 'the name of the tenant is required'),
+  displayName: named(z.string().min(1, 'the name of the tenant is required').optional()),
   // The provider of the identity of the tenant. A field that is absent
   // is a field that does not change: a call that names no provider
   // keeps the one the tenant has. A tenant that is created is created
   // with a provider, and a call that names none is refused.
-  issuer: z.string().url('the issuer of the provider must be a url').optional(),
-  idpClientId: z.string().min(1, 'the client id at the provider is required').optional(),
-  idpClientSecret: z.string().min(1, 'the client secret at the provider is required').optional(),
-  idpRedirectUri: z.string().url('the callback at the provider must be a url').optional(),
+  issuer: named(z.string().url('the issuer of the provider must be a url').optional()),
+  idpClientId: named(z.string().min(1, 'the client id at the provider is required').optional()),
+  idpClientSecret: named(
+    z.string().min(1, 'the client secret at the provider is required').optional()
+  ),
+  idpRedirectUri: named(z.string().url('the callback at the provider must be a url').optional()),
   idpScopes: z.array(z.string().min(1)).optional(),
   idpAlgorithms: z.array(z.string().min(1)).optional(),
-  emailDomain: z.string().min(1).nullable().optional(),
-  clientId: z.string().min(1, 'the client id of the gateway is required'),
-  clientSecret: z.string().min(1, 'the secret of the gateway is required'),
-  clientRedirectUris: z.array(z.string().url('a redirect uri is a url')).optional().default([]),
+  // The domain of the addresses of the tenant: `null` clears it, and a
+  // field that is absent keeps the one the tenant has.
+  emailDomain: named(z.string().min(1).nullable().optional()),
+  clientId: named(z.string().min(1, 'the client id of the gateway is required').optional()),
+  // The secret of the gateway: a change that names no secret of it
+  // keeps the one the tenant has (spec §10.2).
+  clientSecret: named(z.string().min(1, 'the secret of the gateway is required').optional()),
+  clientRedirectUris: z.array(z.string().url('a redirect uri is a url')).optional(),
   autoProvision: z.boolean().optional(),
   autoProvisionAdmin: z.boolean().optional(),
   sharedClient: z.boolean().optional(),
@@ -53,10 +84,12 @@ export const ProviderBody = z.object({
     .regex(SLUG_PATTERN, 'the slug of a provider is [a-z0-9-] and is 2 to 63 characters long'),
   displayName: z.string().min(1).optional(),
   enabled: z.boolean().optional(),
-  issuer: z.string().url('the issuer of the provider must be a url').optional(),
-  idpClientId: z.string().min(1, 'the client id at the provider is required').optional(),
-  idpClientSecret: z.string().min(1, 'the client secret at the provider is required').optional(),
-  idpRedirectUri: z.string().url('the callback at the provider must be a url').optional(),
+  issuer: named(z.string().url('the issuer of the provider must be a url').optional()),
+  idpClientId: named(z.string().min(1, 'the client id at the provider is required').optional()),
+  idpClientSecret: named(
+    z.string().min(1, 'the client secret at the provider is required').optional()
+  ),
+  idpRedirectUri: named(z.string().url('the callback at the provider must be a url').optional()),
   idpScopes: z.array(z.string().min(1)).optional(),
   idpAlgorithms: z.array(z.string().min(1)).optional(),
 })

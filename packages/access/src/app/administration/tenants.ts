@@ -43,6 +43,10 @@ export async function tenantHandler(
     const body = await readBody(context, TenantBody)
     const registration = {
       slug: body.slug,
+      // Every field but the slug is a field the body may not name: a
+      // field that is absent is a field that does not change, and the
+      // tenant keeps the value it has (spec §10.2). The domain gives
+      // the defaults of a tenant that is created.
       displayName: body.displayName,
       // The provider of the identity of the tenant: a field the body
       // does not name is a field that does not change, and the tenant
@@ -54,17 +58,17 @@ export async function tenantHandler(
       idpRedirectUri: body.idpRedirectUri,
       idpScopes: body.idpScopes,
       idpAlgorithms: body.idpAlgorithms,
-      emailDomain: body.emailDomain ?? null,
+      emailDomain: body.emailDomain,
       clientId: body.clientId,
       clientSecret: body.clientSecret,
       clientRedirectUris: body.clientRedirectUris,
-      autoProvision: body.autoProvision ?? false,
+      autoProvision: body.autoProvision,
       // The first identity of a tenant administers it, unless the tenant
       // says otherwise (spec §6.4).
-      autoProvisionAdmin: body.autoProvisionAdmin ?? true,
-      sharedClient: body.sharedClient ?? false,
-      isDefault: body.default ?? false,
-      enabled: body.enabled ?? true,
+      autoProvisionAdmin: body.autoProvisionAdmin,
+      sharedClient: body.sharedClient,
+      isDefault: body.default,
+      enabled: body.enabled,
     }
     const result = await dependencies.administration.upsertTenant(
       scope,

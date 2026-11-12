@@ -139,6 +139,94 @@ describe('the administration of Access', () => {
     expect(response.body.error).toBe('invalid_request')
   })
 
+  test('a change that sends an empty secret keeps the secret the tenant has', async () => {
+    // A value that is empty is not a name: a change that sends an empty
+    // secret names no secret, and the tenant keeps the ones it has
+    // (spec §10.2).
+    const response = await call('/v1/admin/tenants', 'POST', {
+      slug: 'acme',
+      displayName: 'Acme Incorporated',
+      issuer: 'https://login.acme.example',
+      idpClientId: 'access-acme',
+      idpClientSecret: '',
+      clientId: 'gateway-acme',
+      clientSecret: '',
+      clientRedirectUris: ['https://gateway-acme.example.com/auth/callback'],
+    })
+    expect(response.status).toBe(200)
+    expect(response.body.displayName).toBe('Acme Incorporated')
+    // The secrets of the tenant are the ones it had.
+    const id = String(response.body.id)
+    const tenants = service.runtime.repositories.tenants
+    expect(await tenants.readProviderSecret(id)).toBe('the-secret-of-the-provider')
+    expect(await tenants.readGatewaySecret(id)).toBe('the-secret-of-the-gateway')
+  })
+
+  test('a change that names one value keeps the values it does not name', async () => {
+    // A field that a call does not name is a field that does not
+    // change: the tenant keeps the values it has (spec §10.2).
+    const created = await call('/v1/admin/tenants', 'POST', {
+      slug: 'kept',
+      displayName: 'Kept Inc',
+      issuer: 'https://login.kept.example',
+      idpClientId: 'access-kept',
+      idpClientSecret: 'the-secret-of-the-provider',
+      clientId: 'gateway-kept',
+      clientSecret: 'the-secret-of-the-gateway',
+      clientRedirectUris: ['https://gateway-kept.example.com/auth/callback'],
+      emailDomain: 'kept.example',
+      autoProvision: true,
+      autoProvisionAdmin: false,
+      enabled: false,
+    })
+    expect(created.status).toBe(201)
+    const changed = await call('/v1/admin/tenants', 'POST', {
+      slug: 'kept',
+      displayName: 'Kept Incorporated',
+    })
+    expect(changed.status).toBe(200)
+    expect(changed.body.displayName).toBe('Kept Incorporated')
+    expect(changed.body.issuer).toBe('https://login.kept.example')
+    expect(changed.body.idpClientId).toBe('access-kept')
+    expect(changed.body.emailDomain).toBe('kept.example')
+    expect(changed.body.clientId).toBe('gateway-kept')
+    expect(changed.body.clientRedirectUris).toEqual([
+      'https://gateway-kept.example.com/auth/callback',
+    ])
+    expect(changed.body.autoProvision).toBe(true)
+    expect(changed.body.autoProvisionAdmin).toBe(false)
+    expect(changed.body.enabled).toBe(false)
+  })
+
+  test('a change that names no domain of addresses clears it', async () => {
+    // The domain of the addresses is a value like the others: a change
+    // that names it empty clears it, and a change that names none of
+    // it keeps it.
+    const cleared = await call('/v1/admin/tenants', 'POST', {
+      slug: 'kept',
+      emailDomain: null,
+    })
+    expect(cleared.status).toBe(200)
+    expect(cleared.body.emailDomain).toBeNull()
+  })
+
+  test('a tenant that is created with an empty secret is refused', async () => {
+    // A tenant that is created needs the secrets of its provider and
+    // of its gateway: a body that sends them empty names none of them
+    // (spec §10.2).
+    const response = await call('/v1/admin/tenants', 'POST', {
+      slug: 'empty-secret',
+      displayName: 'Empty Secret',
+      issuer: 'https://login.empty.example',
+      idpClientId: 'access-empty',
+      idpClientSecret: '',
+      clientId: 'gateway-empty',
+      clientSecret: '',
+    })
+    expect(response.status).toBe(400)
+    expect(response.body.error).toBe('invalid_request')
+  })
+
   test('a change of the provider that names no secret is refused', async () => {
     // The secret of a provider belongs to that provider: a change that
     // names another issuer and no secret is refused.

@@ -1125,6 +1125,10 @@ A slug that belongs to another tenant of the same client id → `409 conflict`. 
 
 **The provider of a tenant is the tenant's own.** A tenant is created with the provider of its identity: a call that creates a tenant and names no `issuer`, no `idpClientId` and no `idpClientSecret` → `400 invalid_request`. A call that **changes** a tenant and names none of them keeps the ones the tenant has: the issuer, the client, the secret, the callback, the scopes and the algorithms of the provider are kept, and the caller that changes the name of a tenant does not have to know the secret of its provider. A call that changes the **issuer** or the **client** of the provider and names no secret of it → `400 invalid_request`: the secret of a provider belongs to that provider.
 
+**A value that is not provided is kept.** A field that a call does not name is a field that does not change: a change keeps every value the tenant has — the name, the provider of its identity, the domain of its addresses, the client of its gateway, the secret of that client, the urls of the callbacks and the flags. A field that a call sends empty is a field the call does not name, and `null` clears the domain of the addresses.
+
+**A tenant that is created needs the values a tenant cannot do without.** The name of the tenant, the issuer of its provider, the client and the secret of Access at that provider, the client of its gateway and the secret of that client: a creation that does not name one of them is refused with `400 invalid_request`. The values a creation does not need have their defaults: the callback of the provider, the scopes and the algorithms of the provider, the domain of the addresses, the urls of the callbacks and the flags.
+
 The flags of a tenant are the work of its operator: `autoProvision` says whether the tenant provisions the identities that sign in, and `autoProvisionAdmin` says whether the first of them administers the tenant (§6.4). A tenant that is created and names neither keeps the defaults: it provisions no identity, and the first identity that signs in at it administers it.
 
 **A tenant is created with the role that administers it.** The role `admin` of the tenant is created with the tenant, and it holds the permissions an administration needs (§6.4). The role is created again when it is missing, and the permissions are given back to it when they are not held: the role of the administration is the administration of the tenant. The operator of the tenant gives the role the other rights its administrators need (§10.11).
@@ -1288,6 +1292,7 @@ An **upsert** keyed by the pair. The **slug never changes**: a principal carries
 
 - A slug of `default` → `400 invalid_request`: the default provider is the registration of the tenant, and it is changed with the tenant.
 - A provider that is created carries a complete registration: the issuer, the client id, the secret and the callback. A registration that names none of them → `400 invalid_request`.
+- A field that a call does not name is a field that does not change: a change keeps the values the provider has, and a field that a call sends empty is a field the call does not name.
 - A change that names another issuer or another client id and **no secret** → `400 invalid_request`: the secret of a provider belongs to its provider, and the login at the new provider would be refused.
 - An unknown tenant → `404 not_found`.
 

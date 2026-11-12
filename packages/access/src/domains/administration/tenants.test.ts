@@ -151,6 +151,63 @@ describe('the tenants of the administration', () => {
         CONTEXT
       )
     ).rejects.toThrow(/the secret of Access at the provider is needed/)
+    await expect(
+      administration.upsertTenant(
+        PLATFORM_SCOPE,
+        {
+          ...TENANT,
+          slug: 'without-gateway-secret',
+          clientId: 'gateway-without-gateway-secret',
+          clientSecret: undefined,
+        },
+        CONTEXT
+      )
+    ).rejects.toThrow(/the secret of the gateway is needed/)
+    await expect(
+      administration.upsertTenant(
+        PLATFORM_SCOPE,
+        {
+          ...TENANT,
+          slug: 'without-name',
+          clientId: 'gateway-without-name',
+          displayName: undefined,
+        },
+        CONTEXT
+      )
+    ).rejects.toThrow(/the name of the tenant is needed/)
+    await expect(
+      administration.upsertTenant(
+        PLATFORM_SCOPE,
+        {
+          ...TENANT,
+          slug: 'without-client',
+          clientId: undefined,
+        },
+        CONTEXT
+      )
+    ).rejects.toThrow(/the client id of the gateway is needed/)
+  })
+
+  test('a change that names no value keeps the values the tenant has', async () => {
+    const administration = serviceOf(fakes)
+    await administration.upsertTenant(PLATFORM_SCOPE, TENANT, CONTEXT)
+    // A field that a call does not name is a field that does not
+    // change: the tenant keeps the values it has (spec §10.2).
+    const changed = await administration.upsertTenant(
+      PLATFORM_SCOPE,
+      { slug: TENANT.slug, displayName: 'Another name' },
+      CONTEXT
+    )
+    expect(changed.created).toBe(false)
+    expect(changed.tenant.displayName).toBe('Another name')
+    expect(changed.tenant.issuer).toBe(TENANT.issuer)
+    expect(changed.tenant.idpClientId).toBe(TENANT.idpClientId)
+    expect(changed.tenant.emailDomain).toBe(TENANT.emailDomain)
+    expect(changed.tenant.clientId).toBe(TENANT.clientId)
+    expect(changed.tenant.clientRedirectUris).toEqual(TENANT.clientRedirectUris)
+    expect(changed.tenant.autoProvision).toBe(TENANT.autoProvision)
+    expect(changed.tenant.autoProvisionAdmin).toBe(TENANT.autoProvisionAdmin)
+    expect(changed.tenant.enabled).toBe(TENANT.enabled)
   })
 
   test('a change that names no provider keeps the provider of the tenant', async () => {

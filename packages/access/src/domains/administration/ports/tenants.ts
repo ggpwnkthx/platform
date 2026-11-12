@@ -47,10 +47,18 @@ export interface TenantSummary extends Tenant {
   grantCount: number
 }
 
-/** The registration of a tenant, in clear. */
+/**
+ * The registration of a tenant, in clear.
+ *
+ * A field that is absent is a field that does not change: a call that
+ * does not name a value keeps the value the tenant has (spec §10.2).
+ * A tenant that is created is created with the values it is given, and
+ * with the defaults of the ones it is not.
+ */
 export interface TenantRegistration {
   slug: string
-  displayName: string
+  /** The name of the tenant. */
+  displayName?: string
   /**
    * The provider of the identity of the tenant.
    *
@@ -69,17 +77,24 @@ export interface TenantRegistration {
   idpScopes?: string[]
   /** The algorithms a token of the provider may be signed with. */
   idpAlgorithms?: string[]
-  emailDomain: string | null
-  clientId: string
+  /** The domain of the addresses of the tenant: `null` clears it. */
+  emailDomain?: string | null
+  /** The client id of the tenant's gateway at Access. */
+  clientId?: string
   /**
    * The urls the gateway of the tenant is registered with.
    *
    * The browser is sent back to one of them with the code of the login.
    */
-  clientRedirectUris: string[]
-  /** The secret of the gateway of the tenant, in clear. */
-  clientSecret: string
-  autoProvision: boolean
+  clientRedirectUris?: string[]
+  /**
+   * The secret of the gateway of the tenant, in clear.
+   *
+   * A field that is absent is a field that does not change: a change
+   * that names no secret of the gateway keeps the one the tenant has.
+   */
+  clientSecret?: string
+  autoProvision?: boolean
   /**
    * Whether the first principal of the tenant administers the tenant.
    *
@@ -87,10 +102,10 @@ export interface TenantRegistration {
    * provisions its identities may hand the administration of the tenant
    * to the first one of them (spec §6.4).
    */
-  autoProvisionAdmin: boolean
-  sharedClient: boolean
-  isDefault: boolean
-  enabled: boolean
+  autoProvisionAdmin?: boolean
+  sharedClient?: boolean
+  isDefault?: boolean
+  enabled?: boolean
 }
 
 /**
@@ -99,15 +114,26 @@ export interface TenantRegistration {
  * A tenant is created with the provider of its identity: the issuer,
  * the client and the secret of the provider are needed, and the
  * callback of the provider and the scopes it is asked for have their
- * defaults.
+ * defaults. The name of the tenant and the client of its gateway are
+ * needed too, and the flags have their defaults.
  */
 export interface TenantCreation extends TenantRegistration {
+  displayName: string
   issuer: string
   idpClientId: string
   idpClientSecret: string
   idpRedirectUri: string
   idpScopes: string[]
   idpAlgorithms: string[]
+  emailDomain: string | null
+  clientId: string
+  clientRedirectUris: string[]
+  clientSecret: string
+  autoProvision: boolean
+  autoProvisionAdmin: boolean
+  sharedClient: boolean
+  isDefault: boolean
+  enabled: boolean
 }
 
 /** The storage of the tenants. */

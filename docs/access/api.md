@@ -331,24 +331,26 @@ curl -sS -X POST https://access.example.com/v1/admin/tenants \
 | Field | Rule |
 | --- | --- |
 | `slug` | Required. `[a-z0-9-]{2,63}`. The row key. |
-| `displayName` | Required. |
+| `displayName` | Required to create a tenant. A change that leaves it out keeps the name the tenant has. |
 | `issuer` | Required to create a tenant. The tenant's provider issuer. A change that leaves it out keeps the issuer the tenant has. |
 | `idpClientId` | Required to create a tenant. A change that leaves it out keeps the client the tenant has. |
 | `idpClientSecret` | Required to create a tenant. Encrypted at rest, never returned. A change that leaves it out keeps the secret the tenant has. |
 | `idpRedirectUri` | Optional. Default `https://{ACCESS_PUBLIC_URL}/oauth/tenant/callback` when the tenant is created. A change that leaves it out keeps the callback the tenant has. |
 | `idpScopes` | Optional. Default `["openid","email","profile"]` when the tenant is created. A change that leaves it out keeps the scopes the tenant has. |
 | `idpAlgorithms` | Optional. Default `["RS256"]` when the tenant is created. A change that leaves it out keeps the algorithms the tenant has. |
-| `emailDomain` | Optional. Unique when set. |
-| `clientId` | Required. The client id of the tenant's gateway at Access. Unique across tenants. |
-| `clientSecret` | Required. Encrypted at rest, never returned. On replacement, the old secret stays valid for 24 hours alongside the new one. |
-| `clientRedirectUris` | Optional. Default `[]`. The gateway's callback URLs; a tenant with none refuses every login. |
-| `autoProvision` | Optional. Default `false`. A tenant that provisions its identities creates a principal at the first login of an identity it does not know (§6.4). |
-| `autoProvisionAdmin` | Optional. Default `true`. A tenant that hands its administration to its first identity gives the role that administers it to the principal that signs in first (§6.4). |
-| `sharedClient` | Optional. Default `false`. Platform operators only (§10.1). |
-| `default` | Optional. Default `false`. At most one tenant. Platform operators only. |
-| `enabled` | Optional. Default `true`. |
+| `emailDomain` | Optional. Unique when set. `null` clears it. A change that leaves it out keeps the domain the tenant has. |
+| `clientId` | Required to create a tenant. The client id of the tenant's gateway at Access. Unique across tenants. A change that leaves it out keeps the client the tenant has. |
+| `clientSecret` | Required to create a tenant. Encrypted at rest, never returned. A change that leaves it out keeps the secret the tenant has. On replacement, the old secret stays valid for 24 hours alongside the new one. |
+| `clientRedirectUris` | Optional. Default `[]` when the tenant is created. The gateway's callback URLs; a tenant with none refuses every login. A change that leaves it out keeps the urls the tenant has. |
+| `autoProvision` | Optional. Default `false` when the tenant is created. A tenant that provisions its identities creates a principal at the first login of an identity it does not know (§6.4). A change that leaves it out keeps the flag the tenant has. |
+| `autoProvisionAdmin` | Optional. Default `true` when the tenant is created. A tenant that hands its administration to its first identity gives the role that administers it to the principal that signs in first (§6.4). A change that leaves it out keeps the flag the tenant has. |
+| `sharedClient` | Optional. Default `false` when the tenant is created. Platform operators only (§10.1). A change that leaves it out keeps the flag the tenant has. |
+| `default` | Optional. Default `false` when the tenant is created. At most one tenant. Platform operators only. A change that leaves it out keeps the flag the tenant has. |
+| `enabled` | Optional. Default `true` when the tenant is created. A change that leaves it out keeps the flag the tenant has. |
 
 `409 conflict` when the client id belongs to another tenant or a second default would appear; `403 forbidden` when a tenant credential changes `sharedClient` or `default`; `400 invalid_request` when the call creates a tenant and names no provider of its identity, and when the call changes the provider of a tenant — the issuer or the client — and names no secret of it. The secret of a provider belongs to that provider.
+
+A field that the body does not name is a field that does not change: the rules above read the same for a field that is left out and for a field that is sent empty.
 
 A tenant that is created holds the role that administers it, `admin`, and the role holds the permissions an administration needs: the right to open the administration of the tenant, the detail of the status of the services, and the capabilities that administer a workspace (§6.4).
 
@@ -517,11 +519,13 @@ curl -sS -X POST https://access.example.com/v1/admin/providers \
 | `enabled` | Optional. `true` (default) or `false`. A disabled provider signs nobody in. |
 | `issuer` | Required when the provider is created. |
 | `idpClientId` | Required when the provider is created. |
-| `idpClientSecret` | Required when the provider is created. A change that names another provider and no secret is refused. |
+| `idpClientSecret` | Required when the provider is created. A change that names another provider and no secret is refused. A change that sends it empty keeps the secret the provider has. |
 | `idpRedirectUri` | Required when the provider is created. |
 | `idpScopes` | Optional. Default `openid`, `email`, `profile`. |
 
 `400 invalid_request` when the slug is `default` — the default provider of a tenant is the registration of the tenant — and when a change names another provider and no secret of it. `404 not_found` when the tenant is unknown.
+
+A field that the body does not name is a field that does not change: a change keeps the values the provider has.
 
 ```json
 {

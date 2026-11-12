@@ -23,11 +23,15 @@ import { ensureTenantAdminRole } from './tenant-admin'
 /**
  * The registration of a tenant that is created.
  *
- * A tenant is created with the provider of its identity: the issuer,
- * the client and the secret of the provider are needed, and a
- * registration that names none of them is a registration that creates
- * no tenant. The callback of the provider and the scopes it is asked
- * for have their defaults.
+ * A tenant is created with a name, and with the provider of its
+ * identity: the issuer, the client and the secret of the provider are
+ * needed, and a registration that names none of them is a registration
+ * that creates no tenant. The callback of the provider and the scopes
+ * it is asked for have their defaults.
+ *
+ * The gateway of the tenant signs in with its client and its secret: a
+ * registration that names no secret of the gateway creates a tenant
+ * that refuses every login.
  *
  * @param options what the administration is built with.
  * @param registration the registration of the call.
@@ -36,6 +40,12 @@ function creationOf(
   options: AdministrationOptions,
   registration: TenantRegistration
 ): TenantCreation {
+  if (registration.displayName === undefined || registration.displayName === '') {
+    throw new AdministrationError(
+      'invalid_request',
+      'a tenant is created with a name: the name of the tenant is needed'
+    )
+  }
   if (registration.issuer === undefined || registration.issuer === '') {
     throw new AdministrationError(
       'invalid_request',
@@ -54,14 +64,38 @@ function creationOf(
       'a tenant is created with the provider of its identity: the secret of Access at the provider is needed'
     )
   }
+  if (registration.clientId === undefined || registration.clientId === '') {
+    throw new AdministrationError(
+      'invalid_request',
+      'a tenant is created with the client of its gateway: the client id of the gateway is needed'
+    )
+  }
+  // The gateway of the tenant signs in with its client and its secret:
+  // a tenant that is created with no secret of it refuses every login.
+  if (registration.clientSecret === undefined || registration.clientSecret === '') {
+    throw new AdministrationError(
+      'invalid_request',
+      'a tenant is created with the client of its gateway: the secret of the gateway is needed'
+    )
+  }
   return {
     ...registration,
+    displayName: registration.displayName,
     issuer: registration.issuer,
     idpClientId: registration.idpClientId,
     idpClientSecret: registration.idpClientSecret,
     idpRedirectUri: registration.idpRedirectUri ?? `${options.publicUrl}/oauth/tenant/callback`,
     idpScopes: registration.idpScopes ?? ['openid', 'email', 'profile'],
     idpAlgorithms: registration.idpAlgorithms ?? ['RS256'],
+    emailDomain: registration.emailDomain ?? null,
+    clientId: registration.clientId,
+    clientRedirectUris: registration.clientRedirectUris ?? [],
+    clientSecret: registration.clientSecret,
+    autoProvision: registration.autoProvision ?? false,
+    autoProvisionAdmin: registration.autoProvisionAdmin ?? true,
+    sharedClient: registration.sharedClient ?? false,
+    isDefault: registration.isDefault ?? false,
+    enabled: registration.enabled ?? true,
   }
 }
 
@@ -72,7 +106,9 @@ function creationOf(
  * belongs to one tenant and a default belongs to one tenant: both are
  * a conflict.
  *
- * The provider of the identity of the tenant is the provider the
+ * A value that the registration does not name is a value that does not
+ * change: a change keeps the values the tenant has (spec §10.2). The
+ * provider of the identity of the tenant is the provider the
  * registration names, and it is the provider the tenant has when the
  * registration names none: a call that changes the name of a tenant
  * does not change the provider its people sign in at.
@@ -101,15 +137,19 @@ export async function upsertTenant(
   // logins of the platform and lifts the scope of the decisions of its
   // gateway, and the default tenant of the platform routes the logins
   // of the shared clients. A credential of a tenant may not change
-  // them.
+  // them. A flag the call does not name is a flag that does not
+  // change: it is not a change the credential may not make.
   if (scope.tenant !== null && existing) {
-    if (registration.sharedClient !== existing.sharedClient) {
+    if (
+      registration.sharedClient !== undefined &&
+      registration.sharedClient !== existing.sharedClient
+    ) {
       throw new AdministrationError(
         'forbidden',
         'the credential may not change the shared client of the tenant'
       )
     }
-    if (registration.isDefault !== existing.isDefault) {
+    if (registration.isDefault !== undefined && registration.isDefault !== existing.isDefault) {
       throw new AdministrationError(
         'forbidden',
         'the credential may not change the default tenant of the platform'
@@ -117,13 +157,16 @@ export async function upsertTenant(
     }
   }
 
-  // A client id belongs to one tenant.
-  const owner = await options.tenants.findByClientId(registration.clientId)
-  if (owner && owner.id !== existing?.id) {
-    throw new AdministrationError(
-      'conflict',
-      'the client id of the gateway belongs to another tenant'
-    )
+  // A client id belongs to one tenant. A call that names no client id
+  // keeps the one the tenant has.
+  if (registration.clientId !== undefined) {
+    const owner = await options.tenants.findByClientId(registration.clientId)
+    if (owner && owner.id !== existing?.id) {
+      throw new AdministrationError(
+        'conflict',
+        'the client id of the gateway belongs to another tenant'
+      )
+    }
   }
 
   // At most one tenant is the default.
