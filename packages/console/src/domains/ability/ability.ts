@@ -5,14 +5,23 @@
  * what they answer. The ability is that drawing: the rules of the
  * console itself, and the rules of the collections of a workspace.
  *
- * The ability is a mirror and never an authority. Access
- * decides who holds a permission, and Data decides what a
+ * The ability is a mirror of the data, and never an authority of it.
+ * Access decides who holds a permission, and Data decides what a
  * permission grants. Every rule of the ability is an upper bound of
  * what the caller may do, and never a lower one: the console draws as
  * closed what the services refuse, with the reason of the rule, and it
  * shows what they allow. A button that the console shows and Data
  * refuses is an annoyance; a button that the console closes and Data
  * allows is a fault.
+ *
+ * The administration is the other way around, and the console says so.
+ * The rules of the administration decide which credential the console
+ * presents to Access, and Access authorises that credential rather
+ * than the person behind it. The ability is therefore the only thing
+ * that holds a tenant operator to the tenant it administers, for as
+ * long as the console falls back on the credential of the platform. It
+ * is a guard and not a drawing there, and the guard is one of the
+ * reasons the fallback is removed (§4.1 of the action plan).
  *
  * The library knows two wildcards: the action `manage` and the subject
  * `all`. The console has neither. The action and the subject of a rule

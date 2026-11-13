@@ -4,7 +4,7 @@ The normative behavior of the console: what it does, what it refuses, and where 
 
 The console is the platform's web application: people read and change workspace data, operators administer access, and anyone reads service status. It is a **client** of the gateway, Access and Data and speaks their contracts. Every answer it shows comes from one of those services and is governed by that service's spec.
 
-Status: 1.0.1. Runtime: Bun ≥ 1.4.3. Listener: HTTP on
+Status: 1.5.0. Runtime: Bun ≥ 1.4.3. Listener: HTTP on
 `CONSOLE_HOST:CONSOLE_PORT` (default `0.0.0.0:8083`).
 
 ---
@@ -29,7 +29,8 @@ These hold in code and are not configurable:
 - The console **never decides access**. It asks Access and renders the answer.
 - The console **never reaches a database**. All data comes from a service over its contract.
 - The caller's token **never reaches the browser**. The browser holds only a signed session identifier.
-- The ability is a **mirror, never an authority**: it is an upper bound on what the caller may do, never a lower one (§5).
+- The ability is a **mirror of the data, never an authority of it**: it is an upper bound on what the caller may do, never a lower one (§5).
+- The administration is the exception, and it is a guard and not a drawing: the rules of the console decide which credential the console presents to Access, and Access authorises that credential rather than the person behind it (§5, §6).
 - The console **fails closed**. An unreadable context opens nothing, and an unreachable service is shown as unreachable.
 
 ---
