@@ -33,6 +33,7 @@ const KNOWN_TOP_LEVEL = [
   '.env.example',
   '.github',
   '.gitignore',
+  'ACTION PLAN.md',
   'CHANGELOG.md',
   'CONTRIBUTING.md',
   'LICENSE',
