@@ -133,6 +133,20 @@ export interface RoleIdentity {
   readonly name: string
   readonly superuser: boolean
   readonly bypassesRowLevelSecurity: boolean
+  /**
+   * True when the role owns a table of the deployment.
+   *
+   * The owner of a table holds every privilege of it, and it may alter
+   * its policies: a service that connects as the owner of the tables is
+   * a service whose isolation is a promise and not a rule.
+   */
+  readonly ownsTables: boolean
+  /**
+   * True when the role is a member of a role that owns a table.
+   *
+   * A member of the owner inherits the privileges of the owner.
+   */
+  readonly memberOfOwner: boolean
 }
 
 /**
@@ -140,21 +154,46 @@ export interface RoleIdentity {
  *
  * A superuser and a role with `BYPASSRLS` are not subject to the
  * policies of the tables: a deployment that uses such a role does not
- * have the isolation it believes it has.
+ * have the isolation it believes it has. The owner of a table is
+ * subject to the policies of the table when they are forced, but it may
+ * turn them off, and a member of the owner inherits what the owner
+ * holds.
  */
 export async function roleOf(pool: ConnectionPool): Promise<RoleIdentity> {
   const rows = await pool.query<{
     name: string
     superuser: boolean
     bypasses: boolean
+    owns: boolean
+    member: boolean
   }>(
-    `select r.rolname as name, r.rolsuper as superuser, r.rolbypassrls as bypasses
-     from pg_roles r where r.rolname = current_user`
+    `select r.rolname as name, r.rolsuper as superuser, r.rolbypassrls as bypasses,
+            exists (
+              select 1 from pg_class c
+                join pg_namespace n on n.oid = c.relnamespace
+               where c.relkind = 'r'
+                 and c.relowner = r.oid
+                 and n.nspname not in ('pg_catalog', 'information_schema')
+                 and n.nspname !~ '^pg_'
+            ) as owns,
+            exists (
+              select 1 from pg_auth_members m
+                join pg_roles o on o.oid = m.roleid
+                join pg_class c on c.relowner = o.oid
+                join pg_namespace n on n.oid = c.relnamespace
+               where m.member = r.oid
+                 and c.relkind = 'r'
+                 and n.nspname not in ('pg_catalog', 'information_schema')
+                 and n.nspname !~ '^pg_'
+            ) as member
+       from pg_roles r where r.rolname = current_user`
   )
   const row = rows[0]
   return {
     name: row?.name ?? 'unknown',
     superuser: row?.superuser ?? true,
     bypassesRowLevelSecurity: row?.bypasses ?? true,
+    ownsTables: row?.owns ?? true,
+    memberOfOwner: row?.member ?? true,
   }
 }

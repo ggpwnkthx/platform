@@ -13,7 +13,7 @@
 
 import type { Logger } from '../observability/logger'
 import { type ConnectionPool, roleOf } from '../platform/postgres/database'
-import { type Migration, verifyMigrations } from '../platform/postgres/migrations'
+import { type Migration, detectDrift, verifyMigrations } from '../platform/postgres/migrations'
 import type { ManifestBundle } from '../domains/schema'
 
 /** The options of the readiness. */
@@ -57,11 +57,21 @@ export class Readiness {
   /** Checks the dependencies of the service. */
   async check(): Promise<ReadinessState> {
     // The role of the connection: a superuser or a role with BYPASSRLS is
-    // not subject to the policies of the tables.
+    // not subject to the policies of the tables. The owner of the tables
+    // is subject to them when they are forced, but it may turn them off,
+    // and a member of the owner inherits what the owner holds.
     try {
       const role = await roleOf(this.#options.pool)
       if (role.superuser || role.bypassesRowLevelSecurity) {
         this.#lastReason = 'the role of the connection bypasses the isolation of the rows'
+        return { ready: false, reason: this.#lastReason }
+      }
+      if (role.ownsTables) {
+        this.#lastReason = `the role "${role.name}" of the connection owns the tables of the deployment: it may turn their policies off`
+        return { ready: false, reason: this.#lastReason }
+      }
+      if (role.memberOfOwner) {
+        this.#lastReason = `the role "${role.name}" of the connection is a member of the role that owns the tables: it holds what the owner holds`
         return { ready: false, reason: this.#lastReason }
       }
     } catch (error) {
@@ -76,6 +86,23 @@ export class Readiness {
       await verifyMigrations(this.#options.pool, this.#options.migrations)
     } catch (error) {
       this.#lastReason = `the schema of the deployment is not ready: ${
+        error instanceof Error ? error.message : 'unknown error'
+      }`
+      return { ready: false, reason: this.#lastReason }
+    }
+
+    // The schema of the deployment, as it is in the database and not as
+    // the files of the repository say it is: a column that is missing, a
+    // column of another type and a table whose isolation was turned off
+    // are a drift that the ledger of the migrations cannot see.
+    try {
+      const drift = await detectDrift(this.#options.pool, this.#options.manifest)
+      if (drift.length > 0) {
+        this.#lastReason = `the schema of the deployment drifted: ${drift.join('; ')}`
+        return { ready: false, reason: this.#lastReason }
+      }
+    } catch (error) {
+      this.#lastReason = `the schema of the deployment could not be read: ${
         error instanceof Error ? error.message : 'unknown error'
       }`
       return { ready: false, reason: this.#lastReason }
