@@ -76,17 +76,13 @@ describe('the rule of the decision, against a random policy', () => {
 
     for (let round = 0; round < 40; round += 1) {
       // The tenant, the principal and the groups of the round.
+      const tenantSlug = `property-${round}`
       const tenant = await database.query<{ id: string }>(
         `insert into tenants (slug, display_name, idp_issuer, idp_client_id, idp_client_secret,
            idp_redirect_uri, client_id, client_secret)
          values ($1, $1, 'https://login.example.com', $2, $3, 'https://access.example.com/cb', $4, $3)
          returning id`,
-        [
-          `property-${round}`,
-          `access-property-${round}`,
-          Buffer.from('secret'),
-          `gateway-property-${round}`,
-        ]
+        [tenantSlug, `access-property-${round}`, Buffer.from('secret'), `gateway-property-${round}`]
       )
       const tenantId = tenant[0]!.id
       const principal = await database.query<{ id: string }>(
@@ -124,7 +120,7 @@ describe('the rule of the decision, against a random policy', () => {
         const grant: RandomGrant = {
           permission: choice(random, ['workspace.read', 'workspace.write']),
           group: group?.key ?? null,
-          workspace: choice(random, ['the-workspace', 'the-other-workspace', null]),
+          workspace: choice(random, ['the-workspace', 'the-other-workspace', tenantSlug, null]),
           route: choice(random, ['the-route', null]),
           revoked: random() < 0.25,
           expired: random() < 0.25,
@@ -177,8 +173,10 @@ describe('the rule of the decision, against a random policy', () => {
       }
 
       // The request of the decision, and the workspace and the route it
-      // asks about.
-      const workspace = choice(random, ['the-workspace', 'the-other-workspace'])
+      // asks about. The empty workspace is a request that names none: a
+      // route that names no workspace is a call of the tenant, and a
+      // grant that names the tenant holds on it.
+      const workspace = choice(random, ['the-workspace', 'the-other-workspace', ''])
       const route = choice(random, ['the-route', 'the-other-route'])
       const request = { subject, workspaceId: workspace, routeId: route, roles: [] }
 
@@ -187,7 +185,9 @@ describe('the rule of the decision, against a random policy', () => {
       const matching = grants.filter(
         (grant) =>
           !grant.revoked &&
-          (grant.workspace === null || grant.workspace === workspace) &&
+          (grant.workspace === null ||
+            grant.workspace === workspace ||
+            (workspace === '' && grant.workspace === tenantSlug)) &&
           (grant.route === null || grant.route === route) &&
           (grant.group === null || grant.members.includes(subject))
       )

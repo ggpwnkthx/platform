@@ -83,6 +83,14 @@ interface DecisionRecord {
  * the credentials of a tenant does not see the principals of the other
  * tenants.
  *
+ * The second parameter is the workspace of the request, and it is empty
+ * when the request names none: a route that names no workspace is a call
+ * of the tenant (spec §6.5). A grant that names the tenant itself — its
+ * slug is the workspace it names — holds on such a request, and a grant
+ * that names no workspace at all holds on it too. The grant of a
+ * workspace of the tenant does not: a request that names no workspace
+ * is not about a workspace of the tenant.
+ *
  * The third kind of candidate is the grant of a **role**: the grant holds
  * the role for the principal, and the permissions of the role are the
  * ones the principal holds. The roles the principal holds and the roles
@@ -123,7 +131,7 @@ select
        where g.user_id = u.id
          and g.revoked_at is null
          and p.enabled
-         and (g.workspace_id is null or g.workspace_id = $2)
+         and (g.workspace_id is null or g.workspace_id = $2 or ($2 = '' and g.workspace_id = t.slug))
          and (g.route_id is null or g.route_id = $3)
        order by (g.expires_at is null or g.expires_at > now()) desc
        limit 1)
@@ -135,7 +143,7 @@ select
        where gr.members @> array[u.id]
          and g.revoked_at is null
          and p.enabled
-         and (g.workspace_id is null or g.workspace_id = $2)
+         and (g.workspace_id is null or g.workspace_id = $2 or ($2 = '' and g.workspace_id = t.slug))
          and (g.route_id is null or g.route_id = $3)
        order by (g.expires_at is null or g.expires_at > now()) desc
        limit 1)
@@ -149,7 +157,7 @@ select
        where (g.user_id = u.id or (g.group_id is not null and gr.members @> array[u.id]))
          and g.revoked_at is null
          and p.enabled
-         and (g.workspace_id is null or g.workspace_id = $2)
+         and (g.workspace_id is null or g.workspace_id = $2 or ($2 = '' and g.workspace_id = t.slug))
          and (g.route_id is null or g.route_id = $3)
        order by (g.expires_at is null or g.expires_at > now()) desc
        limit 1)

@@ -10,6 +10,14 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The decision of a route that names no workspace is a decision about the tenant
+
+The creation of a workspace is a call of the tenant: the route names no workspace, and the gateway asks Access about the route alone — the request carries no workspace. Access compared the workspace of a grant with the workspace of the request, and a request that names none matched only the grants that name no workspace. The grant that holds the capability of a tenant — the one that names the tenant itself, as the slug of the tenant is the workspace it names — matched no request of that kind, and the caller that held it was refused by the gateway with `403 workspace_forbidden` before Data was ever reached.
+
+**The request that names no workspace is about the tenant.** A grant that names the tenant itself holds on it, and so does a grant that names no workspace at all. The grant of a workspace of the tenant does not: a request that names no workspace is not about a workspace, and the administration of a tenant does not reach the records of a workspace because it administers the tenant.
+
+**Contract:** [access spec §8.1](docs/access/spec.md#81-request), [access spec §8.3](docs/access/spec.md#83-rule).
+
 ## 1.6.0
 
 ### The policies of the outbox name their role

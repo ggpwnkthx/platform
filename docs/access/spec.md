@@ -900,6 +900,8 @@ Content-Type: application/json
 
 These four fields are what the gateway sends. Access requires no field the gateway does not send and refuses no field it does not know.
 
+- A `workspaceId` that is absent is the scope of the tenant: the request is about the route and about nothing else, and the grants that hold on it are the grants of the tenant (§8.3).
+
 - Missing or wrong credential → `401 unauthorized`. The two credential schemes are in §8.8.
 - Body that is not JSON, or a `subject` that is not a string → `400 bad_request`.
 - A `subject` that is not a principal id → `400 bad_request`. A principal id is a UUID; a value that is not one names no row, so the request is refused without asking the database. The database is never asked to cast a value it cannot cast, so a malformed request cannot become a storage failure.
@@ -931,10 +933,12 @@ A principal may use a workspace on a route when at least one grant satisfies **a
 | Grant | `grants.revoked_at is null`, and the grant names the principal (`grants.user_id = users.id`) or one of its groups (`grants.group_id` names a group whose `members` hold `users.id`). |
 | Expiry | `grants.expires_at is null` or `grants.expires_at > now()`. |
 | Permission | The grant's permission is `enabled`. |
-| Workspace | `grants.workspace_id is null` (every workspace of the tenant) or `grants.workspace_id = workspaceId`. |
+| Workspace | `grants.workspace_id is null` (every workspace of the tenant), or `grants.workspace_id = workspaceId`, or the request names no workspace and the grant names the tenant itself (`grants.workspace_id = tenants.slug`). |
 | Route | `grants.route_id is null` (every route) or `grants.route_id = routeId`. |
 
 A grant on one workspace or route does not grant another. A grant with neither workspace nor route covers the whole tenant.
+
+**The request that names no workspace is a request about the tenant.** A route that names no workspace is a call of the tenant (§6.5), and the gateway asks Access about the route alone: the request carries no workspace. A grant that names the tenant itself — its slug is the workspace it names — holds on such a request, and so does a grant that names no workspace at all. The grant of a workspace does not: a request that names no workspace is not about a workspace of the tenant, and the administration of a tenant does not reach the records of a workspace because it administers the tenant.
 
 > [!IMPORTANT]
 > The rule is coarse on purpose, and an operator has to know it. A grant that names a workspace and **no route** holds on **every route** of that workspace, and the permission of the grant is not compared with the permission a route asks for: any live grant of the workspace authorizes the route. A deployment whose routes ask for different permissions therefore names the route in every grant that is not meant to cover all of them, and the console shows the routes a grant covers.

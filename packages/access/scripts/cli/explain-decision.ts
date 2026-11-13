@@ -80,7 +80,7 @@ async function main(): Promise<void> {
          where g.user_id = u.id
            and g.revoked_at is null
            and p.enabled
-           and (g.workspace_id is null or g.workspace_id = $2)
+           and (g.workspace_id is null or g.workspace_id = $2 or ($2 = '' and g.workspace_id = t.slug))
            and (g.route_id is null or g.route_id = $3)
          order by (g.expires_at is null or g.expires_at > now()) desc
          limit 1
