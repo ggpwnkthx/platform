@@ -25,7 +25,9 @@ import { operatorScope } from '../../middleware/scope'
 import { flash, sessionOf } from '../../middleware/session'
 
 export const POST = createRoute(async (c) => {
-  const scope = await operatorScope(c)
+  // The creation is a write: the scope is read again, and the answer
+  // the client keeps is not the answer of this request.
+  const scope = await operatorScope(c, { fresh: true })
   const services = c.get('services')
   const session = sessionOf(c)
   const refused = reasonOf(consoleAbility(scope), ACTIONS.create, SUBJECTS.workspace)

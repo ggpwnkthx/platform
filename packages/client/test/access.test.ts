@@ -37,6 +37,38 @@ const OPTIONS = {
   credential: 'the-credential',
 }
 
+/** The question of the contract of the access context. */
+const QUESTION = {
+  subject: 'the-subject',
+  tenantId: 'the-tenant',
+  workspaceId: 'the-workspace',
+  routeId: 'the-route',
+}
+
+/**
+ * An answer of the contract of the access context, in the shape the
+ * contract holds.
+ *
+ * The shape is the one of Access: the version, the decision, the four
+ * identifiers of the question, the permission keys, the moment of the
+ * evaluation and the moment the answer stops being valid.
+ */
+function contextAnswer(overrides: Record<string, unknown> = {}): string {
+  const now = Date.now()
+  return JSON.stringify({
+    version: 1,
+    allow: true,
+    subject: QUESTION.subject,
+    tenantId: QUESTION.tenantId,
+    workspaceId: QUESTION.workspaceId,
+    routeId: QUESTION.routeId,
+    permissionKeys: ['workspace.read'],
+    evaluatedAt: new Date(now).toISOString(),
+    validUntil: new Date(now + 4_000).toISOString(),
+    ...overrides,
+  })
+}
+
 describe('the clients of Access', () => {
   test('the path of the administration carries the version', async () => {
     const { transport, calls } = transportOf({
@@ -99,20 +131,79 @@ describe('the clients of Access', () => {
 
   test('the context of a principal is read', async () => {
     const { transport, calls } = transportOf({
-      'POST https://access.example.test/v1/access-context': ok(
-        '{"allow":true,"permissionKeys":["workspace.read"],"validUntil":"2030-01-01T00:00:00.000Z"}'
-      ),
+      'POST https://access.example.test/v1/access-context': ok(contextAnswer()),
     })
     const client = new AccessContextClient({ ...OPTIONS, transport })
-    const context = await client.context({
-      subject: 'the-subject',
-      tenantId: 'the-tenant',
-      workspaceId: 'the-workspace',
-      routeId: 'the-route',
-    })
+    const context = await client.context(QUESTION)
     expect(context.allow).toBe(true)
     expect(context.permissionKeys).toEqual(['workspace.read'])
     expect(calls[0]?.body).toContain('"version":1')
+  })
+
+  test('an answer that is already expired is refused', async () => {
+    // The answer is the shape of the contract and it is spent: a
+    // console that used it would act on an authorization that Access
+    // took back.
+    const expired = new Date(Date.now() - 1_000).toISOString()
+    const { transport } = transportOf({
+      'POST https://access.example.test/v1/access-context': ok(
+        contextAnswer({ evaluatedAt: expired, validUntil: expired })
+      ),
+    })
+    const client = new AccessContextClient({ ...OPTIONS, transport })
+    await expect(client.context(QUESTION)).rejects.toThrow('expired')
+  })
+
+  test('an answer that names another subject is refused', async () => {
+    const { transport } = transportOf({
+      'POST https://access.example.test/v1/access-context': ok(
+        contextAnswer({ subject: 'another-subject' })
+      ),
+    })
+    const client = new AccessContextClient({ ...OPTIONS, transport })
+    await expect(client.context(QUESTION)).rejects.toThrow('another subject')
+  })
+
+  test('an answer that carries no moment of validity is refused', async () => {
+    const { transport } = transportOf({
+      'POST https://access.example.test/v1/access-context': ok(
+        contextAnswer({ validUntil: undefined })
+      ),
+    })
+    const client = new AccessContextClient({ ...OPTIONS, transport })
+    await expect(client.context(QUESTION)).rejects.toThrow('validity')
+  })
+
+  test('an answer that is valid for longer than the contract allows is refused', async () => {
+    const now = Date.now()
+    const { transport } = transportOf({
+      'POST https://access.example.test/v1/access-context': ok(
+        contextAnswer({
+          evaluatedAt: new Date(now).toISOString(),
+          validUntil: new Date(now + 3_600_000).toISOString(),
+        })
+      ),
+    })
+    const client = new AccessContextClient({ ...OPTIONS, transport })
+    await expect(client.context(QUESTION)).rejects.toThrow('longer than the contract allows')
+  })
+
+  test('an answer that allows without a permission key is refused', async () => {
+    const { transport } = transportOf({
+      'POST https://access.example.test/v1/access-context': ok(
+        contextAnswer({ permissionKeys: [] })
+      ),
+    })
+    const client = new AccessContextClient({ ...OPTIONS, transport })
+    await expect(client.context(QUESTION)).rejects.toThrow('without a single permission key')
+  })
+
+  test('an answer of another version is refused', async () => {
+    const { transport } = transportOf({
+      'POST https://access.example.test/v1/access-context': ok(contextAnswer({ version: 2 })),
+    })
+    const client = new AccessContextClient({ ...OPTIONS, transport })
+    await expect(client.context(QUESTION)).rejects.toThrow('unknown version')
   })
 
   test('the context of a principal is kept until it is spent', async () => {
@@ -120,20 +211,14 @@ describe('the clients of Access', () => {
     const transport: ClientTransport = {
       send: async () => {
         calls += 1
-        return ok('{"allow":true,"permissionKeys":[],"validUntil":"2030-01-01T00:00:00.000Z"}')
+        return ok(contextAnswer())
       },
     }
     const client = new AccessContextClient({ ...OPTIONS, transport })
-    const question = {
-      subject: 'the-subject',
-      tenantId: 'the-tenant',
-      workspaceId: 'the-workspace',
-      routeId: 'the-route',
-    }
-    await client.context(question)
-    await client.context(question)
+    await client.context(QUESTION)
+    await client.context(QUESTION)
     expect(calls).toBe(1)
-    await client.context(question, { fresh: true })
+    await client.context(QUESTION, { fresh: true })
     expect(calls).toBe(2)
   })
 

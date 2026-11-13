@@ -79,7 +79,7 @@ export async function adminFor(
   if (credential) {
     return { admin: c.get('services').admin(credential, ...(caller ? [caller] : [])) }
   }
-  const ability = consoleAbility(await operatorScope(c))
+  const ability = consoleAbility(await operatorScope(c, { fresh: true }))
   const reason =
     reasonOf(ability, ACTIONS.administer, tenantOf(tenant)) ??
     `The console holds no credential of the administration for the tenant ${tenant}.`
@@ -130,7 +130,7 @@ export async function platformWrite(
 ): Promise<PlatformWrite> {
   const named = keys.filter((key): key is string => isPlatformKey(key))
   if (named.length === 0) return { kind: 'tenant' }
-  const ability = consoleAbility(await operatorScope(c))
+  const ability = consoleAbility(await operatorScope(c, { fresh: true }))
   const platform = c.get('services').credentials.platform
   for (const key of named) {
     const reason = reasonOf(ability, ACTIONS.give, permissionOf(key))

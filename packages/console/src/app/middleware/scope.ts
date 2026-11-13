@@ -15,8 +15,19 @@ import type { Context } from 'hono'
 import { emptyScope, type OperatorScope, scopeOf } from '../../domains/operators'
 import '../context'
 
-/** The scope of the caller of a request. */
-export async function operatorScope(c: Context): Promise<OperatorScope> {
+/**
+ * The scope of the caller of a request.
+ *
+ * @param c the request.
+ * @param options `fresh` asks Access again instead of reading the
+ *   answer the client keeps. The administration asks: a credential that
+ *   was revoked is a credential that may not be presented, and the
+ *   answer the client keeps is valid until Access says it is not.
+ */
+export async function operatorScope(
+  c: Context,
+  options: { fresh?: boolean } = {}
+): Promise<OperatorScope> {
   const known = c.var.scope
   if (known) return known
   const session = c.get('session')
@@ -28,12 +39,15 @@ export async function operatorScope(c: Context): Promise<OperatorScope> {
     try {
       const tenantId = await services.tenantId(tenant)
       if (tenantId) {
-        const context = await services.context.context({
-          subject: session.principal.id,
-          tenantId,
-          workspaceId: tenant,
-          routeId: services.config.routeId,
-        })
+        const context = await services.context.context(
+          {
+            subject: session.principal.id,
+            tenantId,
+            workspaceId: tenant,
+            routeId: services.config.routeId,
+          },
+          options.fresh ? { fresh: true } : {}
+        )
         if (context.allow) scope = scopeOf(tenant, context.permissionKeys, services.credentials)
       }
     } catch (error) {

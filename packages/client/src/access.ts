@@ -73,6 +73,129 @@ export interface ContextQuestion {
   readonly routeId: string
 }
 
+/** The version of the contract of the access context. */
+export const ACCESS_CONTEXT_VERSION = 1
+
+/** The maximum lifetime of an answer of the context, in milliseconds. */
+export const MAX_CONTEXT_LIFETIME_MS = 5_000
+
+/** The tolerance of the clock, in milliseconds. */
+export const CLOCK_TOLERANCE_MS = 1_000
+
+/** The failure of an answer of the context that cannot be used. */
+export class AccessContextError extends Error {
+  override readonly name = 'AccessContextError'
+}
+
+/**
+ * Validates the answer of the contract of the access context.
+ *
+ * The answer of Access is not trusted: the client reads its shape, and
+ * it refuses an answer that names another subject, another tenant,
+ * another workspace or another route than the one of the question, an
+ * answer that carries no moment of validity, an answer whose validity
+ * is already past, and an answer that is valid for longer than the
+ * contract allows.
+ *
+ * A refusal is a failure of the dependency and not a refusal of the
+ * caller: the client that asks the context has nothing to answer with,
+ * and it fails closed.
+ *
+ * @param body the answer, as it came off the wire.
+ * @param question the question the answer answers.
+ * @param now the moment of the answer, in milliseconds since the epoch.
+ */
+export function validateContext(
+  body: unknown,
+  question: ContextQuestion,
+  now: number
+): AccessContext {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new AccessContextError('the answer of the access context is not an object')
+  }
+  const answer = body as Record<string, unknown>
+  if (answer.version !== ACCESS_CONTEXT_VERSION) {
+    throw new AccessContextError('the answer of the access context has an unknown version')
+  }
+  if (typeof answer.allow !== 'boolean') {
+    throw new AccessContextError('the answer of the access context does not hold its decision')
+  }
+  for (const field of ['subject', 'tenantId', 'workspaceId', 'routeId'] as const) {
+    if (typeof answer[field] !== 'string') {
+      throw new AccessContextError(`the answer of the access context does not hold its ${field}`)
+    }
+    if (answer[field] !== question[field]) {
+      throw new AccessContextError(
+        `the answer of the access context holds another ${field} than the one of the question`
+      )
+    }
+  }
+  const keys = answer.permissionKeys
+  if (!Array.isArray(keys)) {
+    throw new AccessContextError(
+      'the answer of the access context does not hold its permission keys'
+    )
+  }
+  for (const key of keys) {
+    if (typeof key !== 'string' || key.length === 0 || key.length > 64) {
+      throw new AccessContextError(
+        'the answer of the access context holds a permission key that is not a string'
+      )
+    }
+  }
+  for (let index = 1; index < keys.length; index += 1) {
+    const previous = keys[index - 1] as string
+    const current = keys[index] as string
+    if (previous === current) {
+      throw new AccessContextError('the answer of the access context holds a permission key twice')
+    }
+    if (previous > current) {
+      throw new AccessContextError(
+        'the answer of the access context does not hold its permission keys sorted'
+      )
+    }
+  }
+  if (answer.allow && keys.length === 0) {
+    throw new AccessContextError(
+      'the answer of the access context allows without a single permission key'
+    )
+  }
+  if (!answer.allow && keys.length > 0) {
+    throw new AccessContextError(
+      'the answer of the access context refuses and holds permission keys'
+    )
+  }
+  const evaluatedAt = answer.evaluatedAt
+  if (typeof evaluatedAt !== 'string' || Number.isNaN(Date.parse(evaluatedAt))) {
+    throw new AccessContextError(
+      'the answer of the access context does not hold its evaluation time'
+    )
+  }
+  const evaluatedAtMs = Date.parse(evaluatedAt)
+  if (evaluatedAtMs > now + CLOCK_TOLERANCE_MS) {
+    throw new AccessContextError('the answer of the access context was evaluated in the future')
+  }
+  if (!answer.allow) {
+    return { allow: false, permissionKeys: [], validUntil: null }
+  }
+  const validUntil = answer.validUntil
+  if (typeof validUntil !== 'string' || Number.isNaN(Date.parse(validUntil))) {
+    throw new AccessContextError(
+      'the answer of the access context allows without a moment of validity'
+    )
+  }
+  const validUntilMs = Date.parse(validUntil)
+  if (validUntilMs <= now) {
+    throw new AccessContextError('the answer of the access context is already expired')
+  }
+  if (validUntilMs > evaluatedAtMs + MAX_CONTEXT_LIFETIME_MS) {
+    throw new AccessContextError(
+      'the answer of the access context is valid for longer than the contract allows'
+    )
+  }
+  return { allow: true, permissionKeys: keys as string[], validUntil }
+}
+
 /** The client of Access. */
 export class AccessClient {
   readonly #options: AccessClientOptions
@@ -450,16 +573,10 @@ export class AccessContextClient {
     if (!options.fresh && cached && cached.until > now) return cached.context
 
     const body = (await this.#client.context(
-      { version: 1, ...question },
+      { version: ACCESS_CONTEXT_VERSION, ...question },
       this.#client.credentialOf()
     )) as Record<string, unknown> | null
-    const context: AccessContext = {
-      allow: body?.allow === true,
-      permissionKeys: Array.isArray(body?.permissionKeys)
-        ? body.permissionKeys.filter((key): key is string => typeof key === 'string')
-        : [],
-      validUntil: typeof body?.validUntil === 'string' ? body.validUntil : null,
-    }
+    const context = validateContext(body, question, now)
     if (context.allow && context.validUntil) {
       const until = Date.parse(context.validUntil)
       if (Number.isFinite(until)) this.#cache.set(key, { context, until })

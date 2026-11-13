@@ -182,20 +182,35 @@ beforeAll(async () => {
       if (url.pathname === '/v1/access-context') {
         const body = (await request.json()) as Record<string, unknown>
         expect(body.tenantId).toBe(TENANT_ID)
+        // The answer carries the shape of the contract: the four
+        // identifiers of the question, the moment of the evaluation and
+        // the moment the answer stops being valid.
+        const evaluatedAt = new Date().toISOString()
+        const validUntil = new Date(Date.now() + 4_000).toISOString()
         if (body.routeId !== 'console') {
           seen.contextChecks.push(`${body.subject} ${body.workspaceId} ${body.routeId}`)
           return Response.json({
             version: 1,
             allow: true,
+            subject: body.subject,
+            tenantId: body.tenantId,
+            workspaceId: body.workspaceId,
+            routeId: body.routeId,
             permissionKeys: ['content.read', 'content.write'],
-            validUntil: new Date(Date.now() + 1).toISOString(),
+            evaluatedAt,
+            validUntil,
           })
         }
         return Response.json({
           version: 1,
           allow: consoleKeys.length > 0,
-          permissionKeys: consoleKeys,
-          validUntil: new Date(Date.now() + 1).toISOString(),
+          subject: body.subject,
+          tenantId: body.tenantId,
+          workspaceId: body.workspaceId,
+          routeId: body.routeId,
+          permissionKeys: [...consoleKeys].sort(),
+          evaluatedAt,
+          validUntil,
         })
       }
       if (url.pathname.startsWith('/v1/admin/')) {

@@ -60,7 +60,7 @@ export const requireToken: MiddlewareHandler = createMiddleware(async (c, next) 
 /** A page of the administration: the caller administers something. */
 export const requireOperator: MiddlewareHandler = createMiddleware(async (c, next) => {
   if (!c.get('session')) return toLogin(c)
-  const ability = consoleAbility(await operatorScope(c))
+  const ability = consoleAbility(await operatorScope(c, { fresh: true }))
   if (!ability.can(CONSOLE_ACTIONS.admin, CONSOLE_SUBJECT)) {
     c.status(403)
     return c.render(
@@ -93,7 +93,7 @@ export const requireOperator: MiddlewareHandler = createMiddleware(async (c, nex
  * tenant of its own slug, and an operator of the platform every one.
  */
 export async function tenantCredential(c: Context, tenant: string): Promise<string | null> {
-  const scope = await operatorScope(c)
+  const scope = await operatorScope(c, { fresh: true })
   if (!consoleAbility(scope).can(ACTIONS.administer, tenantOf(tenant))) return null
   return credentialFor(scope, c.get('services').credentials, tenant)
 }
