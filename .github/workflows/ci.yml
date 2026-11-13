@@ -141,6 +141,14 @@ jobs:
         # identifier that nothing reads.
         run: bun run vocabulary:check
 
+      - name: the vocabulary of the permission keys is one
+        # The keys of the permissions are written in the code of the
+        # three services that own them, and the services share no code.
+        # The check holds the three copies of the vocabulary together: a
+        # key that is renamed in one place and not in the others is a key
+        # that one of the services does not know.
+        run: bun run permission-keys:check
+
       - name: the clients of the platform speak the same paths
         # The published client of Data and the client of the console and
         # of the CLI are two copies of the same paths. A path that only

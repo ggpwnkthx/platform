@@ -45,6 +45,7 @@
     "audit": "bun run scripts/audit.ts",
     "repositories:check": "bun run scripts/check-repositories.ts",
     "vocabulary:check": "bun run scripts/check-vocabulary.ts",
+    "permission-keys:check": "bun run scripts/check-permission-keys.ts",
     "redaction:check": "bun run scripts/check-redaction.ts",
     "client-paths:check": "bun run scripts/check-client-paths.ts",
     "docs:check": "bun run scripts/check-docs.ts",
