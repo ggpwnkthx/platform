@@ -137,6 +137,15 @@ export function registerRoutes(app: Hono<AppEnv>, dependencies: AppDependencies)
         message: 'the tenant of the workspace is a uuid',
       })
     }
+    // The binding of the route may name the tenant it is restricted to.
+    // The creation of a workspace is a call of the tenant and the tenant
+    // of the call is in the body, so a route that is restricted to one
+    // tenant may not create a workspace of another one. The ordinary
+    // routes hold the same restriction, against the tenant of the
+    // workspace (spec §4.2).
+    if (gateway.expectedTenantId && gateway.expectedTenantId !== tenantId) {
+      throw new ServiceError('NOT_FOUND')
+    }
     if (!TENANT_SLUG.test(tenant)) {
       throw new ServiceError('INVALID_REQUEST', {
         message: 'the tenant of the workspace is a slug',
@@ -677,7 +686,7 @@ async function createWorkspace(
  * grant names the tenant itself or every workspace of the tenant — and
  * the grant names no route, so it holds on every route of the tenant.
  */
-const WORKSPACE_CREATE = 'data.workspace.create'
+export const WORKSPACE_CREATE = 'data.workspace.create'
 
 /** The slug of a tenant: the name of the tenant inside the platform. */
 const TENANT_SLUG = /^[a-z][a-z0-9-]{1,62}$/

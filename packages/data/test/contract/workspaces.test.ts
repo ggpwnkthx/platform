@@ -1,5 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { createHarness, PRINCIPAL_ID, TENANT_ID, type Harness } from '../helpers/harness'
+import {
+  createHarness,
+  OTHER_TENANT_ID,
+  PRINCIPAL_ID,
+  TENANT_ID,
+  type Harness,
+} from '../helpers/harness'
 
 let harness: Harness
 
@@ -130,5 +136,49 @@ describe('the creation of a workspace', () => {
       signature: null,
     })
     expect(response.status).toBe(401)
+  })
+})
+
+describe('the creation of a workspace on a route that is restricted to a tenant', () => {
+  let restricted: Harness
+
+  beforeAll(async () => {
+    restricted = await createHarness({ expectedTenantId: TENANT_ID })
+  })
+
+  afterAll(async () => {
+    await restricted?.stop()
+  })
+
+  test('the tenant of the binding creates a workspace of it', async () => {
+    restricted.access.grants.set(PRINCIPAL_ID, [
+      { tenantId: TENANT_ID, permissionKeys: ['data.workspace.create'] },
+    ])
+    const response = await restricted.request('/v1/workspaces', {
+      method: 'POST',
+      workspaceId: '',
+      body: { ...CREATION, slug: 'of-the-binding' },
+    })
+    expect(response.status).toBe(201)
+  })
+
+  test('a tenant that the binding does not name is refused', async () => {
+    // The caller holds the capability in the other tenant, and the
+    // route of the gateway is restricted to one tenant: the binding
+    // holds the route, and the route may not reach another tenant.
+    restricted.access.grants.set(PRINCIPAL_ID, [
+      { tenantId: OTHER_TENANT_ID, permissionKeys: ['data.workspace.create'] },
+    ])
+    const response = await restricted.request('/v1/workspaces', {
+      method: 'POST',
+      workspaceId: '',
+      body: {
+        tenant: 'other',
+        tenantId: OTHER_TENANT_ID,
+        slug: 'of-another-tenant',
+        displayName: 'Another tenant',
+      },
+    })
+    expect(response.status).toBe(404)
   })
 })

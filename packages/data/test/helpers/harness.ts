@@ -120,7 +120,15 @@ export interface Harness {
 
 /** Builds the harness. */
 export async function createHarness(
-  options: { policies?: string; maxInFlightPerTenant?: number } = {}
+  options: {
+    policies?: string
+    maxInFlightPerTenant?: number
+    /**
+     * The tenant the route of the creation of a workspace is restricted
+     * to, when the deployment restricts it.
+     */
+    expectedTenantId?: string
+  } = {}
 ): Promise<Harness> {
   const database = await testDatabase()
   await database.reset()
@@ -221,6 +229,7 @@ export async function createHarness(
         upstreamPathPattern: '/v1/workspaces/*',
         routeId: 'workspaces',
         identity: { version: 'v5', algorithm: 'ES256', keyFile: 'test' },
+        ...(options.expectedTenantId ? { expectedTenantId: options.expectedTenantId } : {}),
       },
       verification: {
         version: 'v5',
