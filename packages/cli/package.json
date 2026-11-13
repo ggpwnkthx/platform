@@ -1,6 +1,6 @@
 {
   "name": "@platform/cli",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "private": true,
   "type": "module",
   "description": "The command line of the platform: a client of the gateway, Access and Data, and the operator commands of a deployment.",

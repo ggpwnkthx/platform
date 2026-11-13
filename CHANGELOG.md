@@ -10,6 +10,68 @@ in the same commit as the code.
 
 ## Unreleased
 
+## 1.6.0
+
+### The policies of the outbox name their role
+
+Three policies of the migration that isolated the tables of Data named no role, and the policies of PostgreSQL are combined with a logical or: a policy that holds every row of a table undoes the policy that holds the rows of the scope. The role of the API read the events of every tenant, and wrote the deliveries of every tenant, whatever the scope of its transaction was — and it read them with no scope at all.
+
+**The policies name the role they belong to.** The events and the deliveries belong to the role of the delivery, and the registry of the workspaces to the role of the registry. The role of the API writes the events and the deliveries of its own writes, and reads neither: the grant of the select on the events is taken from it, and the worker of the deliveries reads them with the role of the delivery.
+
+**The guard holds the shape of the policies.** A new gate reads the migrations of the deployment and refuses a policy that names no role and reads no scope, a policy that names a role nobody holds, and a table that does not force its isolation. It runs in the architecture check of the workspace, and it names the three policies of the migration that the new one replaces.
+
+**Contract:** [data spec §6.4](docs/data/spec.md#64-postgresql-isolation).
+
+### The readiness of Data refuses an unsafe role and a schema that drifted
+
+The readiness checked that the role of its connection was not a superuser and did not hold `BYPASSRLS`. The role that owns the schema passed both, and the comparison of the manifest of the deployment with the deployed schema — the check that notices a table whose isolation was turned off — ran in a test and nowhere else, although the specification asks for it in the readiness.
+
+**The role of the connection is checked.** The readiness reads whether the role owns a table of the deployment and whether it is a member of the role that owns them, and it refuses both. The owner of a table may turn its policies off, and a member of the owner holds what the owner holds.
+
+**The schema is read as it is.** The readiness asks the check that compares the manifest with the deployed schema: a column that is missing, a column of another type and a table whose isolation was switched off stop the service, and the ledger of the migrations cannot see them.
+
+**Contract:** [data spec §6.4](docs/data/spec.md#64-postgresql-isolation), [data spec §7.4](docs/data/spec.md#74-schema-lifecycle), [data spec §15.1](docs/data/spec.md#151-probes-and-metrics).
+
+### The capabilities of the platform may not be left out
+
+The setting that names the capabilities that are not relative to a tenant replaced the built-in list instead of extending it. A deployment that named a key of its own stopped Access from protecting `console.platform`, and the console holds that key fixed: the two disagreed about who may give it, and a credential of a tenant could give it to somebody who then administered every tenant with the credential of the platform.
+
+**The value extends the built-in keys.** The capabilities of the platform of the console are protected whatever the deployment names, and a deployment that leaves one of them out is refused at the start.
+
+**Contract:** [access spec §3.3](docs/access/spec.md#33-permissions), [access configuration](docs/access/configuration.md).
+
+### The creation of a workspace honours the tenant of the binding
+
+A binding may name the tenant its route is restricted to, and the routes of a workspace compared the tenant of the workspace with it. The creation of a workspace compared nothing: the tenant of the call is in the body of the request, and the restriction of the binding did not hold for it.
+
+**The restriction of the binding holds for every route.** The tenant of the body is compared with the tenant of the binding before the authorization is resolved, and a call that names another tenant is refused.
+
+**Contract:** [data spec §4.1](docs/data/spec.md#41-trusted-route-bindings).
+
+### The context of the access is validated before it is used
+
+The client of the platform read the answer of the contract of the access context and kept the decision, the keys and the moment of the validity, and it checked none of them. An answer that named another subject, another tenant, another workspace or another route, an answer that was already spent, and an answer that was valid for an hour, were all used as they came. The console builds the whole scope of its operator on that answer.
+
+**The answer is read before it is used.** The client validates the contract: the version, the decision, the four identifiers of the question, the permission keys, the moment of the evaluation and the moment the answer stops being valid. An answer that names another subject, an answer that is already expired, an answer that carries no validity and an answer that is valid for longer than the contract allows are refused, and the client fails closed.
+
+**A write asks again.** The console asks Access again for the scope of an operator when it decides which credential it presents to Access, and when it creates a workspace. The answer the client keeps is the answer of a read.
+
+**Contract:** [access spec §9](docs/access/spec.md#9-access-context), [access spec §9.5](docs/access/spec.md#95-freshness), [console spec §1.1](docs/console/spec.md#11-invariants).
+
+### The vocabulary of the permission keys is one
+
+The keys of the permissions were written in the code of the three services that own them, and the services share no code. A key that was renamed in one place and not in the others was a key that one of the services did not know, and the console drew a capability that Access gave to nobody.
+
+**The three copies are held together.** A check reads the vocabulary of Access, of Data and of the console and refuses a key that one of them does not know, a capability of the platform that the two do not name alike, and a key of the creation of a workspace that the two name differently. It runs in the continuous integration.
+
+### The console says what the ability is
+
+The header of the ability of the console and the specification of the console said that the ability is a mirror and never an authority. That is true of the data, and it is not true of the administration: the rules of the console decide which credential it presents to Access, and Access authorises that credential rather than the person behind it. The claim was in the source and it was wrong in the source.
+
+**The ability is a mirror of the data and a guard of the administration.** The specification says it, and the header of the module says it with the reason.
+
+
+
 ## 1.5.0
 
 ### A capability of the platform is given by the platform, in every way it is given
