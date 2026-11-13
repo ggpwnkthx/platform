@@ -182,6 +182,7 @@ Rules:
 7. `upstreamPathPattern` holds literal path segments, exactly one `{workspaceId}` segment and a terminal `/*`. It accepts no executable regex and no other substitution.
 8. A UUID segment cannot hold encoded separators, backslashes or dot segments.
 9. Data verifies the original signed bytes before it uses any normalized routing value.
+10. `expectedTenantId` restricts every route of the binding, the creation of a workspace included: a route that names a tenant may not reach another one, and a call that names another tenant is refused.
 
 A version 1 bindings file held one derived identity key per binding. Data reads it as legacy mode, and a deployment that reads it must declare so with `DATA_LEGACY_IDENTITY`. The legacy format is refused by default, and version `2.0.0` removes it.
 
@@ -399,7 +400,7 @@ Missing or invalid settings deny access. The scope MUST NOT survive the end of i
 
 Tables MUST enable and force row-level security. The runtime role MUST NOT be a superuser, MUST NOT have `BYPASSRLS`, MUST NOT own the protected tables and MUST NOT have DDL privileges. The migration owner, registry reader, runtime role, delivery role and maintenance role are separate privileges, even when their credentials point at the same server.
 
-The delivery role may claim delivery metadata for every workspace, and MUST NOT read or mutate a business record. A worker's business operation uses the ordinary scoped role, after a fresh Access authorization.
+The delivery role may claim delivery metadata for every workspace, and MUST NOT read or mutate a business record. The API role writes the events and the deliveries of its own writes, and reads neither: the worker of the deliveries reads the events, with the delivery role. A worker's business operation uses the ordinary scoped role, after a fresh Access authorization.
 
 Relations require composite tenant and workspace foreign keys, or equivalent constraints that reject references into another scope. A business reference is not authorized merely because a UUID exists.
 

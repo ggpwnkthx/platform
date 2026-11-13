@@ -216,6 +216,175 @@ describe('the privileges of the roles', () => {
   })
 })
 
+describe('the isolation of the outbox', () => {
+  const TENANT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+  const TENANT_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+  const WORKSPACE_A = '22222222-2222-4222-8222-222222222222'
+  const WORKSPACE_B = '33333333-3333-4333-8333-333333333333'
+  const EVENT_A = '44444444-4444-4444-8444-444444444444'
+  const EVENT_B = '55555555-5555-4555-8555-555555555555'
+
+  /** Writes one event, and one delivery of it. */
+  async function seedEvent(id: string, tenantId: string, workspaceId: string): Promise<void> {
+    await owner.query(
+      `insert into platform.outbox_events
+         (id, version, type, tenant_id, workspace_id, collection, record_id, record_version,
+          actor_id, occurred_at, changed_fields, correlation_id, causation_depth, payload)
+       values ($1::uuid, 1, 'record.created', $2::uuid, $3::uuid, 'articles',
+               '66666666-6666-4666-8666-666666666666'::uuid, 1,
+               '11111111-1111-4111-8111-111111111111'::uuid, now(), '{}', $1::text, 0, '{}'::jsonb)`,
+      [id, tenantId, workspaceId]
+    )
+  }
+
+  /** Writes a delivery of an event, with a subscriber of its own. */
+  async function seedDelivery(
+    eventId: string,
+    subscriber: string,
+    tenantId: string,
+    workspaceId: string
+  ): Promise<void> {
+    await owner.query(
+      `insert into platform.outbox_deliveries
+         (event_id, subscriber_id, tenant_id, workspace_id, state, attempts, next_attempt_at,
+          created_at, updated_at)
+       values ($1::uuid, $2, $3::uuid, $4::uuid, 'pending', 0, now(), now(), now())`,
+      [eventId, subscriber, tenantId, workspaceId]
+    )
+  }
+
+  /** Reads the events with the role of the api, in a scope. */
+  async function readEventsAsRuntime(tenantId: string | null, workspaceId: string | null) {
+    await runtime.query('begin')
+    try {
+      if (tenantId !== null && workspaceId !== null) {
+        await runtime.query(
+          `select set_config('data.tenant_id', $1, true), set_config('data.workspace_id', $2, true)`,
+          [tenantId, workspaceId]
+        )
+      }
+      return await runtime.query('select id, tenant_id from platform.outbox_events order by id')
+    } finally {
+      await runtime.query('rollback')
+    }
+  }
+
+  beforeAll(async () => {
+    await seedEvent(EVENT_A, TENANT_A, WORKSPACE_A)
+    await seedEvent(EVENT_B, TENANT_B, WORKSPACE_B)
+    await seedDelivery(EVENT_B, 'the-seeded-subscriber', TENANT_B, WORKSPACE_B)
+  })
+
+  test('the role of the api may not read the events of the platform', async () => {
+    // The events are the metadata of the writes of the tenants. The
+    // role of the api writes them and never reads them: the worker
+    // reads them, with the role of the delivery.
+    let refused = false
+    try {
+      await readEventsAsRuntime(TENANT_A, WORKSPACE_A)
+    } catch (error) {
+      refused = true
+      expect((error as { code?: string }).code).toBe('42501')
+    }
+    expect(refused).toBe(true)
+  })
+
+  test('the role of the api reads no event without a scope either', async () => {
+    let refused = false
+    try {
+      await readEventsAsRuntime(null, null)
+    } catch (error) {
+      refused = true
+      expect((error as { code?: string }).code).toBe('42501')
+    }
+    expect(refused).toBe(true)
+  })
+
+  test('the role of the api may not write a delivery of another tenant', async () => {
+    await runtime.query('begin')
+    try {
+      await runtime.query(
+        `select set_config('data.tenant_id', $1, true), set_config('data.workspace_id', $2, true)`,
+        [TENANT_A, WORKSPACE_A]
+      )
+      let refused = false
+      try {
+        await runtime.query(
+          `insert into platform.outbox_deliveries
+             (event_id, subscriber_id, tenant_id, workspace_id, state, attempts, next_attempt_at,
+              created_at, updated_at)
+           values ($1::uuid, 'the-other-subscriber', $2::uuid, $3::uuid, 'pending', 0, now(), now(),
+                   now())`,
+          [EVENT_B, TENANT_B, WORKSPACE_B]
+        )
+      } catch (_error) {
+        refused = true
+      }
+      expect(refused).toBe(true)
+    } finally {
+      await runtime.query('rollback')
+    }
+  })
+
+  test('the role of the api writes the deliveries of its own tenant', async () => {
+    await runtime.query('begin')
+    try {
+      await runtime.query(
+        `select set_config('data.tenant_id', $1, true), set_config('data.workspace_id', $2, true)`,
+        [TENANT_A, WORKSPACE_A]
+      )
+      const written = await runtime.query(
+        `insert into platform.outbox_deliveries
+           (event_id, subscriber_id, tenant_id, workspace_id, state, attempts, next_attempt_at,
+            created_at, updated_at)
+         values ($1::uuid, 'the-own-subscriber', $2::uuid, $3::uuid, 'pending', 0, now(), now(),
+                 now())`,
+        [EVENT_A, TENANT_A, WORKSPACE_A]
+      )
+      expect(written.rowCount).toBe(1)
+    } finally {
+      await runtime.query('rollback')
+    }
+  })
+
+  test('the role of the deliveries reads the events of every tenant', async () => {
+    const delivery = new Client({ connectionString: database.deliveryUrl })
+    await delivery.connect()
+    try {
+      const rows = await delivery.query('select id from platform.outbox_events order by id')
+      expect(rows.rows.map((row) => row.id)).toEqual([EVENT_A, EVENT_B])
+    } finally {
+      await delivery.end()
+    }
+  })
+
+  test('no policy that widens a scope is given to the role of the api', async () => {
+    // The policies of the tables of the backend are combined with a
+    // logical or, so a policy that holds every row of one table undoes
+    // the policy that holds the rows of the scope. Every policy that
+    // applies to the role of the api, or to every role, must therefore
+    // hold the scope of the transaction.
+    const policies = await owner.query<{
+      tablename: string
+      policyname: string
+      roles: string
+      qual: string | null
+    }>(
+      `select c.relname as tablename, p.polname as policyname,
+              p.polroles::text as roles, pg_get_expr(p.polqual, p.polrelid) as qual
+         from pg_policy p
+         join pg_class c on c.oid = p.polrelid
+         join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname in ('data', 'platform')
+          and (p.polroles = '{0}'::oid[] or 'data_runtime'::regrole = any(p.polroles))
+          and p.polpermissive
+          and p.polqual is not null
+          and pg_get_expr(p.polqual, p.polrelid) !~ 'current_setting'`
+    )
+    expect(policies.rows).toEqual([])
+  })
+})
+
 describe('the migrations and the drift', () => {
   test('the applied migrations are the ones of the repository', async () => {
     const pool = new ConnectionPool({
