@@ -42,6 +42,15 @@ export interface Group {
   displayName: string | null
   /** The external subjects of the principals of the group. */
   members: string[]
+  /**
+   * The ids of the principals of the group.
+   *
+   * The administration speaks in external subjects, and a call replaces
+   * the membership: the domain compares the ids of the members it is
+   * given with the ones the group holds, to know who joins it
+   * (spec §10.9).
+   */
+  memberIds: string[]
   createdAt: Date
 }
 

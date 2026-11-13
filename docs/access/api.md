@@ -758,8 +758,8 @@ curl -sS -X PUT https://access.example.com/v1/admin/grants \
 | `tenant` | Required. The tenant slug. |
 | `userId` | The principal id. Exactly one of `userId` and `group` is required. |
 | `group` | The group key. Exactly one of `userId` and `group` is required. |
-| `permission` | The permission key, created in the tenant's scope if missing. Exactly one of `permission` and `role` is required. A capability of the platform may only be granted by a credential of the platform (§3.3). |
-| `role` | The role key. The grant holds the role's permissions. An unknown role is `404 not_found`. |
+| `permission` | The permission key, created in the tenant's scope if missing. Exactly one of `permission` and `role` is required. A capability of the platform may only be granted by a credential of the platform (§3.3.1). |
+| `role` | The role key. The grant holds the role's permissions. An unknown role is `404 not_found`. A role that holds a capability of the platform, in itself or through a role it names, is granted like the capability: by a credential of the platform. |
 | `workspaceId` | Optional. `null` (default) means every workspace of the tenant. |
 | `routeId` | Optional. `null` (default) means every route. |
 | `expiresAt` | Optional. An ISO 8601 instant; `null` (default) never expires. |
@@ -856,7 +856,7 @@ curl -sS -X POST https://access.example.com/v1/admin/groups \
 | `tenant` | Required. The tenant slug. |
 | `key` | Required. `[a-z0-9][a-z0-9._-]{0,63}`. |
 | `displayName` | Optional. |
-| `members` | Optional. The members' **external subjects**. |
+| `members` | Optional. The members' **external subjects**. A group whose live grants give a capability of the platform takes a new member from a credential of the platform only; any credential of the tenant removes one (§3.3.1). |
 
 ```json
 {
@@ -923,8 +923,8 @@ curl -sS -X PUT https://access.example.com/v1/admin/roles \
 | `key` | Required. `[a-z0-9][a-z0-9._-]{0,63}`. |
 | `displayName` | Optional. |
 | `description` | Optional. |
-| `permissions` | Optional. Permission keys the role holds. Missing keys are created in the tenant's scope. A capability of the platform may only be put in a role by a credential of the platform (§3.3). |
-| `roles` | Optional. Role keys the role names. An unknown key is `404 not_found`. |
+| `permissions` | Optional. Permission keys the role holds. Missing keys are created in the tenant's scope. A capability of the platform may only be put in a role by a credential of the platform (§3.3.1). |
+| `roles` | Optional. Role keys the role names. An unknown key is `404 not_found`. A role that holds a capability of the platform is named by a credential of the platform only. |
 
 A role that names itself, directly or through others, is `409 conflict`.
 

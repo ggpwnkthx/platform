@@ -3,10 +3,11 @@ import {
   GrantRepository,
   GroupRepository,
   PermissionRepository,
+  RoleRepository,
   UserRepository,
   type Database,
 } from '../../src/platform/postgres'
-import { tenantScope } from '../../src/domains/administration'
+import { platformScope, tenantScope } from '../../src/domains/administration'
 import { seedPermission, seedTenant } from '../fixtures/tenant'
 import { openTestDatabase } from './database'
 
@@ -237,6 +238,52 @@ describe('the grants of a group', () => {
     // The roles of the outsider do not.
     const others = await grants.findLivePermissionKeys(outsider.id)
     expect(others).not.toContain('workspace.team')
+  })
+
+  test('the permissions a group gives are the ones of its live grants, the roles expanded', async () => {
+    const groups = new GroupRepository(database)
+    const roles = new RoleRepository(database)
+    const permissions = new PermissionRepository(database)
+    const scope = tenantScope(tenantId)
+    const permissionOf = async (key: string): Promise<string> =>
+      (await permissions.create({ tenantId, key }, scope)).id
+
+    const group = await groups.create({ tenantId, key: 'team-of-the-keys', members: [] })
+    const other = await groups.create({ tenantId, key: 'team-of-nothing', members: [] })
+    const ofGroup = { tenantId, userId: null, groupId: group.id }
+
+    // As it is, through a role, and through a role that the role names.
+    await grants.create({ ...ofGroup, permissionId: await permissionOf('given.as-it-is') })
+    const lead = await roles.create({ tenantId, key: 'lead-of-the-keys' })
+    const named = await roles.create({ tenantId, key: 'named-by-the-lead' })
+    await roles.grantPermission(lead.id, await permissionOf('given.by-a-role'), scope)
+    await roles.grantPermission(named.id, await permissionOf('given.by-a-named-role'), scope)
+    // A capability of the catalogue is given like any other permission.
+    const capability = await permissions.create({ key: 'given.by-the-catalogue' }, platformScope())
+    await roles.grantPermission(named.id, capability.id, platformScope())
+    await roles.nest(lead.id, named.id, scope)
+    await grants.create({ ...ofGroup, permissionId: null, roleId: lead.id })
+
+    // A grant that ended and a grant that was revoked give nothing.
+    await grants.create({
+      ...ofGroup,
+      permissionId: await permissionOf('given.until-yesterday'),
+      expiresAt: new Date(Date.now() - 86_400_000),
+    })
+    const revoked = await grants.create({
+      ...ofGroup,
+      permissionId: await permissionOf('given.and-revoked'),
+    })
+    await grants.revoke(revoked.id, scope)
+
+    expect(await grants.findLivePermissionKeysOfGroup(group.id, scope)).toEqual([
+      'given.as-it-is',
+      'given.by-a-named-role',
+      'given.by-a-role',
+      'given.by-the-catalogue',
+    ])
+    // The grants of a group are the grants of that group.
+    expect(await grants.findLivePermissionKeysOfGroup(other.id, scope)).toEqual([])
   })
 
   test('the membership is replaced and the access of the leaver ends', async () => {

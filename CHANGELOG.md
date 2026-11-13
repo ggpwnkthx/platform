@@ -10,6 +10,22 @@ in the same commit as the code.
 
 ## Unreleased
 
+### A capability of the platform is given by the platform, in every way it is given
+
+Access refused the credential of a tenant that granted a capability of the platform, and the one that wrote it in a role. It read the key a call named, and not what the call gave. The same credential granted a role that held the capability, wrote a role that named such a role, and added a member to a group that was granted one: each of the three made a principal of the tenant an administrator of every tenant, with the API and nothing else.
+
+**The rule reads what a call gives.** The credential of a tenant is refused with `403 forbidden` when it grants a role that holds a capability of the platform — among its own permissions, or through a role it names, however deep — when it writes a role that names such a role, and when it adds a member to a group whose live grants give one. The refusal names the role or the group. The policy is read when the call is made, and a refused call writes nothing.
+
+**The credential of a tenant still takes a capability away.** It revokes a grant whatever the grant gives, writes a role without the capability, takes a member out of a group and renames it. The principals that held a role or were in a group before it came to hold a capability keep what the platform gave them with it.
+
+**The write of a role takes away what it does not name.** `PUT /v1/admin/roles` replaces the permissions of a role and the roles it names: the specification says so, and so do the clients. An update never did. The role kept every permission and every role it had held, the call answered `200`, and a permission cleared in the console or in the CLI was still given by every grant of the role. The update now removes what the call does not name, with a row of the audit for each removal, and a role names the row of the catalogue for a capability of the platform, as a grant does. A caller that sent a part of a role to add to it now sends the whole role. A role that was changed before this release still holds what was cleared from it then: the list of the roles says what each one holds, and writing the role again takes the rest away.
+
+**The console follows the rule, and signs for the platform.** A group that gives a capability of the platform says so above its members. An operator of a tenant takes members away and adds none, on the page of the group and on the page of a user; an operator of the platform adds one, and the console signs that write with the credential of the platform, since Access now refuses the one of the tenant. A tenant that holds more rights than the console reads is not taken for one whose groups give nothing.
+
+**The rule guards the policy, and not the sign-in.** The operator of a tenant chooses the provider its people sign in at, and the first identity of a tenant is given its role `admin`: a capability of the platform belongs in a tenant whose administration the platform trusts with it.
+
+**Contract:** [access spec §3.3.1](docs/access/spec.md#331-who-gives-a-capability-of-the-platform), [access spec §10.6](docs/access/spec.md#106-put-v1admingrants), [access spec §10.9](docs/access/spec.md#109-post-v1admingroups), [access spec §10.11](docs/access/spec.md#1011-put-v1adminroles), [access decisions](docs/access/decisions.md), [console spec §4.3](docs/console/spec.md#43-what-is-the-platforms).
+
 ### A workspace created in the console is given to its creator
 
 The page that creates a workspace read the answer of Data out of its envelope twice. Data created the workspace, the console answered `500`, and the grant of the role `admin` on the workspace was never written: its creator held no right on the workspace it had just made.

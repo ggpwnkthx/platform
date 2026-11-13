@@ -7,7 +7,7 @@ import {
   UserRepository,
   type Database,
 } from '../../src/platform/postgres'
-import { tenantScope } from '../../src/domains/administration'
+import { platformScope, tenantScope } from '../../src/domains/administration'
 import { seedTenant } from '../fixtures/tenant'
 import { openTestDatabase } from './database'
 
@@ -79,6 +79,41 @@ describe('the roles of Access', () => {
     await roles.nest(chief.id, editor.id, tenantScope(tenantId))
     expect(await roles.expandedPermissionsOf(chief.id, tenantScope(tenantId))).toEqual([
       'workspace.read',
+    ])
+  })
+
+  test('a role that is changed is answered with the memberships it holds', async () => {
+    const roles = new RoleRepository(database)
+    const named = await roles.create({ tenantId, key: 'role-named-by-the-changed' })
+    const role = await roles.create({ tenantId, key: 'role-changed' })
+    await roles.grantPermission(role.id, permissionId, tenantScope(tenantId))
+    await roles.nest(role.id, named.id, tenantScope(tenantId))
+    // The administration replaces the memberships of a role from what
+    // the role held: a change that answered an empty role would take
+    // nothing away, and say so with a `200`.
+    const changed = await roles.update(
+      role.id,
+      { displayName: 'The role that was changed' },
+      tenantScope(tenantId)
+    )
+    expect(changed?.displayName).toBe('The role that was changed')
+    expect(changed?.permissionKeys).toEqual(['workspace.read'])
+    expect(changed?.roleKeys).toEqual(['role-named-by-the-changed'])
+  })
+
+  test('a capability of the catalogue is read in the scope of the tenant that holds it', async () => {
+    const roles = new RoleRepository(database)
+    const permissions = new PermissionRepository(database)
+    // The row of a capability of the platform is the catalogue's: the
+    // administration expands a role in the scope of its tenant, and it
+    // has to find the capability there to refuse the grant of the role.
+    const capability = await permissions.create({ key: 'catalogue.capability' }, platformScope())
+    const holder = await roles.create({ tenantId, key: 'role-of-the-catalogue' })
+    await roles.grantPermission(holder.id, capability.id, platformScope())
+    const naming = await roles.create({ tenantId, key: 'role-naming-the-catalogue' })
+    await roles.nest(naming.id, holder.id, tenantScope(tenantId))
+    expect(await roles.expandedPermissionsOf(naming.id, tenantScope(tenantId))).toEqual([
+      'catalogue.capability',
     ])
   })
 

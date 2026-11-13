@@ -222,6 +222,7 @@ function toGroup(row: GroupRow, members: string[]): Group {
     key: row.key,
     displayName: row.displayName,
     members,
+    memberIds: row.members,
     createdAt: row.createdAt,
   }
 }
@@ -813,6 +814,11 @@ export function createAdministrationService(
         async () => await dependencies.grants.findLiveByRole(tenantId, role, workspaceId)
       )
       return rows.map(toGrant)
+    },
+    findLivePermissionKeysOfGroup: async (groupId, scope) => {
+      return await run(
+        async () => await dependencies.grants.findLivePermissionKeysOfGroup(groupId, scope)
+      )
     },
     create: async (registration, audit) => {
       const row = await run(async () => await dependencies.grants.create(registration, audit))

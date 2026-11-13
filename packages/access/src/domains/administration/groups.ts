@@ -11,6 +11,7 @@ import { AdministrationError } from './errors'
 import type { AdministrationOptions } from './options'
 import type { AuditContext, Group, GroupFilter, GroupPage, GroupRegistration } from './ports'
 import { change, type AuditEntry } from './audit'
+import { platformPermissionAmong, refuseTenantGift } from './platform-permissions'
 import { tenantScope } from './ports'
 import { refuseOutsideScope, tenantOf } from './scope'
 import { DEFAULT_PAGE_SIZE, DEFAULT_PROVIDER_SLUG, MAX_PAGE_SIZE, wholeNumber } from './values'
@@ -136,6 +137,28 @@ export async function upsertGroup(
   }
 
   const existing = await groups.findByKey(tenant.id, registration.key)
+
+  // A member of a group holds what the group is granted. A group whose
+  // live grants give a capability of the platform — as a permission, or
+  // through a role — hands it to every principal that joins it: the
+  // credential of a tenant takes a member away, and only the credential
+  // of the platform adds one (spec §3.3.1). The grants are read when a
+  // member joins, and not otherwise.
+  if (existing && scope.tenant !== null) {
+    const joining = members.some((id) => !existing.memberIds.includes(id))
+    if (joining) {
+      const given = await options.grants.findLivePermissionKeysOfGroup(
+        existing.id,
+        tenantScope(tenant.id)
+      )
+      refuseTenantGift(
+        scope,
+        platformPermissionAmong(options, given),
+        `the group "${existing.key}"`
+      )
+    }
+  }
+
   if (!existing) {
     const group = await groups.create(
       {

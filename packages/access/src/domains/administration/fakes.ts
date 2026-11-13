@@ -668,6 +668,24 @@ class FakeGrants implements GrantStore {
     )
   }
 
+  async findLivePermissionKeysOfGroup(groupId: string, _scope?: Scope): Promise<string[]> {
+    const now = new Date('2026-01-08T12:00:00.000Z')
+    const group = this.groups.rows.find((row) => row.id === groupId)
+    if (!group) return []
+    const keys = new Set<string>()
+    for (const grant of this.rows) {
+      if (grant.tenant !== group.tenant || grant.group !== group.key) continue
+      if (grant.revokedAt !== null) continue
+      if (grant.expiresAt !== null && grant.expiresAt <= now) continue
+      if (grant.permission) keys.add(grant.permission)
+      const role = this.roles.rows.find(
+        (row) => row.tenant === group.tenant && row.key === grant.role
+      )
+      if (role) for (const key of await this.roles.expand(role.id)) keys.add(key)
+    }
+    return [...keys].sort()
+  }
+
   async create(
     registration: {
       tenantId: string
@@ -774,6 +792,7 @@ class FakeGroups implements GroupStore {
       key: registration.key,
       displayName: registration.displayName ?? null,
       members: registration.memberIds,
+      memberIds: registration.memberIds,
       createdAt: new Date('2026-01-08T10:20:00.000Z'),
     }
     this.rows.push(group)
@@ -789,7 +808,10 @@ class FakeGroups implements GroupStore {
     const group = this.rows.find((row) => row.id === id)
     if (!group) return null
     if (changes.displayName !== undefined) group.displayName = changes.displayName
-    if (changes.memberIds !== undefined) group.members = changes.memberIds
+    if (changes.memberIds !== undefined) {
+      group.members = changes.memberIds
+      group.memberIds = changes.memberIds
+    }
     return group
   }
 

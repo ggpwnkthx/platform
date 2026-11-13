@@ -287,6 +287,53 @@ export class GrantRepository {
   }
 
   /**
+   * The keys of the permissions the live grants of a group give.
+   *
+   * The permissions the group is granted as they are, and the ones of
+   * the roles it is granted, the nested ones included: what every
+   * member of the group holds. The expansion is a recursive statement,
+   * and it is a `union`, so a cycle of the roles answers instead of
+   * expanding forever.
+   *
+   * A permission that is disabled is among them: the answer says what
+   * the grants name, and a capability that is switched off today is
+   * given again the day it is switched on (spec §10.9).
+   */
+  async findLivePermissionKeysOfGroup(groupId: string, scope: Scope): Promise<string[]> {
+    const rows = await withScope(
+      this.db,
+      scope,
+      async (client) =>
+        await client.query<{ key: string }>(
+          `with recursive live as (
+         select grants.permission_id, grants.role_id
+           from grants
+          where grants.group_id = $1
+            and grants.revoked_at is null
+            and (grants.expires_at is null or grants.expires_at > now())
+       ), descendants(role_id) as (
+         select live.role_id from live where live.role_id is not null
+         union
+         select rr.child_role_id
+           from descendants d
+           join role_roles rr on rr.role_id = d.role_id
+       )
+       select p.key
+         from live
+         join permissions p on p.id = live.permission_id
+       union
+       select p.key
+         from descendants d
+         join role_permissions rp on rp.role_id = d.role_id
+         join permissions p on p.id = rp.permission_id
+        order by 1`,
+          [groupId]
+        )
+    )
+    return rows.map((row) => row.key)
+  }
+
+  /**
    * The live grants of a principal: the roles of the token (spec §7.3).
    *
    * The grants of the **groups** of the principal are part of them: a

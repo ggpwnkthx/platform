@@ -20,7 +20,11 @@ import type {
 import { change, type AuditEntry } from './audit'
 import { platformScope, tenantScope } from './ports'
 import { refuseOutsideScope, statementScope, tenantOf } from './scope'
-import { isPlatformPermission } from './platform-permissions'
+import {
+  isPlatformPermission,
+  platformPermissionAmong,
+  refuseTenantGift,
+} from './platform-permissions'
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, liveOf, wholeNumber } from './values'
 
 /**
@@ -138,13 +142,8 @@ export async function upsertGrant(
   // only a credential of the platform may give it to a principal. The
   // credential of a tenant may not hand it to a colleague, whoever the
   // colleague is.
-  if (permissionKey !== null && isPlatformPermission(options, permissionKey)) {
-    if (scope.tenant !== null) {
-      throw new AdministrationError(
-        'forbidden',
-        'the credential of a tenant may not give a capability of the platform'
-      )
-    }
+  if (permissionKey !== null) {
+    refuseTenantGift(scope, platformPermissionAmong(options, [permissionKey]))
   }
 
   let subjectId: string
@@ -177,6 +176,16 @@ export async function upsertGrant(
     ? await resolvePermission(options, tenant.id, permissionKey)
     : null
   const role = roleKey ? await resolveRole(options, tenant.id, roleKey) : null
+
+  // The grant of a role is the grant of what the role holds. A role
+  // that holds a capability of the platform — among its permissions, or
+  // through a role it names — hands it to the subject of the grant: the
+  // credential of a tenant may not grant it either (spec §3.3.1). The
+  // role is expanded now, as the decision will expand it.
+  if (role && scope.tenant !== null) {
+    const held = await options.roles!.expand(role.id, tenantScope(tenant.id))
+    refuseTenantGift(scope, platformPermissionAmong(options, held), `the role "${role.key}"`)
+  }
 
   const workspaceId = registration.workspaceId ?? null
   const routeId = registration.routeId ?? null

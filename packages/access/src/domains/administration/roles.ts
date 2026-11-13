@@ -27,8 +27,9 @@ import type {
   RoleRegistration,
 } from './ports'
 import { change, type AuditEntry } from './audit'
+import { resolvePermission } from './grants'
 import { platformScope, tenantScope } from './ports'
-import { isPlatformPermission } from './platform-permissions'
+import { platformPermissionAmong, refuseTenantGift } from './platform-permissions'
 import { refuseOutsideScope, statementScope, tenantOf } from './scope'
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, wholeNumber } from './values'
 
@@ -115,18 +116,7 @@ export async function upsertRole(
   const permissionKeys = registration.permissionKeys ?? []
   // A capability that is not relative to a tenant is the platform's:
   // only a credential of the platform may put it in a role.
-  for (const key of permissionKeys) {
-    if (isPlatformPermission(options, key) && scope.tenant !== null) {
-      throw new AdministrationError(
-        'forbidden',
-        'the credential of a tenant may not give a capability of the platform'
-      )
-    }
-  }
-  const permissions: Permission[] = []
-  for (const key of permissionKeys) {
-    permissions.push(await resolvePermission(options, tenant.id, key))
-  }
+  refuseTenantGift(scope, platformPermissionAmong(options, permissionKeys))
 
   // The roles the role names: every key names a role of the same
   // tenant, and a role that does not exist is a `404`.
@@ -138,6 +128,23 @@ export async function upsertRole(
       throw new AdministrationError('not_found', `the role "${key}" does not exist`)
     }
     nested.push(child)
+  }
+
+  // A role holds what the roles it names hold, however deep. A role
+  // that names one that holds a capability of the platform hands it to
+  // everybody who holds the first: the credential of a tenant may not
+  // write that either (spec §3.3.1). The roles are read before any
+  // permission is created: a call that is refused writes nothing.
+  if (scope.tenant !== null) {
+    for (const child of nested) {
+      const held = await roles.expand(child.id, tenantScope(tenant.id))
+      refuseTenantGift(scope, platformPermissionAmong(options, held), `the role "${child.key}"`)
+    }
+  }
+
+  const permissions: Permission[] = []
+  for (const key of permissionKeys) {
+    permissions.push(await resolvePermission(options, tenant.id, key))
   }
 
   const existing = await roles.findByKey(tenant.id, registration.key)
@@ -188,8 +195,18 @@ export async function upsertRole(
     role = updated
   }
 
-  await replacePermissions(options, role, permissions, tenant, context)
-  await replaceNestedRoles(options, role, nested, tenant, context)
+  // What the call takes away is read from the role as it was before the
+  // call: a role that was just created held nothing, and the row a
+  // change answers with is not where the memberships are read.
+  await replacePermissions(
+    options,
+    role,
+    existing?.permissionKeys ?? [],
+    permissions,
+    tenant,
+    context
+  )
+  await replaceNestedRoles(options, role, existing?.roleKeys ?? [], nested, tenant, context)
 
   // The role is read again: the answer names the role as it is, with the
   // memberships it holds and not the ones it held.
@@ -246,27 +263,29 @@ export async function removeRole(
  * The permissions that are not in the list are taken away, and the ones
  * that are in the list are given. A permission that the role already
  * holds is left alone: the grant of it is not written again.
+ *
+ * @param held the keys of the permissions the role held before the call.
  */
 async function replacePermissions(
   options: AdministrationOptions,
   role: Role,
+  held: readonly string[],
   permissions: Permission[],
   tenant: { id: string; slug: string },
   context: AuditContext
 ): Promise<void> {
   const roles = options.roles!
-  const held = role.permissionKeys
   const wanted = new Set(permissions.map((permission) => permission.key))
   for (const key of held) {
     if (wanted.has(key)) continue
-    const permission = await permissionOf(options, tenant.id, key)
-    if (!permission) continue
-    await roles.revokePermission(
-      role.id,
-      permission.id,
-      tenantScope(tenant.id),
-      change('role.permission.revoked', tenant.slug, context)
-    )
+    for (const permission of await permissionsOf(options, tenant.id, key)) {
+      await roles.revokePermission(
+        role.id,
+        permission.id,
+        tenantScope(tenant.id),
+        change('role.permission.revoked', tenant.slug, context)
+      )
+    }
   }
   for (const permission of permissions) {
     if (held.includes(permission.key)) continue
@@ -284,16 +303,18 @@ async function replacePermissions(
  *
  * A role that is not in the list is not named any more, and a role that
  * is in the list and was not named is named now.
+ *
+ * @param held the keys of the roles the role named before the call.
  */
 async function replaceNestedRoles(
   options: AdministrationOptions,
   role: Role,
+  held: readonly string[],
   nested: Role[],
   tenant: { id: string; slug: string },
   context: AuditContext
 ): Promise<void> {
   const roles = options.roles!
-  const held = role.roleKeys
   const wanted = new Set(nested.map((entry) => entry.key))
   for (const key of held) {
     if (wanted.has(key)) continue
@@ -318,41 +339,25 @@ async function replaceNestedRoles(
 }
 
 /**
- * The permission of a key, in the scope of a tenant.
+ * The permissions a key names for a tenant: the one of the catalogue,
+ * and the tenant's own.
  *
- * The key of a permission the role held and does not hold any more is
- * resolved in the tenant and in the catalogue: the permission is never
- * created here, and a permission that does not exist any more is not
+ * A key names one permission almost always. It names two when a tenant
+ * holds a row of its own for a key the catalogue holds as well: a role
+ * that was written with a key of the platform before the catalogue held
+ * its row has such a row. A role holds the key through either, so the
+ * key is taken away from the role in both: a role that is written
+ * without a key does not hold the key any more, whichever row gave it.
+ *
+ * A permission is never created here, and a key that names none is not
  * taken away.
  */
-async function permissionOf(
+async function permissionsOf(
   options: AdministrationOptions,
   tenantId: string,
   key: string
-): Promise<Permission | null> {
+): Promise<Permission[]> {
   const catalogue = await options.permissions.findCataloguePermission(key, tenantScope(tenantId))
-  if (catalogue) return catalogue
-  return await options.permissions.findByTenantAndKey(tenantId, key)
-}
-
-/**
- * The permission of a role.
- *
- * A key is a name **inside** a tenant: the catalogue of the platform is
- * shared and is reused, the permission of the tenant is reused, and the
- * permission that does not exist is created in the scope of the tenant.
- */
-async function resolvePermission(
-  options: AdministrationOptions,
-  tenantId: string,
-  key: string
-): Promise<Permission> {
-  const scope = tenantScope(tenantId)
-  const catalogue = await options.permissions.findCataloguePermission(key, scope)
-  if (catalogue) return catalogue
-
   const own = await options.permissions.findByTenantAndKey(tenantId, key)
-  if (own) return own
-
-  return await options.permissions.createOrFind({ tenantId, key }, scope)
+  return [catalogue, own].filter((permission): permission is Permission => permission !== null)
 }

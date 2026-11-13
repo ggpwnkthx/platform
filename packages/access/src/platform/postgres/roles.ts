@@ -269,8 +269,19 @@ export class RoleRepository {
          update roles set ${assignments.join(', ')} where id = $${idParam}
          returning id, tenant_id, key, display_name, description, created_at, updated_at
        )${audited}
-       select updated.*, tenants.slug as tenant_slug, '{}'::text[] as permission_keys,
-         '{}'::text[] as role_keys
+       select updated.*, tenants.slug as tenant_slug,
+         coalesce(
+           (select array_agg(p.key order by p.key)
+              from role_permissions rp join permissions p on p.id = rp.permission_id
+             where rp.role_id = updated.id),
+           '{}'
+         ) as permission_keys,
+         coalesce(
+           (select array_agg(nested.key order by nested.key)
+              from role_roles rr join roles nested on nested.id = rr.child_role_id
+             where rr.role_id = updated.id),
+           '{}'
+         ) as role_keys
        from updated join tenants on tenants.id = updated.tenant_id`,
           params
         )

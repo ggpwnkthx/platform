@@ -230,6 +230,226 @@ describe('the capabilities of the platform', () => {
     ).rejects.toThrow(/may not give a capability of the platform/)
   })
 
+  test('the credential of a tenant may not grant a role that holds a capability of the platform', async () => {
+    const administration = serviceOf(fakes)
+    const ofAcme = { tenant: 'acme', operator: 'alice' }
+    // The platform put the capability in a role of the tenant: the role
+    // is the platform's to hand out from then on.
+    await administration.upsertRole(
+      PLATFORM_SCOPE,
+      { tenant: 'acme', key: 'root', permissionKeys: ['console.platform'] },
+      CONTEXT
+    )
+    // The role names the row of the catalogue, like a grant of the
+    // capability: the tenant holds no row of its own for the key.
+    expect(
+      fakes.permissions.rows
+        .filter((row) => row.key === 'console.platform')
+        .map((row) => row.tenantId)
+    ).toEqual([null])
+    const principal = await administration.upsertPrincipal(
+      PLATFORM_SCOPE,
+      { tenant: 'acme', externalSubject: 'the-subject-of-a-colleague' },
+      CONTEXT
+    )
+    const grant = {
+      tenant: 'acme',
+      userId: principal.principal.id,
+      role: 'root',
+      workspaceId: 'acme',
+    }
+    await expect(administration.upsertGrant(ofAcme, grant, CONTEXT)).rejects.toThrow(
+      /may not give a capability of the platform: the role "root" holds "console.platform"/
+    )
+    // Nothing was written: the colleague holds no grant of the role.
+    expect(fakes.grants.rows.some((row) => row.role === 'root')).toBe(false)
+
+    // The credential of the platform grants the role it filled.
+    const given = await administration.upsertGrant(PLATFORM_SCOPE, grant, CONTEXT)
+    expect(given.grant.role).toBe('root')
+  })
+
+  test('a role that holds the capability through a role it names is not granted either', async () => {
+    const administration = serviceOf(fakes)
+    const ofAcme = { tenant: 'acme', operator: 'alice' }
+    await administration.upsertRole(
+      PLATFORM_SCOPE,
+      { tenant: 'acme', key: 'chief', roleKeys: ['root'] },
+      CONTEXT
+    )
+    await administration.upsertRole(
+      PLATFORM_SCOPE,
+      { tenant: 'acme', key: 'board', permissionKeys: ['workspace.read'], roleKeys: ['chief'] },
+      CONTEXT
+    )
+    const principal = await administration.upsertPrincipal(
+      PLATFORM_SCOPE,
+      { tenant: 'acme', externalSubject: 'the-subject-of-the-board' },
+      CONTEXT
+    )
+    // The capability is two roles deep: the grant gives it all the same.
+    await expect(
+      administration.upsertGrant(
+        ofAcme,
+        { tenant: 'acme', userId: principal.principal.id, role: 'board' },
+        CONTEXT
+      )
+    ).rejects.toThrow(/the role "board" holds "console.platform"/)
+    // A grant to a group is refused like a grant to a principal.
+    await administration.upsertGroup(
+      PLATFORM_SCOPE,
+      { tenant: 'acme', key: 'directors', members: [] },
+      CONTEXT
+    )
+    await expect(
+      administration.upsertGrant(
+        ofAcme,
+        { tenant: 'acme', group: 'directors', role: 'chief' },
+        CONTEXT
+      )
+    ).rejects.toThrow(/may not give a capability of the platform/)
+  })
+
+  test('a role of a tenant may not name a role that holds a capability of the platform', async () => {
+    const administration = serviceOf(fakes)
+    const ofAcme = { tenant: 'acme', operator: 'alice' }
+    // Everybody who holds the role would hold the capability, without a
+    // grant: the write of the role is the gift.
+    await expect(
+      administration.upsertRole(
+        ofAcme,
+        {
+          tenant: 'acme',
+          key: 'editors',
+          permissionKeys: ['never.created'],
+          roleKeys: ['chief'],
+        },
+        CONTEXT
+      )
+    ).rejects.toThrow(/may not give a capability of the platform: the role "chief" holds/)
+    // Nothing was written: not the role, and not the permission it named.
+    expect(fakes.roles.rows.some((row) => row.key === 'editors')).toBe(false)
+    expect(fakes.permissions.rows.some((row) => row.key === 'never.created')).toBe(false)
+
+    // The credential of the platform writes it.
+    const written = await administration.upsertRole(
+      PLATFORM_SCOPE,
+      { tenant: 'acme', key: 'editors', roleKeys: ['chief'] },
+      CONTEXT
+    )
+    expect(written.role.roleKeys).toEqual(['chief'])
+  })
+
+  test('the credential of a tenant takes a capability of the platform away', async () => {
+    const administration = serviceOf(fakes)
+    const ofAcme = { tenant: 'acme', operator: 'alice' }
+    // The role that named the holder names it no more…
+    const lighter = await administration.upsertRole(
+      ofAcme,
+      { tenant: 'acme', key: 'editors', permissionKeys: ['workspace.read'], roleKeys: [] },
+      CONTEXT
+    )
+    expect(lighter.role.roleKeys).toEqual([])
+    // …and the role is the tenant's again: it grants it.
+    const principal = await administration.upsertPrincipal(
+      PLATFORM_SCOPE,
+      { tenant: 'acme', externalSubject: 'the-subject-of-an-editor' },
+      CONTEXT
+    )
+    const grant = await administration.upsertGrant(
+      ofAcme,
+      { tenant: 'acme', userId: principal.principal.id, role: 'editors' },
+      CONTEXT
+    )
+    expect(grant.grant.role).toBe('editors')
+    // A grant of the capability is revoked by the tenant it belongs to.
+    const held = fakes.grants.rows.find((row) => row.role === 'root')
+    await administration.revokeGrant(ofAcme, held!.id, CONTEXT)
+    expect(held?.revokedAt).not.toBeNull()
+  })
+
+  test('a group that holds a capability of the platform is filled by the platform', async () => {
+    const administration = serviceOf(fakes)
+    const ofAcme = { tenant: 'acme', operator: 'alice' }
+    for (const subject of ['the-first-of-the-team', 'the-second-of-the-team']) {
+      await administration.upsertPrincipal(
+        PLATFORM_SCOPE,
+        { tenant: 'acme', externalSubject: subject },
+        CONTEXT
+      )
+    }
+    const team = (members: string[]) => ({ tenant: 'acme', key: 'platform-team', members })
+    // The group is the tenant's while it holds nothing of the platform.
+    await administration.upsertGroup(ofAcme, team(['the-first-of-the-team']), CONTEXT)
+    await administration.upsertGrant(
+      PLATFORM_SCOPE,
+      {
+        tenant: 'acme',
+        group: 'platform-team',
+        permission: 'console.platform',
+        workspaceId: 'acme',
+      },
+      CONTEXT
+    )
+
+    // A member of the group holds the capability: the credential of a
+    // tenant adds none, whoever else it keeps or removes.
+    await expect(
+      administration.upsertGroup(
+        ofAcme,
+        team(['the-first-of-the-team', 'the-second-of-the-team']),
+        CONTEXT
+      )
+    ).rejects.toThrow(
+      /may not give a capability of the platform: the group "platform-team" holds "console.platform"/
+    )
+    await expect(
+      administration.upsertGroup(ofAcme, team(['the-second-of-the-team']), CONTEXT)
+    ).rejects.toThrow(/may not give a capability of the platform/)
+    expect(fakes.groups.rows.find((row) => row.key === 'platform-team')?.memberIds).toHaveLength(1)
+
+    // It keeps the members the group has, and it takes one away.
+    const kept = await administration.upsertGroup(
+      ofAcme,
+      { ...team(['the-first-of-the-team']), displayName: 'The team of the platform' },
+      CONTEXT
+    )
+    expect(kept.group.displayName).toBe('The team of the platform')
+    // The credential of the platform adds the member.
+    const filled = await administration.upsertGroup(
+      PLATFORM_SCOPE,
+      team(['the-first-of-the-team', 'the-second-of-the-team']),
+      CONTEXT
+    )
+    expect(filled.group.memberIds).toHaveLength(2)
+    const emptied = await administration.upsertGroup(ofAcme, team([]), CONTEXT)
+    expect(emptied.group.memberIds).toEqual([])
+  })
+
+  test('a group holds the capability through a role, and until its grant ends', async () => {
+    const administration = serviceOf(fakes)
+    const ofAcme = { tenant: 'acme', operator: 'alice' }
+    await administration.upsertGroup(
+      PLATFORM_SCOPE,
+      { tenant: 'acme', key: 'on-call', members: [] },
+      CONTEXT
+    )
+    const grant = await administration.upsertGrant(
+      PLATFORM_SCOPE,
+      { tenant: 'acme', group: 'on-call', role: 'board' },
+      CONTEXT
+    )
+    const joined = { tenant: 'acme', key: 'on-call', members: ['the-first-of-the-team'] }
+    await expect(administration.upsertGroup(ofAcme, joined, CONTEXT)).rejects.toThrow(
+      /the group "on-call" holds "console.platform"/
+    )
+    // The grant is revoked: the group gives nothing of the platform, and
+    // it is the tenant's to fill again.
+    await administration.revokeGrant(PLATFORM_SCOPE, grant.grant.id, CONTEXT)
+    const filled = await administration.upsertGroup(ofAcme, joined, CONTEXT)
+    expect(filled.group.memberIds).toHaveLength(1)
+  })
+
   test('the deployment names the capabilities that are not relative to a tenant', async () => {
     const administration = serviceOf(fakes, { platformPermissions: ['data.platform'] })
     const principal = await administration.upsertPrincipal(

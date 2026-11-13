@@ -120,6 +120,17 @@ export interface GrantStore {
    */
   findLiveByRole(tenantId: string, role: string, workspaceId: string | null): Promise<Grant[]>
   /**
+   * The keys of the permissions the live grants of a group give: the
+   * ones it is granted as they are, and the ones of the roles it is
+   * granted, the nested ones included.
+   *
+   * Every member of the group holds them. The domain reads them before
+   * a credential of a tenant gives the group a new member: a group that
+   * holds a capability of the platform is filled by the platform
+   * (spec §10.9).
+   */
+  findLivePermissionKeysOfGroup(groupId: string, scope: Scope): Promise<string[]>
+  /**
    * Creates a grant.
    *
    * The row of the audit of the change is written by the same statement

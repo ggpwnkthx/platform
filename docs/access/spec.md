@@ -165,7 +165,24 @@ A catalogue permission (`tenant_id is null`) may be granted in every tenant; a t
 
 **A key is a name inside a tenant.** Two tenants may each hold a permission with the same key, as separate rows. A grant never names another tenant's permission: the tenant's own row is created on demand (§10.6).
 
-**The catalogue holds the capabilities that are not relative to a tenant.** `console.platform` opens the administration of every tenant, and it means the same thing in every one of them: the row of that key is the catalogue's, and every tenant grants that one row. The deployment names the keys it holds to be platform-wide (`ACCESS_PLATFORM_PERMISSIONS`), and Access creates their rows in the catalogue on demand. A capability of the platform is given by the platform: only a credential of the platform may grant it (§10.6).
+**The catalogue holds the capabilities that are not relative to a tenant.** `console.platform` opens the administration of every tenant, and it means the same thing in every one of them: the row of that key is the catalogue's, and every tenant grants that one row. The deployment names the keys it holds to be platform-wide (`ACCESS_PLATFORM_PERMISSIONS`), and Access creates their rows in the catalogue on demand. A capability of the platform is given by the platform, and by nobody else (§3.3.1).
+
+#### 3.3.1 Who gives a capability of the platform
+
+Only a credential of the platform makes a principal hold a capability of the platform. A credential of a tenant is refused with `403 forbidden` in every way a principal comes to hold one:
+
+| A credential of a tenant | Refused in |
+| --- | --- |
+| Grants the capability, to a principal or to a group. | §10.6 |
+| Grants a role that holds the capability, in itself or through a role it names. | §10.6 |
+| Writes a role with the capability, or with a role that holds it. | §10.11 |
+| Adds a member to a group whose live grants give the capability, as a permission or through a role. | §10.9 |
+
+A credential of a tenant **takes a capability away**, and that is all it does with one. It revokes a grant of its tenant whatever the grant gives (§10.7). It writes a role without the capability, or without the role that held it. It removes a member from a group.
+
+The rule reads the policy as it is when the call is made. A role or a group that comes to hold a capability is the platform's to hand out from then on, and the principals that held the role or were in the group before keep what the platform gave them with it.
+
+**The rule guards the policy, and not the sign-in.** The operator of a tenant names the provider its people sign in at (§10.2), and whoever administers a provider signs in as any of its people. The first identity of a tenant is given the role `admin` of the tenant (§6.4), and with it a capability the platform wrote in that role. A capability of the platform belongs in a tenant whose administration the platform trusts with it.
 
 ### 3.4 `grants`
 
@@ -1175,10 +1192,13 @@ Exactly one of `userId` and `group` is required. The permission row is **created
 | Group of another tenant | `403 forbidden` |
 | Neither a principal nor a group, or both | `400 invalid_request` |
 | A capability of the platform, by a credential of a tenant | `403 forbidden` |
+| A role that holds a capability of the platform, by a credential of a tenant | `403 forbidden` |
 
 A permission in the platform catalogue is reused. A permission in another tenant is **not**: the tenant creates its own row and the grant names it, since a key is a name inside a tenant (§3.3).
 
 **Only the platform gives a capability of the platform.** A capability that is not relative to a tenant is granted by a credential of the platform; the credential of a tenant is refused with `403 forbidden`, whoever the principal of the grant is. A deployment that names a key of its own in `ACCESS_PLATFORM_PERMISSIONS` makes it a capability of the platform, and the rule follows the key.
+
+The grant of a role is the grant of what the role holds. A role that holds a capability of the platform — among its own permissions, or through a role it names, however deep — is granted by a credential of the platform only, and the refusal of a credential of a tenant names the role. The role is expanded when the call is made (§3.3.1).
 
 **Batch.** The body may carry a list of grants instead of one ([shape](api.md#batch-of-grants)). The principal batch rules of §10.4 apply: at most **1 000** grants, each item written on its own, every item's outcome reported, and the call idempotent.
 
@@ -1202,6 +1222,8 @@ Members are given as the principals' external identities (§6.2): the operator k
 
 A member is written `<subject>` when it names a principal of the **default** provider of the tenant, and `<provider>/<subject>` when it names a principal of another provider: the subject alone does not name a principal of a tenant that has several providers (§6.2). The answer publishes the members the same way.
 
+**A group that holds a capability of the platform is filled by the platform.** A member of a group holds what the group is granted, so adding a member to a group whose live grants give a capability of the platform — the permission, or a role that holds it — gives the capability to that member. A credential of a tenant that adds one is refused with `403 forbidden`, and nothing of the call is written. The same credential still removes members from the group and renames it (§3.3.1).
+
 An **upsert** keyed by the group key. `201` when created, `200` when changed.
 
 ### 10.10 `GET /v1/admin/groups`
@@ -1218,7 +1240,7 @@ Creates a role, or changes the one with that key. The call **replaces** the role
 
 Permissions are named by key; an unknown key is created in the tenant's scope, as for a grant (§10.6). Roles are named by key; an unknown role key → `404 not_found`, since a role cannot name a role that does not exist.
 
-A role of a tenant may not hold a capability of the platform: the credential of a tenant is refused with `403 forbidden`, and only a credential of the platform may put one in a role (§3.3).
+A role of a tenant may not hold a capability of the platform: the credential of a tenant is refused with `403 forbidden`, and only a credential of the platform may put one in a role (§3.3). A role holds what the roles it names hold: a credential of a tenant that names, in `roles`, a role that holds a capability of the platform is refused the same way, and the refusal names that role. A call refused for either reason writes nothing: no permission it names is created.
 
 A role that names itself, directly or through other roles → `409 conflict`: the nesting would never end and the decision would never answer. The schema refuses the cycle too (§3.6.3).
 

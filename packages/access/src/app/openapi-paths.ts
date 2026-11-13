@@ -460,7 +460,9 @@ export function apiPaths(): Record<string, unknown> {
           'It creates a group, or it changes the group of that key: the call is an upsert.',
         responses: {
           201: jsonResponse('The group is registered.'),
-          403: errorResponse('The caller does not hold the administration of the tenant.'),
+          403: errorResponse(
+            'The caller does not hold the administration of the tenant, or the call gives a capability of the platform and the credential is the one of a tenant.'
+          ),
         },
       },
       get: {
@@ -479,7 +481,9 @@ export function apiPaths(): Record<string, unknown> {
           'It creates a role, or it changes the role of that key: the call is an upsert.',
         responses: {
           201: jsonResponse('The role is registered.'),
-          403: errorResponse('The caller does not hold the administration of the tenant.'),
+          403: errorResponse(
+            'The caller does not hold the administration of the tenant, or the call gives a capability of the platform and the credential is the one of a tenant.'
+          ),
         },
       },
       get: {
@@ -518,7 +522,9 @@ export function apiPaths(): Record<string, unknown> {
           'It creates a grant, or it updates the grant of that `(tenant, user, permission, workspace)` tuple: the call is an upsert.',
         responses: {
           201: jsonResponse('The grant is registered.'),
-          403: errorResponse('The caller does not hold the administration of the tenant.'),
+          403: errorResponse(
+            'The caller does not hold the administration of the tenant, or the call gives a capability of the platform and the credential is the one of a tenant.'
+          ),
         },
       },
       get: {
