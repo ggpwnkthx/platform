@@ -5,26 +5,21 @@
 
 import { createRoute } from 'honox/factory'
 import { CONSOLE_ACTIONS, CONSOLE_SUBJECT, consoleAbility, reasonOf } from '../../domains/ability'
-import { CONSOLE_KEYS } from '../../domains/operators'
+import { KNOWN_PERMISSIONS } from '../../domains/operators'
 import { Badge, KeyValues, Moment, PageHead } from '../components/page'
 import CopyText from '../islands/copy-text'
 import { requireSession } from '../middleware/guards'
 import { operatorScope } from '../middleware/scope'
 import { sessionOf } from '../middleware/session'
 
-/** What each key of the console opens. */
-const OPENS: Record<string, string> = {
-  [CONSOLE_KEYS.status]: 'Opens the detail of the status: versions, readiness, latencies.',
-  [CONSOLE_KEYS.admin]: 'Opens the administration of your tenant: users, groups, roles, rights.',
-  [CONSOLE_KEYS.platform]: 'Opens the administration of every tenant of the platform.',
-}
-
 export default createRoute(requireSession, async (c) => {
   const session = sessionOf(c)
   const services = c.get('services')
   const scope = await operatorScope(c)
   const ability = consoleAbility(scope)
-  const keys = Object.values(CONSOLE_KEYS)
+  // The keys the console reads about the tenant itself: its own, and the
+  // one of Data that creates a workspace.
+  const keys = KNOWN_PERMISSIONS.filter((permission) => permission.reach === 'tenant')
   return c.render(
     <>
       <PageHead
@@ -56,17 +51,17 @@ export default createRoute(requireSession, async (c) => {
             <code>{session.principal.tenant}</code>.
           </p>
           <div class="stack" style="gap: 0.4rem">
-            {keys.map((key) => (
+            {keys.map((permission) => (
               <div class="key-row">
                 <div class="row spread">
-                  <code>{key}</code>
-                  {scope.keys.includes(key) ? (
+                  <code>{permission.key}</code>
+                  {scope.keys.includes(permission.key) ? (
                     <Badge tone="ok">held</Badge>
                   ) : (
                     <Badge>not held</Badge>
                   )}
                 </div>
-                <span class="small muted">{OPENS[key]}</span>
+                <span class="small muted">{permission.opens}</span>
               </div>
             ))}
           </div>

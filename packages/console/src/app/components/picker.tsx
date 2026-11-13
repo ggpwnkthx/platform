@@ -46,6 +46,9 @@ export interface PickerProps {
   /** Whether a value that is not a candidate may be added, and the pattern it must follow. */
   allowNew?: boolean
   newPattern?: string
+  /** The word before a value that is not a candidate, and the line under it. */
+  newVerb?: string
+  newHint?: string
   /** Whether the picker says what is not saved yet. */
   trackChanges?: boolean
   /** The word for one value and for several, in the line of the changes. */
@@ -87,7 +90,14 @@ export function Picker(props: PickerProps & { onChange?: (values: string[]) => v
   const options: { value: string; label: string; hint?: string; fresh?: boolean }[] = [
     ...matches,
     ...(offerNew
-      ? [{ value: typed, label: typed, hint: 'not used in this tenant yet', fresh: true }]
+      ? [
+          {
+            value: typed,
+            label: typed,
+            hint: props.newHint ?? 'not used in this tenant yet',
+            fresh: true,
+          },
+        ]
       : []),
   ]
   const shown = open && options.length > 0
@@ -203,7 +213,7 @@ export function Picker(props: PickerProps & { onChange?: (values: string[]) => v
                 onMouseEnter={() => setActive(index)}
               >
                 <span>
-                  {option.fresh ? 'Create ' : null}
+                  {option.fresh ? `${props.newVerb ?? 'Create'} ` : null}
                   <strong>{option.label}</strong>
                 </span>
                 {option.hint ? <span class="small muted">{option.hint}</span> : null}

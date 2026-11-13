@@ -10,6 +10,26 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The console draws what the caller may not do, and a right is granted in words
+
+The console drew a refusal as disabled on the pages of the records. Elsewhere it offered what the services would refuse: the tabs of the model and of the audit of a workspace to a caller that held no key of theirs, and the acts of the platform to an operator of a tenant. The refusal came after the click, from Data or from Access. Granting a right asked for the identifier of a workspace and the name of a route, and making an administrator took knowing that the console reads its keys on the slug of the tenant: a right granted one field off opened nothing, and Access accepted it without a word.
+
+**The ability says what the caller may do, everywhere.** The ability of the console — the rules it builds with CASL from what the services answered — now holds the acts of the administration and the parts of a workspace beside the collections: administering a tenant, creating one, changing the flags of the platform, vouching for a route, giving a permission, creating a workspace, reading and changing the model of a workspace and reading its audit. A rule that refuses carries its reason, and a page draws it: a disabled control with a lock, a tab that stays a link and says which key is missing, a closed cell. The header names what the caller administers. The keys of a workspace are read in the access context of the caller, the question Data itself asks; a context the console cannot read closes nothing, and Data answers.
+
+**A right is granted in words.** The grant form asks four questions — who, what, where, until when — and names the three places a right holds in: the tenant itself, every workspace, one workspace. A workspace is chosen by the name Data gave it. Before the grant, the form says the right as a sentence, what it opens in the place chosen, and which of its permissions open nothing there. No role is chosen in advance: the form used to open on the role `admin`.
+
+**One step makes an administrator.** The page of a user says what the console opens to them, asked of Access, and **Make … an administrator** grants the role `admin` on the tenant itself. The same page changes the groups of the user. The page of a tenant lists who administers it, and the list of the users says what each one holds.
+
+**The roles are a grid.** **Permissions by role** sets the roles against the permissions: an operator ticks and clears cells, and one save writes the roles that changed. The list of the rights is filtered by what a right gives in effect — who can do this — and the grants of the roles that hold the permission are among the answers.
+
+**What is the platform's is the platform's in every form.** A capability of the platform was refused when it was granted as it is, and when it was put in a role. The console now refuses, to an operator of a tenant, the grant of a role that holds one and the write of a role that comes to include one, and it signs both with the credential of the platform for an operator of the platform. Access holds the same rule, which is the entry above. The flags of the platform and the vouching of a route are now written with the credential of the platform, for an operator of the platform: sent with the credential of the tenant, they were refused by Access whoever the operator was.
+
+**A role is not saved without the key of the administration before the operator says so.** A role written without `console.admin` closes the administration to everybody who holds it, the operator who writes it among them. The page of the role names how many rights the save touches and asks first; the grid draws the cell closed and refuses the write. A right that opens the administration to the operator itself says so before it is revoked.
+
+Smaller corrections come with it. A member of a group that signs in at a provider other than the default one is named by its provider, so its groups are found. The removal of a provider and of an account asks first. The hint of the creation of a workspace names the place that allows it.
+
+**Contract:** [console spec §4.2](docs/console/spec.md#42-where-a-right-holds), [console spec §4.3](docs/console/spec.md#43-what-is-the-platforms), [console spec §5](docs/console/spec.md#5-ability), [console spec §6.2](docs/console/spec.md#62-places), [console user guide](docs/console/user-guide.md#administer-a-tenant).
+
 ### A value that is not provided is kept
 
 The administration of Access refused a body that sent an empty secret with a message that named the field and said it was required: `idpClientSecret: the client secret at the provider is required`. The interfaces of the platform send the fields of their forms, and a form sends the fields the reader left empty as empty strings: a tenant that was changed without its secret could not be changed at all.

@@ -12,9 +12,11 @@
  */
 
 import { createRoute } from 'honox/factory'
+import { ACTIONS, consoleAbility, reasonOf, SUBJECTS } from '../../../domains/ability'
 import { AccessError } from '../../../domains/access'
 import { type CreatedWorkspace, DataError } from '../../../domains/data'
-import { mayCreateWorkspaces } from '../../../domains/operators'
+import { DATA_KEYS, permissionsOfRole, TENANT_ADMIN_ROLE } from '../../../domains/operators'
+import { platformWrite } from '../../components/operators'
 import { Badge, Notice, PageHead, refusalOf } from '../../components/page'
 import { WorkspaceForm } from '../../components/workspace-form'
 import { workspacePath } from '../../components/workspace'
@@ -22,16 +24,12 @@ import { formOf } from '../../middleware/forms'
 import { operatorScope } from '../../middleware/scope'
 import { flash, sessionOf } from '../../middleware/session'
 
-/** The refusal of a caller that may not create a workspace. */
-const REFUSED = 'Creating a workspace needs the right data.workspace.create in your tenant.'
-
 export const POST = createRoute(async (c) => {
   const scope = await operatorScope(c)
   const services = c.get('services')
   const session = sessionOf(c)
-  if (!mayCreateWorkspaces(scope)) {
-    return c.text(REFUSED, 403)
-  }
+  const refused = reasonOf(consoleAbility(scope), ACTIONS.create, SUBJECTS.workspace)
+  if (refused) return c.text(refused, 403)
   const form = await formOf(c)
   const slug = form.get('slug').trim()
   const displayName = form.get('displayName').trim()
@@ -65,11 +63,26 @@ export const POST = createRoute(async (c) => {
     return c.redirect(workspacePath(created.id))
   }
   const caller = c.get('callerAddress')
+  const admin = services.admin(credential, ...(caller ? [caller] : []))
   try {
-    await services.admin(credential, ...(caller ? [caller] : [])).saveGrant({
+    // The role is the tenant's own, and it holds what was written in it.
+    // One that holds a capability of the platform is the platform's to
+    // grant (Access spec §3.3.1): the grant is signed with the credential
+    // of the platform for an operator of the platform, and it is not
+    // written for anybody else.
+    const roles = await admin.all((page) => admin.roles({ tenant: scope.tenant, ...page }))
+    const write = await platformWrite(c, permissionsOfRole(TENANT_ADMIN_ROLE, roles.rows))
+    if (write.kind === 'refused') {
+      flash(c, {
+        kind: 'error',
+        text: `The workspace was created, and its rights were not: the role ${TENANT_ADMIN_ROLE} of your tenant holds a capability of the platform, and only an operator of the platform grants it.`,
+      })
+      return c.redirect(workspacePath(created.id))
+    }
+    await (write.kind === 'platform' ? write.client : admin).saveGrant({
       tenant: scope.tenant,
       userId: session.principal.id,
-      role: 'admin',
+      role: TENANT_ADMIN_ROLE,
       workspaceId: created.id,
     })
   } catch (error) {
@@ -85,16 +98,20 @@ export const POST = createRoute(async (c) => {
 })
 
 export default createRoute(async (c) => {
-  const scope = await operatorScope(c)
-  if (!mayCreateWorkspaces(scope)) {
+  const refused = reasonOf(
+    consoleAbility(await operatorScope(c)),
+    ACTIONS.create,
+    SUBJECTS.workspace
+  )
+  if (refused) {
     c.status(403)
     return c.render(
       <section class="refusal">
         <h1>The creation of a workspace is not open to you</h1>
-        <p>{REFUSED}</p>
+        <p>{refused}</p>
         <p>
-          An operator of your tenant can grant you <code>data.workspace.create</code> on the route
-          of the console, on its Rights tab.
+          An operator of your tenant can grant you <code>{DATA_KEYS.workspaceCreate}</code> on its
+          Rights tab: on the tenant itself, and on every route.
         </p>
         <p>
           <a href="/workspaces">Back to the workspaces</a>
@@ -119,7 +136,7 @@ export default createRoute(async (c) => {
       </section>
       <p class="small muted">
         <Badge tone="accent" plain>
-          data.workspace.create
+          {DATA_KEYS.workspaceCreate}
         </Badge>{' '}
         is the right that lets you create a workspace of your tenant.
       </p>

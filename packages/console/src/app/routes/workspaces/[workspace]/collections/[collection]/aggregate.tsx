@@ -4,10 +4,13 @@
  */
 
 import { createRoute } from 'honox/factory'
+import { collectionAbility, reasonOf } from '../../../../../../domains/ability'
 import { type Aggregate, DataError } from '../../../../../../domains/data'
 import { isUuid } from '../../../../../../domains/operators'
 import { Empty, Notice, PageHead, Refusal, refusalOf } from '../../../../../components/page'
+import { ASK_AN_OPERATOR } from '../../../../../components/why'
 import {
+  accessPath,
   collectionPath,
   labelOf,
   Value,
@@ -39,10 +42,14 @@ export default createRoute(async (c) => {
   )
   const numeric = fields.filter((field) => field.type === 'integer' || field.type === 'decimal')
 
+  // An aggregate is a reading: a collection the caller only writes to
+  // has nothing to group for it.
+  const unreadable = reasonOf(collectionAbility(collection), 'read', key)
+
   let result: Aggregate | null = null
   let refusal = null
   let problem: string | null = null
-  if (params.has('run')) {
+  if (params.has('run') && !unreadable) {
     let filter: unknown
     if (filterText) {
       try {
@@ -78,6 +85,12 @@ export default createRoute(async (c) => {
         eyebrow={collection.label}
         lede="Group the records you can read by up to three fields, then count and summarize them."
       />
+      {unreadable ? (
+        <Notice tone="warn" title="You cannot aggregate this collection">
+          {unreadable} {ASK_AN_OPERATOR}{' '}
+          <a href={accessPath(workspace, key)}>See what you can do in {collection.label}</a>.
+        </Notice>
+      ) : null}
       <form method="get" class="card form">
         <input type="hidden" name="run" value="1" />
         <div class="form-grid">
@@ -127,7 +140,7 @@ export default createRoute(async (c) => {
           />
         </fieldset>
         <div class="row">
-          <button type="submit" class="button">
+          <button type="submit" class="button" disabled={unreadable !== null}>
             Aggregate
           </button>
           <a class="button quiet" href={collectionPath(workspace, key)}>

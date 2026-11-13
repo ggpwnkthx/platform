@@ -3,15 +3,17 @@
  */
 
 import { createRoute } from 'honox/factory'
+import { ACTIONS, consoleAbility, SUBJECTS } from '../../../domains/ability'
 import { DataError, type Me } from '../../../domains/data'
-import { isUuid, mayCreateWorkspaces } from '../../../domains/operators'
+import { isUuid } from '../../../domains/operators'
 import { Badge, Empty, Notice, PageHead } from '../../components/page'
+import { ActionLink } from '../../components/why'
 import { workspaceName, workspacePath } from '../../components/workspace'
 import CopyText from '../../islands/copy-text'
 import { formOf } from '../../middleware/forms'
 import { operatorScope } from '../../middleware/scope'
 import { flash, sessionOf } from '../../middleware/session'
-import { knownWorkspaces } from '../../middleware/workspaces'
+import { knownWorkspaces, rememberWorkspaceName } from '../../middleware/workspaces'
 
 /** What Data answers for a workspace the caller may hold. */
 interface Probe {
@@ -33,14 +35,18 @@ export const POST = createRoute(async (c) => {
 export default createRoute(async (c) => {
   const services = c.get('services')
   const session = sessionOf(c)
-  const scope = await operatorScope(c)
+  const ability = consoleAbility(await operatorScope(c))
   const known = await knownWorkspaces(c)
   // Data answers whether the caller may read a workspace:
   // the console asks it for every workspace it knows, at most two dozen.
   const probes: Probe[] = await Promise.all(
     known.ids.slice(0, 24).map(async (id) => {
       try {
-        return { id, me: await services.data(id, session.accessToken).me(), refusal: null }
+        const me = await services.data(id, session.accessToken).me()
+        // The name Data gave the workspace is kept for the pages that
+        // only know its identifier.
+        rememberWorkspaceName(c, id, me)
+        return { id, me, refusal: null }
       } catch (error) {
         return {
           id,
@@ -57,14 +63,18 @@ export default createRoute(async (c) => {
         eyebrow="Data"
         title="Workspaces"
         lede="Workspaces your rights name, plus any you opened. Data decides what you can see in each."
+        actions={
+          <ActionLink
+            ability={ability}
+            I={ACTIONS.create}
+            a={SUBJECTS.workspace}
+            id="new-workspace"
+            href="/workspaces/new"
+            label="New workspace"
+            ask="An operator of your tenant can grant it, on the tenant itself."
+          />
+        }
       />
-      {mayCreateWorkspaces(scope) ? (
-        <p>
-          <a class="button" href="/workspaces/new">
-            New workspace
-          </a>
-        </p>
-      ) : null}
       {!known.rightsRead ? (
         <Notice tone="warn" title="Your rights could not be read">
           The console has no admin credential for your tenant, or Access did not answer. Only

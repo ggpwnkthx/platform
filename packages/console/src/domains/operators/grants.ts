@@ -8,7 +8,8 @@
  * names a new permission before Access creates it.
  */
 
-import type { Grant } from '../access'
+import type { Grant, Role } from '../access'
+import { permissionsOfGrant } from './effective'
 
 const DAY = 24 * 60 * 60 * 1000
 const DAYS: Record<string, number> = { '1d': 1, '7d': 7, '30d': 30, '90d': 90 }
@@ -42,6 +43,10 @@ export interface GrantDraft {
   readonly permission: string
   /** Whether the operator confirmed the creation of a permission the tenant does not name. */
   readonly createPermission: boolean
+  /**
+   * Where the right holds: `tenant` for the tenant itself, `all` for
+   * every workspace, `one` for the workspace of `workspaceId`.
+   */
   readonly workspace: string
   readonly workspaceId: string
   readonly routeId: string
@@ -66,12 +71,37 @@ export interface CheckedGrant {
   readonly expiresAt: string | null
 }
 
-const KEY = /^[a-z0-9][a-z0-9._-]{0,63}$/
+/**
+ * The pattern of a key of Access: of a permission, of a role, of a group.
+ *
+ * It is written the way the `pattern` of a field reads it, without its
+ * anchors: the forms of the console and the check of a grant hold the
+ * same rule.
+ */
+export const KEY_PATTERN = '[a-z0-9][a-z0-9._\\-]{0,63}'
+
+const KEY = new RegExp(`^${KEY_PATTERN}$`)
+
+/** What the console knows of the tenant a grant form is about. */
+export interface GrantKnowledge {
+  /** The permissions the tenant names. */
+  readonly permissions: readonly string[]
+  /** The keys of the roles of the tenant. */
+  readonly roles: readonly string[]
+  /**
+   * The slug of the tenant.
+   *
+   * A right on the tenant itself names it as its workspace: it is what
+   * the console asks Access about, and what Access writes for the first
+   * administrator of a tenant.
+   */
+  readonly tenant: string
+}
 
 /** Reads a grant form: the grant it names, or what is wrong with it. */
 export function checkGrant(
   draft: GrantDraft,
-  known: { readonly permissions: readonly string[]; readonly roles: readonly string[] },
+  known: GrantKnowledge,
   now = Date.now()
 ): { grant: CheckedGrant } | { problems: GrantProblem[] } {
   const problems: GrantProblem[] = []
@@ -107,7 +137,12 @@ export function checkGrant(
     })
   }
 
-  const workspaceId = draft.workspace === 'one' ? draft.workspaceId.trim() : ''
+  const workspaceId =
+    draft.workspace === 'tenant'
+      ? known.tenant
+      : draft.workspace === 'one'
+        ? draft.workspaceId.trim()
+        : ''
   if (draft.workspace === 'one' && !workspaceId) {
     problems.push({ field: 'workspaceId', message: 'Name the workspace, or choose every one.' })
   }
@@ -140,7 +175,7 @@ function capitalize(text: string): string {
 export interface RightsFilter {
   /** A part of the name of the holder. */
   readonly holder: string
-  /** A part of the permission or of the role. */
+  /** A part of the permission or of the role, or of a permission the role holds. */
   readonly right: string
   /** A part of the workspace. */
   readonly workspace: string
@@ -151,20 +186,37 @@ export function isFiltered(filter: RightsFilter): boolean {
   return Boolean(filter.holder.trim() || filter.right.trim() || filter.workspace.trim())
 }
 
-/** Reports whether a grant, held by the holder of that name, matches a filter. */
+/**
+ * Reports whether a grant, held by the holder of that name, matches a
+ * filter.
+ *
+ * A right matches by what it gives in effect: the grant of a role
+ * matches the key of the role and every permission the role holds, so
+ * the filter answers "who can do this" and not only "who was granted
+ * this key".
+ *
+ * @param grant the grant.
+ * @param holderLabel the name of its holder, as the page shows it.
+ * @param filter the filter of the page.
+ * @param shown what the page knows beside the grant: the roles of the
+ *   tenant, and the name it shows for the workspace of the grant.
+ */
 export function matchesRightsFilter(
   grant: Grant,
   holderLabel: string,
-  filter: RightsFilter
+  filter: RightsFilter,
+  shown: { readonly roles?: readonly Role[]; readonly workspaceLabel?: string } = {}
 ): boolean {
   const has = (value: string | null | undefined, needle: string) =>
     needle.trim() === '' || (value ?? '').toLowerCase().includes(needle.trim().toLowerCase())
+  const gives = [grant.permission ?? grant.role, ...permissionsOfGrant(grant, shown.roles ?? [])]
+  const places =
+    grant.workspaceId === null
+      ? ['every workspace', 'all workspaces']
+      : [grant.workspaceId, shown.workspaceLabel]
   return (
     has(holderLabel, filter.holder) &&
-    has(grant.permission ?? grant.role, filter.right) &&
-    (filter.workspace.trim() === '' ||
-      (grant.workspaceId === null
-        ? 'every workspace'.includes(filter.workspace.trim().toLowerCase())
-        : has(grant.workspaceId, filter.workspace)))
+    gives.some((key) => has(key, filter.right)) &&
+    places.some((place) => has(place, filter.workspace))
   )
 }

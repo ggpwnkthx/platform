@@ -8,6 +8,7 @@ import { LoginError } from '../../domains/authentication'
 import { DataError } from '../../domains/data'
 import type { ServiceState } from '../../domains/status'
 import { UnreachableError } from '../../domains/transport'
+import { Lock } from './why'
 
 /** The head of a page: its title, what it is about and its actions. */
 export function PageHead(props: { title: string; lede?: Child; actions?: Child; eyebrow?: Child }) {
@@ -191,17 +192,45 @@ export function Empty(props: { children: Child }) {
   return <div class="empty">{props.children}</div>
 }
 
+/** A tab of a section. */
+export interface TabItem {
+  readonly href: string
+  readonly label: string
+  readonly current?: boolean
+  /**
+   * Why the tab is closed to the reader, when it is.
+   *
+   * A closed tab is still a link: the page it leads to says what is
+   * missing and who can grant it. It is drawn closed so that the reader
+   * knows before it follows it.
+   */
+  readonly locked?: string | null
+}
+
 /** The tabs of a section. */
-export function Tabs(props: {
-  items: readonly { href: string; label: string; current?: boolean }[]
-}) {
+export function Tabs(props: { items: readonly TabItem[] }) {
   return (
     <nav class="tabs" aria-label="Sections">
-      {props.items.map((item) => (
-        <a href={item.href} aria-current={item.current ? 'page' : undefined}>
-          {item.label}
-        </a>
-      ))}
+      {props.items.map((item) =>
+        item.locked ? (
+          // The name of the tab says it is closed, and its title says why:
+          // a reader of the screen hears the first and is offered the second.
+          <a
+            href={item.href}
+            class="locked"
+            aria-current={item.current ? 'page' : undefined}
+            title={item.locked}
+          >
+            <Lock />
+            {item.label}
+            <span class="sr-only"> (not open to you)</span>
+          </a>
+        ) : (
+          <a href={item.href} aria-current={item.current ? 'page' : undefined}>
+            {item.label}
+          </a>
+        )
+      )}
     </nav>
   )
 }

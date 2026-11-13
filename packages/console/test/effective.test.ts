@@ -1,15 +1,21 @@
 import { describe, expect, test } from 'bun:test'
 import type { Grant, Role } from '../src/domains/access'
 import {
+  administrationLostBy,
+  administrationOf,
   checkGrant,
   effectivePermissionsOf,
   expandRole,
   expiryOf,
   type GrantDraft,
   grantAppliesTo,
+  groupIsReadWhole,
   knownPermissionsOf,
   matchesRightsFilter,
+  permissionsOfGrant,
   permissionsOfRole,
+  permissionsOfWrite,
+  platformKeysOfGroup,
   rolesIncluding,
 } from '../src/domains/operators'
 
@@ -66,16 +72,178 @@ describe('the roles of a tenant', () => {
   })
 
   test('the known permissions are the ones of the grants and of the roles', () => {
-    // The capabilities that are not relative to a tenant are named too:
-    // the console knows them, and a reader sees the key and the reason
-    // it is refused rather than an absence.
+    // The permissions the console knows the meaning of are named too,
+    // the capabilities of the platform among them: a reader finds the
+    // key it looks for, with what it opens or the reason it is refused,
+    // rather than an absence.
     expect(knownPermissionsOf([grant({ permission: 'files.read' })], roles)).toEqual([
+      'console.admin',
       'console.platform',
+      'console.status',
       'content.admin',
       'content.read',
       'content.write',
+      'data.audit.read',
+      'data.model.read',
+      'data.model.write',
+      'data.workspace.create',
       'files.read',
     ])
+  })
+
+  test('a grant gives its permission, or what its role holds in effect', () => {
+    expect(permissionsOfGrant(grant({ permission: 'files.read' }), roles)).toEqual(['files.read'])
+    expect(permissionsOfGrant(grant({ role: 'editor' }), roles)).toEqual([
+      'content.read',
+      'content.write',
+    ])
+    expect(permissionsOfGrant(grant({ role: 'gone' }), roles)).toEqual([])
+  })
+})
+
+describe('the write of a role', () => {
+  test('a role is written with its permissions and with what the roles it includes hold', () => {
+    // A role that comes to include another gives what the other holds:
+    // the write is checked against all of it.
+    const withRoot = [...roles, role('root', ['console.platform'])]
+    expect(permissionsOfWrite({ permissions: ['content.export'] }, withRoot)).toEqual([
+      'content.export',
+    ])
+    expect(
+      permissionsOfWrite({ permissions: ['content.export'], roles: ['editor', 'root'] }, withRoot)
+    ).toEqual(['console.platform', 'content.export', 'content.read', 'content.write'])
+    // A role the tenant does not have adds nothing: Access refuses the write.
+    expect(permissionsOfWrite({ roles: ['nobody'] }, withRoot)).toEqual([])
+  })
+})
+
+describe('what a group gives of the platform', () => {
+  const withRoot = [...roles, role('root', ['console.platform']), role('board', [], ['root'])]
+
+  test('a live right of the group gives it, as it is or through a role', () => {
+    // A member of a group holds what the group is granted: the key
+    // itself, the role that holds it, and the role that includes one.
+    const direct = [grant({ group: 'ops', permission: 'console.platform', workspaceId: 'acme' })]
+    expect(platformKeysOfGroup('ops', direct, withRoot)).toEqual(['console.platform'])
+    const through = [grant({ group: 'ops', role: 'board' })]
+    expect(platformKeysOfGroup('ops', through, withRoot)).toEqual(['console.platform'])
+  })
+
+  test('the right is read wherever it holds, the way Access reads it', () => {
+    // Access refuses the new member of a group whose live grants give
+    // the capability, whatever workspace and route they name.
+    const elsewhere = [grant({ group: 'ops', role: 'root', workspaceId: WS, routeId: 'data-api' })]
+    expect(platformKeysOfGroup('ops', elsewhere, withRoot)).toEqual(['console.platform'])
+  })
+
+  test('the rights of the tenant, of a user and of another group give the group nothing', () => {
+    const rights = [
+      grant({ group: 'ops', role: 'editor' }),
+      grant({ group: 'night', permission: 'console.platform' }),
+      grant({ userId: 'u-1', permission: 'console.platform' }),
+    ]
+    expect(platformKeysOfGroup('ops', rights, withRoot)).toEqual([])
+  })
+
+  test('a right that was revoked or that ended gives nothing', () => {
+    const over = [
+      grant({ group: 'ops', role: 'root', revokedAt: '2026-01-02T00:00:00.000Z' }),
+      grant({
+        group: 'ops',
+        permission: 'console.platform',
+        expiresAt: '2026-01-02T00:00:00.000Z',
+      }),
+    ]
+    expect(platformKeysOfGroup('ops', over, withRoot)).toEqual([])
+  })
+
+  test('an empty answer is certain only when the console read the rights whole', () => {
+    // The console reads a bounded number of rows: a tenant that holds
+    // more leaves it unable to say that a group gives nothing.
+    const all = { rows: [grant({ group: 'ops', permission: 'content.read' })], complete: true }
+    const everyRole = { rows: withRoot, complete: true }
+    expect(groupIsReadWhole('ops', all, everyRole)).toBe(true)
+    expect(groupIsReadWhole('ops', { ...all, complete: false }, everyRole)).toBe(false)
+
+    // The roles matter when a live right of the group names one: a
+    // deployment without roles refuses their list, and holds no such right.
+    const noRole = { rows: [], complete: false }
+    expect(groupIsReadWhole('ops', all, noRole)).toBe(true)
+    const through = { rows: [grant({ group: 'ops', role: 'board' })], complete: true }
+    expect(groupIsReadWhole('ops', through, noRole)).toBe(false)
+    expect(groupIsReadWhole('night', through, noRole)).toBe(true)
+    const ended = {
+      rows: [grant({ group: 'ops', role: 'board', revokedAt: '2026-01-02T00:00:00.000Z' })],
+      complete: true,
+    }
+    expect(groupIsReadWhole('ops', ended, noRole)).toBe(true)
+  })
+})
+
+describe('the administration of a tenant', () => {
+  const place = { tenant: 'acme', consoleRoute: 'console' }
+  const administrators = [
+    ...roles,
+    role('admin-of-tenant', ['console.admin', 'console.status']),
+    role('lead', ['content.admin'], ['admin-of-tenant']),
+    role('root', ['console.platform', 'console.admin']),
+  ]
+
+  test('a right on the tenant itself that gives console.admin opens it', () => {
+    expect(
+      administrationOf(grant({ permission: 'console.admin', workspaceId: 'acme' }), [], place)
+    ).toEqual({ key: 'console.admin', roles: [] })
+    expect(
+      administrationOf(grant({ role: 'lead', workspaceId: 'acme' }), administrators, place)
+    ).toEqual({ key: 'console.admin', roles: ['lead', 'admin-of-tenant'] })
+  })
+
+  test('a right on every workspace holds on the tenant itself too', () => {
+    expect(administrationOf(grant({ role: 'admin-of-tenant' }), administrators, place)).toEqual({
+      key: 'console.admin',
+      roles: ['admin-of-tenant'],
+    })
+  })
+
+  test('the key of the platform is named first: it opens more', () => {
+    expect(
+      administrationOf(grant({ role: 'root', routeId: 'console' }), administrators, place)
+    ).toEqual({ key: 'console.platform', roles: ['root'] })
+  })
+
+  test('a right that holds somewhere else, or that ended, opens nothing', () => {
+    const elsewhere = grant({ role: 'admin-of-tenant', workspaceId: WS })
+    expect(administrationOf(elsewhere, administrators, place)).toBeNull()
+    const otherRoute = grant({ permission: 'console.admin', routeId: 'data-api' })
+    expect(administrationOf(otherRoute, administrators, place)).toBeNull()
+    const revoked = grant({ permission: 'console.admin', revokedAt: '2026-01-02T00:00:00Z' })
+    expect(administrationOf(revoked, administrators, place)).toBeNull()
+    expect(administrationOf(grant({ role: 'editor' }), administrators, place)).toBeNull()
+  })
+
+  test('a role written without the key closes the administration to its holders', () => {
+    const rights = [
+      grant({ id: 'direct', role: 'admin-of-tenant', workspaceId: 'acme' }),
+      grant({ id: 'through', role: 'lead' }),
+      grant({ id: 'elsewhere', role: 'admin-of-tenant', workspaceId: WS }),
+      grant({ id: 'as-it-is', permission: 'console.admin', workspaceId: 'acme' }),
+    ]
+    const lostBy = (written: { key: string; permissions: string[]; roles: string[] }) =>
+      administrationLostBy(rights, administrators, written, place).map((entry) => entry.id)
+    // The key leaves the role: the rights that give the role stop
+    // opening the administration, the ones that include it too.
+    expect(lostBy({ key: 'admin-of-tenant', permissions: ['console.status'], roles: [] })).toEqual([
+      'direct',
+      'through',
+    ])
+    // The role that included it stops including it: only its own holders lose it.
+    expect(lostBy({ key: 'lead', permissions: ['content.admin'], roles: [] })).toEqual(['through'])
+    // A write that keeps the key closes nothing, whatever else it changes.
+    expect(
+      lostBy({ key: 'admin-of-tenant', permissions: ['console.admin'], roles: ['reader'] })
+    ).toEqual([])
+    // A role nobody administers through closes nothing.
+    expect(lostBy({ key: 'editor', permissions: [], roles: [] })).toEqual([])
   })
 })
 
@@ -124,7 +292,7 @@ describe('the grant form', () => {
     expiresAt: '',
     ...extra,
   })
-  const known = { permissions: ['content.read'], roles: ['editor'] }
+  const known = { permissions: ['content.read'], roles: ['editor'], tenant: 'acme' }
 
   test('a known permission on every workspace is a grant', () => {
     expect(checkGrant(draft({}), known, NOW)).toEqual({
@@ -158,6 +326,25 @@ describe('the grant form', () => {
         workspaceId: WS,
         routeId: null,
         expiresAt: '2026-06-08T00:00:00.000Z',
+      },
+    })
+  })
+
+  test('a right on the tenant itself names the tenant as its workspace', () => {
+    // It is what the console asks Access about, and what Access writes
+    // for the first administrator of a tenant.
+    const checked = checkGrant(
+      draft({ kind: 'role', role: 'editor', workspace: 'tenant', workspaceId: WS }),
+      known,
+      NOW
+    )
+    expect(checked).toEqual({
+      grant: {
+        userId: 'u-1',
+        role: 'editor',
+        workspaceId: 'acme',
+        routeId: null,
+        expiresAt: null,
       },
     })
   })
@@ -207,5 +394,25 @@ describe('the filter of the rights', () => {
     expect(matchesRightsFilter(g, 'Alice', { ...filter, workspace: '1111' })).toBe(true)
     expect(matchesRightsFilter(g, 'Alice', { ...filter, holder: 'bob' })).toBe(false)
     expect(matchesRightsFilter(grant({}), 'Bob', { ...filter, workspace: 'every' })).toBe(true)
+  })
+
+  test('a right matches by what it gives in effect: who can do this', () => {
+    // The grant of a role matches the permissions the role holds, the
+    // included ones too, once the page knows the roles of the tenant.
+    const g = grant({ role: 'editor' })
+    const asked = { ...filter, right: 'content.read' }
+    expect(matchesRightsFilter(g, 'Alice', asked)).toBe(false)
+    expect(matchesRightsFilter(g, 'Alice', asked, { roles })).toBe(true)
+    expect(matchesRightsFilter(g, 'Alice', { ...filter, right: 'content.admin' }, { roles })).toBe(
+      false
+    )
+  })
+
+  test('a workspace matches by the name the page shows for it', () => {
+    const g = grant({ role: 'editor', workspaceId: WS })
+    const asked = { ...filter, workspace: 'archive' }
+    expect(matchesRightsFilter(g, 'Alice', asked)).toBe(false)
+    expect(matchesRightsFilter(g, 'Alice', asked, { workspaceLabel: 'Acme archive' })).toBe(true)
+    expect(matchesRightsFilter(grant({}), 'Alice', { ...filter, workspace: 'all work' })).toBe(true)
   })
 })

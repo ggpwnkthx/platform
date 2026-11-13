@@ -3,7 +3,13 @@
  */
 
 import type { Crumb } from '../context'
-import type { FieldMetadata, Me } from '../../domains/data'
+import {
+  type ConsoleAbility,
+  collectionAccessOf,
+  reasonOf,
+  WORKSPACE_PARTS,
+} from '../../domains/ability'
+import type { CollectionMetadata, FieldMetadata, Me } from '../../domains/data'
 import { displayOf, formValueOf, inputKindOf } from '../../domains/data'
 import JsonInput from '../islands/json-input'
 import { Tabs } from './page'
@@ -42,21 +48,71 @@ export function workspaceCrumbs(id: string, me: Me | null, ...rest: Crumb[]): Cr
   ]
 }
 
-/** The tabs of a workspace. */
+/**
+ * The tabs of a workspace.
+ *
+ * The model and the audit are opened by a capability of their own. A
+ * page that knows what the caller holds on the workspace hands its
+ * ability over, and a tab the caller may not open is drawn closed, with
+ * the reason: the caller learns it before it follows the tab.
+ */
 export function WorkspaceTabs(props: {
   id: string
   current: 'collections' | 'access' | 'model' | 'audit'
+  ability?: ConsoleAbility
 }) {
   const base = workspacePath(props.id)
+  const closed = (part: string) => (props.ability ? reasonOf(props.ability, 'read', part) : null)
   return (
     <Tabs
       items={[
         { href: base, label: 'Collections', current: props.current === 'collections' },
         { href: `${base}/access`, label: 'Your access', current: props.current === 'access' },
-        { href: `${base}/model`, label: 'Data model', current: props.current === 'model' },
-        { href: `${base}/audit`, label: 'Audit', current: props.current === 'audit' },
+        {
+          href: `${base}/model`,
+          label: 'Data model',
+          current: props.current === 'model',
+          locked: closed(WORKSPACE_PARTS.model),
+        },
+        {
+          href: `${base}/audit`,
+          label: 'Audit',
+          current: props.current === 'audit',
+          locked: closed(WORKSPACE_PARTS.audit),
+        },
       ]}
     />
+  )
+}
+
+/** The actions on the records of a collection, in the words of a page. */
+const ACTION_WORDS = { read: 'Read', create: 'Create', update: 'Change', delete: 'Delete' } as const
+
+/**
+ * What the caller may do with the records of a collection: the four
+ * actions, each one allowed or not.
+ *
+ * An action Data's policies refuse is drawn as refused, with its reason,
+ * instead of being left out: the reader sees what is missing.
+ */
+export function CollectionActions(props: { collection: CollectionMetadata }) {
+  const { actions } = collectionAccessOf(props.collection)
+  return (
+    <ul class="can-list" aria-label={`What you may do with ${props.collection.label}`}>
+      {(Object.keys(ACTION_WORDS) as (keyof typeof ACTION_WORDS)[]).map((action) => {
+        const allowance = actions[action]
+        return (
+          <li
+            class={`can-mark ${allowance.allowed ? 'can' : 'cannot'}`}
+            title={allowance.reason ?? undefined}
+          >
+            <span aria-hidden="true">{allowance.allowed ? '✓' : '–'}</span>
+            {ACTION_WORDS[action]}
+            <span class="sr-only">{allowance.allowed ? ': yes' : ': no'}</span>
+          </li>
+        )
+      })}
+    </ul>
   )
 }
 

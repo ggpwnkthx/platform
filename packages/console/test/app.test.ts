@@ -15,6 +15,11 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose'
 
 const ROOT = resolve(import.meta.dir, '..')
 const WORKSPACE = '11111111-1111-4111-8111-111111111111'
+/** A workspace whose answer does not come in time, and one whose Data is down. */
+const SLOW_WORKSPACE = '77777777-7777-4777-8777-777777777777'
+const DOWN_WORKSPACE = '88888888-8888-4888-8888-888888888888'
+/** The workspace the fake of Data answers a creation with. */
+const CREATED_WORKSPACE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const TENANT_ID = '22222222-2222-4222-8222-222222222222'
 const PRINCIPAL = '33333333-3333-4333-8333-333333333333'
 const CLIENT = 'platform'
@@ -47,11 +52,13 @@ const policy = {
   grants: [] as Record<string, unknown>[],
   roles: [] as Record<string, unknown>[],
   groups: [] as Record<string, unknown>[],
+  users: [] as Record<string, unknown>[],
   writes: [] as { method: string; path: string; body: unknown }[],
 }
 
 function resetPolicy() {
   policy.writes.length = 0
+  policy.users = [ALICE]
   policy.grants = [
     {
       id: 'g-1',
@@ -98,8 +105,6 @@ function resetPolicy() {
     },
   ]
 }
-resetPolicy()
-
 const ALICE = {
   id: PRINCIPAL,
   tenant: 'acme',
@@ -110,6 +115,7 @@ const ALICE = {
   lastLoginAt: null,
   createdAt: '2026-01-01T00:00:00.000Z',
 }
+resetPolicy()
 
 beforeAll(async () => {
   const { privateKey, publicKey } = await generateKeyPair('RS256')
@@ -217,8 +223,18 @@ beforeAll(async () => {
             ],
           })
         }
-        const page = (key: string, rows: unknown[]) =>
-          Response.json({ [key]: rows, total: rows.length, limit: 200, offset: 0 })
+        // A page of a list: the rows the query asks for, and the number
+        // of all of them (Access spec §10.1).
+        const page = (key: string, rows: unknown[]) => {
+          const limit = Number(url.searchParams.get('limit') ?? 50)
+          const offset = Number(url.searchParams.get('offset') ?? 0)
+          return Response.json({
+            [key]: rows.slice(offset, offset + limit),
+            total: rows.length,
+            limit,
+            offset,
+          })
+        }
         const write = async () => {
           const body = await request.json()
           policy.writes.push({ method: request.method, path: url.pathname, body })
@@ -254,8 +270,12 @@ beforeAll(async () => {
           policy.writes.push({ method: 'DELETE', path: url.pathname, body: null })
           return new Response(null, { status: 204 })
         }
+        if (url.pathname === '/v1/admin/users' && request.method === 'POST') {
+          const body = await write()
+          return Response.json({ ...ALICE, ...body })
+        }
         if (url.pathname === '/v1/admin/users') {
-          return Response.json({ principals: [ALICE], total: 1, limit: 50, offset: 0 })
+          return page('principals', policy.users)
         }
         if (url.pathname === '/v1/admin/groups' && request.method === 'GET') {
           const key = url.searchParams.get('key')
@@ -307,6 +327,33 @@ beforeAll(async () => {
       seen.bearers.push(bearer)
       if (!bearer.startsWith('Bearer ey')) {
         return Response.json({ error: 'unauthenticated', message: 'no token' }, { status: 401 })
+      }
+      const down = () =>
+        Response.json(
+          { error: { code: 'UNAVAILABLE', message: 'not now' }, requestId: 'r' },
+          { status: 503 }
+        )
+      if (url.pathname.startsWith(`/ws/${DOWN_WORKSPACE}/`)) return down()
+      if (url.pathname.startsWith(`/ws/${SLOW_WORKSPACE}/`)) {
+        await Bun.sleep(4000)
+        return down()
+      }
+      // The creation of a workspace is a call of the tenant: its path
+      // names no workspace (Data spec §9.11).
+      if (url.pathname === '/v1/workspaces' && request.method === 'POST') {
+        const body = (await request.json()) as Record<string, unknown>
+        return Response.json(
+          {
+            data: {
+              id: CREATED_WORKSPACE,
+              tenantId: TENANT_ID,
+              slug: body.slug,
+              displayName: body.displayName,
+              status: 'active',
+            },
+          },
+          { status: 201 }
+        )
       }
       const prefix = `/ws/${WORKSPACE}/v1`
       const collection = {
@@ -437,12 +484,20 @@ class Browser {
     return response
   }
 
-  /** Sends a form, from a page of the console. */
-  async post(path: string, fields: Record<string, string>, origin = PUBLIC): Promise<Response> {
+  /** Sends a form, from a page of the console. A field that repeats is sent as pairs. */
+  async post(
+    path: string,
+    fields: Record<string, string> | readonly (readonly [string, string])[],
+    origin = PUBLIC
+  ): Promise<Response> {
+    const body = new URLSearchParams()
+    for (const [name, value] of Array.isArray(fields) ? fields : Object.entries(fields)) {
+      body.append(name, value)
+    }
     return await this.request(path, {
       method: 'POST',
       headers: { origin, 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams(fields).toString(),
+      body: body.toString(),
     })
   }
 
@@ -830,6 +885,653 @@ describe('the console', () => {
     const detail = await (await browser.request('/operators/tenants/acme/roles/editor')).text()
     expect(detail).toContain('Holds in effect')
     expect(detail).toContain('included reader')
+  })
+
+  test('a part of a workspace the caller holds no key of is drawn closed, with its reason', async () => {
+    const browser = new Browser()
+    await browser.signIn()
+    const html = await (await browser.request(`/workspaces/${WORKSPACE}`)).text()
+    const from = html.indexOf('<nav class="tabs"')
+    const tabs = html.slice(from, html.indexOf('</nav>', from))
+    // Access gives content.read and content.write on the workspace. The
+    // model and the audit have keys of their own, and the caller holds
+    // neither: the two tabs say so before the caller follows them.
+    expect(tabs).toContain(`href="/workspaces/${WORKSPACE}/model" class="locked"`)
+    expect(tabs).toContain('Reading the data model needs the permission data.model.read')
+    expect(tabs).toContain(`href="/workspaces/${WORKSPACE}/audit" class="locked"`)
+    expect(tabs).toContain('Reading the audit needs the permission data.audit.read')
+    expect(tabs).toContain(`<a href="/workspaces/${WORKSPACE}/access">Your access</a>`)
+    // What the policies of Data refuse on a collection is named, and not left out.
+    expect(html).toContain('<li class="can-mark can">')
+    expect(html).toContain('<li class="can-mark cannot" title="')
+    expect(html).toContain('do not let you delete records of Articles')
+  })
+
+  test('a right on the tenant itself names the tenant, and says what it opens there', async () => {
+    resetPolicy()
+    policy.roles.push({
+      id: 'r-admin',
+      tenant: 'acme',
+      key: 'admin',
+      displayName: 'Administrators',
+      description: null,
+      permissions: ['console.admin', 'console.status', 'data.model.read'],
+      roles: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })
+    const browser = new Browser()
+    await browser.signIn()
+    // Alice holds nothing that opens the administration: her page offers it in one step.
+    const before = await (
+      await browser.request(`/operators/tenants/acme/users/${PRINCIPAL}`)
+    ).text()
+    expect(before).toContain('Make Alice an administrator')
+    expect(before).toContain('<input type="hidden" name="workspace" value="tenant"/>')
+
+    const granted = await browser.post('/operators/tenants/acme/rights', {
+      _action: 'grant',
+      _form: 'grant',
+      back: `/operators/tenants/acme/users/${PRINCIPAL}`,
+      holder: `user:${PRINCIPAL}`,
+      kind: 'role',
+      role: 'admin',
+      workspace: 'tenant',
+      expires: 'never',
+    })
+    expect(granted.headers.get('location')).toBe(`/operators/tenants/acme/users/${PRINCIPAL}`)
+    // The tenant itself is the slug of the tenant, where Access holds a workspace.
+    const body = policy.writes[0]?.body as Record<string, unknown>
+    expect(body).toMatchObject({ userId: PRINCIPAL, role: 'admin', workspaceId: 'acme' })
+    expect(body.routeId ?? null).toBeNull()
+
+    const after = await (await browser.request(`/operators/tenants/acme/users/${PRINCIPAL}`)).text()
+    expect(after).toContain('The role admin was granted.')
+    // Access accepts a right that opens nothing where it holds: the page says it.
+    expect(after).toContain(
+      'data.model.read is read on a workspace: on the tenant itself it opens nothing.'
+    )
+    expect(after).toContain('The tenant itself')
+    expect(after).toContain('opens the administration')
+    expect(after).toContain('Alice administers acme through the role admin')
+    expect(after).not.toContain('Make Alice an administrator')
+  })
+
+  test('a role that holds a capability of the platform is the platform’s to grant', async () => {
+    resetPolicy()
+    policy.roles.push({
+      id: 'r-root',
+      tenant: 'acme',
+      key: 'root',
+      displayName: 'Root',
+      description: null,
+      permissions: ['console.platform'],
+      roles: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })
+    const fields = {
+      _action: 'grant',
+      _form: 'grant',
+      back: '/operators/tenants/acme/rights',
+      holder: `user:${PRINCIPAL}`,
+      kind: 'role',
+      role: 'root',
+      workspace: 'tenant',
+      expires: 'never',
+    }
+    consoleKeys = ['console.admin', 'console.status']
+    const operator = new Browser()
+    await operator.signIn()
+    await operator.post('/operators/tenants/acme/rights', fields)
+    // Access refuses the permission and not the role that holds it: the
+    // console refuses both, before anything is written.
+    expect(policy.writes).toEqual([])
+    const refused = await (await operator.request('/operators/tenants/acme/rights')).text()
+    expect(refused).toContain('console.platform is a capability of the platform')
+    expect(refused).toContain('not yours to give')
+
+    consoleKeys = ['console.platform', 'console.status']
+    try {
+      const platform = new Browser()
+      await platform.signIn()
+      seen.adminCalls.length = 0
+      await platform.post('/operators/tenants/acme/rights', fields)
+      expect(policy.writes.map((entry) => entry.body)).toEqual([
+        expect.objectContaining({ role: 'root', workspaceId: 'acme' }),
+      ])
+      const write = seen.adminCalls.find((call) => call.startsWith('PUT /v1/admin/grants '))
+      expect(write).toContain('Bearer the-platform-token-0001')
+    } finally {
+      consoleKeys = ['console.admin', 'console.status']
+    }
+  })
+
+  test('a role does not come to include a capability of the platform by the hand of a tenant', async () => {
+    resetPolicy()
+    policy.roles.push({
+      id: 'r-root',
+      tenant: 'acme',
+      key: 'root',
+      displayName: 'Root',
+      description: null,
+      permissions: ['console.platform'],
+      roles: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })
+    consoleKeys = ['console.admin', 'console.status']
+    const browser = new Browser()
+    await browser.signIn()
+    // The editors would hold the capability through the role: everybody
+    // who holds the role would, without a grant.
+    await browser.post('/operators/tenants/acme/roles/editor', [
+      ['_action', 'save'],
+      ['key', 'editor'],
+      ['displayName', 'Editors'],
+      ['permissions', 'content.write'],
+      ['roles', 'reader'],
+      ['roles', 'root'],
+    ])
+    expect(policy.writes).toEqual([])
+    const page = await (await browser.request('/operators/tenants/acme/roles/editor')).text()
+    expect(page).toContain('The role was not saved')
+    expect(page).toContain('console.platform is a capability of the platform')
+    // The grid draws the role that holds it as closed, cell by cell.
+    const grid = await (await browser.request('/operators/tenants/acme/roles?view=matrix')).text()
+    expect(grid).toContain('closed to you')
+    expect(grid).not.toContain('name="perm:root"')
+  })
+
+  test('a role is not saved without the key of the administration before the operator says so', async () => {
+    resetPolicy()
+    policy.roles.push({
+      id: 'r-admin',
+      tenant: 'acme',
+      key: 'admin',
+      displayName: 'Administrators',
+      description: null,
+      permissions: ['console.admin', 'console.status'],
+      roles: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })
+    policy.grants.push({
+      id: 'g-admin',
+      tenant: 'acme',
+      userId: PRINCIPAL,
+      permission: null,
+      role: 'admin',
+      workspaceId: 'acme',
+      routeId: null,
+      expiresAt: null,
+      revokedAt: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })
+    const browser = new Browser()
+    await browser.signIn()
+    const path = '/operators/tenants/acme/roles/admin'
+    const before = await (await browser.request(path)).text()
+    expect(before).toContain('opens the administration of acme to the holders of 1 live right')
+    expect(before).toContain('yours among them')
+
+    // The role is sent without console.admin: everybody who holds it
+    // would lose the administration, the operator who sends it too.
+    const fields: [string, string][] = [
+      ['_action', 'save'],
+      ['key', 'admin'],
+      ['displayName', 'Administrators'],
+      ['permissions', 'console.status'],
+    ]
+    await browser.post(path, fields)
+    expect(policy.writes).toEqual([])
+    const asked = await (await browser.request(path)).text()
+    expect(asked).toContain('The role was not saved: the form asks a question first.')
+    expect(asked).toContain('yours among them: your next page would be a refusal')
+    expect(asked).toContain('name="closesAdministration"')
+
+    // The grid draws the cell closed, and refuses the same write.
+    const grid = await (await browser.request('/operators/tenants/acme/roles?view=matrix')).text()
+    expect(grid).not.toMatch(/name="perm:admin" value="console\.admin"/)
+    expect(grid).toContain('This is how you administer acme yourself.')
+    await browser.post('/operators/tenants/acme/roles?view=matrix', [
+      ['_action', 'matrix'],
+      ['role', 'admin'],
+      ['shown:admin', 'console.admin\nconsole.status'],
+      ['perm:admin', 'console.status'],
+    ])
+    expect(policy.writes).toEqual([])
+    const refused = await (
+      await browser.request('/operators/tenants/acme/roles?view=matrix')
+    ).text()
+    expect(refused).toContain('the change closes the administration of acme')
+
+    // Once the operator said so, the role is written as it was sent.
+    await browser.post(path, [...fields, ['closesAdministration', 'yes']])
+    expect(policy.writes.map((entry) => entry.body)).toEqual([
+      expect.objectContaining({ key: 'admin', permissions: ['console.status'] }),
+    ])
+  })
+
+  test('the grid of the roles writes the roles whose cells changed, and no other', async () => {
+    resetPolicy()
+    const browser = new Browser()
+    await browser.signIn()
+    const grid = await (await browser.request('/operators/tenants/acme/roles?view=matrix')).text()
+    expect(grid).toContain('<table class="matrix">')
+    expect(grid).toMatch(/name="perm:editor" value="content\.write" checked=""/)
+    // The editors read through the readers: the cell says where it comes from.
+    expect(grid).toContain('via reader')
+    // A capability of the platform is a row of closed cells for the operator of a tenant.
+    expect(grid).toContain('<code>console.platform</code>')
+    expect(grid).not.toContain('value="console.platform"')
+
+    // The readers are given content.write, the editors a permission the
+    // tenant does not name yet; nothing else is touched.
+    const saved = await browser.post('/operators/tenants/acme/roles?view=matrix', [
+      ['_action', 'matrix'],
+      ['role', 'editor'],
+      ['shown:editor', 'content.write'],
+      ['role', 'reader'],
+      ['shown:reader', 'content.read'],
+      ['perm:editor', 'content.write'],
+      ['perm:reader', 'content.read'],
+      ['perm:reader', 'content.write'],
+      ['new', 'content.archive'],
+      ['new:editor', 'yes'],
+    ])
+    expect(saved.headers.get('location')).toBe('/operators/tenants/acme/roles?view=matrix')
+    const written = Object.fromEntries(
+      policy.writes.map((entry) => {
+        const body = entry.body as { key: string; permissions: string[]; roles: string[] }
+        return [body.key, body]
+      })
+    )
+    expect(Object.keys(written).sort()).toEqual(['editor', 'reader'])
+    expect(written.editor).toMatchObject({
+      permissions: ['content.archive', 'content.write'],
+      roles: ['reader'],
+    })
+    expect(written.reader).toMatchObject({ permissions: ['content.read', 'content.write'] })
+    const after = await (await browser.request('/operators/tenants/acme/roles?view=matrix')).text()
+    expect(after).toContain('Saved 2 roles')
+
+    // A grid that comes back as it was drawn writes nothing.
+    policy.writes.length = 0
+    await browser.post('/operators/tenants/acme/roles?view=matrix', [
+      ['_action', 'matrix'],
+      ['role', 'reader'],
+      ['shown:reader', 'content.read\ncontent.write'],
+      ['perm:reader', 'content.read'],
+      ['perm:reader', 'content.write'],
+    ])
+    expect(policy.writes).toEqual([])
+
+    // A cell that was closed and comes back ticked is refused with the reason of the rule.
+    await browser.post('/operators/tenants/acme/roles?view=matrix', [
+      ['_action', 'matrix'],
+      ['role', 'reader'],
+      ['shown:reader', 'content.read\ncontent.write'],
+      ['perm:reader', 'content.read'],
+      ['perm:reader', 'content.write'],
+      ['perm:reader', 'console.platform'],
+    ])
+    expect(policy.writes).toEqual([])
+    const refused = await (
+      await browser.request('/operators/tenants/acme/roles?view=matrix')
+    ).text()
+    expect(refused).toContain('No role was saved.')
+    expect(refused).toContain('not yours to give')
+  })
+
+  test('the groups of a user are changed on the page of the user', async () => {
+    resetPolicy()
+    policy.groups.push({
+      id: 'grp-2',
+      tenant: 'acme',
+      key: 'night',
+      displayName: null,
+      members: ['user-bob'],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })
+    const browser = new Browser()
+    await browser.signIn()
+    const path = `/operators/tenants/acme/users/${PRINCIPAL}`
+    // Alice stays in the team and joins the night shift: one group is
+    // written, with the members it had and her.
+    await browser.post(path, [
+      ['_action', 'groups'],
+      ['groups', 'team'],
+      ['groups', 'night'],
+    ])
+    expect(policy.writes).toEqual([
+      {
+        method: 'POST',
+        path: '/v1/admin/groups',
+        body: expect.objectContaining({ key: 'night', members: ['user-bob', 'user-alice'] }),
+      },
+    ])
+    expect(await (await browser.request(path)).text()).toContain('Alice joined night.')
+
+    // A form that names no group takes her out of the one she is in.
+    policy.writes.length = 0
+    await browser.post(path, { _action: 'groups' })
+    expect(policy.writes.map((entry) => entry.body)).toEqual([
+      expect.objectContaining({ key: 'team', displayName: 'The team', members: [] }),
+    ])
+  })
+
+  test('a user of another provider is written at its provider, and found in its groups', async () => {
+    resetPolicy()
+    const erin = {
+      ...ALICE,
+      id: '55555555-5555-4555-8555-555555555555',
+      provider: 'contractors',
+      externalSubject: 'user-erin',
+      email: 'erin@acme.test',
+      displayName: 'Erin',
+    }
+    policy.users.push(erin)
+    // A group names a member of another provider with the provider.
+    policy.groups.push({
+      id: 'grp-2',
+      tenant: 'acme',
+      key: 'night',
+      displayName: null,
+      members: ['contractors/user-erin'],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })
+    const browser = new Browser()
+    await browser.signIn()
+    const path = `/operators/tenants/acme/users/${erin.id}`
+    const html = await (await browser.request(path)).text()
+    expect(html).toContain('<input type="hidden" name="groups" value="night"/>')
+
+    // Disabling her names her provider: the subject alone names a
+    // principal of the default provider, and would disable nobody.
+    await browser.post(path, { _action: 'status', status: 'disabled' })
+    expect(policy.writes.map((entry) => entry.body)).toEqual([
+      expect.objectContaining({
+        provider: 'contractors',
+        externalSubject: 'user-erin',
+        status: 'disabled',
+      }),
+    ])
+
+    // Leaving her group takes her name out of it, the provider with it.
+    policy.writes.length = 0
+    await browser.post(path, { _action: 'groups' })
+    expect(policy.writes.map((entry) => entry.body)).toEqual([
+      expect.objectContaining({ key: 'night', members: [] }),
+    ])
+  })
+
+  test('a group that gives a capability of the platform is filled by the platform', async () => {
+    resetPolicy()
+    consoleKeys = ['console.admin', 'console.status']
+    policy.users.push({
+      ...ALICE,
+      id: '66666666-6666-4666-8666-666666666666',
+      externalSubject: 'user-bob',
+      email: 'bob@acme.test',
+      displayName: 'Bob',
+    })
+    // The team holds the role root, and the role holds the capability: a
+    // member of the team administers every tenant.
+    policy.roles.push({
+      id: 'r-root',
+      tenant: 'acme',
+      key: 'root',
+      displayName: null,
+      description: null,
+      permissions: ['console.platform'],
+      roles: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })
+    policy.grants.push({
+      id: 'g-root',
+      tenant: 'acme',
+      group: 'team',
+      permission: null,
+      role: 'root',
+      workspaceId: 'acme',
+      routeId: 'console',
+      expiresAt: null,
+      revokedAt: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })
+    const browser = new Browser()
+    await browser.signIn()
+    const path = '/operators/tenants/acme/groups/team'
+
+    // The page says who fills the group, and the picker offers nobody new.
+    const page = await (await browser.request(path)).text()
+    expect(page).toContain('Members are added by an operator of the platform')
+    expect(page).toContain('not yours to give')
+    expect(page).toContain('alice@acme.test')
+    expect(page).not.toContain('bob@acme.test')
+
+    // The operator of a tenant adds nobody: nothing is written, and the
+    // refusal names what the group gives.
+    await browser.post(path, [
+      ['_action', 'members'],
+      ['members', 'user-alice'],
+      ['members', 'user-bob'],
+    ])
+    expect(policy.writes).toEqual([])
+    const refused = await (await browser.request(path)).text()
+    expect(refused).toContain('The members were not saved')
+    expect(refused).toContain('The group gives console.platform to every member.')
+
+    // Taking a member away is the tenant's own write, with its credential.
+    seen.adminCalls.length = 0
+    await browser.post(path, { _action: 'members' })
+    expect(policy.writes.map((entry) => entry.body)).toEqual([
+      expect.objectContaining({ key: 'team', members: [] }),
+    ])
+    expect(seen.adminCalls.find((call) => call.startsWith('POST /v1/admin/groups '))).toContain(
+      'Bearer the-acme-token-00001'
+    )
+
+    // An operator of the platform adds the member, and the write is
+    // signed with the credential of the platform: Access refuses the
+    // one of the tenant.
+    policy.writes.length = 0
+    consoleKeys = ['console.platform', 'console.status']
+    const platform = new Browser()
+    await platform.signIn()
+    const open = await (await platform.request(path)).text()
+    expect(open).toContain('A new member is given a capability of the platform')
+    expect(open).toContain('bob@acme.test')
+    seen.adminCalls.length = 0
+    await platform.post(path, [
+      ['_action', 'members'],
+      ['members', 'user-alice'],
+      ['members', 'user-bob'],
+    ])
+    expect(policy.writes.map((entry) => entry.body)).toEqual([
+      expect.objectContaining({ key: 'team', members: ['user-alice', 'user-bob'] }),
+    ])
+    expect(seen.adminCalls.find((call) => call.startsWith('POST /v1/admin/groups '))).toContain(
+      'Bearer the-platform-token-0001'
+    )
+    consoleKeys = ['console.admin', 'console.status']
+  })
+
+  test('a user joins a group that gives a capability of the platform by the hand of the platform', async () => {
+    resetPolicy()
+    consoleKeys = ['console.admin', 'console.status']
+    policy.groups.push(
+      {
+        id: 'grp-2',
+        tenant: 'acme',
+        key: 'night',
+        displayName: null,
+        members: [],
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'grp-3',
+        tenant: 'acme',
+        key: 'board',
+        displayName: 'The board',
+        members: ['user-bob'],
+        createdAt: '2026-01-01T00:00:00.000Z',
+      }
+    )
+    policy.grants.push({
+      id: 'g-board',
+      tenant: 'acme',
+      group: 'board',
+      permission: 'console.platform',
+      workspaceId: 'acme',
+      routeId: 'console',
+      expiresAt: null,
+      revokedAt: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })
+    const browser = new Browser()
+    await browser.signIn()
+    const path = `/operators/tenants/acme/users/${PRINCIPAL}`
+
+    // The picker of an operator of a tenant does not offer the board, and says so.
+    const page = await (await browser.request(path)).text()
+    expect(page).toContain('Not offered: The board.')
+
+    // Alice joins the night shift and not the board: one group is
+    // written, and the refusal of the other names what it gives.
+    const wanted = [
+      ['_action', 'groups'],
+      ['groups', 'team'],
+      ['groups', 'night'],
+      ['groups', 'board'],
+    ] as const
+    await browser.post(path, wanted)
+    expect(policy.writes.map((entry) => entry.body)).toEqual([
+      expect.objectContaining({ key: 'night', members: ['user-alice'] }),
+    ])
+    const after = await (await browser.request(path)).text()
+    expect(after).toContain('Alice joined night.')
+    expect(after).toContain('board: The group gives console.platform to every member.')
+
+    // An operator of the platform signs each write with the credential
+    // it needs: the one of the tenant for the night shift, and the one
+    // of the platform for the board.
+    policy.writes.length = 0
+    consoleKeys = ['console.platform', 'console.status']
+    const platform = new Browser()
+    await platform.signIn()
+    expect(await (await platform.request(path)).text()).not.toContain('Not offered')
+    seen.adminCalls.length = 0
+    await platform.post(path, wanted)
+    expect(policy.writes.map((entry) => entry.body)).toEqual([
+      expect.objectContaining({ key: 'night', members: ['user-alice'] }),
+      expect.objectContaining({ key: 'board', members: ['user-bob', 'user-alice'] }),
+    ])
+    expect(seen.adminCalls.filter((call) => call.startsWith('POST /v1/admin/groups '))).toEqual([
+      'POST /v1/admin/groups Bearer the-acme-token-00001',
+      'POST /v1/admin/groups Bearer the-platform-token-0001',
+    ])
+    consoleKeys = ['console.admin', 'console.status']
+  })
+
+  test('a tenant the console cannot read whole is not taken for one whose groups give nothing', async () => {
+    resetPolicy()
+    policy.users.push({
+      ...ALICE,
+      id: '66666666-6666-4666-8666-666666666666',
+      externalSubject: 'user-bob',
+      email: 'bob@acme.test',
+      displayName: 'Bob',
+    })
+    // More live rights than the console reads of a tenant, and the one
+    // that gives the capability to the team is the last of them.
+    for (let index = 0; index < 1000; index += 1) {
+      policy.grants.push({
+        id: `g-many-${index}`,
+        tenant: 'acme',
+        userId: '99999999-9999-4999-8999-999999999999',
+        permission: 'content.reader',
+        workspaceId: WORKSPACE,
+        routeId: 'data-api',
+        expiresAt: null,
+        revokedAt: null,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      })
+    }
+    policy.grants.push({
+      id: 'g-last',
+      tenant: 'acme',
+      group: 'team',
+      permission: 'console.platform',
+      workspaceId: 'acme',
+      routeId: 'console',
+      expiresAt: null,
+      revokedAt: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })
+    const path = '/operators/tenants/acme/groups/team'
+    const members = [
+      ['_action', 'members'],
+      ['members', 'user-alice'],
+      ['members', 'user-bob'],
+    ] as const
+    const signerOf = () => seen.adminCalls.find((call) => call.startsWith('POST /v1/admin/groups '))
+
+    // The operator of a tenant signs with the credential of its tenant:
+    // Access reads every right of the group, and it answers.
+    consoleKeys = ['console.admin', 'console.status']
+    const browser = new Browser()
+    await browser.signIn()
+    seen.adminCalls.length = 0
+    await browser.post(path, members)
+    expect(signerOf()).toContain('Bearer the-acme-token-00001')
+
+    // The operator of the platform signs with the credential of the
+    // platform, which may always add a member.
+    consoleKeys = ['console.platform', 'console.status']
+    const platform = new Browser()
+    await platform.signIn()
+    seen.adminCalls.length = 0
+    await platform.post(path, members)
+    expect(signerOf()).toContain('Bearer the-platform-token-0001')
+    consoleKeys = ['console.admin', 'console.status']
+  })
+
+  test('a page of the administration does not wait for Data to name a workspace', async () => {
+    const grantOn = (id: string, workspaceId: string) => ({
+      id,
+      tenant: 'acme',
+      userId: PRINCIPAL,
+      permission: 'content.read',
+      workspaceId,
+      routeId: 'data-api',
+      expiresAt: null,
+      revokedAt: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })
+    try {
+      // The name of a workspace is a courtesy: the page that asked for
+      // one that does not come shows the identifier, and answers.
+      resetPolicy()
+      policy.grants.push(grantOn('g-slow', SLOW_WORKSPACE))
+      const waiting = new Browser()
+      await waiting.signIn()
+      const started = Date.now()
+      const slow = await (await waiting.request('/operators/tenants/acme/rights')).text()
+      expect(Date.now() - started).toBeLessThan(3500)
+      expect(slow).toContain('The Acme workspace')
+      expect(slow).toContain(`<code title="${SLOW_WORKSPACE}">77777777…</code>`)
+
+      // A Data that does not answer is not asked again by the next page.
+      resetPolicy()
+      policy.grants.push(grantOn('g-down', DOWN_WORKSPACE))
+      const browser = new Browser()
+      await browser.signIn()
+      await browser.request('/operators/tenants/acme/rights')
+      seen.bearers.length = 0
+      const again = await (await browser.request('/operators/tenants/acme/rights')).text()
+      expect(seen.bearers).toEqual([])
+      expect(again).toContain(`<code title="${DOWN_WORKSPACE}">88888888…</code>`)
+    } finally {
+      resetPolicy()
+    }
   })
 
   test('an operator whose keys were revoked is refused at once', async () => {

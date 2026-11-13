@@ -3,35 +3,50 @@
  * the acts that grant a right and revoke it.
  *
  * The grant form is checked before Access is called: a role is one of
- * the tenant's roles, and a permission no grant or role names is created
- * only once the operator said so. A refused form comes back filled in,
- * on the page it was sent from.
+ * the tenant's roles, a permission no grant or role names is created
+ * only once the operator said so, and a permission that is not the
+ * operator's to give — as it is, or in the role that is granted — is
+ * refused with the reason of the rule. A refused form comes back filled
+ * in, on the page it was sent from.
+ *
+ * The list is filtered by what a right gives in effect: asked for a
+ * permission, it answers with the rights that give it, the grants of
+ * the roles that hold it among them.
  */
 
 import { createRoute } from 'honox/factory'
-import { AccessError, type GrantInput } from '../../../../../../domains/access'
+import { AccessError, type Grant, type GrantInput } from '../../../../../../domains/access'
 import { safeRedirect } from '../../../../../../domains/authentication'
 import {
   checkGrant,
+  effectOf,
   isFiltered,
   knownPermissionsOf,
   matchesRightsFilter,
+  permissionsOfGrant,
+  permissionsOfRole,
   type RightsFilter,
+  whereOf,
 } from '../../../../../../domains/operators'
 import {
   adminFor,
-  GRANT_FORM,
-  GrantForm,
   HowRightsWork,
-  holderOf,
   platformWrite,
-  RightsTable,
   TenantHead,
   TenantTabs,
   tenantCrumbs,
   tenantPath,
 } from '../../../../../components/operators'
 import { Empty, Notice, OffsetPager, Refusal, refusalOf } from '../../../../../components/page'
+import {
+  GRANT_FORM,
+  GrantForm,
+  holderOf,
+  RightsTable,
+  type RightsView,
+  rightsViewOf,
+  workspaceLabel,
+} from '../../../../../components/rights'
 import { formOf } from '../../../../../middleware/forms'
 import { flash, keepDraft, sessionOf, takeDraft } from '../../../../../middleware/session'
 
@@ -53,27 +68,31 @@ export const POST = createRoute(async (c) => {
     return c.redirect(back)
   }
 
+  const [grants, roles] = await Promise.all([
+    admin.all((page) => admin.grants({ tenant: slug, ...page })),
+    admin.all((page) => admin.roles({ tenant: slug, ...page })),
+  ])
+
   // A capability that is not relative to a tenant is the platform's:
-  // only an operator that holds it may give it, and the write is signed
-  // with the credential of the platform. Access refuses the write of a
-  // credential of a tenant.
-  const write = await platformWrite(c, [form.get('permission')])
+  // only an operator that holds it may give it — as it is, or in the
+  // role that is granted — and the write is signed with the credential
+  // of the platform. Access refuses the write of a credential of a
+  // tenant.
+  const byRole = form.get('kind') === 'role'
+  const gives = byRole
+    ? permissionsOfRole(form.get('role').trim(), roles.rows)
+    : [form.get('permission').trim()]
+  const write = await platformWrite(c, gives)
   if (write.kind === 'refused') {
     keepDraft(c, {
       form: GRANT_FORM,
       values: form.fields,
-      problems: [
-        { field: 'permission', message: 'The capability of the platform is not yours to give.' },
-      ],
+      problems: [{ field: byRole ? 'role' : 'permission', message: write.reason }],
     })
     flash(c, { kind: 'error', text: 'The right was not granted: the form needs a change.' })
     return c.redirect(back)
   }
 
-  const [grants, roles] = await Promise.all([
-    admin.all((page) => admin.grants({ tenant: slug, ...page })),
-    admin.all((page) => admin.roles({ tenant: slug, ...page })),
-  ])
   const checked = checkGrant(
     {
       holder: form.get('holder'),
@@ -90,6 +109,7 @@ export const POST = createRoute(async (c) => {
     {
       permissions: knownPermissionsOf(grants.rows, roles.rows),
       roles: roles.rows.map((role) => role.key),
+      tenant: slug,
     }
   )
   if ('problems' in checked) {
@@ -106,11 +126,21 @@ export const POST = createRoute(async (c) => {
   }
   try {
     const grant = await (write.kind === 'platform' ? write.client : admin).saveGrant(input)
+    // Access accepts a right that opens nothing where it holds: the
+    // operator is told, with the right it just granted.
+    const effect = effectOf(
+      permissionsOfGrant(grant, roles.rows),
+      { where: whereOf(grant.workspaceId, slug), routeId: grant.routeId },
+      c.get('services').config.routeId
+    )
     flash(c, {
       kind: 'ok',
       text: grant.role
         ? `The role ${grant.role} was granted.`
         : `The permission ${grant.permission} was granted.`,
+      ...(effect.inert.length > 0
+        ? { detail: effect.inert.map((entry) => entry.why).join(' ') }
+        : {}),
     })
   } catch (error) {
     if (!(error instanceof AccessError) || error.status >= 500) throw error
@@ -149,10 +179,18 @@ export default createRoute(async (c) => {
     admin.all((offsets) => admin.grants({ tenant: slug, live: true, ...offsets }), 400),
   ])
   const byId = new Map(users.rows.map((user) => [user.id, user]))
+  const viewOf = (shown: readonly Grant[]) =>
+    rightsViewOf(c, slug, {
+      grants: [...every.rows, ...shown],
+      roles: roles.rows,
+      groups: groups.rows,
+      users: users.rows,
+    })
 
   // A filter reads the rights of the tenant and pages them here; without
   // one, Access pages them.
-  let rows = null
+  let rows: readonly Grant[] | null = null
+  let view: RightsView | null = null
   let total = 0
   let partial = false
   let refusal = null
@@ -161,9 +199,16 @@ export default createRoute(async (c) => {
       const all = await admin.all((offsets) =>
         admin.grants({ tenant: slug, ...(live === undefined ? {} : { live }), ...offsets })
       )
+      const read = await viewOf(all.rows)
       const matched = all.rows.filter((grant) =>
-        matchesRightsFilter(grant, holderOf(slug, grant, byId).label, filter)
+        matchesRightsFilter(grant, holderOf(slug, grant, byId).label, filter, {
+          roles: roles.rows,
+          workspaceLabel:
+            workspaceLabel(read, grant.workspaceId) ??
+            (whereOf(grant.workspaceId, slug) === 'tenant' ? 'the tenant itself' : undefined),
+        })
       )
+      view = read
       total = matched.length
       partial = !all.complete
       rows = matched.slice(offset, offset + limit)
@@ -181,6 +226,7 @@ export default createRoute(async (c) => {
     if (!(error instanceof AccessError) || error.status >= 500) throw error
     refusal = refusalOf(error)
   }
+  view ??= await viewOf(rows ?? [])
 
   const query = (changes: Record<string, string | number>) => {
     const params = new URLSearchParams()
@@ -211,17 +257,20 @@ export default createRoute(async (c) => {
       <HowRightsWork />
       <details
         class="card disclosure"
-        open={draft !== null || (rows !== null && total === 0 && !isFiltered(filter))}
+        id="grant"
+        open={
+          draft !== null ||
+          c.req.query('grant') === '1' ||
+          (rows !== null && total === 0 && !isFiltered(filter))
+        }
       >
-        <summary>Grant a right</summary>
+        <summary class="act">Grant a right</summary>
         <GrantForm
-          tenant={slug}
+          view={view}
           back={base}
           grants={every.rows}
-          roles={roles.rows}
           users={users.rows}
           groups={groups.rows}
-          consoleRoute={c.get('services').config.routeId}
           draft={draft}
         />
       </details>
@@ -232,16 +281,20 @@ export default createRoute(async (c) => {
           <input name="holder" value={filter.holder} placeholder="a name, an e-mail or a group" />
         </label>
         <label class="field">
-          <span>Role or permission</span>
-          <input name="right" value={filter.right} class="mono" placeholder="content.read" />
+          <span>Gives</span>
+          <input
+            name="right"
+            value={filter.right}
+            class="mono"
+            placeholder="a role, or a permission it holds"
+          />
         </label>
         <label class="field">
-          <span>Workspace</span>
+          <span>Where</span>
           <input
             name="workspace"
             value={filter.workspace}
-            class="mono"
-            placeholder="a part of its ID"
+            placeholder="a workspace, “tenant” or “all”"
           />
         </label>
         <button type="submit" class="button quiet">
@@ -280,10 +333,20 @@ export default createRoute(async (c) => {
       ) : null}
       {rows && rows.length > 0 ? (
         <>
+          {filter.right.trim() ? (
+            <p class="small muted">
+              {total} {total === 1 ? 'right gives' : 'rights give'}{' '}
+              <code>{filter.right.trim()}</code>, as it is or through a role that holds it.
+            </p>
+          ) : null}
           <RightsTable
             showHolder
-            roles={roles.rows}
-            rows={rows.map((grant) => ({ grant, holder: holderOf(slug, grant, byId) }))}
+            view={view}
+            highlight={filter.right}
+            rows={rows.map((grant) => ({
+              grant,
+              holder: holderOf(slug, grant, byId, view.caller),
+            }))}
             back={here}
           />
           <OffsetPager

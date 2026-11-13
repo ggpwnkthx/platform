@@ -4,10 +4,11 @@
 
 import { createRoute } from 'honox/factory'
 import {
+  ACTIONS,
   administersOwnTenant,
   consoleAbility,
-  CONSOLE_ACTIONS,
-  CONSOLE_SUBJECT,
+  reasonOf,
+  SUBJECTS,
 } from '../../../domains/ability'
 import { AccessError, type Tenant } from '../../../domains/access'
 import { listingCredential } from '../../../domains/operators'
@@ -22,8 +23,9 @@ export const POST = createRoute(async (c) => {
   const scope = await operatorScope(c)
   const ability = consoleAbility(scope)
   const services = c.get('services')
-  if (!ability.can(CONSOLE_ACTIONS.platform, CONSOLE_SUBJECT) || !services.credentials.platform) {
-    return c.text('only the operator of the platform creates a tenant', 403)
+  const refused = reasonOf(ability, ACTIONS.create, SUBJECTS.tenant)
+  if (refused || !services.credentials.platform) {
+    return c.text(refused ?? 'The console holds no credential of the platform.', 403)
   }
   const form = await formOf(c)
   try {
@@ -105,6 +107,12 @@ export default createRoute(async (c) => {
                     <a href={tenantPath(tenant.slug)}>
                       <strong>{tenant.displayName}</strong>
                     </a>
+                    {tenant.slug === scope.tenant ? (
+                      <>
+                        {' '}
+                        <Badge plain>yours</Badge>
+                      </>
+                    ) : null}
                     <div class="small muted mono">{tenant.slug}</div>
                   </td>
                   <td class="small">
@@ -144,9 +152,9 @@ export default createRoute(async (c) => {
           </table>
         </div>
       ) : null}
-      {ability.can(CONSOLE_ACTIONS.platform, CONSOLE_SUBJECT) && services.credentials.platform ? (
+      {ability.can(ACTIONS.create, SUBJECTS.tenant) && services.credentials.platform ? (
         <details class="card disclosure">
-          <summary>Create a tenant</summary>
+          <summary class="act">Create a tenant</summary>
           <TenantForm platform action="/operators" />
         </details>
       ) : null}

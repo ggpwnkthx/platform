@@ -20,6 +20,13 @@ async function Masthead(props: { section?: Section }) {
   const scope = session ? await operatorScope(c) : null
   const ability = scope ? consoleAbility(scope) : null
   const theme = getCookie(c, 'console_theme')
+  // What the caller is to the console, beside its name: the reader sees
+  // at a glance why a place is there, or why it is not.
+  const standing = ability?.can(CONSOLE_ACTIONS.platform, CONSOLE_SUBJECT)
+    ? 'platform operator'
+    : ability?.can(CONSOLE_ACTIONS.admin, CONSOLE_SUBJECT)
+      ? 'operator'
+      : null
   // The status and the documentation are in the foot of every page: the
   // header carries the places of the console, and the foot the two that
   // every reader may reach.
@@ -64,7 +71,10 @@ async function Masthead(props: { section?: Section }) {
               />
               <a class="who" href="/me" style="text-decoration: none; color: inherit">
                 <strong>{session.principal.name ?? session.principal.email ?? 'You'}</strong>
-                <span class="small muted">{session.principal.tenant}</span>
+                <span class="small muted">
+                  {session.principal.tenant}
+                  {standing ? ` · ${standing}` : ''}
+                </span>
               </a>
               <form method="post" action="/auth/logout">
                 <button type="submit" class="button quiet small">

@@ -10,6 +10,7 @@
  */
 
 import type { CatalogEntry, Provider } from '../../domains/access'
+import ConfirmButton from '../islands/confirm-button'
 import PresetPicker from '../islands/preset-picker'
 import { Badge } from './page'
 
@@ -69,15 +70,17 @@ export function ProviderForm(props: { action: string; catalog: readonly CatalogE
   )
 }
 
-/** The button that removes a provider of a tenant. */
-export function RemoveProvider(props: { id: string; action: string }) {
+/** The button that removes a provider of a tenant: it asks first. */
+export function RemoveProvider(props: { id: string; action: string; name: string }) {
   return (
     <form method="post" action={props.action} class="inline">
       <input type="hidden" name="_action" value="remove-provider" />
       <input type="hidden" name="id" value={props.id} />
-      <button type="submit" class="button button-quiet">
-        Remove
-      </button>
+      <ConfirmButton
+        small
+        label="Remove"
+        message={`Remove the provider ${props.name}? Nobody signs in at it any more. Access refuses the removal while a user belongs to it.`}
+      />
     </form>
   )
 }
@@ -109,15 +112,17 @@ export function CredentialForm(props: { action: string; provider: string }) {
   )
 }
 
-/** The button that removes a credential of a local provider. */
-export function RemoveCredential(props: { id: string; action: string }) {
+/** The button that removes a credential of a local provider: it asks first. */
+export function RemoveCredential(props: { id: string; action: string; email: string }) {
   return (
     <form method="post" action={props.action} class="inline">
       <input type="hidden" name="_action" value="remove-credential" />
       <input type="hidden" name="id" value={props.id} />
-      <button type="submit" class="button button-quiet">
-        Remove
-      </button>
+      <ConfirmButton
+        small
+        label="Remove"
+        message={`Remove the account ${props.email}? It cannot sign in any more; its user and the rights it holds stay.`}
+      />
     </form>
   )
 }
@@ -137,7 +142,18 @@ export function ProviderRow(props: { provider: Provider; action: string }) {
       <td class="small">
         {provider.enabled ? <Badge tone="ok">enabled</Badge> : <Badge tone="error">disabled</Badge>}
       </td>
-      <td>{isDefault ? null : <RemoveProvider id={provider.id} action={props.action} />}</td>
+      <td class="num actions">
+        {isDefault ? (
+          <span
+            class="small muted"
+            title="The default provider is the registration of the tenant: it is changed with the tenant"
+          >
+            the tenant's own
+          </span>
+        ) : (
+          <RemoveProvider id={provider.id} action={props.action} name={provider.displayName} />
+        )}
+      </td>
     </tr>
   )
 }

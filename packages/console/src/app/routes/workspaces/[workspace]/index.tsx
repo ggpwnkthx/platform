@@ -1,12 +1,18 @@
 /**
  * A workspace: who the caller is in it, and the collections it may use.
+ *
+ * Every collection says what the caller may do with its records, the
+ * refused actions too, and the tabs of the model and of the audit are
+ * drawn closed when Access gives the caller no key that opens them.
  */
 
 import { createRoute } from 'honox/factory'
+import { workspaceAbility } from '../../../../domains/ability'
 import { isUuid } from '../../../../domains/operators'
-import { Badge, Empty, KeyValues, PageHead } from '../../../components/page'
+import { Empty, KeyValues, PageHead } from '../../../components/page'
 import {
   accessPath,
+  CollectionActions,
   collectionPath,
   WorkspaceTabs,
   workspaceCrumbs,
@@ -14,14 +20,7 @@ import {
 } from '../../../components/workspace'
 import CopyText from '../../../islands/copy-text'
 import { sessionOf } from '../../../middleware/session'
-import { rememberWorkspace } from '../../../middleware/workspaces'
-
-const ACTION_TONES: Record<string, 'ok' | 'accent' | 'warn' | 'error'> = {
-  read: 'ok',
-  create: 'accent',
-  update: 'warn',
-  delete: 'error',
-}
+import { rememberWorkspace, workspaceKeys } from '../../../middleware/workspaces'
 
 export default createRoute(async (c) => {
   const id = c.req.param('workspace') ?? ''
@@ -29,7 +28,8 @@ export default createRoute(async (c) => {
   const session = sessionOf(c)
   const client = c.get('services').data(id, session.accessToken)
   const [me, schema] = await Promise.all([client.me(), client.schema()])
-  rememberWorkspace(c, id)
+  rememberWorkspace(c, id, me)
+  const ability = workspaceAbility(await workspaceKeys(c, id, me.routeId))
 
   return c.render(
     <>
@@ -38,7 +38,7 @@ export default createRoute(async (c) => {
         eyebrow="Workspace"
         lede={`${schema.collections.length} ${schema.collections.length === 1 ? 'collection is' : 'collections are'} open to you.`}
       />
-      <WorkspaceTabs id={id} current="collections" />
+      <WorkspaceTabs id={id} current="collections" ability={ability} />
       <div class="split">
         <section class="stack">
           {schema.collections.length === 0 ? (
@@ -54,13 +54,7 @@ export default createRoute(async (c) => {
                   {collection.description ? (
                     <p class="small muted">{collection.description}</p>
                   ) : null}
-                  <div class="chips">
-                    {collection.actions.map((action) => (
-                      <Badge tone={ACTION_TONES[action] ?? 'accent'} plain>
-                        {action}
-                      </Badge>
-                    ))}
-                  </div>
+                  <CollectionActions collection={collection} />
                   <span class="small muted">
                     {collection.readableFields.length} readable · {collection.writableFields.length}{' '}
                     writable fields

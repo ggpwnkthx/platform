@@ -24,9 +24,27 @@ export function isLive(grant: Grant, now = Date.now()): boolean {
   return true
 }
 
+/** The slug of the default provider of a tenant: the registration of the tenant itself. */
+const DEFAULT_PROVIDER = 'default'
+
+/**
+ * The name a group knows a user by.
+ *
+ * A group names its members by the identity their provider gives them:
+ * the subject alone for the default provider of the tenant, and
+ * `<provider>/<subject>` for another one, since two providers of a
+ * tenant hand out the same subject (Access spec §10.9).
+ */
+export function memberNameOf(user: Pick<Principal, 'provider' | 'externalSubject'>): string {
+  return !user.provider || user.provider === DEFAULT_PROVIDER
+    ? user.externalSubject
+    : `${user.provider}/${user.externalSubject}`
+}
+
 /** The groups a user is a member of. */
 export function groupsOf(user: Principal, groups: readonly Group[]): Group[] {
-  return groups.filter((group) => group.members.includes(user.externalSubject))
+  const name = memberNameOf(user)
+  return groups.filter((group) => group.members.includes(name))
 }
 
 /** The rights of a user: its own, and the ones of its groups. */

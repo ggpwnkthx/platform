@@ -37,7 +37,8 @@ Each place, with the service calls behind it: [spec §6.2](spec.md#62-places).
 | --- | --- | --- |
 | Session | The browser holds only a signed session identifier; the caller's token stays on the server. | [spec §3](spec.md#3-sessions) |
 | Operator scope | The keys `console.status`, `console.admin` and `console.platform`, read from Access on every page. | [spec §4](spec.md#4-operator-scope) |
-| Ability | What the console shows mirrors what the services allow: it may hide an action, never grant one. | [spec §5](spec.md#5-ability) |
+| Where a right holds | On the tenant itself, on every workspace or on one: a key opens something only in the place its reader asks about, and the grant form says so first. | [spec §4.2](spec.md#42-where-a-right-holds) |
+| Ability | What the console shows mirrors what the services allow: it draws what is refused as closed, with the reason, and never grants anything. | [spec §5](spec.md#5-ability) |
 | Documentation | The console serves this `docs/` tree from its build, arranged around the role the reader chooses. | [spec §6.4](spec.md#64-documentation) |
 
 ## Find your way

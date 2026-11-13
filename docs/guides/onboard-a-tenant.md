@@ -231,7 +231,7 @@ curl -sS -X PUT $ACCESS/v1/admin/grants \
   -d '{"tenant":"acme","userId":"'"$USER_ID"'","role":"admin","workspaceId":"acme","routeId":"console"}'
 ```
 
-The role `admin` is created with the tenant, and it holds the permissions an administration needs ([Access spec §6.4](../access/spec.md#64-unknown-identity)). Granting the role is enough; granting `console.admin` by hand works as well.
+The role `admin` is created with the tenant, and it holds the permissions an administration needs ([Access spec §6.4](../access/spec.md#64-unknown-identity)). Granting the role is enough; granting `console.admin` by hand works as well. Once the tenant has an administrator, the next ones are made from the console, on the page of the user ([console user guide](../console/user-guide.md#make-someone-an-administrator)).
 
 ## Check that it worked
 

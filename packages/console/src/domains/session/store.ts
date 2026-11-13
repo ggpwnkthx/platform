@@ -65,6 +65,21 @@ export interface Session {
   refreshToken: string | null
   /** The workspaces the caller opened, the latest first. */
   workspaces: string[]
+  /**
+   * The names of the workspaces Data named for the caller, by their
+   * identifier; null for a workspace Data did not open to it.
+   *
+   * Access names a workspace by its identifier and Data by its name: a
+   * page of the administration shows the name where the caller could
+   * read it itself, and the identifier everywhere else.
+   */
+  workspaceNames: Record<string, string | null>
+  /**
+   * The moment the console asks Data for the name of a workspace again,
+   * after Data did not answer: a page of the administration does not
+   * wait for Data.
+   */
+  workspaceNamesAfter?: number
   flash: Flash | null
   /** The last refused form, kept for the next page. */
   draft?: Draft | null
@@ -127,6 +142,7 @@ export class SessionStore {
       accessTokenExpiresAt: options.accessTokenExpiresAt,
       refreshToken: options.refreshToken ?? null,
       workspaces: [],
+      workspaceNames: {},
       flash: null,
     }
     this.#sessions.set(session.id, session)

@@ -62,7 +62,7 @@ platformctl access grants put --tenant acme --user-id "$USER_ID" --permission wo
   --expires-at 2026-12-31T23:59:59Z --granted-by ops@example.com
 ```
 
-In the console, use **Rights**: pick a user or group, a permission or role, the workspace and route, and an optional expiry.
+In the console, use **Rights**: pick a user or group, a role or a permission, the place it holds in and an optional end. The form names the places and says what the right opens in the one you pick ([console user guide](../console/user-guide.md#give-someone-access)).
 
 A permission key that does not exist yet is created in the tenant's own scope ([Access spec §10.6](../access/spec.md#106-put-v1admingrants)). Leave out `expiresAt` for a grant that never expires; leave out `workspaceId` or `routeId` to cover every workspace or route of the tenant. What a permission lets someone do inside Data is decided by Data's policies, not by Access ([Data configuration: policy bundle](../data/configuration.md#policy-bundle)).
 
@@ -92,7 +92,7 @@ platformctl access grants put --tenant acme --group team-platform --permission w
 platformctl access groups list --tenant acme
 ```
 
-In the console, use **Groups**. A member that is not a principal of the tenant is refused with `404 not_found`, so register people first. Membership is read from the table on every decision, so removing someone from a group takes away the group's grants at their next decision.
+In the console, use **Groups**, or change one person's groups on the page of the user. A member that is not a principal of the tenant is refused with `404 not_found`, so register people first. Membership is read from the table on every decision, so removing someone from a group takes away the group's grants at their next decision.
 
 ### 4. Bundle permissions in roles
 
@@ -117,7 +117,7 @@ platformctl access grants put --tenant acme --user-id "$USER_ID" --role role-edi
   --workspace-id "$WORKSPACE" --route-id workspace-api
 ```
 
-In the console, save the role on **Roles** and grant it on **Rights**. A role that would include itself, directly or through others, is refused with `409 conflict`. A role can be removed (`DELETE /v1/admin/roles/{id}`, or `platformctl access roles remove <id>`) only once no grant names it, so revoke those grants first ([Access spec §10.13](../access/spec.md#1013-delete-v1adminrolesid)).
+In the console, save the role on **Roles** — or tick its permissions in the grid of that page ([console user guide](../console/user-guide.md#change-what-roles-hold)) — and grant it on **Rights**. A role that would include itself, directly or through others, is refused with `409 conflict`. A role can be removed (`DELETE /v1/admin/roles/{id}`, or `platformctl access roles remove <id>`) only once no grant names it, so revoke those grants first ([Access spec §10.13](../access/spec.md#1013-delete-v1adminrolesid)).
 
 ### 5. Revoke a grant, or switch a person off
 

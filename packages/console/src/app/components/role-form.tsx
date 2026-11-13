@@ -7,7 +7,13 @@
  */
 
 import type { Role, RoleInput } from '../../domains/access'
-import { rolesIncluding } from '../../domains/operators'
+import {
+  isPlatformKey,
+  KEY_PATTERN,
+  knownPermission,
+  permissionsOfRole,
+  rolesIncluding,
+} from '../../domains/operators'
 import type { Draft } from '../../domains/session'
 import ChipPicker from '../islands/chip-picker'
 import type { SentForm } from '../middleware/forms'
@@ -15,8 +21,12 @@ import type { SentForm } from '../middleware/forms'
 /** The name of the role form: the draft of a refused role comes back to it. */
 export const ROLE_FORM = 'role'
 
-/** The pattern of a key of Access. */
-export const KEY_PATTERN = '[a-z0-9][a-z0-9._\\-]{0,63}'
+/**
+ * The field that says the operator knows what a write closes: a role
+ * written without the key that opens the administration closes it to
+ * everybody who holds the role.
+ */
+export const CLOSES_ADMINISTRATION = 'closesAdministration'
 
 /** The values of a list field of a draft: the list fields are kept one per line. */
 export function draftList(draft: Draft | null, name: string): string[] | null {
@@ -42,6 +52,15 @@ export function roleInputOf(form: SentForm, tenant: string): RoleInput {
     permissions: list('permissions'),
     roles: list('roles'),
   }
+}
+
+/**
+ * The field of a role form that names a capability of the platform: the
+ * permissions when the role is written with one, the included roles
+ * when it comes with one of them.
+ */
+export function closedFieldOf(input: RoleInput): 'permissions' | 'roles' {
+  return (input.permissions ?? []).some(isPlatformKey) ? 'permissions' : 'roles'
 }
 
 /** The draft of a refused role form: its list fields one per line. */
@@ -130,10 +149,12 @@ export function RoleForm(props: {
           newPattern={KEY_PATTERN}
           trackChanges={role !== undefined}
           noun={['permission', 'permissions']}
-          candidates={props.permissions.map((permission) => ({
-            value: permission,
-            label: permission,
-          }))}
+          candidates={props.permissions.map((permission) => {
+            // What the console knows of a key is said under it.
+            const known = knownPermission(permission)
+            const hint = known?.platform ? `${known.title} · the platform's` : known?.title
+            return { value: permission, label: permission, ...(hint ? { hint } : {}) }
+          })}
           selected={draftList(draft ?? null, 'permissions') ?? [...(role?.permissions ?? [])]}
         />
         {problem('permissions') ? <span class="problem">{problem('permissions')}</span> : null}
@@ -151,12 +172,24 @@ export function RoleForm(props: {
           candidates={includable.map((entry) => ({
             value: entry.key,
             label: entry.displayName ?? entry.key,
-            hint: entry.permissions.join(', ') || 'no permission of its own',
+            // A role that holds a capability of the platform says so: including it gives it.
+            hint: permissionsOfRole(entry.key, props.roles).some(isPlatformKey)
+              ? "holds a capability of the platform · the platform's to include"
+              : entry.permissions.join(', ') || 'no permission of its own',
           }))}
           selected={draftList(draft ?? null, 'roles') ?? [...(role?.roles ?? [])]}
         />
         {problem('roles') ? <span class="problem">{problem('roles')}</span> : null}
       </div>
+      {problem(CLOSES_ADMINISTRATION) ? (
+        <div class="notice warn compact">
+          <span>{problem(CLOSES_ADMINISTRATION)}</span>
+          <label class="check small">
+            <input type="checkbox" name={CLOSES_ADMINISTRATION} value="yes" />
+            Yes, save the role without it
+          </label>
+        </div>
+      ) : null}
       <div class="row">
         <button type="submit" class="button">
           {role ? 'Save role' : 'Create role'}

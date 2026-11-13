@@ -14,6 +14,7 @@
 import type { Tenant, TenantInput } from '../../domains/access'
 import type { SentForm } from '../middleware/forms'
 import { listOf } from '../middleware/forms'
+import { Lock } from './why'
 
 /** The input of the upsert of a tenant, from its form. */
 export function tenantInputOf(form: SentForm, platform: boolean, current?: Tenant): TenantInput {
@@ -34,9 +35,13 @@ export function tenantInputOf(form: SentForm, platform: boolean, current?: Tenan
     ...(providerSecret === '' ? {} : { idpClientSecret: providerSecret }),
     ...(optional('idpRedirectUri') ? { idpRedirectUri: optional('idpRedirectUri') } : {}),
     ...(optional('idpScopes') ? { idpScopes: listOf(form.get('idpScopes')) } : {}),
-    ...(optional('emailDomain') ? { emailDomain: optional('emailDomain') } : {}),
+    // The domain of the addresses is named by the form, and an empty
+    // one clears the domain of the tenant.
+    emailDomain: optional('emailDomain') ?? null,
     clientId: form.get('clientId').trim(),
-    clientSecret: form.get('clientSecret'),
+    // The secret of the gateway is sent when it is written, and a
+    // change that leaves it empty keeps the secret the tenant has.
+    ...(form.get('clientSecret') === '' ? {} : { clientSecret: form.get('clientSecret') }),
     clientRedirectUris: listOf(form.get('clientRedirectUris')),
     autoProvision: flag('autoProvision'),
     autoProvisionAdmin: flag('autoProvisionAdmin'),
@@ -57,8 +62,10 @@ function Flag(props: {
   hint?: string
 }) {
   return (
-    <label class="field">
-      <span>{props.label}</span>
+    <label class={`field ${props.disabled ? 'closed' : ''}`.trim()}>
+      <span>
+        {props.disabled ? <Lock /> : null} {props.label}
+      </span>
       <select name={props.name} disabled={props.disabled}>
         <option value="true" selected={props.value}>
           yes
@@ -75,12 +82,18 @@ function Flag(props: {
 /** The form of a tenant. */
 export function TenantForm(props: {
   tenant?: Tenant
+  /** Whether the reader changes the flags that are the platform's. */
   platform: boolean
+  /** Why the reader does not change them, when it does not: the reason of the rule. */
+  platformReason?: string | null
   values?: Readonly<Record<string, string>>
   action: string
 }) {
   const { tenant, values } = props
   const value = (name: string, fallback: string) => values?.[name] ?? fallback
+  const platformOnly = props.platform
+    ? 'the operator of the platform only'
+    : (props.platformReason ?? 'the operator of the platform only')
   return (
     <form method="post" action={props.action} class="form">
       <input type="hidden" name="_action" value="save-tenant" />
@@ -169,8 +182,16 @@ export function TenantForm(props: {
         </label>
         <label class="field">
           <span>Secret of the client</span>
-          <input name="clientSecret" type="password" required autocomplete="new-password" />
-          <span class="hint">a new secret is accepted beside the old one for a day</span>
+          <input
+            name="clientSecret"
+            type="password"
+            required={tenant === undefined}
+            autocomplete="new-password"
+          />
+          <span class="hint">
+            a new secret is accepted beside the old one for a day; leave it empty to keep the secret
+            the tenant has
+          </span>
         </label>
         <label class="field wide">
           <span>Redirects of the client</span>
@@ -198,14 +219,14 @@ export function TenantForm(props: {
           label="Shared client"
           value={tenant?.sharedClient ?? false}
           disabled={!props.platform}
-          hint="the operator of the platform only"
+          hint={platformOnly}
         />
         <Flag
           name="default"
           label="Default tenant"
           value={tenant?.default ?? false}
           disabled={!props.platform}
-          hint="the operator of the platform only"
+          hint={platformOnly}
         />
       </div>
       <div class="row">

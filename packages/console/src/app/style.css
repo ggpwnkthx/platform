@@ -2501,6 +2501,7 @@ fieldset.field > legend {
 .right-name {
   display: inline-flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 0.1rem;
 }
 
@@ -2534,7 +2535,6 @@ details.how .kv {
   align-self: flex-start;
 }
 
-.through,
 td.actions {
   white-space: nowrap;
 }
@@ -2656,4 +2656,511 @@ td.actions {
     padding-left: 0.4rem;
     padding-right: 0.4rem;
   }
+}
+
+/* ------------------------------------------------------------ what the reader may do */
+
+/*
+ * The mark of what is closed to the reader. It takes the colour of the
+ * text it stands in: a closed tab, a disabled button, a locked cell.
+ */
+.lock {
+  flex: none;
+  vertical-align: -0.1em;
+}
+
+/* A tab the reader may not open: still a link, and drawn as closed. */
+.tabs a.locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: color-mix(in srgb, var(--graphite) 75%, transparent);
+}
+
+.tabs a.locked:hover {
+  color: var(--graphite);
+}
+
+.tabs a.locked[aria-current="page"] {
+  color: var(--graphite);
+  border-bottom-color: var(--rule-strong);
+}
+
+/* The reason of a control at the start of a line opens to the right. */
+.why.start .why-tip {
+  left: 0;
+  right: auto;
+}
+
+/* What somebody may do: a line per capability, a yes or a no. */
+.capabilities {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.capability {
+  display: grid;
+  grid-template-columns: 1.1rem minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: start;
+}
+
+.capability-mark {
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.55;
+}
+
+.capability-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.capability.can .capability-mark {
+  color: var(--ok);
+}
+
+.capability.cannot .capability-mark,
+.capability.cannot .capability-label {
+  color: var(--graphite);
+}
+
+/* The actions on the records of a collection: the refused ones are drawn too. */
+.can-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.can-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.05rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.78rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.can-mark.can {
+  color: var(--ok);
+  background: var(--ok-soft);
+}
+
+.can-mark.cannot {
+  color: var(--graphite);
+  border: 1px dashed var(--rule-strong);
+  font-weight: 400;
+}
+
+/* The keys Access holds for somebody, each with what it opens. */
+.key-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.key-entry {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+}
+
+/* ------------------------------------------------------------ the granting of a right */
+
+/* A disclosure that holds the act of a page: its summary is the button of the act. */
+.disclosure > .act {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  align-self: flex-start;
+  list-style: none;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 0.9rem;
+}
+
+.disclosure > .act::-webkit-details-marker {
+  display: none;
+}
+
+.disclosure > .act::before {
+  content: "+";
+  font-weight: 600;
+}
+
+.disclosure > .act:hover {
+  filter: brightness(1.07);
+}
+
+.disclosure[open] > .act {
+  border-color: var(--rule-strong);
+  background: var(--card);
+  color: var(--ink);
+  filter: none;
+}
+
+.disclosure[open] > .act::before {
+  content: "−";
+}
+
+/* The four questions of a right, numbered in the order they are asked. */
+.grant-fields {
+  counter-reset: grant-step;
+  gap: 1.25rem;
+}
+
+.grant-step {
+  counter-increment: grant-step;
+}
+
+.grant-step > legend::before,
+.grant-step > label:first-child::before,
+.grant-step.form-grid > .field:first-child > label::before {
+  content: counter(grant-step);
+  display: inline-grid;
+  place-items: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  margin-right: 0.45rem;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.role-holds {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.optional {
+  color: var(--graphite);
+  font-size: 0.78rem;
+  font-weight: 400;
+}
+
+/* A choice among a few: each one is a card that says what it means. */
+.choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: 0.5rem;
+}
+
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--card);
+  cursor: pointer;
+}
+
+.choice-radio {
+  margin: 0.25rem 0 0;
+  accent-color: var(--accent);
+}
+
+.choice:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.choice:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.choice-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.choice-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* The right in words, and what it opens where it holds. */
+.grant-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.grant-preview.inert {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.grant-preview .problem {
+  color: var(--error);
+  font-size: 0.85rem;
+}
+
+.grant-effect {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.effect {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr);
+  gap: 0.4rem;
+}
+
+.effect-mark {
+  font-weight: 700;
+  text-align: center;
+}
+
+.effect.opens .effect-mark {
+  color: var(--ok);
+}
+
+.effect.others,
+.effect.aside {
+  color: var(--graphite);
+}
+
+.effect.inert {
+  color: var(--warn);
+}
+
+.grant-preview.refused {
+  color: var(--graphite);
+}
+
+/* The tenant itself, where a workspace is named: it is said, not shown as an identifier. */
+.place-tenant {
+  border-bottom: 1px dotted var(--rule-strong);
+  cursor: help;
+  font-weight: 500;
+}
+
+/* The table of rights fits a narrow column: what gives way is the moment, not the right. */
+.rights td:first-child {
+  min-width: 11rem;
+}
+
+.rights time.nowrap {
+  display: inline-block;
+  white-space: normal;
+  text-wrap: balance;
+}
+
+.rights .granted-by {
+  white-space: nowrap;
+}
+
+.field.closed > span:first-child {
+  color: var(--graphite);
+}
+
+/* The tasks of a page: what the reader came to do, each one a way in. */
+.tasks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+  gap: 0.5rem;
+}
+
+.task {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  height: 100%;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  color: inherit;
+  text-decoration: none;
+}
+
+.task:hover {
+  border-color: var(--accent);
+}
+
+.task-name {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------ the grid of the roles */
+
+.matrix-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* The grid scrolls in its own box: its head and its first column stay. */
+.matrix-wrap {
+  max-height: 72vh;
+  overflow: auto;
+}
+
+.matrix-permission,
+.matrix-cell {
+  vertical-align: middle;
+}
+
+/* Every family is a body of its own: the last row of one is not the last row of the grid. */
+.matrix tbody tr:last-child td {
+  border-bottom: 1px solid var(--rule);
+}
+
+.matrix tbody:last-child tr:last-child > * {
+  border-bottom: 0;
+}
+
+.matrix-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  min-width: 7.5rem;
+  text-align: center;
+  vertical-align: bottom;
+  white-space: normal;
+}
+
+.matrix-role-name {
+  color: var(--ink);
+}
+
+.matrix-head.matrix-corner {
+  left: 0;
+  z-index: 3;
+  text-align: left;
+}
+
+.matrix-permission {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 15rem;
+  background: var(--card);
+  font-size: inherit;
+  font-weight: 400;
+}
+
+.matrix-family-name {
+  position: sticky;
+  left: 0;
+  color: var(--graphite);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.matrix-who {
+  display: block;
+  color: var(--graphite);
+}
+
+.matrix-cell {
+  text-align: center;
+}
+
+.matrix-tick {
+  width: 1.05rem;
+  height: 1.05rem;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.matrix-through {
+  display: block;
+  color: var(--graphite);
+  font-size: 0.72rem;
+}
+
+.matrix-cell.closed {
+  background: color-mix(in srgb, var(--sunk) 70%, transparent);
+  cursor: help;
+}
+
+.matrix-closed {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--graphite);
+}
+
+/* A cell that is not what it was when the grid was drawn is not saved yet. */
+.matrix td:has(input[data-was="on"]:not(:checked)),
+.matrix td:has(input[data-was="off"]:checked) {
+  background: var(--warn-soft);
+  box-shadow: inset 0 0 0 2px var(--warn);
+}
+
+.matrix-new-key {
+  min-width: 12rem;
+}
+
+.matrix-save {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 0;
+  background: var(--paper);
+}
+
+/* On a narrow screen the first column gives way, so that two roles stay in view. */
+@media (max-width: 640px) {
+  .matrix-permission {
+    min-width: 9.5rem;
+  }
+
+  .matrix-head {
+    min-width: 5.5rem;
+  }
+}
+
+.matrix-dirty {
+  display: none;
+  color: var(--warn);
+  font-weight: 500;
+}
+
+.matrix-form:has(input[data-was="on"]:not(:checked), input[data-was="off"]:checked) .matrix-dirty {
+  display: inline;
+}
+
+.matrix-form:has(input[data-was="on"]:not(:checked), input[data-was="off"]:checked) .matrix-clean {
+  display: none;
 }

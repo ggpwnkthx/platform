@@ -1,11 +1,32 @@
 /**
- * A tenant: what Access holds about it, its latest changes,
- * and its form.
+ * A tenant: who administers it, what Access holds about it, its latest
+ * changes, and its form.
+ *
+ * The page is where an operator of a tenant lands. It answers the first
+ * question of an administration — who administers this tenant — and
+ * leads to the pages that manage the rest: granting a right, reading
+ * what a user holds, changing what a role holds.
+ *
+ * What is the platform's is drawn as the platform's: the flags of a
+ * tenant that only its operator changes, and the route it alone vouches
+ * for, are shown disabled to an operator of the tenant, with the reason.
  */
 
 import { createRoute } from 'honox/factory'
-import { consoleAbility, CONSOLE_ACTIONS, CONSOLE_SUBJECT } from '../../../../../domains/ability'
-import { AccessError, type Tenant } from '../../../../../domains/access'
+import {
+  ACTIONS,
+  allowanceOf,
+  consoleAbility,
+  reasonOf,
+  SUBJECTS,
+  tenantOf as tenantNamed,
+} from '../../../../../domains/ability'
+import { AccessError, type Grant, type Tenant } from '../../../../../domains/access'
+import {
+  type Administration,
+  administrationOf,
+  CONSOLE_KEYS,
+} from '../../../../../domains/operators'
 import {
   adminFor,
   TenantHead,
@@ -21,6 +42,7 @@ import {
   ProviderRow,
   RemoveCredential,
 } from '../../../../components/provider-form'
+import { type Holder, holderOf, RightPlace, rightsViewOf } from '../../../../components/rights'
 import { RouteForm, RouteRow } from '../../../../components/route-form'
 import { formOf, listOf } from '../../../../middleware/forms'
 import { operatorScope } from '../../../../middleware/scope'
@@ -43,6 +65,14 @@ export const POST = createRoute(async (c) => {
   const ability = consoleAbility(scope)
   const form = await formOf(c)
   const base = tenantPath(slug)
+  const services = c.get('services')
+  const caller = c.get('callerAddress')
+  // What is the platform's is written with the credential of the
+  // platform: Access refuses the credential of a tenant, whoever holds it.
+  const platform = () =>
+    services.credentials.platform
+      ? services.admin(services.credentials.platform, ...(caller ? [caller] : []))
+      : access.admin
   try {
     if (form.get('_action') === 'save-provider') {
       const kind = form.get('kind') === 'local' ? 'local' : 'oidc'
@@ -87,7 +117,16 @@ export const POST = createRoute(async (c) => {
     }
     if (form.get('_action') === 'verify-route') {
       const method = form.get('verification') === 'operator' ? 'operator' : 'dns'
-      const route = await access.admin.verifyRoute(form.get('id').trim(), {
+      // Vouching for a domain is the platform's: an operator of a tenant
+      // is told why before Access refuses it.
+      const refused =
+        method === 'operator' ? reasonOf(ability, ACTIONS.vouch, SUBJECTS.route) : null
+      if (refused) {
+        flash(c, { kind: 'error', text: 'The route was not vouched for.', detail: refused })
+        return c.redirect(base)
+      }
+      const client = method === 'operator' ? platform() : access.admin
+      const route = await client.verifyRoute(form.get('id').trim(), {
         status: 'verified',
         verification: method,
       })
@@ -119,9 +158,12 @@ export const POST = createRoute(async (c) => {
       flash(c, { kind: 'ok', text: 'The provider was removed.' })
       return c.redirect(base)
     }
-    await access.admin.saveTenant(
-      tenantInputOf(form, ability.can(CONSOLE_ACTIONS.platform, CONSOLE_SUBJECT), current)
-    )
+    const mayFlag = ability.can(ACTIONS.flag, tenantNamed(slug))
+    const input = tenantInputOf(form, mayFlag, current)
+    // The flags of the platform are changed with its credential; every
+    // other change of a tenant is signed by the credential of the tenant.
+    const flagged = input.sharedClient !== current.sharedClient || input.default !== current.default
+    await (flagged && mayFlag ? platform() : access.admin).saveTenant(input)
     flash(c, { kind: 'ok', text: `The tenant ${slug} was saved.` })
   } catch (error) {
     if (!(error instanceof AccessError) || error.status >= 500) throw error
@@ -134,6 +176,12 @@ export const POST = createRoute(async (c) => {
   return c.redirect(tenantPath(slug))
 })
 
+/** A holder that administers the tenant, and the rights that make it so. */
+interface Administrator {
+  readonly holder: Holder
+  readonly sources: readonly { readonly grant: Grant; readonly how: Administration }[]
+}
+
 export default createRoute(async (c) => {
   const slug = c.req.param('tenant') ?? ''
   const access = await adminFor(c, slug)
@@ -144,24 +192,59 @@ export default createRoute(async (c) => {
   if (!tenant) return c.notFound()
   let audit = null
   let refusal = null
-  const [groups, roles, providers, credentials] = await Promise.all([
-    access.admin.groups({ tenant: slug, limit: 1 }).catch(() => null),
-    access.admin.roles({ tenant: slug, limit: 1 }).catch(() => null),
-    access.admin.providers({ tenant: slug }).catch(() => null),
-    access.admin.credentials({ tenant: slug }).catch(() => null),
-  ])
+  const { admin } = access
+  const [groups, roles, grants, users, providers, credentials, routes, catalog] = await Promise.all(
+    [
+      admin.all((offsets) => admin.groups({ tenant: slug, ...offsets })).catch(() => null),
+      admin.all((offsets) => admin.roles({ tenant: slug, ...offsets })).catch(() => null),
+      admin
+        .all((offsets) => admin.grants({ tenant: slug, live: true, ...offsets }))
+        .catch(() => null),
+      admin.all((offsets) => admin.principals({ tenant: slug, ...offsets })).catch(() => null),
+      admin.providers({ tenant: slug }).catch(() => null),
+      admin.credentials({ tenant: slug }).catch(() => null),
+      admin.routes({ tenant: slug }).catch(() => null),
+      admin.catalog().catch(() => []),
+    ]
+  )
   const localProviders = (providers?.rows ?? []).filter((provider) => provider.kind === 'local')
-  const [routes, catalog] = await Promise.all([
-    access.admin.routes({ tenant: slug }).catch(() => null),
-    access.admin.catalog().catch(() => []),
-  ])
   try {
-    audit = await access.admin.audit({ tenant: slug, limit: 8 })
+    audit = await admin.audit({ tenant: slug, limit: 8 })
   } catch (error) {
     if (!(error instanceof AccessError) || error.status >= 500) throw error
     refusal = refusalOf(error)
   }
   const base = tenantPath(slug)
+  const view = await rightsViewOf(c, slug, {
+    grants: grants?.rows ?? [],
+    roles: roles?.rows ?? [],
+    groups: groups?.rows ?? [],
+    users: users?.rows ?? [],
+  })
+
+  // Who administers the tenant: the holders of a live right that opens
+  // the administration on the tenant itself, as Access would answer.
+  const byId = new Map((users?.rows ?? []).map((user) => [user.id, user]))
+  const administrators = new Map<string, Administrator>()
+  for (const grant of grants?.rows ?? []) {
+    const how = administrationOf(grant, view.roles, {
+      tenant: slug,
+      consoleRoute: view.consoleRoute,
+    })
+    if (!how) continue
+    const key = grant.group ? `group:${grant.group}` : `user:${grant.userId}`
+    const known = administrators.get(key)
+    administrators.set(key, {
+      holder: known?.holder ?? holderOf(slug, grant, byId, view.caller),
+      sources: [...(known?.sources ?? []), { grant, how }],
+    })
+  }
+  const membersOf = (key: string) =>
+    groups?.rows.find((group) => group.key === key)?.members.length ?? 0
+  const count = (total: number | undefined, complete: boolean | undefined) =>
+    total === undefined ? '—' : complete === false ? `${total}+` : String(total)
+  const mayFlag = allowanceOf(ability, ACTIONS.flag, tenantNamed(slug))
+
   return c.render(
     <>
       <TenantHead slug={slug} title={tenant.displayName} />
@@ -173,11 +256,11 @@ export default createRoute(async (c) => {
         </a>
         <a class="card card-link" href={`${base}/groups`}>
           <span class="muted small">Groups</span>
-          <span class="metric">{groups?.total ?? '—'}</span>
+          <span class="metric">{count(groups?.rows.length, groups?.complete)}</span>
         </a>
         <a class="card card-link" href={`${base}/roles`}>
           <span class="muted small">Roles</span>
-          <span class="metric">{roles?.total ?? '—'}</span>
+          <span class="metric">{count(roles?.rows.length, roles?.complete)}</span>
         </a>
         <a class="card card-link" href={`${base}/rights`}>
           <span class="muted small">Rights</span>
@@ -185,31 +268,143 @@ export default createRoute(async (c) => {
         </a>
       </div>
       <div class="split">
-        <section class="card">
-          <h2>Recent changes</h2>
-          {refusal ? <Refusal refusal={refusal} /> : null}
-          {audit && audit.rows.length === 0 ? <p class="muted">Nothing changed yet.</p> : null}
-          {audit && audit.rows.length > 0 ? (
-            <div class="table-wrap">
-              <table>
-                <tbody>
-                  {audit.rows.map((record) => (
-                    <tr>
-                      <td class="small">
-                        <Moment at={record.at} />
-                      </td>
-                      <td>
-                        <code>{record.action}</code>
-                      </td>
-                      <td class="small muted mono">{record.operator}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-          <a href={`${base}/audit`}>Full audit →</a>
-        </section>
+        <div class="stack">
+          <section class="card">
+            <header>
+              <h2>Manage access</h2>
+            </header>
+            <ul class="tasks">
+              <li>
+                <a class="task" href={`${base}/rights?grant=1#grant`}>
+                  <strong class="task-name">Give someone access</strong>
+                  <span class="small muted">
+                    Grant a role or a permission to a user or a group, where it should hold.
+                  </span>
+                </a>
+              </li>
+              <li>
+                <a class="task" href={`${base}/users`}>
+                  <strong class="task-name">See what someone can do</strong>
+                  <span class="small muted">
+                    Every permission of a user, where it comes from, and its groups.
+                  </span>
+                </a>
+              </li>
+              <li>
+                <a class="task" href={`${base}/roles?view=matrix`}>
+                  <strong class="task-name">Change what a role holds</strong>
+                  <span class="small muted">
+                    The roles against the permissions, in one grid you tick and save.
+                  </span>
+                </a>
+              </li>
+              <li>
+                <a class="task" href={`${base}/rights`}>
+                  <strong class="task-name">Find who holds a permission</strong>
+                  <span class="small muted">
+                    Filter the rights by what they give, a role's permissions included.
+                  </span>
+                </a>
+              </li>
+            </ul>
+          </section>
+          <section class="card" id="administrators">
+            <header>
+              <h2>Administrators</h2>
+              <span class="small muted">{grants ? administrators.size : '—'}</span>
+            </header>
+            <p class="small muted">
+              Who opens this administration: the holders of a live right that gives{' '}
+              <code>{CONSOLE_KEYS.admin}</code> on the tenant itself.
+            </p>
+            {grants === null ? (
+              <p class="muted">The console could not read the rights of the tenant.</p>
+            ) : administrators.size === 0 ? (
+              <p class="muted">
+                Nobody of this tenant administers it. Make a user an administrator on the page of
+                that user.
+              </p>
+            ) : (
+              <div class="table-wrap">
+                <table>
+                  <tbody>
+                    {[...administrators.values()].map(({ holder, sources }) => (
+                      <tr>
+                        <td>
+                          {holder.kind === 'group' ? <span class="small muted">group </span> : null}
+                          {holder.href ? <a href={holder.href}>{holder.label}</a> : holder.label}
+                          {holder.self ? (
+                            <>
+                              {' '}
+                              <Badge plain>you</Badge>
+                            </>
+                          ) : null}
+                          {holder.kind === 'group' ? (
+                            <div class="small muted">
+                              {membersOf(holder.label)}{' '}
+                              {membersOf(holder.label) === 1 ? 'member' : 'members'}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td class="small">
+                          {sources.map(({ grant, how }) => (
+                            <div class="source">
+                              {how.roles.length > 0 ? (
+                                <>role {how.roles.join(' → ')}</>
+                              ) : (
+                                <code>{how.key}</code>
+                              )}
+                              <span class="muted"> · </span>
+                              <RightPlace grant={grant} view={view} />
+                            </div>
+                          ))}
+                        </td>
+                        <td class="small">
+                          {sources.some(({ how }) => how.key === CONSOLE_KEYS.platform) ? (
+                            <Badge tone="accent" plain>
+                              every tenant
+                            </Badge>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {grants && !grants.complete ? (
+              <p class="small muted">
+                The console read the first thousand rights of the tenant: an administrator beyond
+                them is not listed.
+              </p>
+            ) : null}
+          </section>
+          <section class="card">
+            <h2>Recent changes</h2>
+            {refusal ? <Refusal refusal={refusal} /> : null}
+            {audit && audit.rows.length === 0 ? <p class="muted">Nothing changed yet.</p> : null}
+            {audit && audit.rows.length > 0 ? (
+              <div class="table-wrap">
+                <table>
+                  <tbody>
+                    {audit.rows.map((record) => (
+                      <tr>
+                        <td class="small">
+                          <Moment at={record.at} />
+                        </td>
+                        <td>
+                          <code>{record.action}</code>
+                        </td>
+                        <td class="small muted mono">{record.operator}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+            <a href={`${base}/audit`}>Full audit →</a>
+          </section>
+        </div>
         <aside class="card">
           <h2>Tenant</h2>
           <KeyValues
@@ -271,7 +466,7 @@ export default createRoute(async (c) => {
           <ProviderForm action={base} catalog={catalog} />
         </details>
         {localProviders.map((provider) => (
-          <div key={provider.id}>
+          <div key={provider.id} class="stack">
             <h3>The accounts of {provider.displayName}</h3>
             <div class="table-wrap">
               <table>
@@ -293,8 +488,12 @@ export default createRoute(async (c) => {
                             <Badge tone="error">disabled</Badge>
                           )}
                         </td>
-                        <td>
-                          <RemoveCredential id={credential.id} action={base} />
+                        <td class="num actions">
+                          <RemoveCredential
+                            id={credential.id}
+                            action={base}
+                            email={credential.email}
+                          />
                         </td>
                       </tr>
                     ))}
@@ -323,7 +522,7 @@ export default createRoute(async (c) => {
                   key={route.id}
                   route={route}
                   action={base}
-                  platform={ability.can(CONSOLE_ACTIONS.platform, CONSOLE_SUBJECT)}
+                  vouch={allowanceOf(ability, ACTIONS.vouch, SUBJECTS.route)}
                 />
               ))}
             </tbody>
@@ -339,7 +538,8 @@ export default createRoute(async (c) => {
         <summary>Edit tenant</summary>
         <TenantForm
           tenant={tenant}
-          platform={ability.can(CONSOLE_ACTIONS.platform, CONSOLE_SUBJECT)}
+          platform={mayFlag.allowed}
+          platformReason={mayFlag.reason}
           action={base}
         />
       </details>

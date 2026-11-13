@@ -7,9 +7,10 @@
  * caller, so it says what the buttons of the other pages say. A "no"
  * carries a note with its reason.
  *
- * Above the grids are the permissions Access gives the caller here: the
- * keys the policies of Data read. The grid is an upper bound: Data
- * checks every record too.
+ * Beside the grids are the permissions Access gives the caller here: the
+ * keys the policies of Data read, and what the caller may do with the
+ * workspace besides its records — its model and its audit. The grid is
+ * an upper bound: Data checks every record too.
  */
 
 import { createRoute } from 'honox/factory'
@@ -17,11 +18,12 @@ import {
   type Allowance,
   type CollectionAccess,
   collectionAccessOf,
+  workspaceAbility,
+  workspaceCapabilitiesOf,
 } from '../../../../domains/ability'
-import type { AccessContext } from '../../../../domains/access'
-import { isUuid } from '../../../../domains/operators'
+import { isUuid, knownPermission } from '../../../../domains/operators'
 import { Empty, PageHead } from '../../../components/page'
-import { ASK_AN_OPERATOR } from '../../../components/why'
+import { ASK_AN_OPERATOR, Capabilities } from '../../../components/why'
 import {
   collectionPath,
   WorkspaceTabs,
@@ -29,6 +31,7 @@ import {
   workspaceName,
 } from '../../../components/workspace'
 import { sessionOf } from '../../../middleware/session'
+import { workspaceKeys } from '../../../middleware/workspaces'
 
 /** The cell of a grid: yes, or no with the number of its note. */
 function Cell(props: { allowance: Allowance; note: (reason: string) => number; prefix: string }) {
@@ -151,35 +154,12 @@ export default createRoute(async (c) => {
   const id = c.req.param('workspace') ?? ''
   if (!isUuid(id)) return c.notFound()
   const session = sessionOf(c)
-  const services = c.get('services')
-  const client = services.data(id, session.accessToken)
+  const client = c.get('services').data(id, session.accessToken)
   const [me, schema] = await Promise.all([client.me(), client.schema()])
 
   // The permissions Access gives the caller here: the keys Data's policies read.
-  let context: AccessContext | null = null
-  let unavailable: string | null = null
-  if (!services.context) {
-    unavailable = 'The console holds no access-context credential, so it cannot ask Access.'
-  } else {
-    try {
-      const tenantId = await services.tenantId(session.principal.tenant)
-      if (!tenantId) unavailable = 'The console could not read the identifier of your tenant.'
-      else {
-        context = await services.context.context({
-          subject: session.principal.id,
-          tenantId,
-          workspaceId: id,
-          routeId: me.routeId,
-        })
-      }
-    } catch (error) {
-      services.log.warn('the access context of the caller could not be read', {
-        requestId: c.get('requestId'),
-        error: (error as Error).message,
-      })
-      unavailable = 'Access did not answer the question just now.'
-    }
-  }
+  const access = await workspaceKeys(c, id, me.routeId)
+  const ability = workspaceAbility(access)
 
   return c.render(
     <>
@@ -188,7 +168,7 @@ export default createRoute(async (c) => {
         eyebrow={workspaceName(me, id)}
         lede="What you may do with each collection of this workspace, field by field."
       />
-      <WorkspaceTabs id={id} current="access" />
+      <WorkspaceTabs id={id} current="access" ability={ability} />
       <div class="split">
         <div class="stack">
           {schema.collections.length === 0 ? (
@@ -206,21 +186,35 @@ export default createRoute(async (c) => {
         </div>
         <aside class="stack">
           <section class="card">
+            <h2>Beyond the records</h2>
+            {access.keys === null ? (
+              <p class="small muted">
+                {access.unavailable} The console cannot say what is open: Data answers when you open
+                the tab.
+              </p>
+            ) : (
+              <Capabilities items={workspaceCapabilitiesOf(ability)} />
+            )}
+          </section>
+          <section class="card">
             <h2>Your permissions here</h2>
-            {context ? (
-              context.permissionKeys.length === 0 ? (
+            {access.keys ? (
+              access.keys.length === 0 ? (
                 <p class="muted">Access gives you no permission on this workspace and route.</p>
               ) : (
-                <div class="chips">
-                  {context.permissionKeys.map((key) => (
-                    <span class="chip">
+                <ul class="key-list">
+                  {access.keys.map((key) => (
+                    <li class="key-entry">
                       <code>{key}</code>
-                    </span>
+                      {knownPermission(key) ? (
+                        <span class="small muted">{knownPermission(key)?.opens}</span>
+                      ) : null}
+                    </li>
                   ))}
-                </div>
+                </ul>
               )
             ) : (
-              <p class="small muted">{unavailable}</p>
+              <p class="small muted">{access.unavailable}</p>
             )}
             <p class="small muted">
               Access gives these on route <code>{me.routeId}</code>. Data's policies (bundle{' '}

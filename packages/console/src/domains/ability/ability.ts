@@ -8,10 +8,11 @@
  * The ability is a mirror and never an authority. Access
  * decides who holds a permission, and Data decides what a
  * permission grants. Every rule of the ability is an upper bound of
- * what the caller may do, and never a lower one: the console hides what
- * the services refuse, and it shows what they allow. A button that the
- * console shows and Data refuses is an annoyance; a button
- * that the console hides and Data allows is a fault.
+ * what the caller may do, and never a lower one: the console draws as
+ * closed what the services refuse, with the reason of the rule, and it
+ * shows what they allow. A button that the console shows and Data
+ * refuses is an annoyance; a button that the console closes and Data
+ * allows is a fault.
  *
  * The library knows two wildcards: the action `manage` and the subject
  * `all`. The console has neither. The action and the subject of a rule
@@ -21,12 +22,20 @@
 
 import {
   createMongoAbility,
+  type ForcedSubject,
   type MongoAbility,
   type MongoQuery,
   type RawRuleFrom,
+  subject as subjectOf,
 } from '@casl/ability'
 import type { CollectionMetadata } from '../data'
-import { CONSOLE_KEYS, type OperatorScope } from '../operators'
+import {
+  CONSOLE_KEYS,
+  DATA_KEYS,
+  mayCreateWorkspaces,
+  type OperatorScope,
+  PLATFORM_KEYS,
+} from '../operators'
 
 /** The subject of the capabilities of the console itself. */
 export const CONSOLE_SUBJECT = 'console'
@@ -41,11 +50,61 @@ export const CONSOLE_ACTIONS = {
   platform: 'platform',
 } as const
 
+/**
+ * The subjects of the administration, and of the workspaces of a tenant.
+ *
+ * A rule about one of them may carry a condition: an operator of a
+ * tenant administers the tenant of that slug, and gives the permissions
+ * that are not the platform's. The names carry a dot, which the key of a
+ * collection never does: a collection of a workspace is a subject too,
+ * named by its key, and no collection takes the name of one of these.
+ */
+export const SUBJECTS = {
+  /** A tenant of the platform: `{ slug }`. */
+  tenant: 'console.tenant',
+  /** A permission, as an operator gives it in a right or in a role: `{ key }`. */
+  permission: 'console.permission',
+  /** A route of the logins of a tenant. */
+  route: 'console.route',
+  /** A workspace of the tenant of the caller. */
+  workspace: 'console.workspace',
+} as const
+
+/** The actions on the subjects of the administration. */
+export const ACTIONS = {
+  /** Reaches the administration of a tenant. */
+  administer: 'administer',
+  /** Creates a tenant, or a workspace of the tenant of the caller. */
+  create: 'create',
+  /** Changes the flags of a tenant that are the platform's. */
+  flag: 'flag',
+  /** Vouches for the route of a login instead of its record. */
+  vouch: 'vouch',
+  /** Gives a permission, in a right or in a role. */
+  give: 'give',
+} as const
+
+/** A subject that carries the facts a condition reads: a tenant and its slug, a permission and its key. */
+export type FactSubject = ForcedSubject<string>
+
+/** What a question of the ability is about: a kind of thing, or one thing with its facts. */
+export type AbilitySubject = string | FactSubject
+
 /** The ability of the console: an action, a subject and a field. */
-export type ConsoleAbility = MongoAbility<[string, string]>
+export type ConsoleAbility = MongoAbility<[string, AbilitySubject]>
 
 /** A rule of the ability. */
-export type AbilityRule = RawRuleFrom<[string, string], MongoQuery>
+export type AbilityRule = RawRuleFrom<[string, AbilitySubject], MongoQuery>
+
+/** A tenant, as a rule of the ability reads it. */
+export function tenantOf(slug: string): FactSubject {
+  return subjectOf(SUBJECTS.tenant, { slug })
+}
+
+/** A permission, as a rule of the ability reads it. */
+export function permissionOf(key: string): FactSubject {
+  return subjectOf(SUBJECTS.permission, { key })
+}
 
 /** The name that matches no action: the console has no wildcard. */
 const NO_ACTION = 'console.no-action-matches-every-action'
@@ -73,7 +132,7 @@ const NO_FIELD = 'console.no-field'
  * neither.
  */
 export function abilityOf(rules: readonly AbilityRule[]): ConsoleAbility {
-  return createMongoAbility<[string, string]>([...rules], {
+  return createMongoAbility<[string, AbilitySubject]>([...rules], {
     anyAction: NO_ACTION,
     anySubjectType: NO_SUBJECT,
   })
@@ -121,6 +180,101 @@ export function consoleRules(scope: OperatorScope): AbilityRule[] {
       action: [CONSOLE_ACTIONS.admin, CONSOLE_ACTIONS.platform],
       subject: CONSOLE_SUBJECT,
     })
+  }
+  return [...rules, ...administrationRules(scope), ...workspaceRules(scope)]
+}
+
+/**
+ * The rules of the administration, from the scope of the operator.
+ *
+ * The keys of the console say who administers; these rules say what an
+ * administrator may do with it. An operator of a tenant reaches the
+ * tenant of its own slug and gives every permission but the platform's;
+ * an operator of the platform reaches every tenant, creates one, changes
+ * the flags that are the platform's, vouches for a route and gives every
+ * permission. Access holds the same rules (Access spec §10.1, §10.6),
+ * and the console draws them before the operator meets the refusal.
+ */
+function administrationRules(scope: OperatorScope): AbilityRule[] {
+  const closed = `The administration needs the key ${CONSOLE_KEYS.admin}, and Access gives you none on the route of the console.`
+  const rules: AbilityRule[] = [
+    { inverted: true, action: ACTIONS.administer, subject: SUBJECTS.tenant, reason: closed },
+    { inverted: true, action: ACTIONS.give, subject: SUBJECTS.permission, reason: closed },
+    {
+      inverted: true,
+      action: ACTIONS.create,
+      subject: SUBJECTS.tenant,
+      reason: `A tenant is created by an operator of the platform: it needs the key ${CONSOLE_KEYS.platform}.`,
+    },
+    {
+      inverted: true,
+      action: ACTIONS.flag,
+      subject: SUBJECTS.tenant,
+      reason: `The shared client and the default tenant are the platform's: only an operator who holds ${CONSOLE_KEYS.platform} changes them.`,
+    },
+    {
+      inverted: true,
+      action: ACTIONS.vouch,
+      subject: SUBJECTS.route,
+      reason: `Only an operator of the platform vouches for a domain: it needs the key ${CONSOLE_KEYS.platform}. The owner of the domain proves it with its record instead.`,
+    },
+  ]
+  if (scope.administers === 'tenant') {
+    rules.push(
+      { action: ACTIONS.administer, subject: SUBJECTS.tenant, conditions: { slug: scope.tenant } },
+      {
+        inverted: true,
+        action: ACTIONS.administer,
+        subject: SUBJECTS.tenant,
+        conditions: { slug: { $ne: scope.tenant } },
+        reason: `Your key ${CONSOLE_KEYS.admin} opens the tenant ${scope.tenant} and no other: every tenant is administered with the key ${CONSOLE_KEYS.platform}.`,
+      },
+      { action: ACTIONS.give, subject: SUBJECTS.permission }
+    )
+    // A capability of the platform is the platform's to give. One rule per
+    // key: the reason names the key the operator asked for.
+    for (const key of PLATFORM_KEYS) {
+      rules.push({
+        inverted: true,
+        action: ACTIONS.give,
+        subject: SUBJECTS.permission,
+        conditions: { key },
+        reason: `${key} is a capability of the platform, and it is not yours to give: only an operator who holds it gives it.`,
+      })
+    }
+  }
+  if (scope.administers === 'platform') {
+    rules.push(
+      {
+        action: [ACTIONS.administer, ACTIONS.create, ACTIONS.flag],
+        subject: SUBJECTS.tenant,
+      },
+      { action: ACTIONS.vouch, subject: SUBJECTS.route },
+      { action: ACTIONS.give, subject: SUBJECTS.permission }
+    )
+  }
+  return rules
+}
+
+/**
+ * The rules of the workspaces of the tenant, from the scope of the
+ * caller.
+ *
+ * The creation of a workspace is a capability of Data that is held on
+ * the tenant itself: the console reads its key beside its own, and Data
+ * refuses the creation of a caller that holds none.
+ */
+function workspaceRules(scope: OperatorScope): AbilityRule[] {
+  const rules: AbilityRule[] = [
+    {
+      inverted: true,
+      action: ACTIONS.create,
+      subject: SUBJECTS.workspace,
+      reason: `Creating a workspace needs the right ${DATA_KEYS.workspaceCreate} in your tenant, and Access does not give it to you on the tenant itself.`,
+    },
+  ]
+  if (mayCreateWorkspaces(scope)) {
+    rules.push({ action: ACTIONS.create, subject: SUBJECTS.workspace })
   }
   return rules
 }
@@ -263,11 +417,11 @@ const NO_RULE = 'Nothing the services answered gives you this.'
 export function reasonOf(
   ability: ConsoleAbility,
   action: string,
-  subject: string,
+  about: AbilitySubject,
   field?: string
 ): string | null {
-  if (ability.can(action, subject, field)) return null
-  const rule = ability.relevantRuleFor(action, subject, field)
+  if (ability.can(action, about, field)) return null
+  const rule = ability.relevantRuleFor(action, about, field)
   return rule?.inverted && rule.reason ? rule.reason : NO_RULE
 }
 
@@ -275,6 +429,61 @@ export function reasonOf(
 export interface Allowance {
   readonly allowed: boolean
   readonly reason: string | null
+}
+
+/** The answer of the ability to one question: whether it allows, and why not. */
+export function allowanceOf(
+  ability: ConsoleAbility,
+  action: string,
+  about: AbilitySubject,
+  field?: string
+): Allowance {
+  const reason = reasonOf(ability, action, about, field)
+  return { allowed: reason === null, reason }
+}
+
+/** One thing a caller may or may not do, said in words. */
+export interface Capability {
+  /** What it is: "Read the data model". */
+  readonly label: string
+  /** The key Access holds for it. */
+  readonly key: string
+  readonly allowance: Allowance
+}
+
+/**
+ * What a caller may do in the console itself, as a list says it.
+ *
+ * The list is the ability, read aloud: the page of the caller draws it,
+ * and the page of a user draws the same list for the keys Access holds
+ * for that user.
+ *
+ * @param ability the ability of the caller, or of the user the page is about.
+ * @param tenant the slug of the tenant of that caller.
+ */
+export function consoleCapabilitiesOf(ability: ConsoleAbility, tenant: string): Capability[] {
+  return [
+    {
+      label: `Administer the tenant ${tenant}`,
+      key: CONSOLE_KEYS.admin,
+      allowance: allowanceOf(ability, ACTIONS.administer, tenantOf(tenant)),
+    },
+    {
+      label: 'Administer every tenant of the platform',
+      key: CONSOLE_KEYS.platform,
+      allowance: allowanceOf(ability, CONSOLE_ACTIONS.platform, CONSOLE_SUBJECT),
+    },
+    {
+      label: 'Read the detail of the status',
+      key: CONSOLE_KEYS.status,
+      allowance: allowanceOf(ability, CONSOLE_ACTIONS.status, CONSOLE_SUBJECT),
+    },
+    {
+      label: `Create workspaces of ${tenant}`,
+      key: DATA_KEYS.workspaceCreate,
+      allowance: allowanceOf(ability, ACTIONS.create, SUBJECTS.workspace),
+    },
+  ]
 }
 
 /** What the caller may do with a collection: its actions, and each field. */
@@ -292,10 +501,8 @@ export interface CollectionAccess {
 /** The access of the caller to a collection, as a grid draws it. */
 export function collectionAccessOf(collection: CollectionMetadata): CollectionAccess {
   const ability = collectionAbility(collection)
-  const answer = (action: string, field?: string): Allowance => {
-    const reason = reasonOf(ability, action, collection.key, field)
-    return { allowed: reason === null, reason }
-  }
+  const answer = (action: string, field?: string): Allowance =>
+    allowanceOf(ability, action, collection.key, field)
   return {
     actions: {
       read: answer('read'),

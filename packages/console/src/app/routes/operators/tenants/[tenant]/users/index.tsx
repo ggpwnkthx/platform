@@ -6,10 +6,15 @@
  * service publishes until the provider says otherwise. A batch registers
  * a whole team at once: every line is written on its own, and the page
  * says what happened to each one.
+ *
+ * The list says what each user holds at a glance — the roles it was
+ * granted, its groups, and whether it administers the tenant — so that
+ * an operator finds who holds what without opening every user.
  */
 
 import { createRoute } from 'honox/factory'
-import { AccessError } from '../../../../../../domains/access'
+import { AccessError, type Principal } from '../../../../../../domains/access'
+import { administrationOf, groupsOf, isLive, rightsOf } from '../../../../../../domains/operators'
 import {
   adminFor,
   TenantHead,
@@ -19,9 +24,16 @@ import {
   UserStatus,
   userLabel,
 } from '../../../../../components/operators'
-import { Empty, Moment, OffsetPager, Refusal, refusalOf } from '../../../../../components/page'
+import {
+  Badge,
+  Empty,
+  Moment,
+  OffsetPager,
+  Refusal,
+  refusalOf,
+} from '../../../../../components/page'
 import { formOf } from '../../../../../middleware/forms'
-import { flash } from '../../../../../middleware/session'
+import { flash, sessionOf } from '../../../../../middleware/session'
 
 export const POST = createRoute(async (c) => {
   const slug = c.req.param('tenant') ?? ''
@@ -108,6 +120,39 @@ export default createRoute(async (c) => {
     if (!(error instanceof AccessError) || error.status >= 500) throw error
     refusal = refusalOf(error)
   }
+  // What each user of the page holds: read once for the page, and
+  // left out when Access does not answer.
+  const [grants, groups, roles] = await Promise.all([
+    access.admin
+      .all((offsets) => access.admin.grants({ tenant: slug, live: true, ...offsets }))
+      .catch(() => null),
+    access.admin
+      .all((offsets) => access.admin.groups({ tenant: slug, ...offsets }))
+      .catch(() => null),
+    access.admin
+      .all((offsets) => access.admin.roles({ tenant: slug, ...offsets }))
+      .catch(() => null),
+  ])
+  const place = { tenant: slug, consoleRoute: c.get('services').config.routeId }
+  const caller = sessionOf(c).principal.id
+  const holdingOf = (user: Principal) => {
+    if (!grants || !groups) return null
+    const rights = rightsOf(user, grants.rows, groups.rows).filter((right) => isLive(right.grant))
+    const own = rights.filter((right) => right.group === null)
+    return {
+      roles: [
+        ...new Set(
+          own.map((right) => right.grant.role).filter((key): key is string => Boolean(key))
+        ),
+      ].sort(),
+      permissions: own.filter((right) => right.grant.permission).length,
+      groups: groupsOf(user, groups.rows).length,
+      rights: rights.length,
+      administers: rights.some(
+        (right) => administrationOf(right.grant, roles?.rows ?? [], place) !== null
+      ),
+    }
+  }
   const href = (next: number) => {
     const params = new URLSearchParams()
     if (status) params.set('status', status)
@@ -150,6 +195,7 @@ export default createRoute(async (c) => {
               <thead>
                 <tr>
                   <th>User</th>
+                  <th>Holds</th>
                   <th>Identity at the provider</th>
                   <th>Status</th>
                   <th>Last login</th>
@@ -157,28 +203,74 @@ export default createRoute(async (c) => {
                 </tr>
               </thead>
               <tbody>
-                {page.rows.map((user) => (
-                  <tr>
-                    <td>
-                      <a href={`${base}/${user.id}`}>
-                        <strong>{userLabel(user)}</strong>
-                      </a>
-                      {user.email && user.displayName ? (
-                        <div class="small muted">{user.email}</div>
-                      ) : null}
-                    </td>
-                    <td class="small mono">{user.externalSubject}</td>
-                    <td>
-                      <UserStatus user={user} />
-                    </td>
-                    <td class="small">
-                      <Moment at={user.lastLoginAt} />
-                    </td>
-                    <td class="small">
-                      <Moment at={user.createdAt} />
-                    </td>
-                  </tr>
-                ))}
+                {page.rows.map((user) => {
+                  const holding = holdingOf(user)
+                  return (
+                    <tr>
+                      <td>
+                        <a href={`${base}/${user.id}`}>
+                          <strong>{userLabel(user)}</strong>
+                        </a>
+                        {user.id === caller ? (
+                          <>
+                            {' '}
+                            <Badge plain>you</Badge>
+                          </>
+                        ) : null}
+                        {user.email && user.displayName ? (
+                          <div class="small muted">{user.email}</div>
+                        ) : null}
+                      </td>
+                      <td class="small">
+                        {holding === null ? (
+                          <span class="muted">—</span>
+                        ) : holding.rights === 0 ? (
+                          <span class="muted">no right yet</span>
+                        ) : (
+                          <>
+                            <div class="chips">
+                              {holding.administers ? (
+                                <Badge tone="accent" plain>
+                                  administrator
+                                </Badge>
+                              ) : null}
+                              {holding.roles.slice(0, 3).map((key) => (
+                                <span class="chip">
+                                  <code>{key}</code>
+                                </span>
+                              ))}
+                              {holding.roles.length > 3 ? (
+                                <span class="muted">+{holding.roles.length - 3} more</span>
+                              ) : null}
+                            </div>
+                            <div class="muted">
+                              {[
+                                holding.permissions > 0
+                                  ? `${holding.permissions} single ${holding.permissions === 1 ? 'permission' : 'permissions'}`
+                                  : '',
+                                holding.groups > 0
+                                  ? `in ${holding.groups} ${holding.groups === 1 ? 'group' : 'groups'}`
+                                  : '',
+                              ]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </div>
+                          </>
+                        )}
+                      </td>
+                      <td class="small mono">{user.externalSubject}</td>
+                      <td>
+                        <UserStatus user={user} />
+                      </td>
+                      <td class="small">
+                        <Moment at={user.lastLoginAt} />
+                      </td>
+                      <td class="small">
+                        <Moment at={user.createdAt} />
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

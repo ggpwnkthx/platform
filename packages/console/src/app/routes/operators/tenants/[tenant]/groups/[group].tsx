@@ -6,16 +6,20 @@
  * is not saved yet, and the browser asks before the page is left with
  * those changes. The name of the group is changed on its own, with the
  * members it already has.
+ *
+ * A member holds every right of the group, so a group that gives a
+ * capability of the platform is filled by an operator of the platform:
+ * the page says so, and the picker of an operator of a tenant only
+ * takes members away.
  */
 
 import { createRoute } from 'honox/factory'
+import { ACTIONS, permissionOf, reasonOf } from '../../../../../../domains/ability'
 import { AccessError, type AdminClient } from '../../../../../../domains/access'
-import { isLive } from '../../../../../../domains/operators'
+import { isLive, memberNameOf, platformKeysOfGroup } from '../../../../../../domains/operators'
 import {
   adminFor,
-  GRANT_FORM,
-  GrantForm,
-  RightsTable,
+  joiningWrites,
   TenantHead,
   TenantTabs,
   tenantCrumbs,
@@ -23,6 +27,7 @@ import {
   userLabel,
 } from '../../../../../components/operators'
 import { Empty, KeyValues, Moment, Notice } from '../../../../../components/page'
+import { GRANT_FORM, GrantForm, RightsTable, rightsViewOf } from '../../../../../components/rights'
 import ChipPicker from '../../../../../islands/chip-picker'
 import { formOf } from '../../../../../middleware/forms'
 import { flash, takeDraft } from '../../../../../middleware/session'
@@ -64,13 +69,29 @@ export const POST = createRoute(async (c) => {
           .filter(Boolean)
       ),
     ]
-    const group = await access.admin.saveGroup({
+    const added = members.filter((member) => !current.members.includes(member)).length
+    // A member that joins is given what the group holds: a group that
+    // gives a capability of the platform is filled by the platform, and
+    // the write is signed with its credential. A save that only takes
+    // members away is the tenant's own.
+    const write =
+      added > 0
+        ? await (await joiningWrites(c, access.admin, slug))(key)
+        : ({ kind: 'tenant' } as const)
+    if (write.kind === 'refused') {
+      flash(c, {
+        kind: 'error',
+        text: 'The members were not saved: adding a member to this group is not yours to do.',
+        detail: write.reason,
+      })
+      return c.redirect(path)
+    }
+    const group = await (write.kind === 'platform' ? write.client : access.admin).saveGroup({
       tenant: slug,
       key,
       ...(current.displayName ? { displayName: current.displayName } : {}),
       members,
     })
-    const added = members.filter((member) => !current.members.includes(member)).length
     const removed = current.members.filter((member) => !members.includes(member)).length
     flash(c, {
       kind: 'ok',
@@ -104,10 +125,29 @@ export default createRoute(async (c) => {
   const path = `${tenantPath(slug)}/groups/${encodeURIComponent(key)}`
   const showAll = c.req.query('all') === '1'
   const rights = grants.rows.filter((grant) => grant.group === key && (showAll || isLive(grant)))
-  const byIdentity = new Map(users.rows.map((user) => [user.externalSubject, user]))
+  // A group names its members by the identity their provider gives them.
+  const byIdentity = new Map(users.rows.map((user) => [memberNameOf(user), user]))
   const unknown = group.members.filter((member) => !byIdentity.has(member))
   const name = group.displayName ?? group.key
   const draft = takeDraft(c, GRANT_FORM)
+  const view = await rightsViewOf(c, slug, {
+    grants: grants.rows,
+    roles: roles.rows,
+    groups: [group],
+    users: users.rows,
+  })
+  // What a new member is given of the platform, and why the caller may
+  // not add one: the ability decides, and Access holds the same rule.
+  const gives = platformKeysOfGroup(key, grants.rows, roles.rows)
+  const closed =
+    gives
+      .map((given) => reasonOf(view.ability, ACTIONS.give, permissionOf(given)))
+      .find((reason) => reason !== null) ?? null
+  // A picker that may not add offers the members it already has, so that
+  // one that was taken away by mistake is put back before the save.
+  const candidates = closed
+    ? users.rows.filter((user) => group.members.includes(memberNameOf(user)))
+    : users.rows
 
   return c.render(
     <>
@@ -120,7 +160,29 @@ export default createRoute(async (c) => {
               <h2>Members</h2>
               <span class="small muted">{group.members.length}</span>
             </header>
-            {!users.complete ? (
+            {gives.length > 0 ? (
+              <Notice
+                tone="warn"
+                title={
+                  closed
+                    ? 'Members are added by an operator of the platform'
+                    : 'A new member is given a capability of the platform'
+                }
+              >
+                The group gives{' '}
+                {gives.map((given, index) => (
+                  <>
+                    {index > 0 ? ', ' : null}
+                    <code>{given}</code>
+                  </>
+                ))}{' '}
+                to every member.{' '}
+                {closed
+                  ? `${closed} You may still take a member away.`
+                  : 'The console signs a new member with the credential of the platform.'}
+              </Notice>
+            ) : null}
+            {!users.complete && !closed ? (
               <Notice tone="warn" title="The tenant holds more than a thousand users">
                 The search offers the first thousand: a member of the others is named by its
                 identity at the provider.
@@ -130,13 +192,17 @@ export default createRoute(async (c) => {
               <input type="hidden" name="_action" value="members" />
               <ChipPicker
                 name="members"
-                label="Add a member"
-                placeholder="Add a user: type a name, an e-mail or an identity"
+                label={closed ? 'Put a member back' : 'Add a member'}
+                placeholder={
+                  closed
+                    ? 'Only an operator of the platform adds a member'
+                    : 'Add a user: type a name, an e-mail or an identity'
+                }
                 emptyText="The group has no member yet."
                 trackChanges
                 noun={['member', 'members']}
-                candidates={users.rows.map((user) => ({
-                  value: user.externalSubject,
+                candidates={candidates.map((user) => ({
+                  value: memberNameOf(user),
                   label: userLabel(user),
                   ...(user.email && user.email !== userLabel(user) ? { hint: user.email } : {}),
                 }))}
@@ -167,20 +233,18 @@ export default createRoute(async (c) => {
             ) : (
               <RightsTable
                 rows={rights.map((grant) => ({ grant }))}
-                roles={roles.rows}
+                view={view}
                 back={path}
                 holderName={`the group ${name}`}
               />
             )}
             <details class="disclosure" open={draft !== null}>
-              <summary>Grant a right to the group</summary>
+              <summary class="act">Grant a right to the group</summary>
               <GrantForm
-                tenant={slug}
+                view={view}
                 back={path}
                 fixedGroup={group}
                 grants={grants.rows}
-                roles={roles.rows}
-                consoleRoute={c.get('services').config.routeId}
                 draft={draft}
               />
             </details>

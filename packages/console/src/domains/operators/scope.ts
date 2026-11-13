@@ -30,10 +30,29 @@ export const CONSOLE_KEYS = {
  * The creation of a workspace is a capability of Data: Access says who
  * holds it, and the console only shows the page to a caller that holds
  * it.
+ *
+ * The model and the audit of a workspace are capabilities of Data too,
+ * and their keys are fixed in its code. The console reads them in the
+ * access context of the caller on a workspace, to draw what Data would
+ * answer before the caller asks for it.
  */
 export const DATA_KEYS = {
   workspaceCreate: 'data.workspace.create',
+  /** Reads the model of a workspace. */
+  modelRead: 'data.model.read',
+  /** Reads and changes the model of a workspace. */
+  modelWrite: 'data.model.write',
+  /** Reads the audit of a workspace. */
+  auditRead: 'data.audit.read',
 } as const
+
+/**
+ * The key of the role that administers a tenant.
+ *
+ * Access creates the role with every tenant, and it holds the
+ * permissions an administration needs (Access spec §6.4).
+ */
+export const TENANT_ADMIN_ROLE = 'admin'
 
 /**
  * The keys of the capabilities that are not relative to a tenant.
@@ -125,6 +144,31 @@ export function credentialFor(
     return credentials.tenants[tenant] ?? credentials.platform
   }
   return null
+}
+
+/**
+ * Who signs a write that adds a member to a group, when the console
+ * could not read what the group gives.
+ *
+ * A group may give a capability of the platform, and only the platform
+ * adds a member to one that does (Access spec §3.3.1). An operator of
+ * the platform signs with the credential of the platform, which may
+ * always write. An operator of a tenant signs with the credential of
+ * its tenant, and Access answers; when the console holds none, it would
+ * sign with the credential of the platform, which Access never refuses:
+ * nobody signs, and the console refuses the write itself.
+ *
+ * @param scope the scope of the operator.
+ * @param credentials the credentials the console holds.
+ * @param tenant the slug of the tenant of the group.
+ */
+export function signerOfUnreadJoin(
+  scope: OperatorScope,
+  credentials: AdminCredentials,
+  tenant: string
+): 'platform' | 'tenant' | null {
+  if (scope.administers === 'platform') return 'platform'
+  return credentials.tenants[tenant] !== undefined ? 'tenant' : null
 }
 
 /** The credential that reads the list of the tenants. */

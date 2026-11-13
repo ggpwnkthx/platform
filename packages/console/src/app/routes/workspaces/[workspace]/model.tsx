@@ -7,9 +7,20 @@
  * the workspace for every request that follows it. The model never
  * creates a table and never alters one: a field of the model is a column
  * of the table of its collection.
+ *
+ * Reading the model and changing it are two capabilities of Data. A
+ * caller that reads it without the second one is told so at the top of
+ * the page, with the reason, and the page draws no control that would
+ * change it: Data would refuse every one of them.
  */
 
 import { createRoute } from 'honox/factory'
+import {
+  type ModelAnswer,
+  reasonOf,
+  WORKSPACE_PARTS,
+  workspaceAbility,
+} from '../../../../domains/ability'
 import {
   DataError,
   type FieldAttributes,
@@ -18,7 +29,9 @@ import {
 } from '../../../../domains/data'
 import { isUuid } from '../../../../domains/operators'
 import { Badge, Empty, Notice, PageHead } from '../../../components/page'
+import { Lock } from '../../../components/why'
 import {
+  accessPath,
   collectionPath,
   WorkspaceTabs,
   workspaceCrumbs,
@@ -28,6 +41,7 @@ import {
 import ConfirmButton from '../../../islands/confirm-button'
 import { formOf, listOf, type SentForm } from '../../../middleware/forms'
 import { flash, sessionOf } from '../../../middleware/session'
+import { workspaceKeys } from '../../../middleware/workspaces'
 
 const TYPES = [
   'string',
@@ -564,6 +578,13 @@ export default createRoute(async (c) => {
     if (!(error instanceof DataError) || error.status !== 403) throw error
     refused = error
   }
+  // What Data answered about the model is what the page draws: the keys
+  // of the access context draw the other tabs.
+  const answer: ModelAnswer = model ? (model.writable ? 'write' : 'read') : 'refused'
+  const access = await workspaceKeys(c, workspace, me.routeId)
+  const ability = workspaceAbility({ keys: access.keys, model: answer })
+  const part = WORKSPACE_PARTS.model
+  const writable = ability.can('update', part)
   return c.render(
     <>
       <PageHead
@@ -571,11 +592,25 @@ export default createRoute(async (c) => {
         eyebrow="Workspace"
         lede="What the workspace serves from the deployment's tables, how it labels it, and which rules hold. Changes apply to the next request."
       />
-      <WorkspaceTabs id={workspace} current="model" />
+      <WorkspaceTabs id={workspace} current="model" ability={ability} />
       {refused ? (
-        <Notice tone="warn" title="The model is not open to you">
-          Reading the model requires the permission <code>data.model.read</code> or{' '}
-          <code>data.model.write</code>.
+        <Notice tone="warn" title="The data model is not open to you">
+          <p>{reasonOf(ability, 'read', part)}</p>
+          <p class="small muted">
+            Data answered {refused.status} <code>{refused.code}</code>
+            {refused.requestId ? (
+              <>
+                {' '}
+                · request <code>{refused.requestId}</code>
+              </>
+            ) : null}
+            . <a href={accessPath(workspace)}>See what you may do in this workspace</a>.
+          </p>
+        </Notice>
+      ) : null}
+      {model && !writable ? (
+        <Notice tone="warn" title="You read this model, and you cannot change it">
+          <p>{reasonOf(ability, 'update', part)}</p>
         </Notice>
       ) : null}
       {model ? (
@@ -593,10 +628,12 @@ export default createRoute(async (c) => {
               schema <code>{model.schemaVersion}</code>
             </span>
             <span>·</span>
-            {model.writable ? (
+            {writable ? (
               <Badge tone="ok">you may change it</Badge>
             ) : (
-              <Badge>read only: data.model.write is not yours</Badge>
+              <Badge plain>
+                <Lock /> read only
+              </Badge>
             )}
           </div>
           {model.collections.length === 0 ? (
@@ -606,7 +643,7 @@ export default createRoute(async (c) => {
             <CollectionModel
               workspace={workspace}
               collection={collection}
-              writable={model.writable}
+              writable={writable}
               served={model.collections.map((entry) => ({ key: entry.key, label: entry.label }))}
             />
           ))}
@@ -625,7 +662,7 @@ export default createRoute(async (c) => {
                           </div>
                         </td>
                         <td class="num">
-                          {model.writable ? (
+                          {writable ? (
                             <form method="post">
                               <input type="hidden" name="_action" value="register" />
                               <input type="hidden" name="collection" value={entry.key} />

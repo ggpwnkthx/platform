@@ -4,10 +4,12 @@
  */
 
 import { createRoute } from 'honox/factory'
+import { reasonOf, WORKSPACE_PARTS, workspaceAbility } from '../../../../domains/ability'
 import { DataError } from '../../../../domains/data'
-import { isUuid } from '../../../../domains/operators'
+import { DATA_KEYS, isUuid } from '../../../../domains/operators'
 import { Badge, Empty, Moment, PageHead, Refusal, refusalOf } from '../../../components/page'
 import {
+  accessPath,
   recordPath,
   WorkspaceTabs,
   workspaceCrumbs,
@@ -16,6 +18,7 @@ import {
 } from '../../../components/workspace'
 import CopyText from '../../../islands/copy-text'
 import { sessionOf } from '../../../middleware/session'
+import { workspaceKeys } from '../../../middleware/workspaces'
 
 const TONES: Record<string, 'accent' | 'warn' | 'error'> = {
   create: 'accent',
@@ -39,6 +42,13 @@ export default createRoute(async (c) => {
     if (!(error instanceof DataError) || error.status >= 500 || error.status === 401) throw error
     refusal = refusalOf(error)
   }
+  // What Data answered about the audit is what the tab says: the keys
+  // of Access are the question, and this is the answer.
+  const served = page !== null ? true : refusal?.status === 403 ? false : undefined
+  const ability = workspaceAbility({
+    ...(await workspaceKeys(c, workspace, me.routeId)),
+    ...(served === undefined ? {} : { audit: served }),
+  })
   return c.render(
     <>
       <PageHead
@@ -46,11 +56,15 @@ export default createRoute(async (c) => {
         eyebrow="Workspace"
         lede="Committed changes, newest first. Entries name the fields that changed, never their values."
       />
-      <WorkspaceTabs id={workspace} current="audit" />
+      <WorkspaceTabs id={workspace} current="audit" ability={ability} />
       {refusal ? (
         <Refusal refusal={refusal}>
           {refusal.status === 403 ? (
-            <span class="small">The audit requires the permission data.audit.read.</span>
+            <span class="small">
+              {reasonOf(ability, 'read', WORKSPACE_PARTS.audit) ??
+                `The audit requires the permission ${DATA_KEYS.auditRead}.`}{' '}
+              <a href={accessPath(workspace)}>See what you may do in this workspace</a>.
+            </span>
           ) : null}
         </Refusal>
       ) : null}

@@ -5,6 +5,7 @@
 
 import { createRoute } from 'honox/factory'
 import { AccessError } from '../../../../../../domains/access'
+import { KEY_PATTERN } from '../../../../../../domains/operators'
 import {
   adminFor,
   HowRightsWork,
@@ -119,7 +120,7 @@ export default createRoute(async (c) => {
             <input
               name="key"
               required
-              pattern="[a-z0-9][a-z0-9._\-]{0,63}"
+              pattern={KEY_PATTERN}
               title="Lower-case letters, digits, dots, dashes and underscores"
               class="mono"
               placeholder="team-platform"

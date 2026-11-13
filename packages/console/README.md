@@ -16,12 +16,12 @@ packages/console/
 │   ├── main.ts           process: serves the build, or the sources through Vite
 │   ├── runtime/          composition: configuration, logging, client composition
 │   ├── domains/          core rules: no HonoX, no pages
-│   │   ├── ability/        what the console shows, from scope and grants
+│   │   ├── ability/        what the caller may do: the rules and their reasons
 │   │   ├── access/         Access administration and access context
 │   │   ├── authentication/ sign-in at Access (code flow, PKCE, ID token)
 │   │   ├── data/           workspace data through the gateway; form values
 │   │   ├── documentation/  platform docs: the tree and its URLs
-│   │   ├── operators/      operator scope, user rights
+│   │   ├── operators/      operator scope, rights, what a permission opens and where
 │   │   ├── session/        sessions and pending logins
 │   │   ├── status/         service probes
 │   │   ├── map/            platform map (the atlas facts)
@@ -45,7 +45,22 @@ packages/console/
 
 A domain holds rules and never transport; the app holds routes and never rules. The core imports neither the interface nor HonoX. `bun run architecture` rejects imports that break this direction, and CI runs it.
 
-Islands: the status board (re-polls probes), the platform map, the list filter builder, the chip picker (group members, role permissions, the holder of a right), the grant form, the JSON field, the data access clock, the theme switch, confirmation of irreversible actions, copy-ID, and the copy buttons on documentation code blocks.
+Islands: the status board (re-polls probes), the platform map, the list filter builder, the chip picker (group members, the groups of a user, role permissions), the grant form (who, what, where, until, and what the right opens there), the JSON field, the data access clock, the theme switch, confirmation of irreversible actions, copy-ID, and the copy buttons on documentation code blocks.
+
+## Showing what the caller may do
+
+A page never decides what to show with a condition of its own. It asks the ability (`src/domains/ability/`), which is built with [CASL](https://casl.js.org/) from what the services answered, and it draws the answer with the pieces of `src/app/components/why.tsx`:
+
+| To | Use |
+| --- | --- |
+| Ask whether the caller may, and why not | `ability.can(action, subject)` and `reasonOf(ability, action, subject)`: the reason is the one of the rule that decides. |
+| Ask about one thing | `tenantOf(slug)` and `permissionOf(key)` name a tenant and a permission with the facts a rule reads. |
+| Draw an action | `ActionLink`, or `Can` with `DisabledAction`: a link when the action is allowed, the same control disabled with its reason when it is not. |
+| Draw a list of yes and no | `Capabilities`, from `consoleCapabilitiesOf` or `workspaceCapabilitiesOf`. |
+| Close a tab | The `locked` reason of a tab (`Tabs`, `WorkspaceTabs`). |
+| Refuse a form | The same question again in the handler: the page that receives a form trusts no form. |
+
+A new rule goes in the domain, with its reason and a test; a page that needs it asks for it by name. The rule is an upper bound and the services decide ([spec §5](../../docs/console/spec.md#5-ability)): draw a refusal, do not hide one.
 
 ## Decisions
 

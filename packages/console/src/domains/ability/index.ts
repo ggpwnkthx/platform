@@ -1,12 +1,27 @@
 export {
+  ACTIONS,
+  type AbilitySubject,
   type Allowance,
   abilityFor,
   administersOwnTenant,
+  allowanceOf,
   CONSOLE_ACTIONS,
   CONSOLE_SUBJECT,
+  type Capability,
   type CollectionAccess,
+  type ConsoleAbility,
   collectionAbility,
   collectionAccessOf,
   consoleAbility,
+  consoleCapabilitiesOf,
+  permissionOf,
   reasonOf,
+  SUBJECTS,
+  tenantOf,
 } from './ability'
+export {
+  type ModelAnswer,
+  WORKSPACE_PARTS,
+  workspaceAbility,
+  workspaceCapabilitiesOf,
+} from './workspace'

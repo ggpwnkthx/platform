@@ -9,8 +9,10 @@
  * instead.
  */
 
+import type { Allowance } from '../../domains/ability'
 import type { Provider, Route } from '../../domains/access'
 import { Badge } from './page'
+import { DisabledAction } from './why'
 
 /** The form that registers a route of a tenant. */
 export function RouteForm(props: { action: string; providers: readonly Provider[] }) {
@@ -69,7 +71,7 @@ export function ProveRoute(props: {
       <input type="hidden" name="_action" value="verify-route" />
       <input type="hidden" name="id" value={props.id} />
       <input type="hidden" name="verification" value={props.method} />
-      <button type="submit" class="button button-quiet">
+      <button type="submit" class="button quiet small">
         {props.label}
       </button>
     </form>
@@ -80,8 +82,13 @@ export function ProveRoute(props: {
 export function RouteRow(props: {
   route: Route
   action: string
-  /** True when the reader may vouch for a domain. */
-  platform: boolean
+  /**
+   * Whether the reader may vouch for a domain, and why not.
+   *
+   * Vouching is the platform's: an operator of a tenant sees the act
+   * disabled, with the reason, and proves the domain with its record.
+   */
+  vouch: Allowance
 }) {
   const route = props.route
   const record = route.kind === 'domain' ? `_access.${route.key}` : ''
@@ -106,14 +113,22 @@ export function RouteRow(props: {
         {route.status !== 'verified' ? (
           <span class="row">
             <ProveRoute id={route.id} action={props.action} method="dns" label="Check the record" />
-            {props.platform ? (
+            {props.vouch.allowed ? (
               <ProveRoute
                 id={route.id}
                 action={props.action}
                 method="operator"
                 label="Vouch for it"
               />
-            ) : null}
+            ) : (
+              <DisabledAction
+                id={`vouch-${route.id}`}
+                label="Vouch for it"
+                reason={props.vouch.reason ?? ''}
+                small
+                ask={false}
+              />
+            )}
           </span>
         ) : null}
         {record ? <span class="hint">{record}</span> : null}

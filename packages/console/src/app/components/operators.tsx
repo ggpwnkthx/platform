@@ -2,25 +2,24 @@
  * The pieces of the pages of the administration.
  *
  * The administration speaks the words of an operator: a **user** is a
- * principal of Access, and a **right** is a grant of it.
+ * principal of Access, and a **right** is a grant of it. The pieces that
+ * show the rights, and the form that grants one, are in `rights.tsx`.
  */
 
 import type { Context } from 'hono'
-import type { AdminClient, Grant, Group, Principal, Role } from '../../domains/access'
-import { consoleAbility, CONSOLE_ACTIONS, CONSOLE_SUBJECT } from '../../domains/ability'
+import { AccessError, type AdminClient, type Principal, type Role } from '../../domains/access'
+import { ACTIONS, consoleAbility, permissionOf, reasonOf, tenantOf } from '../../domains/ability'
 import {
-  isLive,
+  groupIsReadWhole,
   isPlatformKey,
-  knownPermissionsOf,
-  permissionsOfRole,
+  PLATFORM_KEYS,
+  platformKeysOfGroup,
+  signerOfUnreadJoin,
 } from '../../domains/operators'
-import type { Draft } from '../../domains/session'
 import type { Crumb } from '../context'
-import ConfirmButton from '../islands/confirm-button'
-import GrantFields from '../islands/grant-fields'
 import { tenantCredential } from '../middleware/guards'
 import { operatorScope } from '../middleware/scope'
-import { Badge, Moment, PageHead, Tabs } from './page'
+import { Badge, PageHead, Tabs } from './page'
 
 /** The path of a tenant in the administration. */
 export function tenantPath(slug: string): string {
@@ -64,6 +63,10 @@ export function TenantHead(props: { slug: string; title: string; lede?: string }
 /**
  * The client of the administration for the tenant of a page, or the
  * page that refuses it.
+ *
+ * The refusal says why, in the words of the rule that decides: the
+ * operator of a tenant that asks for another one is told which tenant
+ * its key opens.
  */
 export async function adminFor(
   c: Context,
@@ -76,14 +79,15 @@ export async function adminFor(
   if (credential) {
     return { admin: c.get('services').admin(credential, ...(caller ? [caller] : [])) }
   }
+  const ability = consoleAbility(await operatorScope(c))
+  const reason =
+    reasonOf(ability, ACTIONS.administer, tenantOf(tenant)) ??
+    `The console holds no credential of the administration for the tenant ${tenant}.`
   c.status(403)
   return {
     refusal: c.render(
       <section class="refusal">
-        <PageHead
-          title="This tenant is not yours to administer"
-          lede={`Your scope on the console does not reach the tenant ${tenant}.`}
-        />
+        <PageHead title="This tenant is not yours to administer" lede={reason} />
         <p>
           <a class="button quiet" href="/operators">
             The administration
@@ -101,27 +105,39 @@ export async function adminFor(
  * A capability that is not relative to a tenant is the platform's: only
  * an operator that holds it may give it, and the write is signed with
  * the credential of the platform. Access refuses the write of a
- * credential of a tenant (spec §10.6).
+ * credential of a tenant (Access spec §3.3.1).
  *
  * The answer names the client of the write: the one of the tenant when
  * the write names no capability of the platform, the one of the platform
- * when it does, and the refusal when the operator does not hold it.
+ * when it does, and the refusal — with the reason of the rule that
+ * decides — when the operator does not hold it.
  */
 export type PlatformWrite =
   | { readonly kind: 'tenant' }
   | { readonly kind: 'platform'; readonly client: AdminClient }
-  | { readonly kind: 'refused' }
+  | { readonly kind: 'refused'; readonly reason: string }
 
-/** The client of the write, for the keys the form names. */
+/**
+ * The client of the write, for the permissions the write gives.
+ *
+ * @param c the request.
+ * @param keys the permissions the write gives: the one of a right, the
+ *   ones a granted role holds, the ones a role is written with.
+ */
 export async function platformWrite(
   c: Context,
   keys: readonly (string | null | undefined)[]
 ): Promise<PlatformWrite> {
-  if (!keys.some((key) => isPlatformKey(key))) return { kind: 'tenant' }
+  const named = keys.filter((key): key is string => isPlatformKey(key))
+  if (named.length === 0) return { kind: 'tenant' }
   const ability = consoleAbility(await operatorScope(c))
   const platform = c.get('services').credentials.platform
-  if (!ability.can(CONSOLE_ACTIONS.platform, CONSOLE_SUBJECT) || !platform) {
-    return { kind: 'refused' }
+  for (const key of named) {
+    const reason = reasonOf(ability, ACTIONS.give, permissionOf(key))
+    if (reason) return { kind: 'refused', reason }
+  }
+  if (!platform) {
+    return { kind: 'refused', reason: 'The console holds no credential of the platform.' }
   }
   const caller = c.get('callerAddress')
   return {
@@ -130,9 +146,70 @@ export async function platformWrite(
   }
 }
 
-/** The name of a user, as an operator knows it. */ export function userLabel(
-  user: Principal
-): string {
+/** What a new member of a group is told when the console cannot tell what the group gives. */
+const RIGHTS_NOT_READ =
+  'The console could not read every right of this tenant, so it cannot tell whether the group gives a capability of the platform. An operator of the platform adds the member.'
+
+/**
+ * The clients of the writes that add a member to a group.
+ *
+ * A member of a group holds what the group is granted: a group whose
+ * live rights give a capability of the platform hands it to whoever
+ * joins. Adding the member is the platform's to do, like the grant
+ * itself, and Access refuses the write of a credential of a tenant
+ * (Access spec §10.9). A write that only takes members away is never
+ * asked about.
+ *
+ * The live rights and the roles of the tenant are read once, and the
+ * answer for a group is the one of `platformWrite`, for the capabilities
+ * the group gives. A tenant the console cannot read whole leaves it
+ * unable to tell what a group gives: an operator of the platform then
+ * signs with the credential of the platform, which may always write; an
+ * operator of a tenant is answered by Access when the write is signed
+ * with the credential of the tenant, and refused when the console would
+ * sign it with the one of the platform.
+ *
+ * @param c the request.
+ * @param admin the client of the administration of the tenant.
+ * @param tenant the slug of the tenant.
+ * @returns the client of the write, by the key of the group that is joined.
+ */
+export async function joiningWrites(
+  c: Context,
+  admin: AdminClient,
+  tenant: string
+): Promise<(group: string) => Promise<PlatformWrite>> {
+  const [grants, roles] = await Promise.all([
+    admin.all((page) => admin.grants({ tenant, live: true, ...page })),
+    admin
+      .all((page) => admin.roles({ tenant, ...page }))
+      .catch((error: unknown) => {
+        // A deployment without roles refuses their list, and holds no grant of a role.
+        if (!(error instanceof AccessError) || error.status >= 500) throw error
+        return { rows: [] as Role[], complete: false }
+      }),
+  ])
+  return async (group) => {
+    const keys = platformKeysOfGroup(group, grants.rows, roles.rows)
+    if (keys.length > 0 || groupIsReadWhole(group, grants, roles)) {
+      const write = await platformWrite(c, keys)
+      return write.kind === 'refused'
+        ? {
+            kind: 'refused',
+            reason: `The group gives ${keys.join(', ')} to every member. ${write.reason}`,
+          }
+        : write
+    }
+    // The console read no capability of the platform in the rights of the
+    // group, and it did not read them all: it does not take that for none.
+    const signer = signerOfUnreadJoin(await operatorScope(c), c.get('services').credentials, tenant)
+    if (signer === 'platform') return await platformWrite(c, PLATFORM_KEYS)
+    return signer === 'tenant' ? { kind: 'tenant' } : { kind: 'refused', reason: RIGHTS_NOT_READ }
+  }
+}
+
+/** The name of a user, as an operator knows it. */
+export function userLabel(user: Principal): string {
   return user.displayName ?? user.email ?? user.externalSubject
 }
 
@@ -145,10 +222,7 @@ export function UserStatus(props: { user: Principal }) {
   )
 }
 
-/** The name of the grant form: the draft of a refused grant comes back to it. */
-export const GRANT_FORM = 'grant'
-
-/** How rights work, in four lines, on the pages that grant them. */
+/** How rights work, in five lines, on the pages that grant them. */
 export function HowRightsWork() {
   return (
     <details class="disclosure how">
@@ -162,323 +236,17 @@ export function HowRightsWork() {
         <dd>A named set of permissions. It can include other roles.</dd>
         <dt>Right</dt>
         <dd>
-          A role or a permission, held by a user or a group, on a workspace and route, until it is
-          revoked or ends.
+          A role or a permission, held by a user or a group, somewhere, until it is revoked or ends.
+        </dd>
+        <dt>Where</dt>
+        <dd>
+          On <strong>the tenant itself</strong> for what the console reads: the administration, the
+          status, the creation of workspaces. On <strong>one workspace</strong> or on{' '}
+          <strong>all workspaces</strong> for its records, its model and its audit.
         </dd>
         <dt>Group</dt>
         <dd>A set of users. A right granted to a group is held by every member.</dd>
       </dl>
     </details>
-  )
-}
-
-/** The holder of a right, as a page names it and links it. */
-export interface Holder {
-  readonly label: string
-  readonly href?: string
-  readonly kind: 'user' | 'group'
-}
-
-/** The holder of a grant, from the users and the groups the page read. */
-export function holderOf(
-  tenant: string,
-  grant: Grant,
-  users: ReadonlyMap<string, Principal>
-): Holder {
-  const base = tenantPath(tenant)
-  if (grant.group) {
-    return {
-      label: grant.group,
-      href: `${base}/groups/${encodeURIComponent(grant.group)}`,
-      kind: 'group',
-    }
-  }
-  const user = grant.userId ? users.get(grant.userId) : undefined
-  return {
-    label: user ? userLabel(user) : (grant.userId ?? '—'),
-    ...(grant.userId ? { href: `${base}/users/${encodeURIComponent(grant.userId)}` } : {}),
-    kind: 'user',
-  }
-}
-
-/** The state of a right. */
-export function RightState(props: { grant: Grant }) {
-  const { grant } = props
-  if (grant.revokedAt) return <Badge tone="error">revoked</Badge>
-  if (!isLive(grant)) return <Badge tone="warn">ended</Badge>
-  if (grant.expiresAt) return <Badge tone="accent">until {grant.expiresAt.slice(0, 10)}</Badge>
-  return <Badge tone="ok">live</Badge>
-}
-
-/** The workspace and the route a right holds on, in words. */
-export function scopeWords(grant: Grant): string {
-  const workspace = grant.workspaceId ? `workspace ${grant.workspaceId}` : 'all workspaces'
-  const route = grant.routeId ? `route ${grant.routeId}` : 'all routes'
-  return `${workspace}, ${route}`
-}
-
-/** The scope of a right: the workspace and the route it holds on. */
-export function RightScope(props: { grant: Grant }) {
-  const { workspaceId, routeId } = props.grant
-  return (
-    <span class="small scope">
-      {workspaceId ? (
-        <code title={workspaceId}>
-          {workspaceId.length > 13 ? `${workspaceId.slice(0, 8)}…` : workspaceId}
-        </code>
-      ) : (
-        <span>All workspaces</span>
-      )}
-      <span class="muted"> · </span>
-      {routeId ? <code>{routeId}</code> : <span>all routes</span>}
-    </span>
-  )
-}
-
-/** What a right gives: a permission, or a role and the permissions it holds. */
-export function RightName(props: { grant: Grant; roles?: readonly Role[] }) {
-  const { grant } = props
-  if (grant.permission) {
-    return (
-      <span class="right-name">
-        <code>{grant.permission}</code>
-        <span class="small muted">permission</span>
-      </span>
-    )
-  }
-  const key = grant.role ?? '—'
-  const permissions = props.roles ? permissionsOfRole(key, props.roles) : []
-  return (
-    <span class="right-name">
-      <span>
-        <Badge tone="accent" plain>
-          role
-        </Badge>{' '}
-        <a href={`${tenantPath(grant.tenant)}/roles/${encodeURIComponent(key)}`}>
-          <code>{key}</code>
-        </a>
-      </span>
-      {permissions.length > 0 ? (
-        <span class="small muted" title={permissions.join(', ')}>
-          {permissions.length <= 3
-            ? permissions.join(', ')
-            : `${permissions.slice(0, 3).join(', ')} +${permissions.length - 3} more`}
-        </span>
-      ) : null}
-    </span>
-  )
-}
-
-/** The button that revokes a right. */
-export function RevokeButton(props: { grant: Grant; back: string; holder?: string }) {
-  if (props.grant.revokedAt) return null
-  const what = props.grant.permission
-    ? `the permission ${props.grant.permission}`
-    : `the role ${props.grant.role}`
-  const from = props.holder ? ` from ${props.holder}` : ''
-  return (
-    <form
-      method="post"
-      action={`/operators/tenants/${encodeURIComponent(props.grant.tenant)}/rights`}
-    >
-      <input type="hidden" name="_action" value="revoke" />
-      <input type="hidden" name="grant" value={props.grant.id} />
-      <input type="hidden" name="back" value={props.back} />
-      <ConfirmButton
-        small
-        label="Revoke"
-        message={`Revoke ${what}${from} on ${scopeWords(props.grant)}? Access refuses it from the next decision on.`}
-      />
-    </form>
-  )
-}
-
-/** A row of the table of rights. */
-export interface RightsRow {
-  readonly grant: Grant
-  readonly holder?: Holder
-  /** The key of the group the right is held through, on the page of one of its members. */
-  readonly through?: string | null
-}
-
-/** The table of rights. */
-export function RightsTable(props: {
-  rows: readonly RightsRow[]
-  back: string
-  roles?: readonly Role[]
-  showHolder?: boolean
-  /** The name of the holder of every row, on the page of a user or of a group. */
-  holderName?: string
-}) {
-  return (
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Right</th>
-            {props.showHolder ? <th>Held by</th> : null}
-            {props.rows.some((row) => row.through) ? <th>Through</th> : null}
-            <th>Where</th>
-            <th>State</th>
-            <th>Granted</th>
-            <th>
-              <span class="sr-only">Actions</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {props.rows.map((row) => (
-            <tr>
-              <td>
-                <RightName grant={row.grant} roles={props.roles} />
-              </td>
-              {props.showHolder ? (
-                <td>
-                  {row.holder ? (
-                    <span>
-                      {row.holder.kind === 'group' ? <span class="small muted">group </span> : null}
-                      {row.holder.href ? (
-                        <a href={row.holder.href}>{row.holder.label}</a>
-                      ) : (
-                        row.holder.label
-                      )}
-                    </span>
-                  ) : (
-                    '—'
-                  )}
-                </td>
-              ) : null}
-              {props.rows.some((r) => r.through) ? (
-                <td>
-                  {row.through ? (
-                    <a
-                      class="small through"
-                      href={`${tenantPath(row.grant.tenant)}/groups/${encodeURIComponent(row.through)}`}
-                    >
-                      group {row.through}
-                    </a>
-                  ) : null}
-                </td>
-              ) : null}
-              <td>
-                <RightScope grant={row.grant} />
-              </td>
-              <td>
-                <RightState grant={row.grant} />
-              </td>
-              <td class="small">
-                <Moment at={row.grant.createdAt} />
-                {row.grant.grantedBy ? <div class="muted">by {row.grant.grantedBy}</div> : null}
-              </td>
-              <td class="num actions">
-                {row.through ? (
-                  <a
-                    class="small"
-                    href={`${tenantPath(row.grant.tenant)}/groups/${encodeURIComponent(row.through)}`}
-                    title="A right of a group is revoked on the page of the group"
-                  >
-                    Manage on group
-                  </a>
-                ) : (
-                  <RevokeButton
-                    grant={row.grant}
-                    back={props.back}
-                    holder={props.holderName ?? row.holder?.label}
-                  />
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-/** The workspaces and the routes the rights of a tenant name. */
-export function knownOf(grants: readonly Grant[]): {
-  workspaces: string[]
-  routes: string[]
-} {
-  const unique = (values: (string | null | undefined)[]) =>
-    [
-      ...new Set(
-        values.filter((value): value is string => typeof value === 'string' && value !== '')
-      ),
-    ].sort()
-  return {
-    workspaces: unique(grants.map((grant) => grant.workspaceId)),
-    routes: unique(grants.map((grant) => grant.routeId)),
-  }
-}
-
-/** The form that grants a right, to a user or to a group. */
-export function GrantForm(props: {
-  tenant: string
-  back: string
-  /** The rights of the tenant: the permissions, the workspaces and the routes they name. */
-  grants: readonly Grant[]
-  roles: readonly Role[]
-  consoleRoute: string
-  users?: readonly Principal[]
-  groups?: readonly Group[]
-  fixedUser?: Principal
-  fixedGroup?: Group
-  /** The form that was refused, to show again. */
-  draft?: Draft | null
-  /** Distinguishes the fields of two forms of one page. */
-  prefix?: string
-}) {
-  const known = knownOf(props.grants)
-  const fixedHolder = props.fixedUser
-    ? { value: `user:${props.fixedUser.id}`, label: userLabel(props.fixedUser) }
-    : props.fixedGroup
-      ? {
-          value: `group:${props.fixedGroup.key}`,
-          label: `the group ${props.fixedGroup.displayName ?? props.fixedGroup.key}`,
-        }
-      : undefined
-  const holders = fixedHolder
-    ? undefined
-    : [
-        ...(props.groups ?? []).map((group) => ({
-          value: `group:${group.key}`,
-          label: `${group.displayName ?? group.key} (group)`,
-          hint: `${group.members.length} ${group.members.length === 1 ? 'member' : 'members'}`,
-        })),
-        ...(props.users ?? []).map((user) => ({
-          value: `user:${user.id}`,
-          label: userLabel(user),
-          ...(user.email && user.email !== userLabel(user) ? { hint: user.email } : {}),
-        })),
-      ]
-  return (
-    <form method="post" action={`${tenantPath(props.tenant)}/rights`} class="form">
-      <input type="hidden" name="_action" value="grant" />
-      <input type="hidden" name="_form" value={GRANT_FORM} />
-      <input type="hidden" name="back" value={props.back} />
-      <GrantFields
-        prefix={props.prefix ?? 'grant'}
-        {...(holders ? { holders } : {})}
-        {...(fixedHolder ? { fixedHolder } : {})}
-        roles={[...props.roles]
-          .sort((left, right) => left.key.localeCompare(right.key))
-          .map((role) => ({
-            key: role.key,
-            label: role.displayName ?? role.key,
-            permissions: permissionsOfRole(role.key, props.roles),
-          }))}
-        permissions={knownPermissionsOf(props.grants, props.roles)}
-        workspaces={known.workspaces}
-        routes={known.routes}
-        consoleRoute={props.consoleRoute}
-        {...(props.draft ? { values: props.draft.values, problems: props.draft.problems } : {})}
-      />
-      <div class="row">
-        <button type="submit" class="button">
-          Grant
-        </button>
-      </div>
-    </form>
   )
 }

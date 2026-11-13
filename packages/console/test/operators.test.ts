@@ -4,10 +4,13 @@ import {
   CONSOLE_KEYS,
   credentialFor,
   DATA_KEYS,
+  groupsOf,
   isLive,
   mayCreateWorkspaces,
+  memberNameOf,
   rightsOf,
   scopeOf,
+  signerOfUnreadJoin,
   workspacesOf,
 } from '../src/domains/operators'
 
@@ -69,6 +72,23 @@ describe('the scope of an operator', () => {
     expect(scope.administers).toBe('tenant')
   })
 
+  test('a new member of a group the console could not read is signed where Access still answers', () => {
+    // An operator of the platform may always add a member.
+    const platform = scopeOf('acme', [CONSOLE_KEYS.platform], credentials)
+    expect(signerOfUnreadJoin(platform, credentials, 'globex')).toBe('platform')
+    // The credential of a tenant is refused by Access when the group
+    // gives a capability of the platform: Access answers.
+    const tenant = scopeOf('acme', [CONSOLE_KEYS.admin], credentials)
+    expect(signerOfUnreadJoin(tenant, credentials, 'acme')).toBe('tenant')
+    // A console that holds the credential of the platform alone signs
+    // for the operator of a tenant with it, and Access never refuses
+    // that credential: nobody signs.
+    const alone = { platform: credentials.platform, tenants: {} }
+    const unarmed = scopeOf('acme', [CONSOLE_KEYS.admin], alone)
+    expect(unarmed.administers).toBe('tenant')
+    expect(signerOfUnreadJoin(unarmed, alone, 'acme')).toBeNull()
+  })
+
   test('no key, no scope', () => {
     expect(scopeOf('acme', [], credentials).administers).toBeNull()
   })
@@ -111,6 +131,19 @@ describe('the rights of a user', () => {
       ['2', 'editors'],
       ['1', null],
     ])
+  })
+
+  test('a group names a user of another provider with its provider', () => {
+    // Two providers of a tenant hand out the same subject: the subject
+    // alone names the user of the default provider, and nobody else.
+    const contractor: Principal = { ...alice, id: 'u-erin', provider: 'contractors' }
+    expect(memberNameOf(alice)).toBe('user-alice')
+    expect(memberNameOf(contractor)).toBe('contractors/user-alice')
+    expect(groupsOf(alice, groups).map((group) => group.key)).toEqual(['editors'])
+    expect(groupsOf(contractor, groups)).toEqual([])
+    const mixed: Group[] = [{ ...groups[0]!, members: ['contractors/user-alice'] }]
+    expect(groupsOf(contractor, mixed).map((group) => group.key)).toEqual(['editors'])
+    expect(groupsOf(alice, mixed)).toEqual([])
   })
 
   test('a revoked or an expired right is not live', () => {

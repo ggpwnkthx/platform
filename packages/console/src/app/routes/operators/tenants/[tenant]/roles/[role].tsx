@@ -7,21 +7,35 @@
  */
 
 import { createRoute } from 'honox/factory'
+import { ACTIONS, permissionOf, reasonOf } from '../../../../../../domains/ability'
 import { AccessError } from '../../../../../../domains/access'
-import { expandRole, knownPermissionsOf, rolesIncluding } from '../../../../../../domains/operators'
+import {
+  administrationLostBy,
+  administrationOf,
+  expandRole,
+  knownPermission,
+  knownPermissionsOf,
+  permissionsOfWrite,
+  rolesIncluding,
+} from '../../../../../../domains/operators'
 import {
   adminFor,
-  holderOf,
   platformWrite,
-  RightScope,
-  RightState,
   TenantHead,
   TenantTabs,
   tenantCrumbs,
   tenantPath,
 } from '../../../../../components/operators'
-import { Empty, KeyValues, Moment } from '../../../../../components/page'
-import { ROLE_FORM, RoleForm, roleDraftOf, roleInputOf } from '../../../../../components/role-form'
+import { Empty, KeyValues, Moment, Notice } from '../../../../../components/page'
+import { holderOf, RightPlace, RightState, rightsViewOf } from '../../../../../components/rights'
+import {
+  CLOSES_ADMINISTRATION,
+  closedFieldOf,
+  ROLE_FORM,
+  RoleForm,
+  roleDraftOf,
+  roleInputOf,
+} from '../../../../../components/role-form'
 import ConfirmButton from '../../../../../islands/confirm-button'
 import { formOf } from '../../../../../middleware/forms'
 import { flash, keepDraft, takeDraft } from '../../../../../middleware/session'
@@ -32,8 +46,8 @@ export const POST = createRoute(async (c) => {
   const access = await adminFor(c, slug)
   if ('refusal' in access) return access.refusal
   const { admin } = access
-  const page = await admin.roles({ tenant: slug, key, limit: 1 })
-  const role = page.rows.find((row) => row.key === key)
+  const roles = await admin.all((offsets) => admin.roles({ tenant: slug, ...offsets }))
+  const role = roles.rows.find((row) => row.key === key)
   if (!role) return c.notFound()
   const form = await formOf(c)
   const path = `${tenantPath(slug)}/roles/${encodeURIComponent(key)}`
@@ -45,21 +59,50 @@ export const POST = createRoute(async (c) => {
     }
     const input = roleInputOf(form, slug)
     // A capability that is not relative to a tenant is the platform's:
-    // only an operator that holds it may put it in a role, and the write
-    // is signed with the credential of the platform.
-    const write = await platformWrite(c, input.permissions ?? [])
+    // only an operator that holds it may put it in a role — as it is, or
+    // with a role that holds it — and the write is signed with the
+    // credential of the platform.
+    const write = await platformWrite(c, permissionsOfWrite(input, roles.rows))
     if (write.kind === 'refused') {
-      keepDraft(
-        c,
-        roleDraftOf(form, [
-          {
-            field: 'permissions',
-            message: 'The capability of the platform is not yours to give.',
-          },
-        ])
-      )
+      keepDraft(c, roleDraftOf(form, [{ field: closedFieldOf(input), message: write.reason }]))
       flash(c, { kind: 'error', text: 'The role was not saved: the form needs a change.' })
       return c.redirect(path)
+    }
+    // A role written without the key that opens the administration
+    // closes it to everybody who holds the role, the operator among
+    // them: the console asks before it sends such a write.
+    if (form.get(CLOSES_ADMINISTRATION) !== 'yes') {
+      const [grants, users, groups] = await Promise.all([
+        admin.all((offsets) => admin.grants({ tenant: slug, live: true, ...offsets })),
+        admin.all((offsets) => admin.principals({ tenant: slug, ...offsets })),
+        admin.all((offsets) => admin.groups({ tenant: slug, ...offsets })),
+      ])
+      const view = await rightsViewOf(c, slug, {
+        grants: grants.rows,
+        roles: roles.rows,
+        groups: groups.rows,
+        users: users.rows,
+      })
+      const lost = administrationLostBy(
+        grants.rows,
+        roles.rows,
+        { key, permissions: input.permissions ?? [], roles: input.roles ?? [] },
+        { tenant: slug, consoleRoute: view.consoleRoute }
+      )
+      if (lost.length > 0) {
+        const yours = lost.some((grant) => view.ownAdministration.has(grant.id))
+        keepDraft(
+          c,
+          roleDraftOf(form, [
+            {
+              field: CLOSES_ADMINISTRATION,
+              message: `Saved like this, the role stops opening the administration of ${slug} to the holders of ${lost.length} live ${lost.length === 1 ? 'right' : 'rights'}${yours ? ', yours among them: your next page would be a refusal' : ''}. Only an operator who still administers ${slug}, or an operator of the platform, gives it back.`,
+            },
+          ])
+        )
+        flash(c, { kind: 'error', text: 'The role was not saved: the form asks a question first.' })
+        return c.redirect(path)
+      }
     }
     const client = write.kind === 'platform' ? write.client : admin
     await client.saveRole({ ...input, key })
@@ -93,16 +136,33 @@ export default createRoute(async (c) => {
   const access = await adminFor(c, slug)
   if ('refusal' in access) return access.refusal
   const { admin } = access
-  const [roles, grants, users] = await Promise.all([
+  const [roles, grants, users, groups] = await Promise.all([
     admin.all((offsets) => admin.roles({ tenant: slug, ...offsets })),
     admin.all((offsets) => admin.grants({ tenant: slug, ...offsets })),
     admin.all((offsets) => admin.principals({ tenant: slug, ...offsets })),
+    admin.all((offsets) => admin.groups({ tenant: slug, ...offsets })),
   ])
   const role = roles.rows.find((row) => row.key === key)
   if (!role) return c.notFound()
+  const view = await rightsViewOf(c, slug, {
+    grants: grants.rows,
+    roles: roles.rows,
+    groups: groups.rows,
+    users: users.rows,
+  })
   const path = `${tenantPath(slug)}/roles/${encodeURIComponent(key)}`
   const byId = new Map(users.rows.map((user) => [user.id, user]))
   const holds = expandRole(key, roles.rows)
+  // A permission the role holds — itself, or through a role it includes —
+  // and that is not the operator's to give: the role is not saved while
+  // it holds it, and the page says so first.
+  const closed =
+    holds
+      .map((entry) => ({
+        reason: reasonOf(view.ability, ACTIONS.give, permissionOf(entry.permission)),
+        through: entry.path.slice(1),
+      }))
+      .find((entry) => entry.reason !== null) ?? null
   const byPermission = new Map<string, string[][]>()
   for (const entry of holds) {
     byPermission.set(entry.permission, [...(byPermission.get(entry.permission) ?? []), entry.path])
@@ -113,6 +173,13 @@ export default createRoute(async (c) => {
   const removable = naming.length === 0 && includedBy.length === 0
   const name = role.displayName ?? role.key
   const draft = takeDraft(c, ROLE_FORM)
+  // The rights that open the administration of the tenant through this
+  // role: what a save without the key would close.
+  const place = { tenant: slug, consoleRoute: view.consoleRoute }
+  const opening = grants.rows.filter((grant) =>
+    administrationOf(grant, roles.rows, place)?.roles.includes(key)
+  )
+  const yours = opening.some((grant) => view.ownAdministration.has(grant.id))
 
   return c.render(
     <>
@@ -122,6 +189,21 @@ export default createRoute(async (c) => {
         <div class="stack">
           <section class="card">
             <h2>Edit role</h2>
+            {closed ? (
+              <Notice tone="warn" title="This role holds a permission that is not yours to give">
+                {closed.reason}{' '}
+                {closed.through.length > 0
+                  ? `The role holds it through ${closed.through.join(' → ')}: save it without that role, or ask an operator of the platform.`
+                  : 'Save it without that permission, or ask an operator of the platform.'}
+              </Notice>
+            ) : null}
+            {opening.length > 0 ? (
+              <p class="small muted">
+                This role opens the administration of {slug} to the holders of {opening.length} live{' '}
+                {opening.length === 1 ? 'right' : 'rights'}
+                {yours ? ', yours among them' : ''}. A save that would close it asks first.
+              </p>
+            ) : null}
             <RoleForm
               action={path}
               role={role}
@@ -145,6 +227,7 @@ export default createRoute(async (c) => {
                   <thead>
                     <tr>
                       <th>Permission</th>
+                      <th>What it opens</th>
                       <th>Comes from</th>
                     </tr>
                   </thead>
@@ -155,6 +238,11 @@ export default createRoute(async (c) => {
                         <tr>
                           <td>
                             <code>{permission}</code>
+                          </td>
+                          <td class="small">
+                            {knownPermission(permission)?.opens ?? (
+                              <span class="muted">Data's policies decide.</span>
+                            )}
                           </td>
                           <td class="small">
                             {paths.map((chain) => (
@@ -195,7 +283,7 @@ export default createRoute(async (c) => {
                   </thead>
                   <tbody>
                     {live.map((grant) => {
-                      const holder = holderOf(slug, grant, byId)
+                      const holder = holderOf(slug, grant, byId, view.caller)
                       return (
                         <tr>
                           <td>
@@ -205,7 +293,7 @@ export default createRoute(async (c) => {
                             {holder.href ? <a href={holder.href}>{holder.label}</a> : holder.label}
                           </td>
                           <td>
-                            <RightScope grant={grant} />
+                            <RightPlace grant={grant} view={view} />
                           </td>
                           <td>
                             <RightState grant={grant} />

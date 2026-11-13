@@ -4,7 +4,7 @@
  */
 
 import { createRoute } from 'honox/factory'
-import { collectionAbility, reasonOf } from '../../../../../../domains/ability'
+import { collectionAbility } from '../../../../../../domains/ability'
 import {
   DataError,
   type FieldMetadata,
@@ -17,7 +17,7 @@ import {
 } from '../../../../../../domains/data'
 import { isUuid } from '../../../../../../domains/operators'
 import { Empty, Notice, PageHead, Refusal, refusalOf } from '../../../../../components/page'
-import { DisabledAction } from '../../../../../components/why'
+import { ActionLink } from '../../../../../components/why'
 import {
   accessPath,
   collectionPath,
@@ -75,20 +75,23 @@ export default createRoute(async (c) => {
         lede={collection.description}
         actions={
           <>
-            <a class="button quiet" href={`${path}/aggregate`}>
-              Aggregate
-            </a>
-            {ability.can('create', key) ? (
-              <a class="button" href={`${path}/new`}>
-                New record
-              </a>
-            ) : (
-              <DisabledAction
-                id="new-record"
-                label="New record"
-                reason={reasonOf(ability, 'create', key) ?? ''}
-              />
-            )}
+            <ActionLink
+              ability={ability}
+              I="read"
+              a={key}
+              id="aggregate"
+              href={`${path}/aggregate`}
+              label="Aggregate"
+              tone="quiet"
+            />
+            <ActionLink
+              ability={ability}
+              I="create"
+              a={key}
+              id="new-record"
+              href={`${path}/new`}
+              label="New record"
+            />
           </>
         }
       />

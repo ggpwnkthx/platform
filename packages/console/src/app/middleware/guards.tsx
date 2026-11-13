@@ -8,7 +8,13 @@
 
 import type { Context, MiddlewareHandler } from 'hono'
 import { createMiddleware } from 'hono/factory'
-import { consoleAbility, CONSOLE_ACTIONS, CONSOLE_SUBJECT } from '../../domains/ability'
+import {
+  ACTIONS,
+  consoleAbility,
+  CONSOLE_ACTIONS,
+  CONSOLE_SUBJECT,
+  tenantOf,
+} from '../../domains/ability'
 import { credentialFor } from '../../domains/operators'
 import { flash, hereOf, loginUrl, tokenIsAlive } from './session'
 import { operatorScope } from './scope'
@@ -66,8 +72,8 @@ export const requireOperator: MiddlewareHandler = createMiddleware(async (c, nex
           your tenant.
         </p>
         <p>
-          An operator of your tenant can grant you <code>console.admin</code> on the route of the
-          console, on its Rights tab.
+          An operator of your tenant can make you an administrator on the page of your user, or
+          grant you <code>console.admin</code> on the tenant itself on its Rights tab.
         </p>
         <p>
           <a href="/me">See what the console knows about you</a>
@@ -79,8 +85,15 @@ export const requireOperator: MiddlewareHandler = createMiddleware(async (c, nex
   await next()
 })
 
-/** The credential of the administration for the tenant of a page, or a refusal. */
+/**
+ * The credential of the administration for the tenant of a page, or
+ * null when the ability of the caller does not reach the tenant.
+ *
+ * The ability is asked first: an operator of a tenant administers the
+ * tenant of its own slug, and an operator of the platform every one.
+ */
 export async function tenantCredential(c: Context, tenant: string): Promise<string | null> {
   const scope = await operatorScope(c)
+  if (!consoleAbility(scope).can(ACTIONS.administer, tenantOf(tenant))) return null
   return credentialFor(scope, c.get('services').credentials, tenant)
 }

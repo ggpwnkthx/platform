@@ -18,7 +18,9 @@ Status: 1.0.1. Runtime: Bun ≥ 1.4.3. Listener: HTTP on
 | **tenant** | A platform customer. The tenant's slug identifies its operators. |
 | **session** | State the console keeps for a signed-in caller between requests. |
 | **scope** | What an operator may do: the keys Access holds for the caller on the console's route. |
-| **ability** | A rendering of the scope and a workspace's grants. It hides what is refused; it never allows anything. |
+| **ability** | A rendering of the scope and a workspace's grants. It draws what is refused as closed, with the reason; it never allows anything. |
+| **right** | A role or a permission, held by a user or a group, somewhere, until a moment: a grant of Access. |
+| **the tenant itself** | The place the console reads its keys in: the tenant's slug, where Access holds a workspace (§4.2). |
 
 ### 1.1 Invariants
 
@@ -130,11 +132,11 @@ The console asks Access for the caller's **access context** on the console's rou
 | `console.admin` | Administration of the caller's tenant. |
 | `console.platform` | Administration of every tenant. |
 
-`console.platform` is a capability of the **platform**: it is not relative to a tenant, and only the platform gives it. The console writes it with its platform credential (`CONSOLE_ADMIN_TOKEN`), and only for an operator that already holds it: an operator of a tenant cannot hand the capability of the platform to a colleague, and Access refuses the write of a credential of a tenant in any case (Access spec §10.6).
+`console.platform` is a capability of the **platform**: it is not relative to a tenant, and only the platform gives it. The console writes it with its platform credential (`CONSOLE_ADMIN_TOKEN`), and only for an operator that already holds it: an operator of a tenant cannot hand the capability of the platform to a colleague, and Access refuses the write of a credential of a tenant in any case ([Access spec §3.3.1](../access/spec.md#331-who-gives-a-capability-of-the-platform)).
 
 Scope is **read, never assumed**. A context is a snapshot: the console keeps it until its `validUntil` and never longer, and reads it again on every page. A revoked right closes administration from the next page on. An unreadable context opens nothing.
 
-The console acts with the operator's **tenant credential** when it holds one (`CONSOLE_TENANT_ADMIN_TOKENS`), and with the **platform credential** (`CONSOLE_ADMIN_TOKEN`) otherwise. Access's audit names the operator of a tenant credential, so changes to a tenant are better signed by that tenant's own operator.
+The console acts with the operator's **tenant credential** when it holds one (`CONSOLE_TENANT_ADMIN_TOKENS`), and with the **platform credential** (`CONSOLE_ADMIN_TOKEN`) otherwise. Access's audit names the operator of a tenant credential, so changes to a tenant are better signed by that tenant's own operator. What only the platform may write (§4.3) is signed with the platform credential, whoever the operator is.
 
 ### 4.1 The address of the caller
 
@@ -143,6 +145,39 @@ The console acts for the operator, and Access's audit names the address the chan
 The address is the one the **gateway** reports: the gateway resolves the address of the caller once, at the edge, and writes it in `x-real-ip` for the services it forwards to. The console passes it on.
 
 The console reads that header only when the deployment is behind an ingress that is the only way in (`CONSOLE_INGRESS_ONLY`): every peer of the console is then the gateway, and the address it reports is the address of the caller. A console that is published reads nothing — a browser that reaches the console directly chooses the header it sends, and an address it chose is not the address of a caller.
+
+### 4.2 Where a right holds
+
+A right holds in a place: a workspace, and a route. Access accepts any place, and a key opens something only in the place its reader asks about.
+
+| Place of a right | Access holds | Read there |
+| --- | --- | --- |
+| **The tenant itself** | The tenant's slug as the workspace. | The console's keys (§4), and `data.workspace.create`. |
+| **Every workspace** | No workspace. | Everything: such a right holds on each workspace of the tenant, the later ones too, and on the tenant itself. |
+| **One workspace** | The workspace's identifier. | Data's keys for that workspace: its records, `data.model.read`, `data.model.write`, `data.audit.read`. |
+
+A right that names a route holds on that route only. The console reads its keys on its own route (`CONSOLE_ROUTE_ID`), and Data reads its keys on the route of the request. `data.workspace.create` is read on both — by the console to offer the creation, by Data to allow it — so a right limited to one route creates no workspace from the console.
+
+**A right that holds where its key is never read opens nothing**, and Access accepts it without a word. The console names the three places in the grant form, by those names, and says before the grant what the right opens in the place chosen and which of its permissions open nothing there. It says so only of the keys it knows the meaning of — its own, and the four of Data named above; every other key is the deployment's, and Data's policies decide what it allows.
+
+The check is an explanation and never a decision: the console grants the right as the operator wrote it, and says again what opens nothing once it is granted.
+
+### 4.3 What is the platform's
+
+An operator of the platform holds `console.platform`; an operator of a tenant holds `console.admin`. Four things are the platform's, and the console draws each of them closed to an operator of a tenant, with the reason (§5.2):
+
+| Act | Rule |
+| --- | --- |
+| Giving a capability of the platform | In every way it is given: the permission granted as it is, a role that holds it — in itself or through a role it includes — granted to somebody, a role written to hold it or to include a role that does, and a member added to a group whose live rights give it. |
+| Creating a tenant | A tenant is created by the operator of the platform. |
+| The flags of a tenant that move logins across tenants | The shared client and the default tenant ([Access spec §10.1](../access/spec.md#101-common-rules)). The other fields of a tenant are the tenant's operator's. |
+| Vouching for a route | The owner of a domain proves it with its record; only the platform vouches for it instead ([Access spec §10.18](../access/spec.md#1018-the-routes-of-the-logins)). |
+
+The console refuses each of them before it calls Access, for the person and not for the credential: the page that receives a form asks the ability again, whatever the form that was drawn. A flag of the platform that an operator of a tenant sends changes nothing: the console sends Access the value the tenant has.
+
+An operator of a tenant does administer what the platform gave: it revokes a right of its tenant whatever the right gives, a capability of the platform included, and it takes a member out of any group.
+
+**A group the console could not read is not a group that gives nothing.** The console reads what a group gives in the live rights and the roles of its tenant, and it reads a bounded number of them. For a tenant that holds more, a new member of a group is signed with the platform credential for an operator of the platform, who may always add one, and with the tenant credential for an operator of a tenant, whom Access answers. A console that holds no credential of that tenant would sign with the platform credential, which Access never refuses: it refuses the new member itself, and says that it could not read the tenant.
 
 ---
 
@@ -153,6 +188,35 @@ The ability renders the scope and a workspace's grants. Access decides who holds
 Every ability rule must be an **upper bound**, never a lower one: the console refuses what the services refuse and allows what they allow, and it says why. A refusal is drawn as a disabled action with the reason of it, so a reader learns what is missing instead of finding an absence. A button that is offered and then refused by Data is an annoyance; a button that is hidden although it is allowed is a fault.
 
 The ability library has two wildcards, the action `manage` and the subject `all`. The console uses neither: every rule names its action and subject, and the wildcards match no rule.
+
+### 5.1 What the ability knows
+
+A page asks the ability one question: an action, on a subject. A rule that refuses carries the **reason** the page shows, and no page writes a refusal of its own.
+
+| Subject | Actions | Built from |
+| --- | --- | --- |
+| The console | `status`, `admin`, `platform` | The keys of the scope (§4). |
+| A tenant, by its slug | `administer`, `create`, `flag` | The scope. An operator of a tenant administers the tenant of its own slug and no other. An operator of the platform administers every one (§4.3). |
+| A permission, by its key | `give` | The scope. An operator gives every permission but a capability of the platform, which only its holder gives. |
+| A route of the logins | `vouch` | The scope (§4.3). |
+| A workspace of the tenant | `create` | `data.workspace.create` in the scope. |
+| The model and the audit of a workspace | `read`, `update` | The keys Access gives the caller on the workspace, on the route Data serves it on. |
+| A collection and its fields | `read`, `create`, `update`, `delete` | The actions and the fields Data's schema names for the caller. |
+
+The keys of a workspace are the answer to the question Data asks before it serves a request, so the console asks Access the same question. A context the console cannot read tells it nothing about a workspace: the model and the audit are drawn as plain tabs, and Data answers the caller that follows one. That is the upper bound at work, and it opens nothing: the administration is the console's own to close, and it stays closed without a context (§4). When Data has answered on the page — it served the model or the audit, or refused it — its answer replaces the keys.
+
+### 5.2 How a refusal is drawn
+
+| What is refused | Drawn as |
+| --- | --- |
+| An action of a page | A disabled control that carries a lock, with the reason on hover and on keyboard focus. |
+| The model or the audit of a workspace | A tab that carries a lock and stays a link: the page it leads to says which key is missing and who grants it. |
+| A field of a record | Its value, read-only, with the reason under it. |
+| A choice of a form of the administration | The choice named with its reason — a permission, a role, a cell of the grid of the roles — and a form that is not sent with it. |
+| A new member of a group that gives a capability of the platform | The reason above the members of the group, and a picker that offers nobody new and still takes a member away. On the page of a user, the group is named under the picker as not offered. |
+| A place of the console | No link in the page header. Opened by its address, the place answers `403` and says what is missing and who grants it. |
+
+The page header names what the caller administers, beside its tenant: `operator` for a tenant, `platform operator` for the platform.
 
 ---
 
@@ -174,33 +238,37 @@ The ability library has two wildcards, the action `manage` and the subject `all`
 | Place | Shows | Calls |
 | --- | --- | --- |
 | `/` | The places and service state. | The three services' probes. |
-| `/workspaces` | Workspaces named by the caller's grants, plus ones it opened. A workspace can also be opened by ID. A caller that holds `data.workspace.create` is offered the creation of a workspace. | The caller's grants, read with its tenant's credential; `GET /ws/{id}/v1/me` per workspace. |
-| `/workspaces/new` | The creation of a workspace of the tenant: its slug and its name. The caller that creates one is given the administration of it. | `POST /v1/workspaces`, and the grant of the role `admin` on the workspace. |
-| `/workspaces/{id}` | Collections the policies open to the caller, and what it may do with them. | `/me`, `/schema` |
-| `/workspaces/{id}/access` | What the caller may do with each collection, field by field, and the reason of every refusal. | `/me`, `/schema`, and the access context of the caller |
+| `/workspaces` | Workspaces named by the caller's grants, plus ones it opened. A workspace can also be opened by ID. The creation of a workspace is offered to a caller that holds `data.workspace.create`, and drawn disabled to any other (§5.2). | The caller's grants, read with its tenant's credential; `GET /ws/{id}/v1/me` per workspace. |
+| `/workspaces/new` | The creation of a workspace of the tenant: its slug and its name. The caller that creates one is given the administration of it, by the role `admin` of the tenant. | `POST /v1/workspaces`, and the grant of the role `admin` on the workspace. |
+| `/workspaces/{id}` | Collections the policies open to the caller, and the four actions on the records of each, the refused ones named too. The tabs of the model and of the audit are closed to a caller that holds no key of theirs (§5.1). | `/me`, `/schema`, and the access context of the caller |
+| `/workspaces/{id}/access` | What the caller may do with each collection, field by field, and with the model and the audit, with the reason of every refusal; and the permissions Access gives it there, each with what it opens when the console knows. | `/me`, `/schema`, and the access context of the caller |
 | `/workspaces/{id}/collections/{key}` | Records: searched, filtered (by rows or as JSON), sorted, cursor-paged. | `/schema/{key}`, `/items/{key}` |
 | `/workspaces/{id}/collections/{key}/new` | Record creation. The form carries an idempotency key, so submitting twice creates one record. | `POST /items/{key}` |
 | `/workspaces/{id}/collections/{key}/records/{id}` | A record: form, history, deletion. Changes carry the validator of the version the caller read. | `/items/{key}/{id}`, `PATCH`, `DELETE`, `/versions` |
 | `/workspaces/{id}/collections/{key}/records/{id}/versions/{n}` | One version beside the current record, and rollback to it. | `/versions/{n}`, `/rollback` |
 | `/workspaces/{id}/collections/{key}/aggregate` | Records grouped, counted and measured. | `/aggregate/{key}` |
-| `/workspaces/{id}/model` | The workspace data model: collections, fields, rules, relations, and changes to them. | `/model` and its writes (`data.model.read`, `data.model.write`) |
-| `/workspaces/{id}/audit` | Mutations committed in the workspace. | `/audit` (`data.audit.read`) |
+| `/workspaces/{id}/model` | The workspace data model: collections, fields, rules, relations, and changes to them. A caller that reads the model and may not change it reads it without its forms. | `/model` and its writes (`data.model.read`, `data.model.write`), and the access context of the caller |
+| `/workspaces/{id}/audit` | Mutations committed in the workspace. | `/audit` (`data.audit.read`), and the access context of the caller |
 | `/operators` | Platform tenants, and tenant creation. A single-tenant operator is sent to its tenant. | Access administration. |
-| `/operators/tenants/{slug}` | The tenant: counts, latest changes, form, the providers it signs its people in at, the accounts of its local providers, and the routes that name the tenant. | Same. |
-| `/operators/tenants/{slug}/users` | Users, filtered by e-mail and status; registering one user, or a team in one batch. | Same. |
-| `/operators/tenants/{slug}/users/{id}` | A user's rights (direct and through groups), groups, and registration (including disabling). | Same. |
+| `/operators/tenants/{slug}` | The tenant: who administers it, counts, latest changes, form, the providers it signs its people in at, the accounts of its local providers, and the routes that name the tenant. | Same. |
+| `/operators/tenants/{slug}/users` | Users, each with what it holds, filtered by e-mail and status; registering one user, or a team in one batch. | Same. |
+| `/operators/tenants/{slug}/users/{id}` | A user: the permissions it holds in effect, what the console opens to it, its rights (direct and through groups), its groups, a check of one workspace, and its registration (including disabling). The page grants a right, changes the groups, and makes the user an administrator of the tenant in one step. | Same, and the access context of the user. |
 | `/operators/tenants/{slug}/groups` | Groups, members and rights. | Same. |
-| `/operators/tenants/{slug}/rights` | Every right of the tenant, live or ended; granting to a user or group, and revoking. | Same. |
-| `/operators/tenants/{slug}/roles` | The tenant's roles. | Same. |
-| `/operators/tenants/{slug}/roles/{key}` | One role of the tenant: the permissions it holds in effect, the roles it includes, and who holds it. | Same. |
+| `/operators/tenants/{slug}/rights` | Every right of the tenant, live or ended, with its place in words (§4.2); filtered by holder, by what a right gives in effect and by place; granting to a user or group, and revoking. | Same; `GET /ws/{id}/v1/me` for the name of a workspace a right names, a few per page. |
+| `/operators/tenants/{slug}/roles` | The tenant's roles, as a list or as a grid of the roles against the permissions: an operator ticks and clears cells, and one save writes the roles that changed. | Same. |
+| `/operators/tenants/{slug}/roles/{key}` | One role of the tenant: the permissions it holds in effect with what each opens, the roles it includes, and who holds it. | Same. |
 | `/operators/tenants/{slug}/audit` | Administration audit, exportable as CSV or JSONL. | Same. |
 | `/status` | State of the three services. | Each service's `/healthz` and `/readyz`. |
 | `/docs` | Platform documentation, arranged around the reader's role (§6.4): a choice of roles, or the chosen role's map, then every area. `?role=` records or clears the choice. | Nothing: docs are in the console build. |
-| `/me` | The caller: subject, tenant and scope keys. | The caller's access context. |
+| `/me` | The caller: subject, tenant, the scope keys it holds and the ones it does not, each with what it opens. | The caller's access context. |
 
 A Data refusal is shown as it came: status, code, message, named fields and request ID.
 
 Every page header links the places the caller may reach: the overview, the workspaces and the operators. The status and documentation places sit in every page's footer instead, and every caller may open both.
+
+**The name of a workspace.** Access names a workspace by its identifier. On the pages of the administration the console shows the name Data gave the workspace to the caller, asked once per workspace and per session; a workspace Data does not open to the caller keeps its identifier. The name is a courtesy of the page: nothing is decided with it, and a page does not wait for it. A name that does not come in time is there for the next page, and a Data that does not answer is not asked again for half a minute.
+
+**The grid of the roles.** The grid is read as what the operator changed: a cell the page drew closed is not written, whatever the form says, and a role whose cells did not change is not written at all. Each role that changed is written on its own, and the page says what happened to each one.
 
 ### 6.3 Platform map
 
