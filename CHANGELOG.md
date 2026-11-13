@@ -10,6 +10,16 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The creator of a workspace administers its records
+
+The creation of a workspace gives the creator the role `admin` of the tenant on the workspace it created. That role holds the capabilities that administer a workspace — its model and its audit — and the capabilities of the records are the deployment's own: the policies of the deployment name them, and the operator of the tenant gives them to a role. A tenant whose role `admin` held none of them left the creator of a workspace in front of a workspace whose collections were closed to it, and the console said only that no collection was open to it.
+
+**The role of the administration of the tenant holds the capabilities of the records of the deployment.** The development machine gives them to the role `admin` of its tenant, so the creator of a workspace administers its model, its audit and its records.
+
+**The console names what is missing.** The tabs of the collections and of the access say that the capabilities of the records are the deployment's own, and that the operator of the tenant grants them in Access: on the workspace, or on every workspace of the tenant.
+
+**Contract:** [access spec §6.4](docs/access/spec.md#64-unknown-identity), [console spec §6.2](docs/console/spec.md#62-places).
+
 ## 1.6.1
 
 ### The decision of a route that names no workspace is a decision about the tenant

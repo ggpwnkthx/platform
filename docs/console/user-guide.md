@@ -47,7 +47,9 @@ If your tenant gave you the right `data.workspace.create`, the **Workspaces** pa
 | Slug | The name of the workspace inside your tenant: letters, digits, dashes and underscores, starting with a letter. It never changes, and no two workspaces of a tenant share it. |
 | Name | The name people read. |
 
-Choose **Create the workspace** and the console takes you to it. Two things happen: Data registers the workspace under your tenant, and Access gives you the administration of it — the role `admin` of your tenant, granted on that workspace — so you may read and change its model, its audit and its records.
+Choose **Create the workspace** and the console takes you to it. Two things happen: Data registers the workspace under your tenant, and Access gives you the administration of it — the role `admin` of your tenant, granted on that workspace — so you may read and change its model and its audit.
+
+The records of a workspace are opened by the policies of the deployment, and the capabilities they name are the deployment's own. Your tenant gives them to the role `admin` if it wants its administrators to reach the records of the workspaces they create; a workspace whose collections are closed to you says so, and names the way out.
 
 A slug that your tenant already holds is refused, and the form says so. Without the right, **New workspace** is drawn disabled and says what is missing; a call that asks for the creation anyway is refused.
 
@@ -130,7 +132,7 @@ Open **Operators**. Platform operators see every tenant and can create one; an o
 | Groups | Create a group by key and name, then add members. A right granted to a group is held by every member. |
 | A group | Search and add members; the page marks changes that are not saved yet and asks before you leave with them. Grant and revoke the group's rights; rename it. |
 | Rights | Every right of the tenant: what it gives, who holds it, where it holds and until when. Filter by holder, by what a right gives and by place; switch between live, revoked or ended, and all. Grant a right, or revoke one. |
-| Roles | List roles with the permissions they hold in effect, the roles they include and how many live grants name them, or switch to **Permissions by role** to change several roles in one grid. Create a role. Every tenant has one: **admin**, the role of the administrators of the tenant. It holds the right to open the administration of the tenant, the detail of the status of the services, and the capabilities that administer a workspace — its model and its audit. |
+| Roles | List roles with the permissions they hold in effect, the roles they include and how many live grants name them, or switch to **Permissions by role** to change several roles in one grid. Create a role. Every tenant has one: **admin**, the role of the administrators of the tenant. It holds the right to open the administration of the tenant, the detail of the status of the services, and the capabilities that administer a workspace — its model and its audit. The capabilities of the records are the deployment's own: give them to the role `admin` and the administrators of the tenant reach the records of the workspaces they create. |
 | A role | Edit its name, description, permissions and included roles by adding and removing chips; see what it holds in effect, what each permission opens and who holds it; remove it once no grant and no role names it. |
 | Audit | Every change to the tenant, newest first, filterable by action; export it as CSV or JSONL. |
 

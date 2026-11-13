@@ -46,6 +46,13 @@ const seen: {
 /** The life of the first token of the login, in seconds. */
 let firstTokenLives = 300
 let consoleKeys = ['console.admin', 'console.status']
+/**
+ * The collections the fake of Data opens to the caller.
+ *
+ * A workspace whose collections are closed to the caller is the case of
+ * a workspace whose creator holds no capability of the records.
+ */
+let openCollections: 'all' | 'none' = 'all'
 
 /** What the fake Access holds of the administration of acme. */
 const policy = {
@@ -409,7 +416,7 @@ beforeAll(async () => {
               apiVersion: 'v1',
               schemaVersion: 'v1',
               policyBundleVersion: 'p1',
-              collections: [collection],
+              collections: openCollections === 'all' ? [collection] : [],
             },
           })
         case `GET ${prefix}/schema/articles`:
@@ -638,6 +645,22 @@ describe('the console', () => {
     expect(html).toContain('id="c-articles-why-1"')
     expect(html).toContain('<code>content.write</code>')
     expect(seen.contextChecks).toEqual([`${PRINCIPAL} ${WORKSPACE} data-api`])
+  })
+
+  test('a workspace whose collections are closed to the caller says what is missing', async () => {
+    const browser = new Browser()
+    await browser.signIn()
+    openCollections = 'none'
+    try {
+      const html = await (await browser.request(`/workspaces/${WORKSPACE}`)).text()
+      expect(html).toContain('No collection in this workspace is open to you.')
+      expect(html).toContain('the capabilities of the records are the deployment')
+      const page = await (await browser.request(`/workspaces/${WORKSPACE}/access`)).text()
+      expect(page).toContain('No collection of this workspace is open to you.')
+      expect(page).toContain('the capabilities of the records are the deployment')
+    } finally {
+      openCollections = 'all'
+    }
   })
 
   test('a creation carries the key of its form, and a refusal is shown as it is', async () => {

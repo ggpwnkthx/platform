@@ -133,6 +133,9 @@ const PRINCIPAL = {
 /** The group of the principals of the development. */
 const GROUP = 'editors'
 
+/** The role of the administration of the tenant. */
+const TENANT_ADMIN_ROLE = 'admin'
+
 /** The route of Data. */
 const ROUTE = 'data-api'
 
@@ -365,6 +368,18 @@ async function admin(
   return JSON.parse(text) as Record<string, unknown>
 }
 
+/** Reads the administration of Access. */
+async function adminGet(path: string): Promise<Record<string, unknown>> {
+  const response = await fetch(`${accessUrl}${path}`, {
+    headers: { authorization: `Bearer ${SECRETS.adminToken}` },
+  })
+  const text = await response.text()
+  if (!response.ok) {
+    throw new Error(`the administration of Access failed at ${path}: ${text}`)
+  }
+  return JSON.parse(text) as Record<string, unknown>
+}
+
 /**
  * Writes the files of the development machine.
  *
@@ -545,6 +560,39 @@ async function seed(): Promise<string> {
     'PUT'
   )
 
+  // The role of the administration of the tenant holds the capabilities
+  // of the records of the deployment as well: the creator of a workspace
+  // administers its records, and the administration of a tenant is the
+  // administration of its workspaces (access spec §6.4).
+  //
+  // The write of a role replaces its memberships, so the capabilities
+  // Access gave the role are read first and kept.
+  const listed = await adminGet(`/v1/admin/roles?tenant=${TENANT.slug}&key=${TENANT_ADMIN_ROLE}`)
+  const role = (
+    listed.roles as {
+      key: string
+      displayName: string | null
+      description: string | null
+      permissions: string[]
+      roles: string[]
+    }[]
+  )[0]
+  if (!role) {
+    throw new Error('the administration of Access does not hold the role of the administration')
+  }
+  await admin(
+    '/v1/admin/roles',
+    {
+      tenant: TENANT.slug,
+      key: role.key,
+      displayName: role.displayName ?? 'Administrators',
+      description: role.description,
+      permissions: [...new Set([...role.permissions, 'content.reader', 'content.editor'])],
+      roles: role.roles,
+    },
+    'PUT'
+  )
+
   // The rights of the data: the reader is held by the principal, and
   // the editor by the group of the editors. The principal is a member
   // of the group, so it holds the editor and the reader.
@@ -584,7 +632,7 @@ async function seed(): Promise<string> {
     {
       tenant: TENANT.slug,
       userId: principalId,
-      role: 'admin',
+      role: TENANT_ADMIN_ROLE,
       workspaceId: TENANT.slug,
       routeId: CONSOLE_ROUTE,
     },

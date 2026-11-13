@@ -172,7 +172,14 @@ export default createRoute(async (c) => {
       <div class="split">
         <div class="stack">
           {schema.collections.length === 0 ? (
-            <Empty>No collection of this workspace is open to you.</Empty>
+            <Empty>
+              No collection of this workspace is open to you.
+              <p class="small muted">
+                Data opens a collection to the callers that hold the capability of its policies, and
+                the capabilities of the records are the deployment's own. An operator of your tenant
+                grants them in Access: on this workspace, or on every workspace of the tenant.
+              </p>
+            </Empty>
           ) : (
             schema.collections.map((collection) => (
               <Grid
