@@ -116,9 +116,16 @@ export class DataClient {
    *
    * The creation is a call of the tenant: the client names no workspace,
    * and the caller holds the capability that allows it.
+   *
+   * The client of the platform answers the workspace itself, out of its
+   * envelope: reading the envelope a second time answers nothing.
    */
   async createWorkspace(input: WorkspaceCreation): Promise<CreatedWorkspace> {
-    return await this.#data<CreatedWorkspace>(() => this.#client.createWorkspace(input))
+    try {
+      return await this.#client.createWorkspace(input)
+    } catch (error) {
+      throw failureOf(error)
+    }
   }
 
   /** The metadata of the collections the caller may use. */

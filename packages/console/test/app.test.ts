@@ -1494,6 +1494,58 @@ describe('the console', () => {
     consoleKeys = ['console.admin', 'console.status']
   })
 
+  test('the creator of a workspace is given the role of the administration, by who may give it', async () => {
+    const admin = {
+      id: 'r-admin',
+      tenant: 'acme',
+      key: 'admin',
+      displayName: 'Administrators',
+      description: null,
+      permissions: ['console.admin', 'data.model.write'],
+      roles: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    }
+    const create = async (browser: Browser) => {
+      policy.writes.length = 0
+      seen.adminCalls.length = 0
+      const answer = await browser.post('/workspaces/new', { slug: 'press', displayName: 'Press' })
+      expect(answer.headers.get('location')).toBe(`/workspaces/${CREATED_WORKSPACE}`)
+      return seen.adminCalls.find((call) => call.startsWith('PUT /v1/admin/grants '))
+    }
+    const granted = [expect.objectContaining({ role: 'admin', workspaceId: CREATED_WORKSPACE })]
+
+    // The role of a tenant: the grant is the tenant's own write.
+    resetPolicy()
+    policy.roles.push(admin)
+    consoleKeys = ['console.admin', 'console.status', 'data.workspace.create']
+    const browser = new Browser()
+    await browser.signIn()
+    expect(await create(browser)).toContain('Bearer the-acme-token-00001')
+    expect(policy.writes.map((entry) => entry.body)).toEqual(granted)
+
+    // The platform wrote its capability in the role: the grant of the
+    // role is the platform's, and the creator of a workspace who is not
+    // its operator is told that the workspace has no rights yet.
+    policy.roles = [
+      ...policy.roles.filter((role) => role.key !== 'admin'),
+      { ...admin, permissions: [...admin.permissions, 'console.platform'] },
+    ]
+    expect(await create(browser)).toBeUndefined()
+    expect(policy.writes).toEqual([])
+    expect(await (await browser.request('/workspaces/new')).text()).toContain(
+      'only an operator of the platform grants it'
+    )
+
+    // An operator of the platform is given it, with the credential of
+    // the platform: Access refuses the one of the tenant.
+    consoleKeys = ['console.platform', 'console.status', 'data.workspace.create']
+    const platform = new Browser()
+    await platform.signIn()
+    expect(await create(platform)).toContain('Bearer the-platform-token-0001')
+    expect(policy.writes.map((entry) => entry.body)).toEqual(granted)
+    consoleKeys = ['console.admin', 'console.status']
+  })
+
   test('a page of the administration does not wait for Data to name a workspace', async () => {
     const grantOn = (id: string, workspaceId: string) => ({
       id,

@@ -10,6 +10,16 @@ in the same commit as the code.
 
 ## Unreleased
 
+### A workspace created in the console is given to its creator
+
+The page that creates a workspace read the answer of Data out of its envelope twice. Data created the workspace, the console answered `500`, and the grant of the role `admin` on the workspace was never written: its creator held no right on the workspace it had just made.
+
+**The page reads the workspace Data answered.** The creation takes its creator to the workspace and writes the grant of the role `admin` of the tenant on it, as the specification says.
+
+**A role `admin` that holds a capability of the platform is granted by the platform.** The grant is signed with the credential of the platform for an operator of the platform. For anybody else the workspace is created and the grant is not written: the page says so, and an operator of the platform grants the role.
+
+**Contract:** [console spec §6.2](docs/console/spec.md#62-places), [console spec §4.3](docs/console/spec.md#43-what-is-the-platforms).
+
 ### The console draws what the caller may not do, and a right is granted in words
 
 The console drew a refusal as disabled on the pages of the records. Elsewhere it offered what the services would refuse: the tabs of the model and of the audit of a workspace to a caller that held no key of theirs, and the acts of the platform to an operator of a tenant. The refusal came after the click, from Data or from Access. Granting a right asked for the identifier of a workspace and the name of a route, and making an administrator took knowing that the console reads its keys on the slug of the tenant: a right granted one field off opened nothing, and Access accepted it without a word.
