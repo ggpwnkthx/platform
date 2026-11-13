@@ -359,6 +359,14 @@ const EnvSchema = z.object({
  *
  * The value is a list of keys separated by commas. An empty value is
  * the default: the one of the console.
+ *
+ * The value **extends** the built-in keys and it never replaces them:
+ * the console holds the capabilities of the platform fixed, and a
+ * deployment that leaves one of them out makes the two disagree about
+ * who may give it. The disagreement is not a difference of taste: a
+ * credential of a tenant may then give a capability that the console
+ * reads as the one of the platform, and the console acts with the
+ * credential of the platform.
  */
 function platformPermissionsOf(raw: string | undefined): string[] {
   if (!raw || raw.trim().length === 0) return [...PLATFORM_PERMISSIONS]
@@ -373,7 +381,14 @@ function platformPermissionsOf(raw: string | undefined): string[] {
       )
     }
   }
-  return keys
+  for (const required of PLATFORM_PERMISSIONS) {
+    if (!keys.includes(required)) {
+      throw new Error(
+        `ACCESS_PLATFORM_PERMISSIONS leaves out "${required}": it is a capability of the platform that the console holds fixed, and a deployment that leaves it out lets a credential of a tenant give it`
+      )
+    }
+  }
+  return [...new Set([...PLATFORM_PERMISSIONS, ...keys])]
 }
 
 /**

@@ -77,7 +77,7 @@ Integer variables must be whole numbers; an empty or non-numeric value stops the
 | Variable | Default | Production | Meaning |
 | --- | --- | --- | --- |
 | `ACCESS_TENANT_ADMIN_PERMISSION` | `console.admin` | optional | The key of the permission that opens the administration of a tenant (§6.4). It is what the role `admin` of a tenant holds, and what the console reads in the context of its caller. |
-| `ACCESS_PLATFORM_PERMISSIONS` | `console.platform` | optional | The keys of the capabilities that are not relative to a tenant (§3.3), separated by commas. Only a credential of the platform gives them: as a grant, in a role, or through a group (§3.3.1). |
+| `ACCESS_PLATFORM_PERMISSIONS` | `console.platform` | optional | The keys of the capabilities that are not relative to a tenant (§3.3), separated by commas. The value extends the built-in keys and it may not leave them out: a deployment that leaves `console.platform` out makes Access and the console disagree about who may give it, and the service refuses to start. Only a credential of the platform gives them: as a grant, in a role, or through a group (§3.3.1). |
 
 ## Secrets in files
 

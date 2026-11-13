@@ -73,7 +73,7 @@ export function tenantAdminPermission(options: AdministrationOptions): string {
  * workspace are the deployment's own: the policy bundle names them, and
  * the operator of the tenant gives them to the role.
  */
-function tenantAdminPermissions(options: AdministrationOptions): string[] {
+export function tenantAdminPermissions(options: AdministrationOptions): string[] {
   return [
     tenantAdminPermission(options),
     'console.status',

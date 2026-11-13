@@ -105,6 +105,32 @@ describe('the environment of Access', () => {
     expect(() => readEnv({ ...database, ACCESS_ISSUER: 'not-a-url' })).toThrow(/ACCESS_ISSUER/)
   })
 
+  test('the capabilities of the platform are the ones of the console', () => {
+    const settings = readEnv({ ACCESS_DATABASE_URL: 'postgres://localhost:5432/access' })
+    expect(settings.admin.platformPermissions).toEqual(['console.platform'])
+  })
+
+  test('a deployment may name a capability of the platform of its own', () => {
+    const settings = readEnv({
+      ACCESS_DATABASE_URL: 'postgres://localhost:5432/access',
+      ACCESS_PLATFORM_PERMISSIONS: 'console.platform,data.platform',
+    })
+    expect(settings.admin.platformPermissions).toEqual(['console.platform', 'data.platform'])
+  })
+
+  test('a deployment that leaves out a capability of the platform is refused', () => {
+    // The console holds the capabilities of the platform fixed. A
+    // deployment that leaves one of them out makes the two disagree
+    // about who may give it, and a credential of a tenant may then give
+    // the capability of the platform.
+    expect(() =>
+      readEnv({
+        ACCESS_DATABASE_URL: 'postgres://localhost:5432/access',
+        ACCESS_PLATFORM_PERMISSIONS: 'data.platform',
+      })
+    ).toThrow('console.platform')
+  })
+
   test('the level of the log falls back to info', () => {
     const database = { ACCESS_DATABASE_URL: 'postgres://localhost:5432/access' }
     expect(readEnv({ ...database, ACCESS_LOG_LEVEL: 'nonsense' }).observability.logLevel).toBe(

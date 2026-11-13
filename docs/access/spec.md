@@ -497,7 +497,7 @@ Production also refuses to start when:
 
 The log level is the only value that never stops the service: a typo in it must not keep a deployment down.
 
-**Optional:** `ACCESS_DECISION_TOKEN`, which is deprecated and unscoped; keep it only while a gateway (such as the reference gateway) still sends it (§8.8). `ACCESS_CONTEXT_TOKENS`, needed only by a deployment that serves a data backend (§9). `ACCESS_TENANT_ADMIN_PERMISSION` names the key of the permission that opens the administration of a tenant, and it is `console.admin` by default: the key is what the console reads in the context of its caller, and it is what a tenant hands to its first identity when it lets it administer the tenant (§6.4). `ACCESS_PLATFORM_PERMISSIONS` names the keys of the capabilities that are not relative to a tenant, and it is `console.platform` by default: only a credential of the platform may grant them (§3.3, §10.6).
+**Optional:** `ACCESS_DECISION_TOKEN`, which is deprecated and unscoped; keep it only while a gateway (such as the reference gateway) still sends it (§8.8). `ACCESS_CONTEXT_TOKENS`, needed only by a deployment that serves a data backend (§9). `ACCESS_TENANT_ADMIN_PERMISSION` names the key of the permission that opens the administration of a tenant, and it is `console.admin` by default: the key is what the console reads in the context of its caller, and it is what a tenant hands to its first identity when it lets it administer the tenant (§6.4). `ACCESS_PLATFORM_PERMISSIONS` names the keys of the capabilities that are not relative to a tenant, and it is `console.platform` by default: only a credential of the platform may grant them (§3.3, §10.6). The value extends the built-in keys and it may not leave them out: the console holds them fixed, and a deployment that leaves one of them out makes the two disagree about who may give it. The service refuses to start on such a value.
 
 ### 4.5 Secrets in files
 
@@ -1196,7 +1196,7 @@ Exactly one of `userId` and `group` is required. The permission row is **created
 
 A permission in the platform catalogue is reused. A permission in another tenant is **not**: the tenant creates its own row and the grant names it, since a key is a name inside a tenant (§3.3).
 
-**Only the platform gives a capability of the platform.** A capability that is not relative to a tenant is granted by a credential of the platform; the credential of a tenant is refused with `403 forbidden`, whoever the principal of the grant is. A deployment that names a key of its own in `ACCESS_PLATFORM_PERMISSIONS` makes it a capability of the platform, and the rule follows the key.
+**Only the platform gives a capability of the platform.** A capability that is not relative to a tenant is granted by a credential of the platform; the credential of a tenant is refused with `403 forbidden`, whoever the principal of the grant is. A deployment that names a key of its own in `ACCESS_PLATFORM_PERMISSIONS` makes it a capability of the platform, and the rule follows the key. The value extends the built-in keys and it may not leave them out (§3.3).
 
 The grant of a role is the grant of what the role holds. A role that holds a capability of the platform — among its own permissions, or through a role it names, however deep — is granted by a credential of the platform only, and the refusal of a credential of a tenant names the role. The role is expanded when the call is made (§3.3.1).
 
