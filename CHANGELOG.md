@@ -10,6 +10,8 @@ in the same commit as the code.
 
 ## Unreleased
 
+## 1.5.0
+
 ### A capability of the platform is given by the platform, in every way it is given
 
 Access refused the credential of a tenant that granted a capability of the platform, and the one that wrote it in a role. It read the key a call named, and not what the call gave. The same credential granted a role that held the capability, wrote a role that named such a role, and added a member to a group that was granted one: each of the three made a principal of the tenant an administrator of every tenant, with the API and nothing else.
@@ -67,6 +69,7 @@ The administration of Access refused a body that sent an empty secret with a mes
 The CLI, whose forms are sent the same way, changes a tenant without knowing its secrets.
 
 **Contract:** [access spec §10.2](docs/access/spec.md#102-post-v1admintenants), [access api](docs/access/api.md#post-v1admintenants).
+
 
 ## 1.4.5
 
