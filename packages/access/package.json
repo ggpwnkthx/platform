@@ -23,7 +23,7 @@
     "shadow": "bun run scripts/compat/shadow.ts"
   },
   "dependencies": {
-    "hono": "4.13.13",
+    "hono": "4.13.18",
     "ipaddr.js": "2.5.0",
     "jose": "6.2.12",
     "pg": "8.23.1",

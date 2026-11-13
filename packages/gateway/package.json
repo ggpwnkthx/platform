@@ -33,7 +33,7 @@
     "acme-client": "5.4.0",
     "chokidar": "4.0.3",
     "cookie": "2.0.1",
-    "hono": "4.13.13",
+    "hono": "4.13.18",
     "ipaddr.js": "2.5.0",
     "jose": "6.2.12",
     "lru-cache": "11.5.3",
