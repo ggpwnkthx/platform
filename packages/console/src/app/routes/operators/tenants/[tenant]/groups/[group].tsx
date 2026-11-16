@@ -29,6 +29,7 @@ import {
 import { Empty, KeyValues, Moment, Notice } from '../../../../../components/page'
 import { GRANT_FORM, GrantForm, RightsTable, rightsViewOf } from '../../../../../components/rights'
 import ChipPicker from '../../../../../islands/chip-picker'
+import { deploymentCapabilities } from '../../../../../middleware/capabilities'
 import { formOf } from '../../../../../middleware/forms'
 import { flash, takeDraft } from '../../../../../middleware/session'
 
@@ -135,6 +136,7 @@ export default createRoute(async (c) => {
     roles: roles.rows,
     groups: [group],
     users: users.rows,
+    capabilities: (await deploymentCapabilities(c, slug)).capabilities,
   })
   // What a new member is given of the platform, and why the caller may
   // not add one: the ability decides, and Access holds the same rule.

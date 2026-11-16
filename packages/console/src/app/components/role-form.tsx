@@ -3,19 +3,21 @@
  *
  * Access replaces the permissions and the included roles of a role with
  * the lists it is sent. The form starts from what the role holds, so a
- * change is an addition or a removal of a chip, never a list retyped.
+ * change is a box ticked or cleared, never a list retyped. The
+ * permissions are chosen in the list the grant of a right chooses from.
  */
 
 import type { Role, RoleInput } from '../../domains/access'
 import {
   isPlatformKey,
   KEY_PATTERN,
-  knownPermission,
+  type PermissionEntry,
   permissionsOfRole,
   rolesIncluding,
 } from '../../domains/operators'
 import type { Draft } from '../../domains/session'
 import ChipPicker from '../islands/chip-picker'
+import PermissionPicker from '../islands/permission-picker'
 import type { SentForm } from '../middleware/forms'
 
 /** The name of the role form: the draft of a refused role comes back to it. */
@@ -81,7 +83,10 @@ export function RoleForm(props: {
   action: string
   role?: Role
   roles: readonly Role[]
-  permissions: readonly string[]
+  /** The permissions of the tenant, each with what it opens. */
+  permissions: readonly PermissionEntry[]
+  /** The permissions the operator may not give, and why. */
+  locked?: Readonly<Record<string, string>>
   draft?: Draft | null
 }) {
   const { role, draft } = props
@@ -139,22 +144,15 @@ export function RoleForm(props: {
       </div>
       <div class="field">
         <label for="role-permissions">Permissions</label>
-        <ChipPicker
+        <PermissionPicker
           id="role-permissions"
           name="permissions"
-          label="Add a permission"
-          placeholder="Add a permission: type to search, or a new key"
-          emptyText="No permission of its own."
+          label="The permissions of the role"
           allowNew
           newPattern={KEY_PATTERN}
           trackChanges={role !== undefined}
-          noun={['permission', 'permissions']}
-          candidates={props.permissions.map((permission) => {
-            // What the console knows of a key is said under it.
-            const known = knownPermission(permission)
-            const hint = known?.platform ? `${known.title} · the platform's` : known?.title
-            return { value: permission, label: permission, ...(hint ? { hint } : {}) }
-          })}
+          entries={props.permissions}
+          {...(props.locked ? { locked: props.locked } : {})}
           selected={draftList(draft ?? null, 'permissions') ?? [...(role?.permissions ?? [])]}
         />
         {problem('permissions') ? <span class="problem">{problem('permissions')}</span> : null}

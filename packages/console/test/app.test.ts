@@ -701,9 +701,27 @@ describe('the console', () => {
     await browser.signIn()
     const html = await (await browser.request('/operators/tenants/acme/rights')).text()
     expect(html).toContain('content.reader')
-    expect(html).toContain('opens the reading of Articles')
+    expect(html).toContain('Opens the reading of Articles')
     expect(html).toContain('content.editor')
-    expect(html).toContain('opens the writing of Articles')
+    expect(html).toContain('Opens the writing of Articles')
+  })
+
+  test('the roles of a tenant choose among the same permissions, said the same way', async () => {
+    resetPolicy()
+    consoleKeys = ['console.admin', 'console.status']
+    const browser = new Browser()
+    await browser.signIn()
+    // The form of a role lists the capabilities of the deployment, no
+    // role of the tenant holding them yet, with what each of them opens.
+    const list = await (await browser.request('/operators/tenants/acme/roles')).text()
+    expect(list).toMatch(/name="permissions" value="content\.reader"/)
+    expect(list).toContain('Opens the reading of Articles')
+    // What is not the operator's to give is drawn closed in the list.
+    expect(list).toMatch(/name="permissions" value="console\.platform" disabled=""/)
+    // The grid has a row for them, under the same label.
+    const grid = await (await browser.request('/operators/tenants/acme/roles?view=matrix')).text()
+    expect(grid).toMatch(/name="perm:editor" value="content\.reader"/)
+    expect(grid).toContain('Opens the administration of the tenant: users, groups, roles, rights.')
   })
 
   test('a creation carries the key of its form, and a refusal is shown as it is', async () => {
@@ -1201,7 +1219,7 @@ describe('the console', () => {
     expect(grid).toContain('via reader')
     // A capability of the platform is a row of closed cells for the operator of a tenant.
     expect(grid).toContain('<code>console.platform</code>')
-    expect(grid).not.toContain('value="console.platform"')
+    expect(grid).not.toMatch(/name="perm:[^"]*" value="console\.platform"/)
 
     // The readers are given content.write, the editors a permission the
     // tenant does not name yet; nothing else is touched.

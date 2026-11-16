@@ -2517,7 +2517,7 @@ details.how .kv {
   max-width: 48rem;
 }
 
-.effective td:first-child {
+.effective td:first-child code {
   white-space: nowrap;
 }
 
@@ -3163,4 +3163,134 @@ td.actions {
 
 .matrix-form:has(input[data-was="on"]:not(:checked), input[data-was="off"]:checked) .matrix-clean {
   display: none;
+}
+
+/*
+ * A permission, said the same way wherever it is read: its key and
+ * where it is read on one line, what it opens under it.
+ */
+.permission-label {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-width: 0;
+  font-weight: 400;
+}
+
+.permission-key {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* The list a form chooses its permissions from, family by family. */
+.permission-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.permission-list {
+  max-height: 24rem;
+  overflow-y: auto;
+  padding: 0.25rem 0.6rem 0.5rem;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.permission-note {
+  margin: 0.5rem 0;
+}
+
+.permission-family {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.permission-picker .permission-family-name {
+  padding: 0.6rem 0 0.2rem;
+  color: var(--graphite);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.permission-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.permission-option[hidden],
+.permission-family[hidden] {
+  display: none;
+}
+
+.permission-tick {
+  flex: none;
+  width: 1.05rem;
+  height: 1.05rem;
+  margin: 0.2rem 0 0;
+  accent-color: var(--accent);
+}
+
+.permission-option:hover {
+  background: var(--sunk);
+}
+
+.permission-option:has(input:checked) {
+  background: var(--accent-soft);
+}
+
+.permission-option:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.permission-option.locked:has(input:disabled) {
+  cursor: not-allowed;
+}
+
+.permission-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.permission-text .problem {
+  color: var(--error);
+}
+
+.permission-new {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.permission-new-key {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.permission-chosen {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.role-permissions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }

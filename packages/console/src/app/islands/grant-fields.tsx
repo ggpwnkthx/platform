@@ -21,7 +21,14 @@
  */
 
 import { useState } from 'hono/jsx'
-import { effectOf, KEY_PATTERN, type Where } from '../../domains/operators'
+import {
+  effectOf,
+  KEY_PATTERN,
+  type PermissionEntry,
+  permissionEntryOf,
+  type Where,
+} from '../../domains/operators'
+import { PermissionLabel, PermissionPicker } from '../components/permission-picker'
 import { Picker } from '../components/picker'
 
 interface Option {
@@ -61,8 +68,8 @@ export default function GrantFields(props: {
   /** The holder of every right of the form, when the page is the one of a user or a group. */
   fixedHolder?: Option
   roles: readonly RoleOption[]
-  /** The permissions the tenant names, each with what the console knows of it. */
-  permissions: readonly Option[]
+  /** The permissions of the tenant, each with what it opens. */
+  permissions: readonly PermissionEntry[]
   /** The permissions the operator may not give, and why. */
   locked?: Readonly<Record<string, string>>
   /** The workspaces the rights of the tenant name, by identifier, with the name Data gave them. */
@@ -127,7 +134,7 @@ export default function GrantFields(props: {
   const typed = permission.trim()
   const isRoleKey = props.roles.some((entry) => entry.key === typed)
   const isNew =
-    typed !== '' && !isRoleKey && !props.permissions.some((entry) => entry.value === typed)
+    typed !== '' && !isRoleKey && !props.permissions.some((entry) => entry.key === typed)
   // What the operator may not give is said here, before the page refuses it.
   const refused =
     kind === 'role'
@@ -272,14 +279,21 @@ export default function GrantFields(props: {
                   {chosenRole.permissions.length === 0 ? (
                     <span class="hint">This role holds no permission yet.</span>
                   ) : (
-                    <div class="chips">
-                      <span class="sr-only">What the role {chosenRole.label} holds:</span>
-                      {chosenRole.permissions.map((entry) => (
-                        <span class="chip">
-                          <code>{entry}</code>
-                        </span>
+                    <ul
+                      class="role-permissions"
+                      aria-label={`What the role ${chosenRole.label} holds`}
+                    >
+                      {chosenRole.permissions.map((key) => (
+                        <li>
+                          <PermissionLabel
+                            entry={
+                              props.permissions.find((entry) => entry.key === key) ??
+                              permissionEntryOf(key, { roles: [] })
+                            }
+                          />
+                        </li>
                       ))}
-                    </div>
+                    </ul>
                   )}
                 </div>
               ) : null}
@@ -287,17 +301,16 @@ export default function GrantFields(props: {
           )
         ) : (
           <>
-            <Picker
+            <PermissionPicker
               id={id('permission')}
               name="permission"
-              label="Permission"
+              label="The permissions of the tenant"
               single
               allowNew
               newPattern={KEY_PATTERN}
-              candidates={props.permissions}
+              entries={props.permissions}
+              {...(props.locked ? { locked: props.locked } : {})}
               selected={typed ? [typed] : []}
-              placeholder="Search the permissions of the tenant, or type a key: content.read"
-              emptyText="No permission chosen yet."
               onChange={(values) => {
                 setPermission(values[0] ?? '')
                 setCreate(false)

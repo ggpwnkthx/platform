@@ -31,6 +31,24 @@ if (typeof document !== 'undefined') {
   )
 }
 
+/**
+ * Asks before a page with unsaved changes is left.
+ *
+ * @param dirty whether the page holds a change that is not saved yet.
+ */
+export function useUnsavedWarning(dirty: boolean): void {
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (event: BeforeUnloadEvent) => {
+      if (sending) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
+}
+
 /** The properties of a picker. */
 export interface PickerProps {
   name: string
@@ -106,16 +124,7 @@ export function Picker(props: PickerProps & { onChange?: (values: string[]) => v
   const removed = props.selected.filter((value) => !values.includes(value))
   const dirty = props.trackChanges === true && (added.length > 0 || removed.length > 0)
 
-  useEffect(() => {
-    if (!dirty) return
-    const warn = (event: BeforeUnloadEvent) => {
-      if (sending) return
-      event.preventDefault()
-      event.returnValue = ''
-    }
-    window.addEventListener('beforeunload', warn)
-    return () => window.removeEventListener('beforeunload', warn)
-  }, [dirty])
+  useUnsavedWarning(dirty)
 
   const change = (next: string[]) => {
     setValues(next)

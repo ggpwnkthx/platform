@@ -16,16 +16,16 @@
 
 import type { Context } from 'hono'
 import { createRoute } from 'honox/factory'
-import { ACTIONS, permissionOf, reasonOf } from '../../../../../../domains/ability'
+import { consoleAbility } from '../../../../../../domains/ability'
 import { AccessError, type AdminClient } from '../../../../../../domains/access'
 import {
   administrationLostBy,
   administrationOf,
   KEY_PATTERN,
-  knownPermissionsOf,
   type MatrixColumn,
   matrixChangesOf,
   matrixOf,
+  permissionCatalogOf,
   permissionsOfRole,
   permissionsOfWrite,
 } from '../../../../../../domains/operators'
@@ -45,7 +45,7 @@ import {
   tenantPath,
 } from '../../../../../components/operators'
 import { Empty, Moment, Refusal, refusalOf } from '../../../../../components/page'
-import { rightsViewOf } from '../../../../../components/rights'
+import { lockedPermissionsOf, rightsViewOf } from '../../../../../components/rights'
 import {
   closedFieldOf,
   ROLE_FORM,
@@ -53,7 +53,9 @@ import {
   roleDraftOf,
   roleInputOf,
 } from '../../../../../components/role-form'
+import { deploymentCapabilities } from '../../../../../middleware/capabilities'
 import { formOf, type SentForm } from '../../../../../middleware/forms'
+import { operatorScope } from '../../../../../middleware/scope'
 import { flash, keepDraft, takeDraft } from '../../../../../middleware/session'
 
 const KEY = new RegExp(`^${KEY_PATTERN}$`)
@@ -246,7 +248,16 @@ export default createRoute(async (c) => {
     .catch(() => null)
   const all = roles?.rows ?? []
   const sorted = [...all].sort((left, right) => left.key.localeCompare(right.key))
-  const permissions = knownPermissionsOf(grants?.rows ?? [], all)
+  // The permissions of the tenant, the capabilities of the deployment
+  // among them, each with what it opens: the rows of the grid, and the
+  // list the form of a role chooses from.
+  const permissions = permissionCatalogOf(grants?.rows ?? [], {
+    roles: all,
+    capabilities: (await deploymentCapabilities(c, slug)).capabilities,
+  })
+  const keys = permissions.map((entry) => entry.key)
+  // What is not the operator's to give is drawn closed, with the reason.
+  const closed = lockedPermissionsOf(consoleAbility(await operatorScope(c)), keys)
   const draft = takeDraft(c, ROLE_FORM)
   const grantsOf = (key: string) =>
     grants ? grants.rows.filter((grant) => grant.role === key).length : null
@@ -266,14 +277,9 @@ export default createRoute(async (c) => {
       groups: groups.rows,
       users: users.rows,
     })
-    const closed = new Map<string, string>()
-    for (const key of permissions) {
-      const reason = reasonOf(view.ability, ACTIONS.give, permissionOf(key))
-      if (reason) closed.set(key, reason)
-    }
     const closedRoles = new Map<string, string>()
     for (const role of all) {
-      const held = permissionsOfRole(role.key, all).find((key) => closed.has(key))
+      const held = permissionsOfRole(role.key, all).find((key) => key in closed)
       if (held) {
         closedRoles.set(
           role.key,
@@ -300,7 +306,7 @@ export default createRoute(async (c) => {
           : `This opens the administration of ${slug} to the holders of the role. Change it on the page of the role, where the console asks first.`
       )
     }
-    locks = { roles: closedRoles, permissions: closed, cells }
+    locks = { roles: closedRoles, permissions: new Map(Object.entries(closed)), cells }
   }
 
   return c.render(
@@ -329,8 +335,9 @@ export default createRoute(async (c) => {
           <RoleMatrix
             tenant={slug}
             action={matrixPath(slug)}
-            families={matrixOf(sorted, permissions)}
+            families={matrixOf(sorted, keys)}
             roles={sorted}
+            permissions={permissions}
             locks={locks}
           />
           <p class="small muted">
@@ -418,7 +425,13 @@ export default createRoute(async (c) => {
         open={draft !== null || (roles !== null && all.length === 0)}
       >
         <summary class="act">Create a role</summary>
-        <RoleForm action={base} roles={all} permissions={permissions} draft={draft} />
+        <RoleForm
+          action={base}
+          roles={all}
+          permissions={permissions}
+          locked={closed}
+          draft={draft}
+        />
       </details>
     </>,
     {

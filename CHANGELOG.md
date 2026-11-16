@@ -10,6 +10,14 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The console says a permission the same way everywhere
+
+An operator could not see the permissions a tenant uses in one place, nor read what each of them opens: the form of a right, the form of a role and the grid of the roles each built their own list and described it their own way, and only the form of a right on the Rights tab named the capabilities of the deployment.
+
+**One list of permissions.** The console describes the permissions of a tenant once: the keys the console and Data fix, the capabilities of the deployment, and the keys the roles and the rights name. A capability no role holds yet is listed in the form of a role and in the grid, where it had to be typed by hand.
+
+**One label and one picker.** Every page shows a permission with its key, where a right has to hold to open it, and a sentence for what it opens. The form of a right and the form of a role choose in the same list, grouped by family and filtered by key, by description or by role; the grid of the roles labels its rows the same way. A permission that is not the operator's to give is closed in the list, with the reason.
+
 ## 1.6.3
 
 ### The deployment publishes the capabilities of its records

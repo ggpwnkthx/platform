@@ -16,11 +16,13 @@
 import type { Role } from '../../domains/access'
 import {
   KEY_PATTERN,
-  knownPermission,
   type MatrixCell,
   type MatrixFamily,
+  type PermissionEntry,
+  permissionEntryOf,
 } from '../../domains/operators'
 import { tenantPath } from './operators'
+import { PermissionLabel } from './permission-picker'
 import { Lock } from './why'
 
 /** The name of the action of the grid, in the form of the page of the roles. */
@@ -104,9 +106,12 @@ export function RoleMatrix(props: {
   action: string
   families: readonly MatrixFamily[]
   roles: readonly Role[]
+  /** The permissions of the tenant, each with what it opens: the labels of the rows. */
+  permissions: readonly PermissionEntry[]
   locks: MatrixLocks
 }) {
   const { roles, locks } = props
+  const described = new Map(props.permissions.map((entry) => [entry.key, entry]))
   const base = tenantPath(props.tenant)
   const width = roles.length + 1
   // What a role is shown to hold itself, in the cells the operator may
@@ -163,10 +168,12 @@ export function RoleMatrix(props: {
               {family.rows.map((row) => (
                 <tr>
                   <th scope="row" class="matrix-permission">
-                    <code>{row.permission}</code>
-                    {knownPermission(row.permission) ? (
-                      <div class="small muted">{knownPermission(row.permission)?.title}</div>
-                    ) : null}
+                    <PermissionLabel
+                      entry={
+                        described.get(row.permission) ??
+                        permissionEntryOf(row.permission, { roles })
+                      }
+                    />
                     <a
                       class="small matrix-who"
                       href={`${base}/rights?right=${encodeURIComponent(row.permission)}`}

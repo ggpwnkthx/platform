@@ -135,7 +135,7 @@ Open **Operators**. Platform operators see every tenant and can create one; an o
 | A group | Search and add members; the page marks changes that are not saved yet and asks before you leave with them. Grant and revoke the group's rights; rename it. |
 | Rights | Every right of the tenant: what it gives, who holds it, where it holds and until when. Filter by holder, by what a right gives and by place; switch between live, revoked or ended, and all. Grant a right, or revoke one. The form of a grant names the capabilities of the deployment — `content.reader` opens the reading of Articles, `content.editor` its writing — and the collections each of them opens. |
 | Roles | List roles with the permissions they hold in effect, the roles they include and how many live grants name them, or switch to **Permissions by role** to change several roles in one grid. Create a role. Every tenant has one: **admin**, the role of the administrators of the tenant. It holds the right to open the administration of the tenant, the detail of the status of the services, and the capabilities that administer a workspace — its model and its audit. The capabilities of the records are the deployment's own: give them to the role `admin` and the administrators of the tenant reach the records of the workspaces they create. |
-| A role | Edit its name, description, permissions and included roles by adding and removing chips; see what it holds in effect, what each permission opens and who holds it; remove it once no grant and no role names it. |
+| A role | Edit its name and description, tick its permissions in the list of the permissions of the tenant, and add or remove the roles it includes; see what it holds in effect, what each permission opens and who holds it; remove it once no grant and no role names it. |
 | Audit | Every change to the tenant, newest first, filterable by action; export it as CSV or JSONL. |
 
 Your operator keys are read again on every page. If someone revokes them, administration closes from your next page on.
@@ -144,7 +144,7 @@ Your operator keys are read again on every page. If someone revokes them, admini
 
 1. Open **Rights** and choose **Grant a right**. From the page of a user or of a group, **Grant a right to …** opens the same form with the holder already chosen.
 2. Under **Who**, search for a user or a group.
-3. Under **What**, choose a role, or switch to **Single permission** and search for one. A role lists the permissions it holds. A permission that no grant and no role of the tenant names is created only once you confirm it.
+3. Under **What**, choose a role, or switch to **Single permission** and choose one in the list. A role lists the permissions it holds. To grant a key the list does not hold, type it under the list and choose **Add**: it is created only once you confirm it.
 4. Under **Where**, choose the place the right holds in (the table below).
 5. Under **Until**, choose when the right ends, or **Never**. Leave **Route** empty unless the right is for one route of the gateway.
 6. Read the lines above **Grant**, then choose it.
@@ -179,6 +179,18 @@ Open the user. The page answers three questions:
 | **Check access to a workspace** | What Access answers for one workspace and route right now — the answer the services act on — and the live rights that explain it. |
 
 Change their groups under **Groups**: add or remove a group and choose **Save groups**. To find everyone who holds a permission, filter **Rights** by it under **Gives**: the list answers with the rights that give it, the grants of the roles that hold it among them.
+
+### Read what a permission opens
+
+The console says a permission the same way on every page: its key, where a right has to hold to open it, and one sentence for what it opens. The form of a right, the form of a role and the grid of the roles list the same permissions, family by family.
+
+| A permission | What the console says of it |
+| --- | --- |
+| A key the console or Data reads, such as `console.admin` | What it opens, and whether it is read on the tenant itself or on a workspace. |
+| A capability of the deployment, such as `content.reader` | The collections it opens, for reading and for writing. It is listed before any role holds it. |
+| A key an operator wrote in a role or a right | That nobody describes it: the policies of the deployment decide what it allows. |
+
+Filter a list by a key, by a word of what a permission opens, or by the role that holds it.
 
 ### Change what roles hold
 

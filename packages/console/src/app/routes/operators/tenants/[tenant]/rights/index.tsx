@@ -21,7 +21,7 @@ import {
   checkGrant,
   effectOf,
   isFiltered,
-  knownPermissionsOf,
+  permissionCatalogOf,
   matchesRightsFilter,
   permissionsOfGrant,
   permissionsOfRole,
@@ -108,7 +108,12 @@ export const POST = createRoute(async (c) => {
       expiresAt: form.get('expiresAt'),
     },
     {
-      permissions: knownPermissionsOf(grants.rows, roles.rows),
+      // The capabilities of the deployment are permissions the tenant
+      // names: the form offers them, and granting one creates nothing.
+      permissions: permissionCatalogOf(grants.rows, {
+        roles: roles.rows,
+        capabilities: (await deploymentCapabilities(c, slug)).capabilities,
+      }).map((entry) => entry.key),
       roles: roles.rows.map((role) => role.key),
       tenant: slug,
     }
@@ -180,12 +185,17 @@ export default createRoute(async (c) => {
     admin.all((offsets) => admin.grants({ tenant: slug, live: true, ...offsets }), 400),
   ])
   const byId = new Map(users.rows.map((user) => [user.id, user]))
+  // The capabilities of the deployment: the keys its policies name, and
+  // the collections each of them opens. The page says what each of them
+  // opens wherever it names one.
+  const { capabilities } = await deploymentCapabilities(c, slug)
   const viewOf = (shown: readonly Grant[]) =>
     rightsViewOf(c, slug, {
       grants: [...every.rows, ...shown],
       roles: roles.rows,
       groups: groups.rows,
       users: users.rows,
+      capabilities,
     })
 
   // A filter reads the rights of the tenant and pages them here; without
@@ -247,10 +257,6 @@ export default createRoute(async (c) => {
     { id: 'all', label: 'All' },
   ]
   const draft = takeDraft(c, GRANT_FORM)
-  // The capabilities of the deployment: the keys its policies name, and
-  // the collections each of them opens. The operator grants them by
-  // their name, and the picker says what each of them opens.
-  const capabilities = await deploymentCapabilities(c, slug)
   return c.render(
     <>
       <TenantHead
@@ -273,7 +279,6 @@ export default createRoute(async (c) => {
         <GrantForm
           view={view}
           back={base}
-          capabilities={capabilities.capabilities}
           grants={every.rows}
           users={users.rows}
           groups={groups.rows}

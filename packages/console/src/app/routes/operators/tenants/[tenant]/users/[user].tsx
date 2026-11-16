@@ -79,6 +79,7 @@ import { Capabilities } from '../../../../../components/why'
 import ChipPicker from '../../../../../islands/chip-picker'
 import ConfirmButton from '../../../../../islands/confirm-button'
 import CopyText from '../../../../../islands/copy-text'
+import { deploymentCapabilities } from '../../../../../middleware/capabilities'
 import { formOf } from '../../../../../middleware/forms'
 import { flash, sessionOf, takeDraft } from '../../../../../middleware/session'
 
@@ -260,6 +261,7 @@ export default createRoute(async (c) => {
     roles: roles.rows,
     groups: groups.rows,
     users: [user],
+    capabilities: (await deploymentCapabilities(c, slug)).capabilities,
   })
   // A member of a group is given what the group holds: a group that gives
   // a capability of the platform the caller may not give is not offered,
@@ -562,7 +564,11 @@ export default createRoute(async (c) => {
                   <ul class="small">
                     {explaining.map((right) => (
                       <li>
-                        <RightName grant={right.grant} roles={roles.rows} />{' '}
+                        <RightName
+                          grant={right.grant}
+                          roles={roles.rows}
+                          capabilities={view.capabilities}
+                        />{' '}
                         <span class="muted">
                           {right.group ? `through group ${right.group}` : 'granted directly'} ·{' '}
                         </span>

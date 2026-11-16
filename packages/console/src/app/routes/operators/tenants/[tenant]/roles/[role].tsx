@@ -13,8 +13,8 @@ import {
   administrationLostBy,
   administrationOf,
   expandRole,
-  knownPermission,
-  knownPermissionsOf,
+  permissionCatalogOf,
+  permissionEntryOf,
   permissionsOfWrite,
   rolesIncluding,
 } from '../../../../../../domains/operators'
@@ -27,7 +27,14 @@ import {
   tenantPath,
 } from '../../../../../components/operators'
 import { Empty, KeyValues, Moment, Notice } from '../../../../../components/page'
-import { holderOf, RightPlace, RightState, rightsViewOf } from '../../../../../components/rights'
+import { PermissionLabel } from '../../../../../components/permission-picker'
+import {
+  holderOf,
+  lockedPermissionsOf,
+  RightPlace,
+  RightState,
+  rightsViewOf,
+} from '../../../../../components/rights'
 import {
   CLOSES_ADMINISTRATION,
   closedFieldOf,
@@ -37,6 +44,7 @@ import {
   roleInputOf,
 } from '../../../../../components/role-form'
 import ConfirmButton from '../../../../../islands/confirm-button'
+import { deploymentCapabilities } from '../../../../../middleware/capabilities'
 import { formOf } from '../../../../../middleware/forms'
 import { flash, keepDraft, takeDraft } from '../../../../../middleware/session'
 
@@ -149,7 +157,11 @@ export default createRoute(async (c) => {
     roles: roles.rows,
     groups: groups.rows,
     users: users.rows,
+    capabilities: (await deploymentCapabilities(c, slug)).capabilities,
   })
+  // The permissions of the tenant, each with what it opens: the form
+  // chooses among them, and the table below says them the same way.
+  const permissions = permissionCatalogOf(grants.rows, view)
   const path = `${tenantPath(slug)}/roles/${encodeURIComponent(key)}`
   const byId = new Map(users.rows.map((user) => [user.id, user]))
   const holds = expandRole(key, roles.rows)
@@ -208,7 +220,11 @@ export default createRoute(async (c) => {
               action={path}
               role={role}
               roles={roles.rows}
-              permissions={knownPermissionsOf(grants.rows, roles.rows)}
+              permissions={permissions}
+              locked={lockedPermissionsOf(
+                view.ability,
+                permissions.map((entry) => entry.key)
+              )}
               draft={draft}
             />
           </section>
@@ -227,7 +243,6 @@ export default createRoute(async (c) => {
                   <thead>
                     <tr>
                       <th>Permission</th>
-                      <th>What it opens</th>
                       <th>Comes from</th>
                     </tr>
                   </thead>
@@ -237,12 +252,7 @@ export default createRoute(async (c) => {
                       .map(([permission, paths]) => (
                         <tr>
                           <td>
-                            <code>{permission}</code>
-                          </td>
-                          <td class="small">
-                            {knownPermission(permission)?.opens ?? (
-                              <span class="muted">Data's policies decide.</span>
-                            )}
+                            <PermissionLabel entry={permissionEntryOf(permission, view)} />
                           </td>
                           <td class="small">
                             {paths.map((chain) => (

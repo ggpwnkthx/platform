@@ -5,7 +5,6 @@ export {
   familyOf,
   KNOWN_PERMISSIONS,
   knownPermission,
-  opensOf,
   type Where,
   whereOf,
 } from './catalog'
@@ -40,6 +39,12 @@ export {
   matrixChangesOf,
   matrixOf,
 } from './matrix'
+export {
+  type PermissionEntry,
+  permissionCatalogOf,
+  permissionEntryOf,
+  permissionFamiliesOf,
+} from './permissions'
 export {
   groupsOf,
   isLive,

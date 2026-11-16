@@ -269,6 +269,8 @@ Every page header links the places the caller may reach: the overview, the works
 
 **The name of a workspace.** Access names a workspace by its identifier. On the pages of the administration the console shows the name Data gave the workspace to the caller, asked once per workspace and per session; a workspace Data does not open to the caller keeps its identifier. The name is a courtesy of the page: nothing is decided with it, and a page does not wait for it. A name that does not come in time is there for the next page, and a Data that does not answer is not asked again for half a minute.
 
+**The permissions of a tenant.** The console lists the permissions of a tenant once, for every page of the administration: the keys the console and Data fix in their code, the capabilities Data publishes for the deployment, and the keys the roles and the rights of the tenant name. Each one is shown with its key, the place a right has to hold in to open it, and what it opens; a key nobody describes says so. The form of a right, the form of a role and the grid of the roles choose among that list, and a permission that is not the operator's to give is drawn closed in each of them. The description is a courtesy of the page: Access and Data decide.
+
 **The grid of the roles.** The grid is read as what the operator changed: a cell the page drew closed is not written, whatever the form says, and a role whose cells did not change is not written at all. Each role that changed is written on its own, and the page says what happened to each one.
 
 ### 6.3 Platform map
