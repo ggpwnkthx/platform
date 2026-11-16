@@ -1,56 +1,7 @@
-# The dependencies
 node_modules/
-
-# The output of the builds
-dist/
-
-# The environment of the process
-.env
-.env.local
-.env.test
-
-# The logs
-logs
-*.log
-
-# The coverage of the tests
-coverage
-*.lcov
-
-# The caches of the tools
-*.tsbuildinfo
-.eslintcache
-.cache
-
-# The runtime data
-pids
-*.pid
-*.pid.lock
-*.seed
-
-# The infrastructure as code: the working directories of the tools, the
-# state of a deployment and the files of a deployment. The state of a
-# deployment holds the credentials of the deployment, and the files of a
-# deployment belong to one deployment and not to the repository.
-.terraform/
-*.tfstate
-*.tfstate.*
-crash.log
-deploy/tofu/runtime/
-
-# The state of a development machine
-.pg/
-.tmp/
-.access/
-
-# The tools the CLI writes in the working directory: the tool that
-# writes the infrastructure is downloaded from its release when the
-# machine holds none.
-.platform/
-
-# The keys and the configuration of the development machine: they are
-# generated, and they are not secrets. The script
-# `bun run scripts/dev-keys.ts` writes them.
-deploy/secrets/
-deploy/config/bindings.local.json
-deploy/config/routes.local.json
+*.local
+coverage/
+ui/dist/
+ui/dist-dev/
+/.*
+/.github

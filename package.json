@@ -3,75 +3,40 @@
   "version": "1.6.4",
   "private": true,
   "type": "module",
-  "description": "The platform: an application gateway, Access, a Data and the console that is the interface of the three, as workspaces of one repository.",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/ggpwnkthx/platform.git"
-  },
-  "homepage": "https://github.com/ggpwnkthx/platform#readme",
-  "bugs": {
-    "url": "https://github.com/ggpwnkthx/platform/issues"
-  },
+  "description": "PostgreSQL-native identity, modeling, grants and row security, with a static interface that speaks to PostgreSQL itself.",
   "license": "MIT",
-  "workspaces": [
-    "packages/gateway",
-    "packages/access",
-    "packages/data",
-    "packages/console",
-    "packages/cli",
-    "packages/client"
-  ],
   "scripts": {
-    "dev": "bun run scripts/dev.ts",
-    "dev:gateway": "bun run --cwd packages/gateway dev",
-    "cli": "bun packages/cli/src/main.ts",
-    "test": "bun run test:platform && bun run --workspaces test",
-    "test:fast": "bun run test:platform && bun run test:gateway && bun run test:access && bun run test:access:integration && bun run test:console && bun run test:data:fast && bun run test:cli",
-    "test:platform": "bun test test/*.test.ts",
-    "test:gateway": "bun run --cwd packages/gateway test",
-    "test:access": "bun run --cwd packages/access test",
-    "test:access:integration": "bun run --cwd packages/access test:integration",
-    "test:data": "bun run --cwd packages/data test",
-    "test:data:fast": "bun run --cwd packages/data test:fast",
-    "test:console": "bun run --cwd packages/console test",
-    "test:cli": "bun run --cwd packages/cli test",
-    "typecheck": "bun run --workspaces typecheck",
-    "architecture": "bun run --workspaces architecture",
+    "build:ui": "bun run scripts/build-ui.tsx",
+    "dev:ui": "bun run scripts/dev-ui.ts",
+    "cli": "bun src/cli.ts",
+    "migrate": "bun src/cli.ts migrate",
+    "deploy": "bun src/cli.ts deploy",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
     "lint": "biome lint .",
     "format": "biome format --write .",
     "format:check": "biome format .",
-    "dead": "knip",
-    "versions": "bun run scripts/version.ts",
-    "audit": "bun run scripts/audit.ts",
-    "repositories:check": "bun run scripts/check-repositories.ts",
-    "vocabulary:check": "bun run scripts/check-vocabulary.ts",
-    "permission-keys:check": "bun run scripts/check-permission-keys.ts",
-    "redaction:check": "bun run scripts/check-redaction.ts",
-    "client-paths:check": "bun run scripts/check-client-paths.ts",
-    "docs:check": "bun run scripts/check-docs.ts",
-    "api:check": "bun run scripts/check-api.ts",
-    "deploy:check": "bun run scripts/check-deploy.ts",
-    "evidence:check": "bun run scripts/check-evidence.ts",
-    "coverage:check": "bun run scripts/check-coverage.ts",
-    "atlas": "bun run scripts/atlas.ts",
-    "compatibility": "bun run scripts/compatibility.ts",
-    "release:bump": "bun run scripts/bump.ts",
-    "release:tag": "bun run scripts/tag.ts",
-    "release:tag:dry-run": "bun run scripts/tag.ts --dry-run"
+    "check": "bun run build:ui && bun run typecheck && bun run lint && bun run format:check && bun test"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "5.2.8",
+    "@fontsource/jetbrains-mono": "5.2.8",
+    "clsx": "2.1.1",
+    "lucide-preact": "1.75.0",
+    "pg": "8.23.1",
+    "preact": "10.27.2",
+    "preact-iso": "2.12.2",
+    "preact-render-to-string": "6.6.4",
+    "zod": "4.6.7"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.15",
-    "@types/bun": "1.4.3",
+    "@biomejs/biome": "2.6.8",
+    "@electric-sql/pglite": "0.5.16",
+    "@types/bun": "1.4.4",
     "@types/pg": "8.23.1",
-    "knip": "6.42.1",
-    "typescript": "5.9.3",
-    "yaml": "2.8.3"
+    "typescript": "7.0.2"
   },
   "engines": {
     "bun": ">=1.4.3"
-  },
-  "overrides": {
-    "yaml": "2.8.3",
-    "minimatch": "11.0.4"
   }
 }
