@@ -44,6 +44,9 @@ export {
   permissionCatalogOf,
   permissionEntryOf,
   permissionFamiliesOf,
+  permissionUseOf,
+  type RoleSummary,
+  roleSummaryOf,
 } from './permissions'
 export {
   groupsOf,

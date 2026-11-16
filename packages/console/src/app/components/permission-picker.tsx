@@ -16,6 +16,7 @@
 
 import { useState } from 'hono/jsx'
 import {
+  type RoleSummary,
   type PermissionEntry,
   permissionEntryOf,
   permissionFamiliesOf,
@@ -243,5 +244,38 @@ export function PermissionPicker(
         </p>
       ) : null}
     </div>
+  )
+}
+
+/**
+ * What a role lets its holders do: the first sentences of its
+ * permissions, and the keys of the ones nobody describes.
+ */
+export function RoleOpens(props: { summary: RoleSummary; limit?: number }) {
+  const { opens, undescribed } = props.summary
+  const limit = props.limit ?? 3
+  if (opens.length === 0 && undescribed.length === 0) {
+    return <span class="muted">no permission</span>
+  }
+  const left = opens.length - limit
+  return (
+    <ul class="role-opens">
+      {opens.slice(0, limit).map((sentence) => (
+        <li>{sentence}</li>
+      ))}
+      {left > 0 ? <li class="muted">and {left} more</li> : null}
+      {undescribed.length > 0 ? (
+        <li class="chips" title={undescribed.join(', ')}>
+          {undescribed.slice(0, 4).map((key) => (
+            <span class="chip">
+              <code>{key}</code>
+            </span>
+          ))}
+          {undescribed.length > 4 ? (
+            <span class="muted">+{undescribed.length - 4} more</span>
+          ) : null}
+        </li>
+      ) : null}
+    </ul>
   )
 }

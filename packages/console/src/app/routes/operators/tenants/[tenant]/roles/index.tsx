@@ -28,6 +28,7 @@ import {
   permissionCatalogOf,
   permissionsOfRole,
   permissionsOfWrite,
+  roleSummaryOf,
 } from '../../../../../../domains/operators'
 import {
   cellKey,
@@ -45,6 +46,7 @@ import {
   tenantPath,
 } from '../../../../../components/operators'
 import { Empty, Moment, Refusal, refusalOf } from '../../../../../components/page'
+import { RoleOpens } from '../../../../../components/permission-picker'
 import { lockedPermissionsOf, rightsViewOf } from '../../../../../components/rights'
 import {
   closedFieldOf,
@@ -251,10 +253,11 @@ export default createRoute(async (c) => {
   // The permissions of the tenant, the capabilities of the deployment
   // among them, each with what it opens: the rows of the grid, and the
   // list the form of a role chooses from.
-  const permissions = permissionCatalogOf(grants?.rows ?? [], {
+  const context = {
     roles: all,
     capabilities: (await deploymentCapabilities(c, slug)).capabilities,
-  })
+  }
+  const permissions = permissionCatalogOf(grants?.rows ?? [], context)
   const keys = permissions.map((entry) => entry.key)
   // What is not the operator's to give is drawn closed, with the reason.
   const closed = lockedPermissionsOf(consoleAbility(await operatorScope(c)), keys)
@@ -352,7 +355,7 @@ export default createRoute(async (c) => {
             <thead>
               <tr>
                 <th>Role</th>
-                <th>Holds</th>
+                <th>Lets its holders</th>
                 <th>Includes</th>
                 <th class="num">Live grants</th>
                 <th>Created</th>
@@ -360,7 +363,6 @@ export default createRoute(async (c) => {
             </thead>
             <tbody>
               {sorted.map((role) => {
-                const holds = permissionsOfRole(role.key, all)
                 return (
                   <tr>
                     <td>
@@ -371,20 +373,7 @@ export default createRoute(async (c) => {
                       {role.description ? <div class="small">{role.description}</div> : null}
                     </td>
                     <td class="small">
-                      {holds.length === 0 ? (
-                        <span class="muted">no permission</span>
-                      ) : (
-                        <div class="chips" title={holds.join(', ')}>
-                          {holds.slice(0, 4).map((permission) => (
-                            <span class="chip">
-                              <code>{permission}</code>
-                            </span>
-                          ))}
-                          {holds.length > 4 ? (
-                            <span class="muted">+{holds.length - 4} more</span>
-                          ) : null}
-                        </div>
-                      )}
+                      <RoleOpens summary={roleSummaryOf(role.key, context)} />
                     </td>
                     <td class="small">
                       {role.roles.length > 0 ? (

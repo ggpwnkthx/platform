@@ -3294,3 +3294,13 @@ td.actions {
   padding: 0;
   list-style: none;
 }
+
+/* What a role lets its holders do, a sentence per line. */
+.role-opens {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

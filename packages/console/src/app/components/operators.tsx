@@ -38,7 +38,7 @@ export function tenantCrumbs(slug: string, ...rest: Crumb[]): Crumb[] {
 /** The tabs of a tenant. */
 export function TenantTabs(props: {
   slug: string
-  current: 'overview' | 'users' | 'groups' | 'roles' | 'rights' | 'audit'
+  current: 'overview' | 'users' | 'groups' | 'roles' | 'permissions' | 'rights' | 'audit'
 }) {
   const base = tenantPath(props.slug)
   return (
@@ -48,6 +48,11 @@ export function TenantTabs(props: {
         { href: `${base}/users`, label: 'Users', current: props.current === 'users' },
         { href: `${base}/groups`, label: 'Groups', current: props.current === 'groups' },
         { href: `${base}/roles`, label: 'Roles', current: props.current === 'roles' },
+        {
+          href: `${base}/permissions`,
+          label: 'Permissions',
+          current: props.current === 'permissions',
+        },
         { href: `${base}/rights`, label: 'Rights', current: props.current === 'rights' },
         { href: `${base}/audit`, label: 'Audit', current: props.current === 'audit' },
       ]}
@@ -230,7 +235,8 @@ export function HowRightsWork() {
       <dl class="kv small">
         <dt>Permission</dt>
         <dd>
-          A single capability, such as <code>content.read</code>. Data decides what each one allows.
+          A single capability, such as <code>content.read</code>. The Permissions tab lists every
+          one with what it opens.
         </dd>
         <dt>Role</dt>
         <dd>A named set of permissions. It can include other roles.</dd>

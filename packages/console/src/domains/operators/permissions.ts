@@ -21,7 +21,7 @@ import {
   opensOf,
   type Reach,
 } from './catalog'
-import { knownPermissionsOf } from './effective'
+import { knownPermissionsOf, permissionsOfGrant, permissionsOfRole } from './effective'
 import { isPlatformKey } from './scope'
 
 /**
@@ -128,4 +128,58 @@ export function permissionFamiliesOf(entries: readonly PermissionEntry[]): Permi
   return [...families]
     .map(([family, rows]) => ({ family, entries: rows }))
     .sort((left, right) => left.family.localeCompare(right.family))
+}
+
+/** Who holds a permission: the roles that hold it in effect, and the live rights that give it. */
+export interface PermissionUse {
+  /** The roles that hold the permission, themselves or through a role they include, by key. */
+  readonly roles: readonly string[]
+  /** How many of the rights give the permission, as it is or in a role. */
+  readonly rights: number
+}
+
+/**
+ * Who holds a permission.
+ *
+ * @param key the key of the permission.
+ * @param grants the live rights of the tenant.
+ * @param roles the roles of the tenant.
+ */
+export function permissionUseOf(
+  key: string,
+  grants: readonly Grant[],
+  roles: readonly Role[]
+): PermissionUse {
+  return {
+    roles: roles
+      .filter((role) => permissionsOfRole(role.key, roles).includes(key))
+      .map((role) => role.key)
+      .sort(),
+    rights: grants.filter((grant) => permissionsOfGrant(grant, roles).includes(key)).length,
+  }
+}
+
+/** What a role lets its holders do, in the sentences of its permissions. */
+export interface RoleSummary {
+  /** What the permissions of the role open, one sentence per thing, in the order of their keys. */
+  readonly opens: readonly string[]
+  /** The permissions of the role nobody describes, by key. */
+  readonly undescribed: readonly string[]
+}
+
+/**
+ * What a role lets its holders do: what the permissions it holds in
+ * effect open, the ones of the roles it includes among them.
+ *
+ * @param role the key of the role.
+ * @param context the roles of the tenant and the capabilities of the deployment.
+ */
+export function roleSummaryOf(role: string, context: PermissionContext): RoleSummary {
+  const entries = permissionsOfRole(role, context.roles).map((key) =>
+    permissionEntryOf(key, context)
+  )
+  return {
+    opens: [...new Set(entries.flatMap((entry) => (entry.opens ? [entry.opens] : [])))],
+    undescribed: entries.filter((entry) => entry.opens === null).map((entry) => entry.key),
+  }
 }

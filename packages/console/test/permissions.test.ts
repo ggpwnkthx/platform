@@ -14,6 +14,8 @@ import {
   permissionCatalogOf,
   permissionEntryOf,
   permissionFamiliesOf,
+  permissionUseOf,
+  roleSummaryOf,
 } from '../src/domains/operators'
 
 const role = (key: string, permissions: string[]): Role =>
@@ -102,5 +104,39 @@ describe('the permissions of a tenant', () => {
       'content.editor',
       'content.reader',
     ])
+  })
+})
+
+describe('who holds a permission, and what a role lets its holders do', () => {
+  const reader = role('reader', ['content.reader'])
+  const lead = { ...role('lead', ['console.admin', 'files.write']), roles: ['reader'] } as Role
+  const all = [reader, lead]
+
+  test('a permission is held by the roles that hold it in effect, and given by their grants', () => {
+    const grants = [
+      { role: 'lead' },
+      { role: 'reader' },
+      { permission: 'content.reader' },
+      { permission: 'files.write' },
+    ] as unknown as Grant[]
+    expect(permissionUseOf('content.reader', grants, all)).toEqual({
+      roles: ['lead', 'reader'],
+      rights: 3,
+    })
+    expect(permissionUseOf('console.status', grants, all)).toEqual({ roles: [], rights: 0 })
+  })
+
+  test('a role is summed up by what its permissions open, the included roles among them', () => {
+    expect(roleSummaryOf('lead', { roles: all, capabilities })).toEqual({
+      opens: [
+        'Opens the administration of the tenant: users, groups, roles, rights.',
+        'Opens the reading of Articles.',
+      ],
+      undescribed: ['files.write'],
+    })
+    expect(roleSummaryOf('nobody', { roles: all, capabilities })).toEqual({
+      opens: [],
+      undescribed: [],
+    })
   })
 })

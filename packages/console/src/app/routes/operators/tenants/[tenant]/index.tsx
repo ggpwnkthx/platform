@@ -299,6 +299,14 @@ export default createRoute(async (c) => {
                 </a>
               </li>
               <li>
+                <a class="task" href={`${base}/permissions`}>
+                  <strong class="task-name">See what a permission opens</strong>
+                  <span class="small muted">
+                    Every permission of the tenant, what it opens, and the roles that hold it.
+                  </span>
+                </a>
+              </li>
+              <li>
                 <a class="task" href={`${base}/rights`}>
                   <strong class="task-name">Find who holds a permission</strong>
                   <span class="small muted">

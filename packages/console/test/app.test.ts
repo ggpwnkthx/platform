@@ -724,6 +724,32 @@ describe('the console', () => {
     expect(grid).toContain('Opens the administration of the tenant: users, groups, roles, rights.')
   })
 
+  test('the permissions of a tenant are listed with what they open and who holds them', async () => {
+    resetPolicy()
+    const browser = new Browser()
+    await browser.signIn()
+    const page = await browser.request('/operators/tenants/acme/permissions')
+    expect(page.status).toBe(200)
+    const html = await page.text()
+    expect(html).toContain('<table class="permissions">')
+    // What the console fixes, what the deployment names and what the tenant wrote.
+    expect(html).toContain('<code>console.admin</code>')
+    expect(html).toContain('Opens the reading of Articles')
+    expect(html).toContain('<code>content.write</code>')
+    // The editors read through the readers: both roles hold content.read.
+    expect(html).toMatch(/roles\/editor"><code>editor<\/code>/)
+    expect(html).toContain('/operators/tenants/acme/rights?right=content.read')
+    // A filter keeps the permissions whose key or description match.
+    const filtered = await (
+      await browser.request('/operators/tenants/acme/permissions?q=articles')
+    ).text()
+    expect(filtered).toContain('<code>content.reader</code>')
+    expect(filtered).not.toContain('<code>console.admin</code>')
+    // The list of the roles says what each role lets its holders do.
+    const roles = await (await browser.request('/operators/tenants/acme/roles')).text()
+    expect(roles).toContain('<ul class="role-opens">')
+  })
+
   test('a creation carries the key of its form, and a refusal is shown as it is', async () => {
     const browser = new Browser()
     await browser.signIn()
