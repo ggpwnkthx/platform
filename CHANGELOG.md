@@ -10,6 +10,8 @@ in the same commit as the code.
 
 ## Unreleased
 
+## 1.6.4
+
 ### The console says a permission the same way everywhere
 
 An operator could not see the permissions a tenant uses in one place, nor read what each of them opens: the form of a right, the form of a role and the grid of the roles each built their own list and described it their own way, and only the form of a right on the Rights tab named the capabilities of the deployment.
@@ -19,6 +21,9 @@ An operator could not see the permissions a tenant uses in one place, nor read w
 **One label and one picker.** Every page shows a permission with its key, where a right has to hold to open it, and a sentence for what it opens. The form of a right and the form of a role choose in the same list, grouped by family and filtered by key, by description or by role; the grid of the roles labels its rows the same way. A permission that is not the operator's to give is closed in the list, with the reason.
 
 **A page of the permissions.** The **Permissions** tab of a tenant lists every permission with what it opens, the roles that hold it in effect and the live rights that give it. The list of the roles says what each role lets its holders do, in the sentences of its permissions.
+
+**Contract:** [console spec §6.2](docs/console/spec.md#62-places).
+
 
 ## 1.6.3
 
