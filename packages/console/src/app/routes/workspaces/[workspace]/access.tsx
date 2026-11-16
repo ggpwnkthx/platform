@@ -25,11 +25,13 @@ import { isUuid, knownPermission } from '../../../../domains/operators'
 import { Empty, PageHead } from '../../../components/page'
 import { ASK_AN_OPERATOR, Capabilities } from '../../../components/why'
 import {
+  ClosedCollections,
   collectionPath,
   WorkspaceTabs,
   workspaceCrumbs,
   workspaceName,
 } from '../../../components/workspace'
+import { deploymentCapabilities } from '../../../middleware/capabilities'
 import { sessionOf } from '../../../middleware/session'
 import { workspaceKeys } from '../../../middleware/workspaces'
 
@@ -160,6 +162,12 @@ export default createRoute(async (c) => {
   // The permissions Access gives the caller here: the keys Data's policies read.
   const access = await workspaceKeys(c, id, me.routeId)
   const ability = workspaceAbility(access)
+  // The collections of the deployment, and the capabilities that open
+  // them: they are named when none of them is open to the caller.
+  const capabilities =
+    schema.collections.length === 0
+      ? await deploymentCapabilities(c, session.principal.tenant)
+      : null
 
   return c.render(
     <>
@@ -179,6 +187,12 @@ export default createRoute(async (c) => {
                 the capabilities of the records are the deployment's own. An operator of your tenant
                 grants them in Access: on this workspace, or on every workspace of the tenant.
               </p>
+              {capabilities ? (
+                <ClosedCollections
+                  collections={capabilities.collections}
+                  unavailable={capabilities.unavailable}
+                />
+              ) : null}
             </Empty>
           ) : (
             schema.collections.map((collection) => (

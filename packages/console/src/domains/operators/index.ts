@@ -1,8 +1,11 @@
 export {
+  capabilitiesOf,
+  type DeploymentCapability,
   effectOf,
   familyOf,
   KNOWN_PERMISSIONS,
   knownPermission,
+  opensOf,
   type Where,
   whereOf,
 } from './catalog'

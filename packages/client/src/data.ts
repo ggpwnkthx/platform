@@ -13,7 +13,7 @@
  * client.
  */
 
-import type { CreatedWorkspace, WorkspaceCreation } from './types'
+import type { CreatedWorkspace, DeploymentCollections, WorkspaceCreation } from './types'
 import {
   bodyOf,
   type ClientAnswer,
@@ -202,6 +202,23 @@ export class DataClient {
    */
   async createWorkspace(input: WorkspaceCreation): Promise<CreatedWorkspace> {
     return await this.data<CreatedWorkspace>('POST', '/workspaces', { body: input })
+  }
+
+  /**
+   * The collections of the deployment and the capabilities that open them.
+   *
+   * The call is a call of the tenant: the client names no workspace, and
+   * the caller holds a capability of its tenant.
+   *
+   * @param tenant the tenant: its slug and its identifier.
+   */
+  async collections(tenant: {
+    readonly slug: string
+    readonly id: string
+  }): Promise<DeploymentCollections> {
+    return await this.data<DeploymentCollections>('GET', '/workspaces/collections', {
+      query: { tenant: tenant.slug, tenantId: tenant.id },
+    })
   }
 
   /** The metadata of one collection. */

@@ -252,6 +252,7 @@ export async function createHarness(
     records,
     resolver,
     bindings,
+    deployment: { manifest, bundle },
     catalog,
     workspaces: new WorkspaceCreationService(new PostgresWorkspaceCreator(store)),
     model,

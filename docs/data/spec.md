@@ -816,6 +816,21 @@ Rules:
 6. The row is written by the role of the api, inside the scope of the tenant of the workspace: the isolation of the registry refuses a row that names another tenant.
 7. The creation grants nothing. The rights of the caller over the workspace it created are written in Access, and the console writes them when it creates one.
 
+### 9.12 The collections of the deployment
+
+The deployment publishes the capabilities of its records, so that the operator reads the list where it grants a right.
+
+| Endpoint | Query | Answers |
+| --- | --- | --- |
+| `GET /v1/workspaces/collections` | The tenant — its slug and its identifier. | `200` and the collections of the deployment, and the capability that opens each of them. |
+
+Rules:
+
+1. The route names no workspace, and the identity the gateway signs carries none: the call is a call of the tenant, like the creation (§9.11).
+2. The answer is the deployment's manifest and the deployment's bundle: the collections a workspace serves by default, and the capabilities its policies name, by action.
+3. The caller holds a capability of its tenant, and Access says whether it holds one: a caller that holds none is refused with `403 FORBIDDEN`.
+4. The binding of the route may name the tenant it is restricted to: a route that is restricted to one tenant may not read the shape of another one.
+
 ## 10. Mutations and transactions
 
 A mutation follows this sequence:

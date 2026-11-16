@@ -9,7 +9,12 @@ import {
   reasonOf,
   WORKSPACE_PARTS,
 } from '../../domains/ability'
-import type { CollectionMetadata, FieldMetadata, Me } from '../../domains/data'
+import type {
+  CollectionMetadata,
+  DeploymentCollection,
+  FieldMetadata,
+  Me,
+} from '../../domains/data'
 import { displayOf, formValueOf, inputKindOf } from '../../domains/data'
 import JsonInput from '../islands/json-input'
 import { Tabs } from './page'
@@ -37,6 +42,52 @@ export function recordPath(workspace: string, collection: string, id: string): s
 /** The path of the page that says what the caller may do in a workspace. */
 export function accessPath(workspace: string, collection?: string): string {
   return `${workspacePath(workspace)}/access${collection ? `#${encodeURIComponent(collection)}` : ''}`
+}
+
+/**
+ * The collections of the deployment, and the capabilities that open them.
+ *
+ * The capabilities of the records are the deployment's own: the policies
+ * of the deployment name them, and Data publishes the collections each of
+ * them opens. A workspace whose collections are closed to the caller
+ * shows the list: the operator of the tenant grants the capability that
+ * opens a collection, and the page names it.
+ */
+export function ClosedCollections(props: {
+  readonly collections: readonly DeploymentCollection[]
+  /** Why the console could not read the list, when it could not. */
+  readonly unavailable?: string | null
+}) {
+  if (props.unavailable) {
+    return (
+      <p class="small muted">
+        The console could not read the collections of the deployment: {props.unavailable}
+      </p>
+    )
+  }
+  if (props.collections.length === 0) return null
+  return (
+    <div class="stack">
+      <p class="small muted">
+        The deployment serves these collections, and the policies of the deployment open them to the
+        callers that hold their capability:
+      </p>
+      <ul class="key-list">
+        {props.collections.map((collection) => (
+          <li class="key-entry">
+            <strong>{collection.label}</strong>
+            <code>{collection.key}</code>
+            <span class="small muted">
+              {Object.entries(collection.permissions)
+                .filter(([, keys]) => keys.length > 0)
+                .map(([action, keys]) => `${action}: ${keys.join(', ')}`)
+                .join(' · ') || 'no policy opens it'}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
 }
 
 /** The breadcrumbs of a page of a workspace. */

@@ -25,10 +25,12 @@ import {
 import type { Grant, Group, Principal, Role } from '../../domains/access'
 import {
   administrationOf,
+  type DeploymentCapability,
   isLive,
   isUuid,
   knownPermission,
   knownPermissionsOf,
+  opensOf,
   permissionsOfRole,
   rightsOf,
   whereOf,
@@ -417,10 +419,32 @@ function routesOf(grants: readonly Grant[]): string[] {
   ].sort()
 }
 
-/** What the picker says under a permission: what it opens, or where the tenant names it. */
-function permissionHint(key: string, roles: readonly Role[]): string {
+/**
+ * What the picker says under a permission: what it opens, or where the
+ * tenant names it.
+ *
+ * A capability of the deployment is named by the collections it opens:
+ * the policies of the deployment name it, and Data publishes what it
+ * opens. The operator reads it there, and grants it by its name.
+ */
+function permissionHint(
+  key: string,
+  roles: readonly Role[],
+  capabilities: readonly DeploymentCapability[]
+): string {
   const known = knownPermission(key)
   if (known) return known.platform ? `${known.title} · the platform's` : known.title
+  const capability = capabilities.find((entry) => entry.key === key)
+  if (capability) {
+    const holding = roles.filter((role) => role.permissions.includes(key)).map((role) => role.key)
+    const where =
+      holding.length === 0
+        ? ''
+        : holding.length <= 2
+          ? ` · in ${holding.join(' and ')}`
+          : ` · in ${holding.length} roles`
+    return `${opensOf(capability)}${where}`
+  }
   const holding = roles.filter((role) => role.permissions.includes(key)).map((role) => role.key)
   if (holding.length === 0) return 'granted as it is'
   return holding.length <= 2 ? `in ${holding.join(' and ')}` : `in ${holding.length} roles`
@@ -430,6 +454,11 @@ function permissionHint(key: string, roles: readonly Role[]): string {
 export function GrantForm(props: {
   view: RightsView
   back: string
+  /**
+   * The capabilities of the deployment: the keys its policies name, and
+   * the collections each of them opens.
+   */
+  capabilities?: readonly DeploymentCapability[]
   /** The rights of the tenant: the permissions, the workspaces and the routes they name. */
   grants: readonly Grant[]
   users?: readonly Principal[]
@@ -466,6 +495,10 @@ export function GrantForm(props: {
         })),
       ]
   const permissions = knownPermissionsOf(props.grants, view.roles)
+  // The capabilities of the deployment: the keys its policies name, and
+  // the collections each of them opens. The operator reads them where it
+  // grants a right.
+  const capabilities = props.capabilities ?? []
   // The workspaces a right may name: the ones the rights of the tenant
   // name already, and the ones Data named for the operator.
   const workspaces = [
@@ -503,11 +536,13 @@ export function GrantForm(props: {
               ...(refused ? { refused } : {}),
             }
           })}
-        permissions={permissions.map((key) => ({
-          value: key,
-          label: key,
-          hint: permissionHint(key, view.roles),
-        }))}
+        permissions={[...new Set([...permissions, ...capabilities.map((c) => c.key)])]
+          .sort()
+          .map((key) => ({
+            value: key,
+            label: key,
+            hint: permissionHint(key, view.roles, capabilities),
+          }))}
         locked={Object.fromEntries(
           permissions
             .map((key) => [key, refusal(key)] as const)

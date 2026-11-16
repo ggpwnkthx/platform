@@ -21,6 +21,7 @@ import type {
   AuditEntry,
   CollectionMetadata,
   CreatedWorkspace,
+  DeploymentCollections,
   FieldAttributes,
   Me,
   Model,
@@ -123,6 +124,25 @@ export class DataClient {
   async createWorkspace(input: WorkspaceCreation): Promise<CreatedWorkspace> {
     try {
       return await this.#client.createWorkspace(input)
+    } catch (error) {
+      throw failureOf(error)
+    }
+  }
+
+  /**
+   * The collections of the deployment and the capabilities that open them.
+   *
+   * The capabilities of the records are the deployment's own: the
+   * operator of the tenant grants them, and the console names them.
+   *
+   * @param tenant the tenant: its slug and its identifier.
+   */
+  async collections(tenant: {
+    readonly slug: string
+    readonly id: string
+  }): Promise<DeploymentCollections> {
+    try {
+      return await this.#client.collections(tenant)
     } catch (error) {
       throw failureOf(error)
     }

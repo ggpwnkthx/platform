@@ -13,6 +13,8 @@
 
 import { randomBytes } from 'node:crypto'
 
+import type { DeploymentCollection } from '../data'
+
 /** The principal of a session, as the id token of Access names it. */
 export interface SessionPrincipal {
   /** The id of the principal: the `sub` of the token. */
@@ -80,6 +82,21 @@ export interface Session {
    * wait for Data.
    */
   workspaceNamesAfter?: number
+  /**
+   * The collections of the deployment, and the capabilities that open
+   * them, as Data published them.
+   *
+   * The capabilities of the records are the deployment's own, and they
+   * change with the deployment: the session keeps the answer of the
+   * first page that asked for it, and a page of the administration does
+   * not wait for Data.
+   */
+  deploymentCollections?: {
+    /** The tenant the answer was read for. */
+    readonly tenant: string
+    /** The collections of the deployment. */
+    readonly collections: readonly DeploymentCollection[]
+  }
   flash: Flash | null
   /** The last refused form, kept for the next page. */
   draft?: Draft | null

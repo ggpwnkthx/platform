@@ -272,6 +272,7 @@ export async function createRuntime(options: CompositionOptions = {}): Promise<R
     records,
     resolver,
     bindings,
+    deployment: { manifest, bundle },
     catalog,
     workspaces,
     model,

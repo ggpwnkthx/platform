@@ -199,6 +199,69 @@ export function apiPaths(): Record<string, unknown> {
         },
       },
     },
+    '/v1/workspaces/collections': {
+      get: {
+        summary: 'The collections of the deployment and the capabilities that open them.',
+        description:
+          "The capabilities of the records are the deployment's own: the policies of the deployment name them, and the operator of the tenant grants them. The answer is the collections of the deployment, and the key that opens each of them, by action. The call is a call of the tenant: the route names no workspace, and the query names the tenant (its slug and its identifier). The caller holds a capability of its tenant, and Access says whether it holds one.",
+        parameters: [
+          {
+            name: 'tenant',
+            in: 'query',
+            required: true,
+            description: 'The slug of the tenant.',
+            schema: { type: 'string' },
+          },
+          {
+            name: 'tenantId',
+            in: 'query',
+            required: true,
+            description: 'The identifier of the tenant.',
+            schema: { type: 'string', format: 'uuid' },
+          },
+        ],
+        responses: {
+          200: shapedResponse('The collections of the deployment and their capabilities.', {
+            type: 'object',
+            required: ['data'],
+            properties: {
+              data: {
+                type: 'object',
+                required: ['collections', 'policyBundleVersion'],
+                properties: {
+                  collections: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      required: ['key', 'label', 'table', 'permissions'],
+                      properties: {
+                        key: { type: 'string' },
+                        label: { type: 'string' },
+                        table: { type: 'string' },
+                        permissions: {
+                          type: 'object',
+                          required: ['read', 'create', 'update', 'delete'],
+                          properties: {
+                            read: { type: 'array', items: { type: 'string' } },
+                            create: { type: 'array', items: { type: 'string' } },
+                            update: { type: 'array', items: { type: 'string' } },
+                            delete: { type: 'array', items: { type: 'string' } },
+                          },
+                        },
+                      },
+                    },
+                  },
+                  policyBundleVersion: { type: 'string' },
+                },
+              },
+            },
+          }),
+          400: errorResponse('The query does not name the tenant.'),
+          401: errorResponse('The request could not be authenticated.'),
+          403: errorResponse('The caller holds no capability of its tenant.'),
+        },
+      },
+    },
     '/ws/{workspaceId}/v1/me': {
       get: {
         summary: 'The identity of the caller in the workspace.',

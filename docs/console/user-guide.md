@@ -57,6 +57,8 @@ A slug that your tenant already holds is refused, and the form says so. Without 
 
 Open the **Your access** tab of a workspace. Each collection has a grid: the rows are its records and each of its fields, the columns are read, create, change and delete. Every "no" carries a numbered note with its reason. Beside the grids, **Beyond the records** says whether you may read the data model, change it and read the audit, and **Your permissions here** lists the permissions Access gives you on the workspace, each with what it opens when the console knows. A "yes" is the most you may do: Data still checks each record.
 
+A workspace whose collections are closed to you says so, and names them: the deployment serves **Articles** and **Categories**, and the policies of the deployment open them to the holders of `content.reader` and `content.editor`. Those keys are the deployment's own — the console knows the keys it reads itself, and Data publishes the rest — so an operator of your tenant grants them on the **Rights** tab of the tenant.
+
 Elsewhere, the console draws what you may not do instead of leaving it out:
 
 | You see | It means |
@@ -131,7 +133,7 @@ Open **Operators**. Platform operators see every tenant and can create one; an o
 | A user | Everything about one person: what they can do in effect, what the console opens to them, their rights, their groups, and their registration. The tasks below start here. |
 | Groups | Create a group by key and name, then add members. A right granted to a group is held by every member. |
 | A group | Search and add members; the page marks changes that are not saved yet and asks before you leave with them. Grant and revoke the group's rights; rename it. |
-| Rights | Every right of the tenant: what it gives, who holds it, where it holds and until when. Filter by holder, by what a right gives and by place; switch between live, revoked or ended, and all. Grant a right, or revoke one. |
+| Rights | Every right of the tenant: what it gives, who holds it, where it holds and until when. Filter by holder, by what a right gives and by place; switch between live, revoked or ended, and all. Grant a right, or revoke one. The form of a grant names the capabilities of the deployment — `content.reader` opens the reading of Articles, `content.editor` its writing — and the collections each of them opens. |
 | Roles | List roles with the permissions they hold in effect, the roles they include and how many live grants name them, or switch to **Permissions by role** to change several roles in one grid. Create a role. Every tenant has one: **admin**, the role of the administrators of the tenant. It holds the right to open the administration of the tenant, the detail of the status of the services, and the capabilities that administer a workspace — its model and its audit. The capabilities of the records are the deployment's own: give them to the role `admin` and the administrators of the tenant reach the records of the workspaces they create. |
 | A role | Edit its name, description, permissions and included roles by adding and removing chips; see what it holds in effect, what each permission opens and who holds it; remove it once no grant and no role names it. |
 | Audit | Every change to the tenant, newest first, filterable by action; export it as CSV or JSONL. |

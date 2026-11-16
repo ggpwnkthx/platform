@@ -38,6 +38,52 @@ export function applicablePolicies(
   )
 }
 
+/** The capabilities that open a collection, by action. */
+export interface CollectionCapabilities {
+  /** The keys that open the reading of the records. */
+  readonly read: readonly string[]
+  /** The keys that open the creation of a record. */
+  readonly create: readonly string[]
+  /** The keys that open the change of a record. */
+  readonly update: readonly string[]
+  /** The keys that open the deletion of a record. */
+  readonly delete: readonly string[]
+}
+
+/**
+ * The capabilities that open each collection of a bundle.
+ *
+ * The bundle read the other way round: the keys that open a collection,
+ * by action. The policies of a deployment name the capabilities of its
+ * records, and the operator of a tenant reads them to know what to
+ * grant: a capability that nobody holds opens nothing, and a capability
+ * that is held opens what its policies allow.
+ *
+ * @param bundle the bundle of the policies.
+ */
+export function capabilitiesByCollection(
+  bundle: PolicyBundle
+): Map<string, CollectionCapabilities> {
+  const found = new Map<string, Map<Action, Set<string>>>()
+  for (const policy of bundle.policies) {
+    const actions = found.get(policy.collection) ?? new Map<Action, Set<string>>()
+    const keys = actions.get(policy.action) ?? new Set<string>()
+    keys.add(policy.permission)
+    actions.set(policy.action, keys)
+    found.set(policy.collection, actions)
+  }
+  const answer = new Map<string, CollectionCapabilities>()
+  for (const [collection, actions] of found) {
+    answer.set(collection, {
+      read: [...(actions.get('read') ?? [])].sort(),
+      create: [...(actions.get('create') ?? [])].sort(),
+      update: [...(actions.get('update') ?? [])].sort(),
+      delete: [...(actions.get('delete') ?? [])].sort(),
+    })
+  }
+  return answer
+}
+
 /**
  * The fields a caller may read of a collection.
  *

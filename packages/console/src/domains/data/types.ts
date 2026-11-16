@@ -10,8 +10,11 @@
 export type {
   Aggregate,
   AuditEntry,
+  CollectionCapabilities,
   CollectionMetadata,
   CreatedWorkspace,
+  DeploymentCollection,
+  DeploymentCollections,
   FieldAttributes,
   FieldMetadata,
   Me,

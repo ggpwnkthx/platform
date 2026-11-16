@@ -7,6 +7,7 @@ The v1 HTTP endpoints of Data, with example requests and answers for each. It is
 | Path | Method | Answers |
 | --- | --- | --- |
 | `/v1/workspaces` | `POST` | Create a workspace of the tenant of the caller. |
+| `/v1/workspaces/collections` | `GET` | The collections of the deployment and the capabilities that open them. |
 | `/ws/{workspaceId}/v1/me` | `GET` | The caller's identity in the workspace. |
 | `/ws/{workspaceId}/v1/schema` | `GET` | Metadata of the collections the caller may use. |
 | `/ws/{workspaceId}/v1/schema/{collection}` | `GET` | Metadata of one collection. |
@@ -118,6 +119,43 @@ The caller holds the capability `data.workspace.create` in a grant of its tenant
 | The request did not come through the gateway | `401 UNAUTHENTICATED` |
 
 The creation does not grant anything: the rights of the caller over the workspace it created are written in Access, and the console writes them when it creates a workspace.
+
+### The collections of the deployment
+
+`GET /v1/workspaces/collections` answers the collections the deployment serves, and the capability that opens each of them. The capabilities of the records are the deployment's own: the policies of the deployment name them, and the operator of the tenant grants them. The call is a call of the tenant, like the creation: the query names the tenant.
+
+```http
+GET /v1/workspaces/collections?tenant=acme&tenantId=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa
+```
+
+```json
+{
+  "data": {
+    "collections": [
+      {
+        "key": "articles",
+        "label": "Articles",
+        "table": "data.articles",
+        "permissions": {
+          "read": ["content.reader"],
+          "create": ["content.editor"],
+          "update": ["content.editor"],
+          "delete": ["content.editor"]
+        }
+      }
+    ],
+    "policyBundleVersion": "6890b5ea3b0159a21b278964d777aaafde5440239445b9c61e4b129fbacdc658"
+  }
+}
+```
+
+The caller holds a capability of its tenant, and Access says whether it holds one.
+
+| Situation | Answer |
+| --- | --- |
+| The caller holds no capability of its tenant | `403 FORBIDDEN` |
+| The query does not name the tenant | `400 INVALID_REQUEST` |
+| The request did not come through the gateway | `401 UNAUTHENTICATED` |
 
 ## Schema
 

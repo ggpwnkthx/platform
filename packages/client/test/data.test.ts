@@ -70,6 +70,25 @@ describe('the client of the data', () => {
     expect(created.id).toBe('22222222-2222-4222-8222-222222222222')
   })
 
+  test('the collections of the deployment are a call of the tenant', async () => {
+    const { transport, calls } = transportOf({
+      'GET https://gateway.example.test/v1/workspaces/collections?tenant=acme&tenantId=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa':
+        ok(
+          '{"data":{"collections":[{"key":"articles","label":"Articles","table":"data.articles","permissions":{"read":["content.reader"],"create":[],"update":[],"delete":[]}}],"policyBundleVersion":"p1"}}',
+          { 'content-type': 'application/json' }
+        ),
+    })
+    const client = new DataClient({ ...OPTIONS, workspaceId: '', transport })
+    const answer = await client.collections({
+      slug: 'acme',
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    })
+    expect(calls[0]?.request.method).toBe('GET')
+    expect(answer.collections[0]?.key).toBe('articles')
+    expect(answer.collections[0]?.permissions.read).toEqual(['content.reader'])
+    expect(answer.policyBundleVersion).toBe('p1')
+  })
+
   test('the credential of the caller travels in the headers', async () => {
     const { transport, calls } = transportOf({
       'GET https://gateway.example.test/ws/workspace-1/v1/me': ok('{}'),

@@ -3,8 +3,11 @@ export { DataError } from './errors'
 export { nextSortOf, PAGE_SIZES, pageUrl, readPageQuery, sortOf } from './query'
 export type {
   Aggregate,
+  CollectionCapabilities,
   CollectionMetadata,
   CreatedWorkspace,
+  DeploymentCollection,
+  DeploymentCollections,
   FieldAttributes,
   FieldMetadata,
   Me,

@@ -12,6 +12,7 @@ import { isUuid } from '../../../../domains/operators'
 import { Empty, KeyValues, PageHead } from '../../../components/page'
 import {
   accessPath,
+  ClosedCollections,
   CollectionActions,
   collectionPath,
   WorkspaceTabs,
@@ -19,6 +20,7 @@ import {
   workspaceName,
 } from '../../../components/workspace'
 import CopyText from '../../../islands/copy-text'
+import { deploymentCapabilities } from '../../../middleware/capabilities'
 import { sessionOf } from '../../../middleware/session'
 import { rememberWorkspace, workspaceKeys } from '../../../middleware/workspaces'
 
@@ -30,6 +32,12 @@ export default createRoute(async (c) => {
   const [me, schema] = await Promise.all([client.me(), client.schema()])
   rememberWorkspace(c, id, me)
   const ability = workspaceAbility(await workspaceKeys(c, id, me.routeId))
+  // The collections of the deployment, and the capabilities that open
+  // them: they are named when none of them is open to the caller.
+  const capabilities =
+    schema.collections.length === 0
+      ? await deploymentCapabilities(c, sessionOf(c).principal.tenant)
+      : null
 
   return c.render(
     <>
@@ -49,6 +57,12 @@ export default createRoute(async (c) => {
                 the capabilities of the records are the deployment's own. An operator of your tenant
                 grants them in Access: on this workspace, or on every workspace of the tenant.
               </p>
+              {capabilities ? (
+                <ClosedCollections
+                  collections={capabilities.collections}
+                  unavailable={capabilities.unavailable}
+                />
+              ) : null}
             </Empty>
           ) : (
             <div class="grid">

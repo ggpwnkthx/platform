@@ -8,7 +8,7 @@
  */
 
 import type { Context, Hono, Next } from 'hono'
-import type { RequestContext } from '../domains/authorization'
+import { capabilitiesByCollection, type RequestContext } from '../domains/authorization'
 import { verifyGatewayRequest, type VerifiedGatewayIdentity } from '../domains/gateway-context'
 import { ModelError, type ModelScope } from '../domains/model'
 import { type WorkspaceIdentity, WorkspaceCreationError } from '../domains/workspaces'
@@ -195,6 +195,89 @@ export function registerRoutes(app: Hono<AppEnv>, dependencies: AppDependencies)
     } finally {
       dependencies.limiter.leave(resolved.context.tenantId)
     }
+  })
+
+  /**
+   * `GET /v1/workspaces/collections`: the collections of the deployment
+   * and the capabilities that open them.
+   *
+   * The capabilities of the records are the deployment's own: the
+   * policies of the deployment name them, and the operator of the tenant
+   * grants them. The answer is what the operator needs to grant them —
+   * the collections of the deployment, and the key that opens each of
+   * them.
+   *
+   * The call is a call of the tenant, like the creation of a workspace:
+   * the route names no workspace, and the gateway signs an identity that
+   * carries none. The tenant of the call is in the query, and Access
+   * says whether the caller holds a capability of it.
+   */
+  app.get('/v1/workspaces/collections', establishTenant, async (c) => {
+    const gateway = c.get('gateway')
+    if (!gateway) {
+      throw new ServiceError('UNAUTHENTICATED')
+    }
+    const url = new URL(c.req.url)
+    const tenant = url.searchParams.get('tenant') ?? ''
+    const tenantId = url.searchParams.get('tenantId') ?? ''
+    if (!TENANT_SLUG.test(tenant)) {
+      throw new ServiceError('INVALID_REQUEST', { message: 'the tenant is a slug' })
+    }
+    if (!isUuid(tenantId)) {
+      throw new ServiceError('INVALID_REQUEST', { message: 'the tenant is a uuid' })
+    }
+    // The binding of the route may name the tenant it is restricted to:
+    // the answer is the shape of the deployment, and a route that is
+    // restricted to one tenant may not read the shape of another one.
+    if (gateway.expectedTenantId && gateway.expectedTenantId !== tenantId) {
+      throw new ServiceError('NOT_FOUND')
+    }
+    // The caller is a caller of the tenant: Access says the
+    // capabilities it holds on the tenant itself, and a caller that
+    // holds none is refused.
+    const resolved = await dependencies.resolver.resolve(
+      {
+        subject: gateway.subject,
+        tenantId,
+        workspaceId: tenant,
+        routeId: gateway.routeId,
+      },
+      {
+        fresh: true,
+        source: 'gateway',
+        requestId: c.get('requestId') ?? 'unknown',
+      }
+    )
+    if (resolved.context.permissionKeys.length === 0) {
+      throw new ServiceError('FORBIDDEN', {
+        message: 'the caller holds no capability of its tenant',
+      })
+    }
+    const capabilities = capabilitiesByCollection(dependencies.deployment.bundle)
+    const collections = dependencies.deployment.manifest.collections.map((collection) => {
+      const opens = capabilities.get(collection.key)
+      return {
+        key: collection.key,
+        label: collection.label,
+        table: collection.table,
+        permissions: {
+          read: opens?.read ?? [],
+          create: opens?.create ?? [],
+          update: opens?.update ?? [],
+          delete: opens?.delete ?? [],
+        },
+      }
+    })
+    return c.json(
+      {
+        data: {
+          collections,
+          policyBundleVersion: dependencies.deployment.bundle.bundleVersion,
+        },
+      },
+      200,
+      { 'cache-control': 'no-store' }
+    )
   })
 
   app.get(`${scope}/me`, establish, (c) => {

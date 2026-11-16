@@ -7,11 +7,12 @@
  */
 
 import type { AuditReader } from '../domains/audit'
-import type { RequestContext, ResolvedContext } from '../domains/authorization'
+import type { PolicyBundle, RequestContext, ResolvedContext } from '../domains/authorization'
 import type { CatalogProvider } from '../domains/catalog'
 import type { ModelService } from '../domains/model'
 import type { ResolvedBinding, VerifiedGatewayIdentity } from '../domains/gateway-context'
 import type { RecordsService } from '../domains/records'
+import type { ManifestBundle } from '../domains/schema'
 import type { WorkspaceIdentity, WorkspaceCreationService } from '../domains/workspaces'
 import type { Logger } from '../observability/logger'
 import type { Metrics } from '../observability/metrics'
@@ -39,6 +40,17 @@ export interface AppDependencies {
   readonly records: RecordsService
   readonly resolver: ContextResolverLike
   readonly bindings: readonly ResolvedBinding[]
+  /**
+   * The deployment: its manifest and the bundle of its policies.
+   *
+   * The two are the default of every workspace that registered nothing,
+   * and the answer of the tenant that reads them is the answer of the
+   * deployment.
+   */
+  readonly deployment: {
+    readonly manifest: ManifestBundle
+    readonly bundle: PolicyBundle
+  }
   /** The catalog of the workspace: its collections and its policies. */
   readonly catalog: CatalogProvider
   /** The creation of the workspaces of the tenants. */

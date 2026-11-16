@@ -360,6 +360,34 @@ beforeAll(async () => {
         await Bun.sleep(4000)
         return down()
       }
+      // The collections of the deployment and the capabilities that open
+      // them: the call is a call of the tenant, like the creation.
+      if (url.pathname === '/v1/workspaces/collections' && request.method === 'GET') {
+        return Response.json({
+          data: {
+            collections: [
+              {
+                key: 'articles',
+                label: 'Articles',
+                table: 'data.articles',
+                permissions: {
+                  read: ['content.reader'],
+                  create: ['content.editor'],
+                  update: ['content.editor'],
+                  delete: ['content.editor'],
+                },
+              },
+              {
+                key: 'categories',
+                label: 'Categories',
+                table: 'data.categories',
+                permissions: { read: ['content.reader'], create: [], update: [], delete: [] },
+              },
+            ],
+            policyBundleVersion: 'p1',
+          },
+        })
+      }
       // The creation of a workspace is a call of the tenant: its path
       // names no workspace (Data spec §9.11).
       if (url.pathname === '/v1/workspaces' && request.method === 'POST') {
@@ -655,12 +683,27 @@ describe('the console', () => {
       const html = await (await browser.request(`/workspaces/${WORKSPACE}`)).text()
       expect(html).toContain('No collection in this workspace is open to you.')
       expect(html).toContain('the capabilities of the records are the deployment')
+      // The collections of the deployment, and the capability that opens
+      // each of them: the operator grants it by its name.
+      expect(html).toContain('Articles')
+      expect(html).toContain('read: content.reader')
       const page = await (await browser.request(`/workspaces/${WORKSPACE}/access`)).text()
       expect(page).toContain('No collection of this workspace is open to you.')
       expect(page).toContain('the capabilities of the records are the deployment')
+      expect(page).toContain('read: content.reader')
     } finally {
       openCollections = 'all'
     }
+  })
+
+  test('the rights of a tenant name the capabilities of the deployment and what they open', async () => {
+    const browser = new Browser()
+    await browser.signIn()
+    const html = await (await browser.request('/operators/tenants/acme/rights')).text()
+    expect(html).toContain('content.reader')
+    expect(html).toContain('opens the reading of Articles')
+    expect(html).toContain('content.editor')
+    expect(html).toContain('opens the writing of Articles')
   })
 
   test('a creation carries the key of its form, and a refusal is shown as it is', async () => {

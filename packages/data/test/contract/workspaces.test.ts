@@ -139,6 +139,51 @@ describe('the creation of a workspace', () => {
   })
 })
 
+describe('the collections of the deployment', () => {
+  test('the capabilities that open them are answered to the operator of the tenant', async () => {
+    harness.access.grants.set(PRINCIPAL_ID, [
+      { tenantId: TENANT_ID, workspaceId: 'acme', permissionKeys: ['data.workspace.create'] },
+    ])
+    const response = await harness.request('/v1/workspaces/collections', {
+      method: 'GET',
+      workspaceId: '',
+      query: `?tenant=acme&tenantId=${TENANT_ID}`,
+    })
+    expect(response.status).toBe(200)
+    const body = await json(response)
+    const articles = body.data.collections.find((entry: any) => entry.key === 'articles')
+    expect(articles).toBeDefined()
+    // The policies of the deployment name the capabilities of its
+    // records: the reader opens the reading, the editor the writing.
+    expect(articles.permissions.read).toContain('content.reader')
+    expect(articles.permissions.create).toContain('content.editor')
+    expect(articles.permissions.delete).toContain('content.editor')
+    expect(body.data.policyBundleVersion).toBeString()
+  })
+
+  test('a caller that holds no capability of its tenant is refused', async () => {
+    harness.access.grants.set(PRINCIPAL_ID, [])
+    const response = await harness.request('/v1/workspaces/collections', {
+      method: 'GET',
+      workspaceId: '',
+      query: `?tenant=acme&tenantId=${TENANT_ID}`,
+    })
+    expect(response.status).toBe(403)
+  })
+
+  test('a query that does not name the tenant is a bad request', async () => {
+    harness.access.grants.set(PRINCIPAL_ID, [
+      { tenantId: TENANT_ID, permissionKeys: ['data.workspace.create'] },
+    ])
+    const response = await harness.request('/v1/workspaces/collections', {
+      method: 'GET',
+      workspaceId: '',
+      query: '?tenant=acme',
+    })
+    expect(response.status).toBe(400)
+  })
+})
+
 describe('the creation of a workspace on a route that is restricted to a tenant', () => {
   let restricted: Harness
 

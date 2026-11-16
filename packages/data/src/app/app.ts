@@ -19,6 +19,7 @@ import type { AppDependencies, AppEnv } from './types'
 /** The methods of every route of the service. */
 const ROUTES: readonly { pattern: RegExp; methods: readonly string[] }[] = [
   { pattern: /^\/v1\/workspaces$/, methods: ['POST'] },
+  { pattern: /^\/v1\/workspaces\/collections$/, methods: ['GET'] },
   { pattern: /^\/ws\/[^/]+\/v1\/me$/, methods: ['GET'] },
   { pattern: /^\/ws\/[^/]+\/v1\/schema$/, methods: ['GET'] },
   { pattern: /^\/ws\/[^/]+\/v1\/schema\/[^/]+$/, methods: ['GET'] },

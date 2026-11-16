@@ -16,6 +16,7 @@
  * without a word: the console says so before the operator grants it.
  */
 
+import type { DeploymentCollection } from '../data'
 import { CONSOLE_KEYS, DATA_KEYS, PLATFORM_KEYS } from './scope'
 
 /** Where a permission is read: on the tenant itself, or on a workspace of it. */
@@ -123,6 +124,81 @@ export function knownPermission(key: string): KnownPermission | null {
 export function familyOf(key: string): string {
   const dot = key.indexOf('.')
   return dot > 0 ? key.slice(0, dot) : key
+}
+
+/** The actions of the records, as the deployment's policies name them. */
+const ACTIONS = ['read', 'create', 'update', 'delete'] as const
+
+/** A capability of the deployment, and the collections it opens. */
+export interface DeploymentCapability {
+  /** The key of the capability. */
+  readonly key: string
+  /** The collections it opens, by action. */
+  readonly opens: readonly {
+    readonly action: (typeof ACTIONS)[number]
+    readonly collections: readonly string[]
+  }[]
+}
+
+/**
+ * The capabilities of the deployment, and the collections they open.
+ *
+ * The capabilities of the records are the deployment's own: the policies
+ * of the deployment name them, and Data publishes the collections each of
+ * them opens. The operator of a tenant reads them to know what to grant,
+ * and the console names them where it grants a right.
+ *
+ * @param collections the collections of the deployment and their capabilities.
+ */
+export function capabilitiesOf(
+  collections: readonly DeploymentCollection[]
+): DeploymentCapability[] {
+  const opened = new Map<string, Map<(typeof ACTIONS)[number], Set<string>>>()
+  for (const collection of collections) {
+    for (const action of ACTIONS) {
+      for (const key of collection.permissions[action]) {
+        const actions = opened.get(key) ?? new Map<(typeof ACTIONS)[number], Set<string>>()
+        const labels = actions.get(action) ?? new Set<string>()
+        labels.add(collection.label)
+        actions.set(action, labels)
+        opened.set(key, actions)
+      }
+    }
+  }
+  return [...opened.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, actions]) => ({
+      key,
+      opens: ACTIONS.filter((action) => actions.has(action)).map((action) => ({
+        action,
+        collections: [...(actions.get(action) ?? [])].sort(),
+      })),
+    }))
+}
+
+/**
+ * What a capability of the deployment opens, as a sentence.
+ *
+ * The reading and the writing are named apart: a capability that opens
+ * the reading of a collection is not a capability that opens its
+ * writing.
+ *
+ * @param capability the capability of the deployment.
+ */
+export function opensOf(capability: DeploymentCapability): string {
+  const parts: string[] = []
+  const reading = capability.opens.find((entry) => entry.action === 'read')
+  if (reading) parts.push(`the reading of ${namesOf(reading.collections)}`)
+  const writing = [
+    ...new Set(
+      capability.opens
+        .filter((entry) => entry.action !== 'read')
+        .flatMap((entry) => entry.collections)
+    ),
+  ].sort()
+  if (writing.length > 0) parts.push(`the writing of ${namesOf(writing)}`)
+  if (parts.length === 0) return 'nothing of the records'
+  return `opens ${parts.join(' and ')}`
 }
 
 /** Where a right holds: on the tenant itself, on every workspace of it, or on one. */

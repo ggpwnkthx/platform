@@ -10,6 +10,16 @@ in the same commit as the code.
 
 ## Unreleased
 
+### The deployment publishes the capabilities of its records
+
+The capabilities of the records are the deployment's own: the policies of the deployment name them, and the operator of the tenant grants them. Nothing published them: the console knew the seven keys it reads itself, and every other key was "granted as it is". The operator of a tenant who wanted to open a collection had to read the bundle of the deployment to learn its name, and the console could not say which collection a key opened.
+
+**Data publishes the collections and their capabilities.** `GET /v1/workspaces/collections` answers the collections the deployment serves and the key that opens each of them, by action. The call is a call of the tenant, like the creation of a workspace: the route names no workspace, and the caller holds a capability of its tenant.
+
+**The console names them where they are granted and where they are missing.** The form of a grant offers the capabilities of the deployment and says what each of them opens ("opens the reading of Articles"), and the tabs of a workspace whose collections are closed to the caller list the collections of the deployment and the capability that opens each of them.
+
+**Contract:** [data spec §9.12](docs/data/spec.md#912-the-collections-of-the-deployment), [data api](docs/data/api.md#the-collections-of-the-deployment), [console spec §6.2](docs/console/spec.md#62-places).
+
 ## 1.6.2
 
 ### The creator of a workspace administers its records

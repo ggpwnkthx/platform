@@ -589,3 +589,35 @@ export interface CreatedWorkspace {
   /** The state of the workspace. */
   readonly status: string
 }
+
+/** The capabilities that open a collection, by action. */
+export interface CollectionCapabilities {
+  /** The keys that open the reading of the records. */
+  readonly read: readonly string[]
+  /** The keys that open the creation of a record. */
+  readonly create: readonly string[]
+  /** The keys that open the change of a record. */
+  readonly update: readonly string[]
+  /** The keys that open the deletion of a record. */
+  readonly delete: readonly string[]
+}
+
+/** A collection of the deployment and the capabilities that open it. */
+export interface DeploymentCollection {
+  /** The key of the collection. */
+  readonly key: string
+  /** The label of the collection, for the humans. */
+  readonly label: string
+  /** The table of the collection. */
+  readonly table: string
+  /** The capabilities that open it. */
+  readonly permissions: CollectionCapabilities
+}
+
+/** The collections of the deployment and the capabilities that open them. */
+export interface DeploymentCollections {
+  /** The collections of the deployment. */
+  readonly collections: readonly DeploymentCollection[]
+  /** The version of the bundle of the policies. */
+  readonly policyBundleVersion: string
+}

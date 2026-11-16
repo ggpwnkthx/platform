@@ -47,6 +47,7 @@ import {
   rightsViewOf,
   workspaceLabel,
 } from '../../../../../components/rights'
+import { deploymentCapabilities } from '../../../../../middleware/capabilities'
 import { formOf } from '../../../../../middleware/forms'
 import { flash, keepDraft, sessionOf, takeDraft } from '../../../../../middleware/session'
 
@@ -246,6 +247,10 @@ export default createRoute(async (c) => {
     { id: 'all', label: 'All' },
   ]
   const draft = takeDraft(c, GRANT_FORM)
+  // The capabilities of the deployment: the keys its policies name, and
+  // the collections each of them opens. The operator grants them by
+  // their name, and the picker says what each of them opens.
+  const capabilities = await deploymentCapabilities(c, slug)
   return c.render(
     <>
       <TenantHead
@@ -268,6 +273,7 @@ export default createRoute(async (c) => {
         <GrantForm
           view={view}
           back={base}
+          capabilities={capabilities.capabilities}
           grants={every.rows}
           users={users.rows}
           groups={groups.rows}
