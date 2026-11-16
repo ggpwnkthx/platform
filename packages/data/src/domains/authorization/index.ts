@@ -49,7 +49,6 @@ export {
 export {
   type AuthorizationInput,
   applicablePolicies,
-  type CollectionCapabilities,
   capabilitiesByCollection,
   filterSortIntersection,
   readableUnion,
