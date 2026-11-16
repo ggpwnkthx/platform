@@ -1,3 +1,0 @@
-[test]
-# The deadline of the tests and of their hooks: see test/setup.ts.
-preload = ["./test/setup.ts"]
