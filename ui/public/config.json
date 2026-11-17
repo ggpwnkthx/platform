@@ -1,0 +1,8 @@
+{
+  "issuer": "http://localhost:5556/dex",
+  "clientId": "platform-console",
+  "claim": "email",
+  "relay": "/pg",
+  "database": "platform",
+  "statementTimeoutMs": 15000
+}
