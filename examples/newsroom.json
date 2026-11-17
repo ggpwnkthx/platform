@@ -1,0 +1,75 @@
+{
+  "format": 1,
+  "groups": [{ "name": "newsroom_reader" }, { "name": "newsroom_writer" }],
+  "users": [
+    { "name": "admin@example.com", "admin": true },
+    {
+      "name": "alice@example.com",
+      "groups": ["newsroom_reader", "newsroom_writer"]
+    },
+    {
+      "name": "bob@example.com",
+      "groups": ["newsroom_reader", "newsroom_writer"]
+    }
+  ],
+  "workspaces": [
+    {
+      "slug": "newsroom",
+      "owner": "admin@example.com",
+      "collections": [
+        {
+          "name": "articles",
+          "fields": [
+            {
+              "name": "title",
+              "type": "string",
+              "required": true,
+              "options": { "max_length": 120 }
+            },
+            {
+              "name": "status",
+              "type": "string",
+              "required": true,
+              "default": "draft",
+              "options": { "choices": ["draft", "published"] }
+            },
+            { "name": "internal_notes", "type": "text" }
+          ]
+        }
+      ],
+      "grants": [
+        { "to": ["newsroom_reader", "newsroom_writer"], "privileges": ["usage"] },
+        {
+          "to": "newsroom_reader",
+          "collection": "articles",
+          "privileges": ["select"],
+          "columns": [
+            "id",
+            "title",
+            "status",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+            "version"
+          ]
+        },
+        {
+          "to": "newsroom_writer",
+          "collection": "articles",
+          "privileges": ["insert", "update", "delete"],
+          "columns": ["title", "status"]
+        }
+      ],
+      "policies": [
+        {
+          "collection": "articles",
+          "name": "own_articles",
+          "to": ["newsroom_writer"],
+          "using": "created_by=session_user",
+          "check": "created_by=session_user"
+        }
+      ]
+    }
+  ]
+}

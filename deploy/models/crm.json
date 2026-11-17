@@ -1,0 +1,2396 @@
+{
+  "format": 1,
+  "workspace": {
+    "slug": "crm",
+    "name": "CRM"
+  },
+  "collections": [
+    {
+      "name": "accounts",
+      "label": "Accounts",
+      "note": "Companies and organisations: prospects, customers, partners and vendors.",
+      "display_field": "name",
+      "fields": [
+        {
+          "name": "name",
+          "type": "string",
+          "label": "Name",
+          "required": true,
+          "indexed": true
+        },
+        {
+          "name": "legal_name",
+          "type": "string",
+          "label": "Legal name"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "label": "Type",
+          "indexed": true,
+          "default": "prospect",
+          "required": true,
+          "options": {
+            "choices": [
+              "prospect",
+              "customer",
+              "partner",
+              "reseller",
+              "vendor",
+              "competitor",
+              "former_customer",
+              "other"
+            ]
+          }
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "label": "Status",
+          "default": "active",
+          "required": true,
+          "options": {
+            "choices": ["active", "inactive"]
+          }
+        },
+        {
+          "name": "rating",
+          "type": "string",
+          "label": "Rating",
+          "options": {
+            "choices": ["hot", "warm", "cold"]
+          }
+        },
+        {
+          "name": "industry",
+          "type": "string",
+          "label": "Industry"
+        },
+        {
+          "name": "website",
+          "type": "string",
+          "label": "Website",
+          "options": {
+            "max_length": 500
+          }
+        },
+        {
+          "name": "phone",
+          "type": "string",
+          "label": "Phone",
+          "options": {
+            "max_length": 40
+          }
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "label": "General email",
+          "options": {
+            "max_length": 320
+          }
+        },
+        {
+          "name": "employees",
+          "type": "integer",
+          "label": "Employees",
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "annual_revenue",
+          "type": "decimal",
+          "label": "Annual revenue",
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "label": "Currency",
+          "note": "ISO 4217 code of the amounts on this record.",
+          "required": true,
+          "default": "USD",
+          "options": {
+            "max_length": 3
+          }
+        },
+        {
+          "name": "tax_id",
+          "type": "string",
+          "label": "Tax ID",
+          "options": {
+            "max_length": 60
+          }
+        },
+        {
+          "name": "parent",
+          "type": "m2o",
+          "label": "Parent account",
+          "relation": {
+            "collection": "accounts",
+            "on_delete": "set_null",
+            "one_field": "child_accounts"
+          }
+        },
+        {
+          "name": "billing_street",
+          "type": "string",
+          "label": "Billing street",
+          "options": {
+            "max_length": 500
+          }
+        },
+        {
+          "name": "billing_city",
+          "type": "string",
+          "label": "Billing city"
+        },
+        {
+          "name": "billing_region",
+          "type": "string",
+          "label": "Billing region",
+          "note": "State, province or region."
+        },
+        {
+          "name": "billing_postal_code",
+          "type": "string",
+          "label": "Billing postal code",
+          "options": {
+            "max_length": 20
+          }
+        },
+        {
+          "name": "billing_country",
+          "type": "string",
+          "label": "Billing country",
+          "note": "ISO 3166-1 alpha-2 code.",
+          "options": {
+            "max_length": 2
+          }
+        },
+        {
+          "name": "shipping_street",
+          "type": "string",
+          "label": "Shipping street",
+          "options": {
+            "max_length": 500
+          }
+        },
+        {
+          "name": "shipping_city",
+          "type": "string",
+          "label": "Shipping city"
+        },
+        {
+          "name": "shipping_region",
+          "type": "string",
+          "label": "Shipping region",
+          "note": "State, province or region."
+        },
+        {
+          "name": "shipping_postal_code",
+          "type": "string",
+          "label": "Shipping postal code",
+          "options": {
+            "max_length": 20
+          }
+        },
+        {
+          "name": "shipping_country",
+          "type": "string",
+          "label": "Shipping country",
+          "note": "ISO 3166-1 alpha-2 code.",
+          "options": {
+            "max_length": 2
+          }
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "label": "Source",
+          "options": {
+            "choices": [
+              "website",
+              "referral",
+              "partner",
+              "cold_outreach",
+              "inbound_call",
+              "email_campaign",
+              "advertising",
+              "social",
+              "event",
+              "webinar",
+              "content",
+              "purchased_list",
+              "other"
+            ]
+          }
+        },
+        {
+          "name": "customer_since",
+          "type": "date",
+          "label": "Customer since"
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "label": "Description"
+        },
+        {
+          "name": "tags",
+          "type": "json",
+          "label": "Tags",
+          "note": "Free-form labels, as a list of strings."
+        },
+        {
+          "name": "owner",
+          "type": "string",
+          "label": "Owner",
+          "note": "The PostgreSQL role responsible for this record. Use session_user in native row policies.",
+          "indexed": true
+        }
+      ]
+    },
+    {
+      "name": "contacts",
+      "label": "Contacts",
+      "note": "People, usually at an account.",
+      "display_field": "name",
+      "fields": [
+        {
+          "name": "name",
+          "type": "string",
+          "label": "Full name",
+          "required": true,
+          "indexed": true
+        },
+        {
+          "name": "first_name",
+          "type": "string",
+          "label": "First name"
+        },
+        {
+          "name": "last_name",
+          "type": "string",
+          "label": "Last name",
+          "indexed": true
+        },
+        {
+          "name": "salutation",
+          "type": "string",
+          "label": "Salutation",
+          "options": {
+            "max_length": 40
+          }
+        },
+        {
+          "name": "job_title",
+          "type": "string",
+          "label": "Job title"
+        },
+        {
+          "name": "department",
+          "type": "string",
+          "label": "Department"
+        },
+        {
+          "name": "account",
+          "type": "m2o",
+          "label": "Account",
+          "relation": {
+            "collection": "accounts",
+            "on_delete": "set_null",
+            "one_field": "contacts"
+          }
+        },
+        {
+          "name": "reports_to",
+          "type": "m2o",
+          "label": "Reports to",
+          "relation": {
+            "collection": "contacts",
+            "on_delete": "set_null",
+            "one_field": "direct_reports"
+          }
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "label": "Email",
+          "indexed": true,
+          "options": {
+            "max_length": 320
+          }
+        },
+        {
+          "name": "phone",
+          "type": "string",
+          "label": "Phone",
+          "options": {
+            "max_length": 40
+          }
+        },
+        {
+          "name": "mobile",
+          "type": "string",
+          "label": "Mobile",
+          "options": {
+            "max_length": 40
+          }
+        },
+        {
+          "name": "linkedin_url",
+          "type": "string",
+          "label": "LinkedIn URL",
+          "options": {
+            "max_length": 500
+          }
+        },
+        {
+          "name": "lifecycle_stage",
+          "type": "string",
+          "label": "Lifecycle stage",
+          "indexed": true,
+          "default": "lead",
+          "required": true,
+          "options": {
+            "choices": [
+              "subscriber",
+              "lead",
+              "marketing_qualified",
+              "sales_qualified",
+              "opportunity",
+              "customer",
+              "evangelist",
+              "other"
+            ]
+          }
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "label": "Status",
+          "default": "active",
+          "required": true,
+          "options": {
+            "choices": ["active", "inactive", "bounced", "left_company"]
+          }
+        },
+        {
+          "name": "email_opt_out",
+          "type": "boolean",
+          "label": "Email opt out",
+          "note": "The contact asked not to receive marketing email.",
+          "required": true,
+          "default": false
+        },
+        {
+          "name": "do_not_call",
+          "type": "boolean",
+          "label": "Do not call",
+          "required": true,
+          "default": false
+        },
+        {
+          "name": "preferred_channel",
+          "type": "string",
+          "label": "Preferred channel",
+          "options": {
+            "choices": ["email", "phone", "sms", "post"]
+          }
+        },
+        {
+          "name": "language",
+          "type": "string",
+          "label": "Language",
+          "note": "BCP 47 tag, for example en-GB.",
+          "options": {
+            "max_length": 35
+          }
+        },
+        {
+          "name": "timezone",
+          "type": "string",
+          "label": "Timezone",
+          "note": "IANA name, for example Europe/Amsterdam.",
+          "options": {
+            "max_length": 64
+          }
+        },
+        {
+          "name": "birthday",
+          "type": "date",
+          "label": "Birthday"
+        },
+        {
+          "name": "mailing_street",
+          "type": "string",
+          "label": "Mailing street",
+          "options": {
+            "max_length": 500
+          }
+        },
+        {
+          "name": "mailing_city",
+          "type": "string",
+          "label": "Mailing city"
+        },
+        {
+          "name": "mailing_region",
+          "type": "string",
+          "label": "Mailing region",
+          "note": "State, province or region."
+        },
+        {
+          "name": "mailing_postal_code",
+          "type": "string",
+          "label": "Mailing postal code",
+          "options": {
+            "max_length": 20
+          }
+        },
+        {
+          "name": "mailing_country",
+          "type": "string",
+          "label": "Mailing country",
+          "note": "ISO 3166-1 alpha-2 code.",
+          "options": {
+            "max_length": 2
+          }
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "label": "Source",
+          "options": {
+            "choices": [
+              "website",
+              "referral",
+              "partner",
+              "cold_outreach",
+              "inbound_call",
+              "email_campaign",
+              "advertising",
+              "social",
+              "event",
+              "webinar",
+              "content",
+              "purchased_list",
+              "other"
+            ]
+          }
+        },
+        {
+          "name": "last_contacted_at",
+          "type": "timestamp",
+          "label": "Last contacted at"
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "label": "Description"
+        },
+        {
+          "name": "tags",
+          "type": "json",
+          "label": "Tags",
+          "note": "Free-form labels, as a list of strings."
+        },
+        {
+          "name": "owner",
+          "type": "string",
+          "label": "Owner",
+          "note": "The PostgreSQL role responsible for this record. Use session_user in native row policies.",
+          "indexed": true
+        }
+      ]
+    },
+    {
+      "name": "leads",
+      "label": "Leads",
+      "note": "Unqualified people and companies. A qualified lead becomes an account, a contact and a deal.",
+      "display_field": "name",
+      "fields": [
+        {
+          "name": "name",
+          "type": "string",
+          "label": "Full name",
+          "required": true,
+          "indexed": true
+        },
+        {
+          "name": "first_name",
+          "type": "string",
+          "label": "First name"
+        },
+        {
+          "name": "last_name",
+          "type": "string",
+          "label": "Last name"
+        },
+        {
+          "name": "company",
+          "type": "string",
+          "label": "Company",
+          "indexed": true
+        },
+        {
+          "name": "job_title",
+          "type": "string",
+          "label": "Job title"
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "label": "Email",
+          "indexed": true,
+          "options": {
+            "max_length": 320
+          }
+        },
+        {
+          "name": "phone",
+          "type": "string",
+          "label": "Phone",
+          "options": {
+            "max_length": 40
+          }
+        },
+        {
+          "name": "mobile",
+          "type": "string",
+          "label": "Mobile",
+          "options": {
+            "max_length": 40
+          }
+        },
+        {
+          "name": "website",
+          "type": "string",
+          "label": "Website",
+          "options": {
+            "max_length": 500
+          }
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "label": "Status",
+          "indexed": true,
+          "default": "new",
+          "required": true,
+          "options": {
+            "choices": ["new", "working", "nurturing", "qualified", "unqualified", "converted"]
+          }
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "label": "Source",
+          "indexed": true,
+          "options": {
+            "choices": [
+              "website",
+              "referral",
+              "partner",
+              "cold_outreach",
+              "inbound_call",
+              "email_campaign",
+              "advertising",
+              "social",
+              "event",
+              "webinar",
+              "content",
+              "purchased_list",
+              "other"
+            ]
+          }
+        },
+        {
+          "name": "rating",
+          "type": "string",
+          "label": "Rating",
+          "options": {
+            "choices": ["hot", "warm", "cold"]
+          }
+        },
+        {
+          "name": "score",
+          "type": "integer",
+          "label": "Score",
+          "options": {
+            "min": 0,
+            "max": 100
+          }
+        },
+        {
+          "name": "industry",
+          "type": "string",
+          "label": "Industry"
+        },
+        {
+          "name": "employees",
+          "type": "integer",
+          "label": "Employees",
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "estimated_value",
+          "type": "decimal",
+          "label": "Estimated value",
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "label": "Currency",
+          "note": "ISO 4217 code of the amounts on this record.",
+          "required": true,
+          "default": "USD",
+          "options": {
+            "max_length": 3
+          }
+        },
+        {
+          "name": "street",
+          "type": "string",
+          "label": "Street",
+          "options": {
+            "max_length": 500
+          }
+        },
+        {
+          "name": "city",
+          "type": "string",
+          "label": "City"
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "label": "Region",
+          "note": "State, province or region."
+        },
+        {
+          "name": "postal_code",
+          "type": "string",
+          "label": "Postal code",
+          "options": {
+            "max_length": 20
+          }
+        },
+        {
+          "name": "country",
+          "type": "string",
+          "label": "Country",
+          "note": "ISO 3166-1 alpha-2 code.",
+          "options": {
+            "max_length": 2
+          }
+        },
+        {
+          "name": "email_opt_out",
+          "type": "boolean",
+          "label": "Email opt out",
+          "required": true,
+          "default": false
+        },
+        {
+          "name": "do_not_call",
+          "type": "boolean",
+          "label": "Do not call",
+          "required": true,
+          "default": false
+        },
+        {
+          "name": "campaign",
+          "type": "m2o",
+          "label": "Campaign",
+          "note": "The campaign that produced this lead.",
+          "relation": {
+            "collection": "campaigns",
+            "on_delete": "set_null",
+            "one_field": "leads"
+          }
+        },
+        {
+          "name": "unqualified_reason",
+          "type": "string",
+          "label": "Unqualified reason",
+          "options": {
+            "choices": [
+              "no_budget",
+              "no_authority",
+              "no_need",
+              "bad_timing",
+              "unreachable",
+              "duplicate",
+              "competitor",
+              "other"
+            ]
+          }
+        },
+        {
+          "name": "converted_at",
+          "type": "timestamp",
+          "label": "Converted at"
+        },
+        {
+          "name": "converted_account",
+          "type": "m2o",
+          "label": "Converted account",
+          "relation": {
+            "collection": "accounts",
+            "on_delete": "set_null",
+            "one_field": "converted_leads"
+          }
+        },
+        {
+          "name": "converted_contact",
+          "type": "m2o",
+          "label": "Converted contact",
+          "relation": {
+            "collection": "contacts",
+            "on_delete": "set_null",
+            "one_field": "converted_leads"
+          }
+        },
+        {
+          "name": "converted_deal",
+          "type": "m2o",
+          "label": "Converted deal",
+          "relation": {
+            "collection": "deals",
+            "on_delete": "set_null",
+            "one_field": "converted_leads"
+          }
+        },
+        {
+          "name": "last_contacted_at",
+          "type": "timestamp",
+          "label": "Last contacted at"
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "label": "Description"
+        },
+        {
+          "name": "tags",
+          "type": "json",
+          "label": "Tags",
+          "note": "Free-form labels, as a list of strings."
+        },
+        {
+          "name": "owner",
+          "type": "string",
+          "label": "Owner",
+          "note": "The PostgreSQL role responsible for this record. Use session_user in native row policies.",
+          "indexed": true
+        }
+      ]
+    },
+    {
+      "name": "pipelines",
+      "label": "Pipelines",
+      "note": "Sales processes. Each has its own ordered stages.",
+      "display_field": "name",
+      "fields": [
+        {
+          "name": "name",
+          "type": "string",
+          "label": "Name",
+          "required": true,
+          "unique": true
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "label": "Description"
+        },
+        {
+          "name": "is_default",
+          "type": "boolean",
+          "label": "Default pipeline",
+          "required": true,
+          "default": false
+        },
+        {
+          "name": "active",
+          "type": "boolean",
+          "label": "Active",
+          "required": true,
+          "default": true
+        },
+        {
+          "name": "position",
+          "type": "integer",
+          "label": "Position",
+          "required": true,
+          "default": 0,
+          "options": {
+            "min": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "pipeline_stages",
+      "label": "Pipeline stages",
+      "note": "The steps of a pipeline, in order.",
+      "display_field": "name",
+      "fields": [
+        {
+          "name": "name",
+          "type": "string",
+          "label": "Name",
+          "required": true
+        },
+        {
+          "name": "pipeline",
+          "type": "m2o",
+          "label": "Pipeline",
+          "relation": {
+            "collection": "pipelines",
+            "on_delete": "cascade",
+            "one_field": "stages"
+          },
+          "required": true
+        },
+        {
+          "name": "position",
+          "type": "integer",
+          "label": "Position",
+          "required": true,
+          "default": 0,
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "probability",
+          "type": "integer",
+          "label": "Win probability (%)",
+          "required": true,
+          "default": 0,
+          "options": {
+            "min": 0,
+            "max": 100
+          }
+        },
+        {
+          "name": "category",
+          "type": "string",
+          "label": "Category",
+          "default": "open",
+          "required": true,
+          "options": {
+            "choices": ["open", "won", "lost"]
+          }
+        },
+        {
+          "name": "active",
+          "type": "boolean",
+          "label": "Active",
+          "required": true,
+          "default": true
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "label": "Description"
+        }
+      ]
+    },
+    {
+      "name": "deals",
+      "label": "Deals",
+      "note": "Sales opportunities, each at one stage of one pipeline.",
+      "display_field": "name",
+      "fields": [
+        {
+          "name": "name",
+          "type": "string",
+          "label": "Name",
+          "required": true,
+          "indexed": true
+        },
+        {
+          "name": "account",
+          "type": "m2o",
+          "label": "Account",
+          "relation": {
+            "collection": "accounts",
+            "on_delete": "restrict",
+            "one_field": "deals"
+          }
+        },
+        {
+          "name": "primary_contact",
+          "type": "m2o",
+          "label": "Primary contact",
+          "relation": {
+            "collection": "contacts",
+            "on_delete": "set_null",
+            "one_field": "primary_deals"
+          }
+        },
+        {
+          "name": "pipeline",
+          "type": "m2o",
+          "label": "Pipeline",
+          "relation": {
+            "collection": "pipelines",
+            "on_delete": "restrict",
+            "one_field": "deals"
+          }
+        },
+        {
+          "name": "stage",
+          "type": "m2o",
+          "label": "Stage",
+          "relation": {
+            "collection": "pipeline_stages",
+            "on_delete": "restrict",
+            "one_field": "deals"
+          }
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "label": "Status",
+          "indexed": true,
+          "default": "open",
+          "required": true,
+          "options": {
+            "choices": ["open", "won", "lost"]
+          }
+        },
+        {
+          "name": "amount",
+          "type": "decimal",
+          "label": "Amount",
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "label": "Currency",
+          "note": "ISO 4217 code of the amounts on this record.",
+          "required": true,
+          "default": "USD",
+          "options": {
+            "max_length": 3
+          }
+        },
+        {
+          "name": "probability",
+          "type": "integer",
+          "label": "Win probability (%)",
+          "options": {
+            "min": 0,
+            "max": 100
+          }
+        },
+        {
+          "name": "forecast_category",
+          "type": "string",
+          "label": "Forecast category",
+          "default": "pipeline",
+          "required": true,
+          "options": {
+            "choices": ["pipeline", "best_case", "commit", "closed", "omitted"]
+          }
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "label": "Type",
+          "options": {
+            "choices": ["new_business", "expansion", "renewal", "upsell", "cross_sell"]
+          }
+        },
+        {
+          "name": "expected_close_date",
+          "type": "date",
+          "label": "Expected close date",
+          "indexed": true
+        },
+        {
+          "name": "closed_at",
+          "type": "timestamp",
+          "label": "Closed at"
+        },
+        {
+          "name": "next_step",
+          "type": "string",
+          "label": "Next step"
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "label": "Source",
+          "options": {
+            "choices": [
+              "website",
+              "referral",
+              "partner",
+              "cold_outreach",
+              "inbound_call",
+              "email_campaign",
+              "advertising",
+              "social",
+              "event",
+              "webinar",
+              "content",
+              "purchased_list",
+              "other"
+            ]
+          }
+        },
+        {
+          "name": "campaign",
+          "type": "m2o",
+          "label": "Campaign",
+          "note": "The campaign this deal is attributed to.",
+          "relation": {
+            "collection": "campaigns",
+            "on_delete": "set_null",
+            "one_field": "deals"
+          }
+        },
+        {
+          "name": "competitors",
+          "type": "string",
+          "label": "Competitors",
+          "note": "Who else the customer is considering.",
+          "options": {
+            "max_length": 500
+          }
+        },
+        {
+          "name": "loss_reason",
+          "type": "string",
+          "label": "Loss reason",
+          "options": {
+            "choices": [
+              "price",
+              "features",
+              "competitor",
+              "timing",
+              "no_budget",
+              "no_decision",
+              "lost_contact",
+              "other"
+            ]
+          }
+        },
+        {
+          "name": "loss_notes",
+          "type": "text",
+          "label": "Loss notes"
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "label": "Description"
+        },
+        {
+          "name": "tags",
+          "type": "json",
+          "label": "Tags",
+          "note": "Free-form labels, as a list of strings."
+        },
+        {
+          "name": "owner",
+          "type": "string",
+          "label": "Owner",
+          "note": "The PostgreSQL role responsible for this record. Use session_user in native row policies.",
+          "indexed": true
+        }
+      ]
+    },
+    {
+      "name": "deal_contacts",
+      "label": "Deal contacts",
+      "note": "Who is involved in a deal, and in which role.",
+      "display_field": null,
+      "fields": [
+        {
+          "name": "deal",
+          "type": "m2o",
+          "label": "Deal",
+          "relation": {
+            "collection": "deals",
+            "on_delete": "cascade",
+            "one_field": "contact_roles"
+          },
+          "required": true
+        },
+        {
+          "name": "contact",
+          "type": "m2o",
+          "label": "Contact",
+          "relation": {
+            "collection": "contacts",
+            "on_delete": "cascade",
+            "one_field": "deal_roles"
+          },
+          "required": true
+        },
+        {
+          "name": "role",
+          "type": "string",
+          "label": "Role",
+          "default": "other",
+          "required": true,
+          "options": {
+            "choices": [
+              "decision_maker",
+              "economic_buyer",
+              "champion",
+              "influencer",
+              "technical_buyer",
+              "legal",
+              "procurement",
+              "end_user",
+              "blocker",
+              "other"
+            ]
+          }
+        },
+        {
+          "name": "is_primary",
+          "type": "boolean",
+          "label": "Primary contact",
+          "required": true,
+          "default": false
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "label": "Notes"
+        }
+      ],
+      "revisions": false
+    },
+    {
+      "name": "products",
+      "label": "Products",
+      "note": "The catalogue: what can be put on a deal or a quote.",
+      "display_field": "name",
+      "fields": [
+        {
+          "name": "name",
+          "type": "string",
+          "label": "Name",
+          "required": true,
+          "indexed": true
+        },
+        {
+          "name": "sku",
+          "type": "string",
+          "label": "SKU",
+          "unique": true,
+          "options": {
+            "max_length": 80
+          }
+        },
+        {
+          "name": "family",
+          "type": "string",
+          "label": "Family",
+          "note": "Product line or category.",
+          "indexed": true
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "label": "Description"
+        },
+        {
+          "name": "unit_price",
+          "type": "decimal",
+          "label": "Unit price",
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "cost",
+          "type": "decimal",
+          "label": "Cost",
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "label": "Currency",
+          "note": "ISO 4217 code of the amounts on this record.",
+          "required": true,
+          "default": "USD",
+          "options": {
+            "max_length": 3
+          }
+        },
+        {
+          "name": "unit",
+          "type": "string",
+          "label": "Unit",
+          "default": "each",
+          "required": true,
+          "options": {
+            "choices": ["each", "hour", "day", "user", "license", "month", "year", "other"]
+          }
+        },
+        {
+          "name": "billing_period",
+          "type": "string",
+          "label": "Billing period",
+          "default": "one_time",
+          "required": true,
+          "options": {
+            "choices": ["one_time", "monthly", "quarterly", "yearly"]
+          }
+        },
+        {
+          "name": "tax_rate",
+          "type": "decimal",
+          "label": "Tax rate (%)",
+          "options": {
+            "min": 0,
+            "max": 100
+          }
+        },
+        {
+          "name": "active",
+          "type": "boolean",
+          "label": "Active",
+          "required": true,
+          "default": true
+        }
+      ]
+    },
+    {
+      "name": "deal_line_items",
+      "label": "Deal line items",
+      "note": "The products and services on a deal.",
+      "display_field": "description",
+      "fields": [
+        {
+          "name": "deal",
+          "type": "m2o",
+          "label": "Deal",
+          "relation": {
+            "collection": "deals",
+            "on_delete": "cascade",
+            "one_field": "line_items"
+          },
+          "required": true
+        },
+        {
+          "name": "product",
+          "type": "m2o",
+          "label": "Product",
+          "relation": {
+            "collection": "products",
+            "on_delete": "restrict",
+            "one_field": "deal_line_items"
+          }
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "label": "Description",
+          "options": {
+            "max_length": 500
+          }
+        },
+        {
+          "name": "quantity",
+          "type": "decimal",
+          "label": "Quantity",
+          "required": true,
+          "default": 1,
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "unit_price",
+          "type": "decimal",
+          "label": "Unit price",
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "discount_percent",
+          "type": "decimal",
+          "label": "Discount (%)",
+          "required": true,
+          "default": 0,
+          "options": {
+            "min": 0,
+            "max": 100
+          }
+        },
+        {
+          "name": "total",
+          "type": "decimal",
+          "label": "Total",
+          "note": "Quantity times unit price, less the discount. The client computes it.",
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "billing_period",
+          "type": "string",
+          "label": "Billing period",
+          "options": {
+            "choices": ["one_time", "monthly", "quarterly", "yearly"]
+          }
+        },
+        {
+          "name": "position",
+          "type": "integer",
+          "label": "Position",
+          "required": true,
+          "default": 0,
+          "options": {
+            "min": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "quotes",
+      "label": "Quotes",
+      "note": "Priced offers sent to a customer.",
+      "display_field": "number",
+      "fields": [
+        {
+          "name": "number",
+          "type": "string",
+          "label": "Quote number",
+          "required": true,
+          "unique": true,
+          "options": {
+            "max_length": 40
+          }
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "label": "Name"
+        },
+        {
+          "name": "deal",
+          "type": "m2o",
+          "label": "Deal",
+          "relation": {
+            "collection": "deals",
+            "on_delete": "set_null",
+            "one_field": "quotes"
+          }
+        },
+        {
+          "name": "account",
+          "type": "m2o",
+          "label": "Account",
+          "relation": {
+            "collection": "accounts",
+            "on_delete": "restrict",
+            "one_field": "quotes"
+          }
+        },
+        {
+          "name": "contact",
+          "type": "m2o",
+          "label": "Contact",
+          "relation": {
+            "collection": "contacts",
+            "on_delete": "set_null",
+            "one_field": "quotes"
+          }
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "label": "Status",
+          "indexed": true,
+          "default": "draft",
+          "required": true,
+          "options": {
+            "choices": ["draft", "in_review", "approved", "sent", "accepted", "declined", "expired"]
+          }
+        },
+        {
+          "name": "issue_date",
+          "type": "date",
+          "label": "Issue date",
+          "default": "$NOW"
+        },
+        {
+          "name": "valid_until",
+          "type": "date",
+          "label": "Valid until"
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "label": "Currency",
+          "note": "ISO 4217 code of the amounts on this record.",
+          "required": true,
+          "default": "USD",
+          "options": {
+            "max_length": 3
+          }
+        },
+        {
+          "name": "subtotal",
+          "type": "decimal",
+          "label": "Subtotal",
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "discount_total",
+          "type": "decimal",
+          "label": "Discount total",
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "tax_total",
+          "type": "decimal",
+          "label": "Tax total",
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "total",
+          "type": "decimal",
+          "label": "Total",
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "billing_street",
+          "type": "string",
+          "label": "Billing street",
+          "options": {
+            "max_length": 500
+          }
+        },
+        {
+          "name": "billing_city",
+          "type": "string",
+          "label": "Billing city"
+        },
+        {
+          "name": "billing_region",
+          "type": "string",
+          "label": "Billing region",
+          "note": "State, province or region."
+        },
+        {
+          "name": "billing_postal_code",
+          "type": "string",
+          "label": "Billing postal code",
+          "options": {
+            "max_length": 20
+          }
+        },
+        {
+          "name": "billing_country",
+          "type": "string",
+          "label": "Billing country",
+          "note": "ISO 3166-1 alpha-2 code.",
+          "options": {
+            "max_length": 2
+          }
+        },
+        {
+          "name": "terms",
+          "type": "text",
+          "label": "Terms and conditions"
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "label": "Notes"
+        },
+        {
+          "name": "sent_at",
+          "type": "timestamp",
+          "label": "Sent at"
+        },
+        {
+          "name": "accepted_at",
+          "type": "timestamp",
+          "label": "Accepted at"
+        },
+        {
+          "name": "owner",
+          "type": "string",
+          "label": "Owner",
+          "note": "The PostgreSQL role responsible for this record. Use session_user in native row policies.",
+          "indexed": true
+        }
+      ]
+    },
+    {
+      "name": "quote_line_items",
+      "label": "Quote line items",
+      "note": "The lines of a quote.",
+      "display_field": "description",
+      "fields": [
+        {
+          "name": "quote",
+          "type": "m2o",
+          "label": "Quote",
+          "relation": {
+            "collection": "quotes",
+            "on_delete": "cascade",
+            "one_field": "line_items"
+          },
+          "required": true
+        },
+        {
+          "name": "product",
+          "type": "m2o",
+          "label": "Product",
+          "relation": {
+            "collection": "products",
+            "on_delete": "restrict",
+            "one_field": "quote_line_items"
+          }
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "label": "Description",
+          "options": {
+            "max_length": 500
+          }
+        },
+        {
+          "name": "quantity",
+          "type": "decimal",
+          "label": "Quantity",
+          "required": true,
+          "default": 1,
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "unit_price",
+          "type": "decimal",
+          "label": "Unit price",
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "discount_percent",
+          "type": "decimal",
+          "label": "Discount (%)",
+          "required": true,
+          "default": 0,
+          "options": {
+            "min": 0,
+            "max": 100
+          }
+        },
+        {
+          "name": "tax_rate",
+          "type": "decimal",
+          "label": "Tax rate (%)",
+          "options": {
+            "min": 0,
+            "max": 100
+          }
+        },
+        {
+          "name": "total",
+          "type": "decimal",
+          "label": "Total",
+          "note": "Quantity times unit price, less the discount. The client computes it.",
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "position",
+          "type": "integer",
+          "label": "Position",
+          "required": true,
+          "default": 0,
+          "options": {
+            "min": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "contracts",
+      "label": "Contracts",
+      "note": "Agreements with an account: what was sold, for how long and when it renews.",
+      "display_field": "name",
+      "fields": [
+        {
+          "name": "name",
+          "type": "string",
+          "label": "Name",
+          "required": true
+        },
+        {
+          "name": "number",
+          "type": "string",
+          "label": "Contract number",
+          "unique": true,
+          "options": {
+            "max_length": 40
+          }
+        },
+        {
+          "name": "account",
+          "type": "m2o",
+          "label": "Account",
+          "relation": {
+            "collection": "accounts",
+            "on_delete": "restrict",
+            "one_field": "contracts"
+          },
+          "required": true
+        },
+        {
+          "name": "deal",
+          "type": "m2o",
+          "label": "Deal",
+          "relation": {
+            "collection": "deals",
+            "on_delete": "set_null",
+            "one_field": "contracts"
+          }
+        },
+        {
+          "name": "signer",
+          "type": "m2o",
+          "label": "Signed by",
+          "relation": {
+            "collection": "contacts",
+            "on_delete": "set_null",
+            "one_field": "signed_contracts"
+          }
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "label": "Status",
+          "indexed": true,
+          "default": "draft",
+          "required": true,
+          "options": {
+            "choices": ["draft", "in_approval", "sent", "active", "expired", "terminated"]
+          }
+        },
+        {
+          "name": "start_date",
+          "type": "date",
+          "label": "Start date"
+        },
+        {
+          "name": "end_date",
+          "type": "date",
+          "label": "End date",
+          "indexed": true
+        },
+        {
+          "name": "signed_at",
+          "type": "timestamp",
+          "label": "Signed at"
+        },
+        {
+          "name": "auto_renew",
+          "type": "boolean",
+          "label": "Auto renew",
+          "required": true,
+          "default": false
+        },
+        {
+          "name": "renewal_notice_days",
+          "type": "integer",
+          "label": "Renewal notice days",
+          "note": "How many days before the end date notice must be given.",
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "value",
+          "type": "decimal",
+          "label": "Contract value",
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "label": "Currency",
+          "note": "ISO 4217 code of the amounts on this record.",
+          "required": true,
+          "default": "USD",
+          "options": {
+            "max_length": 3
+          }
+        },
+        {
+          "name": "billing_period",
+          "type": "string",
+          "label": "Billing period",
+          "options": {
+            "choices": ["one_time", "monthly", "quarterly", "yearly"]
+          }
+        },
+        {
+          "name": "terms",
+          "type": "text",
+          "label": "Terms"
+        },
+        {
+          "name": "termination_reason",
+          "type": "text",
+          "label": "Termination reason"
+        },
+        {
+          "name": "owner",
+          "type": "string",
+          "label": "Owner",
+          "note": "The PostgreSQL role responsible for this record. Use session_user in native row policies.",
+          "indexed": true
+        }
+      ]
+    },
+    {
+      "name": "campaigns",
+      "label": "Campaigns",
+      "note": "Marketing efforts that leads and deals are attributed to.",
+      "display_field": "name",
+      "fields": [
+        {
+          "name": "name",
+          "type": "string",
+          "label": "Name",
+          "required": true,
+          "indexed": true
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "label": "Type",
+          "default": "other",
+          "required": true,
+          "options": {
+            "choices": [
+              "email",
+              "webinar",
+              "event",
+              "advertising",
+              "content",
+              "social",
+              "referral",
+              "direct_mail",
+              "telemarketing",
+              "other"
+            ]
+          }
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "label": "Status",
+          "indexed": true,
+          "default": "planned",
+          "required": true,
+          "options": {
+            "choices": ["planned", "active", "paused", "completed", "cancelled"]
+          }
+        },
+        {
+          "name": "start_date",
+          "type": "date",
+          "label": "Start date"
+        },
+        {
+          "name": "end_date",
+          "type": "date",
+          "label": "End date"
+        },
+        {
+          "name": "budget",
+          "type": "decimal",
+          "label": "Budget",
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "actual_cost",
+          "type": "decimal",
+          "label": "Actual cost",
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "expected_revenue",
+          "type": "decimal",
+          "label": "Expected revenue",
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "label": "Currency",
+          "note": "ISO 4217 code of the amounts on this record.",
+          "required": true,
+          "default": "USD",
+          "options": {
+            "max_length": 3
+          }
+        },
+        {
+          "name": "expected_responses",
+          "type": "integer",
+          "label": "Expected responses",
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "target_audience",
+          "type": "string",
+          "label": "Target audience",
+          "options": {
+            "max_length": 500
+          }
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "label": "Description"
+        },
+        {
+          "name": "owner",
+          "type": "string",
+          "label": "Owner",
+          "note": "The PostgreSQL role responsible for this record. Use session_user in native row policies.",
+          "indexed": true
+        }
+      ]
+    },
+    {
+      "name": "campaign_members",
+      "label": "Campaign members",
+      "note": "The leads and contacts a campaign reaches, and how each responded.",
+      "display_field": null,
+      "fields": [
+        {
+          "name": "campaign",
+          "type": "m2o",
+          "label": "Campaign",
+          "relation": {
+            "collection": "campaigns",
+            "on_delete": "cascade",
+            "one_field": "members"
+          },
+          "required": true
+        },
+        {
+          "name": "contact",
+          "type": "m2o",
+          "label": "Contact",
+          "relation": {
+            "collection": "contacts",
+            "on_delete": "cascade",
+            "one_field": "campaign_memberships"
+          }
+        },
+        {
+          "name": "lead",
+          "type": "m2o",
+          "label": "Lead",
+          "relation": {
+            "collection": "leads",
+            "on_delete": "cascade",
+            "one_field": "campaign_memberships"
+          }
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "label": "Status",
+          "indexed": true,
+          "default": "targeted",
+          "required": true,
+          "options": {
+            "choices": [
+              "targeted",
+              "sent",
+              "opened",
+              "clicked",
+              "responded",
+              "registered",
+              "attended",
+              "converted",
+              "unsubscribed",
+              "bounced"
+            ]
+          }
+        },
+        {
+          "name": "responded_at",
+          "type": "timestamp",
+          "label": "Responded at"
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "label": "Notes"
+        }
+      ],
+      "revisions": false
+    },
+    {
+      "name": "tickets",
+      "label": "Tickets",
+      "note": "Support requests from customers.",
+      "display_field": "subject",
+      "fields": [
+        {
+          "name": "subject",
+          "type": "string",
+          "label": "Subject",
+          "required": true,
+          "indexed": true
+        },
+        {
+          "name": "number",
+          "type": "string",
+          "label": "Ticket number",
+          "unique": true,
+          "options": {
+            "max_length": 40
+          }
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "label": "Description"
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "label": "Status",
+          "indexed": true,
+          "default": "new",
+          "required": true,
+          "options": {
+            "choices": ["new", "open", "pending", "on_hold", "resolved", "closed"]
+          }
+        },
+        {
+          "name": "priority",
+          "type": "string",
+          "label": "Priority",
+          "indexed": true,
+          "default": "normal",
+          "required": true,
+          "options": {
+            "choices": ["low", "normal", "high", "urgent"]
+          }
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "label": "Type",
+          "options": {
+            "choices": ["question", "problem", "incident", "feature_request", "complaint", "other"]
+          }
+        },
+        {
+          "name": "channel",
+          "type": "string",
+          "label": "Channel",
+          "options": {
+            "choices": ["email", "phone", "web", "chat", "social", "in_person"]
+          }
+        },
+        {
+          "name": "account",
+          "type": "m2o",
+          "label": "Account",
+          "relation": {
+            "collection": "accounts",
+            "on_delete": "set_null",
+            "one_field": "tickets"
+          }
+        },
+        {
+          "name": "contact",
+          "type": "m2o",
+          "label": "Contact",
+          "relation": {
+            "collection": "contacts",
+            "on_delete": "set_null",
+            "one_field": "tickets"
+          }
+        },
+        {
+          "name": "product",
+          "type": "m2o",
+          "label": "Product",
+          "relation": {
+            "collection": "products",
+            "on_delete": "set_null",
+            "one_field": "tickets"
+          }
+        },
+        {
+          "name": "assignee",
+          "type": "uuid",
+          "label": "Assignee",
+          "note": "The platform user working on the ticket. An access rule can match it with $CURRENT_USER.",
+          "indexed": true
+        },
+        {
+          "name": "due_at",
+          "type": "timestamp",
+          "label": "Due at"
+        },
+        {
+          "name": "first_response_at",
+          "type": "timestamp",
+          "label": "First response at"
+        },
+        {
+          "name": "resolved_at",
+          "type": "timestamp",
+          "label": "Resolved at"
+        },
+        {
+          "name": "resolution",
+          "type": "text",
+          "label": "Resolution"
+        },
+        {
+          "name": "satisfaction",
+          "type": "integer",
+          "label": "Satisfaction",
+          "note": "The customer's rating, 1 to 5.",
+          "options": {
+            "min": 1,
+            "max": 5
+          }
+        },
+        {
+          "name": "tags",
+          "type": "json",
+          "label": "Tags",
+          "note": "Free-form labels, as a list of strings."
+        },
+        {
+          "name": "owner",
+          "type": "string",
+          "label": "Owner",
+          "note": "The PostgreSQL role responsible for this record. Use session_user in native row policies.",
+          "indexed": true
+        }
+      ]
+    },
+    {
+      "name": "activities",
+      "label": "Activities",
+      "note": "Tasks, calls, meetings and emails, planned or done, linked to what they are about.",
+      "display_field": "subject",
+      "fields": [
+        {
+          "name": "subject",
+          "type": "string",
+          "label": "Subject",
+          "required": true,
+          "indexed": true
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "label": "Type",
+          "indexed": true,
+          "default": "task",
+          "required": true,
+          "options": {
+            "choices": ["task", "call", "meeting", "email", "sms", "other"]
+          }
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "label": "Status",
+          "indexed": true,
+          "default": "planned",
+          "required": true,
+          "options": {
+            "choices": ["planned", "in_progress", "completed", "cancelled", "deferred"]
+          }
+        },
+        {
+          "name": "priority",
+          "type": "string",
+          "label": "Priority",
+          "default": "normal",
+          "required": true,
+          "options": {
+            "choices": ["low", "normal", "high", "urgent"]
+          }
+        },
+        {
+          "name": "due_at",
+          "type": "timestamp",
+          "label": "Due at",
+          "indexed": true
+        },
+        {
+          "name": "start_at",
+          "type": "timestamp",
+          "label": "Start at"
+        },
+        {
+          "name": "end_at",
+          "type": "timestamp",
+          "label": "End at"
+        },
+        {
+          "name": "completed_at",
+          "type": "timestamp",
+          "label": "Completed at"
+        },
+        {
+          "name": "duration_minutes",
+          "type": "integer",
+          "label": "Duration minutes",
+          "options": {
+            "min": 0
+          }
+        },
+        {
+          "name": "direction",
+          "type": "string",
+          "label": "Direction",
+          "note": "For calls, emails and messages.",
+          "options": {
+            "choices": ["inbound", "outbound"]
+          }
+        },
+        {
+          "name": "outcome",
+          "type": "string",
+          "label": "Outcome",
+          "options": {
+            "choices": [
+              "connected",
+              "left_voicemail",
+              "no_answer",
+              "busy",
+              "wrong_number",
+              "meeting_booked",
+              "follow_up_needed",
+              "not_interested",
+              "other"
+            ]
+          }
+        },
+        {
+          "name": "location",
+          "type": "string",
+          "label": "Location",
+          "options": {
+            "max_length": 500
+          }
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "label": "Description"
+        },
+        {
+          "name": "account",
+          "type": "m2o",
+          "label": "Account",
+          "relation": {
+            "collection": "accounts",
+            "on_delete": "set_null",
+            "one_field": "activities"
+          }
+        },
+        {
+          "name": "contact",
+          "type": "m2o",
+          "label": "Contact",
+          "relation": {
+            "collection": "contacts",
+            "on_delete": "set_null",
+            "one_field": "activities"
+          }
+        },
+        {
+          "name": "lead",
+          "type": "m2o",
+          "label": "Lead",
+          "relation": {
+            "collection": "leads",
+            "on_delete": "set_null",
+            "one_field": "activities"
+          }
+        },
+        {
+          "name": "deal",
+          "type": "m2o",
+          "label": "Deal",
+          "relation": {
+            "collection": "deals",
+            "on_delete": "set_null",
+            "one_field": "activities"
+          }
+        },
+        {
+          "name": "ticket",
+          "type": "m2o",
+          "label": "Ticket",
+          "relation": {
+            "collection": "tickets",
+            "on_delete": "set_null",
+            "one_field": "activities"
+          }
+        },
+        {
+          "name": "assignee",
+          "type": "uuid",
+          "label": "Assignee",
+          "note": "The platform user who does it. An access rule can match it with $CURRENT_USER.",
+          "indexed": true
+        },
+        {
+          "name": "owner",
+          "type": "string",
+          "label": "Owner",
+          "note": "The PostgreSQL role responsible for this record. Use session_user in native row policies.",
+          "indexed": true
+        }
+      ]
+    },
+    {
+      "name": "notes",
+      "label": "Notes",
+      "note": "Free text attached to an account, a contact, a lead, a deal or a ticket.",
+      "display_field": "title",
+      "fields": [
+        {
+          "name": "title",
+          "type": "string",
+          "label": "Title",
+          "required": true
+        },
+        {
+          "name": "body",
+          "type": "text",
+          "label": "Body"
+        },
+        {
+          "name": "pinned",
+          "type": "boolean",
+          "label": "Pinned",
+          "required": true,
+          "default": false
+        },
+        {
+          "name": "account",
+          "type": "m2o",
+          "label": "Account",
+          "relation": {
+            "collection": "accounts",
+            "on_delete": "set_null",
+            "one_field": "notes"
+          }
+        },
+        {
+          "name": "contact",
+          "type": "m2o",
+          "label": "Contact",
+          "relation": {
+            "collection": "contacts",
+            "on_delete": "set_null",
+            "one_field": "notes"
+          }
+        },
+        {
+          "name": "lead",
+          "type": "m2o",
+          "label": "Lead",
+          "relation": {
+            "collection": "leads",
+            "on_delete": "set_null",
+            "one_field": "notes"
+          }
+        },
+        {
+          "name": "deal",
+          "type": "m2o",
+          "label": "Deal",
+          "relation": {
+            "collection": "deals",
+            "on_delete": "set_null",
+            "one_field": "notes"
+          }
+        },
+        {
+          "name": "ticket",
+          "type": "m2o",
+          "label": "Ticket",
+          "relation": {
+            "collection": "tickets",
+            "on_delete": "set_null",
+            "one_field": "notes"
+          }
+        },
+        {
+          "name": "owner",
+          "type": "string",
+          "label": "Owner",
+          "note": "The PostgreSQL role responsible for this record. Use session_user in native row policies.",
+          "indexed": true
+        }
+      ]
+    }
+  ]
+}
