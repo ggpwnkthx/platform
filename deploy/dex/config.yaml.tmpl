@@ -1,0 +1,73 @@
+# Dex: the one issuer PostgreSQL trusts. Every upstream sign-in system is a connector here, and
+# whichever one a person uses, the token PostgreSQL receives comes from this issuer.
+# The Dex image renders this file with gomplate, so values come from the environment.
+issuer: {{ getenv "DEX_ISSUER" "http://localhost:5556/dex" }}
+
+storage:
+  type: sqlite3
+  config:
+    file: {{ getenv "DEX_STORAGE_FILE" "/var/dex/dex.db" }}
+
+web:
+  http: 0.0.0.0:{{ getenv "DEX_HTTP_PORT" "5556" }}
+  # The interface exchanges its authorization code from the browser.
+  allowedOrigins: ['{{ getenv "PLATFORM_PUBLIC_ORIGIN" "http://localhost:8080" }}']
+
+oauth2:
+  skipApprovalScreen: true
+  responseTypes: [code]
+
+expiry:
+  # A token is a login until it expires: REVOKE and NOLOGIN act at once, removal upstream does
+  # not. Keep this as short as people will tolerate signing in again.
+  idTokens: {{ getenv "DEX_TOKEN_LIFETIME" "1h" }}
+  deviceRequests: 5m
+
+staticClients:
+  # The interface: a public client, authorization code with PKCE.
+  - id: platform-console
+    name: Platform console
+    public: true
+    redirectURIs: ['{{ getenv "PLATFORM_PUBLIC_ORIGIN" "http://localhost:8080" }}/']
+  # psql, other libpq 18 clients and `platform token`: a public client, device authorization.
+  - id: platform-psql
+    name: psql
+    public: true
+    # Dex sends a device sign-in back to itself, at the issuer's own path.
+    redirectURIs: ['{{ (urlParse (getenv "DEX_ISSUER" "http://localhost:5556/dex")).Path }}/device/callback']
+
+# Upstream sign-in systems. The claim PostgreSQL matches against a role name is the email a
+# connector reports, so only add connectors you trust to vouch for every address they return.
+# connectors:
+#   - type: oidc
+#     id: corporate
+#     name: Corporate SSO
+#     config:
+#       issuer: https://login.example.com
+#       clientID: $CORPORATE_CLIENT_ID
+#       clientSecret: $CORPORATE_CLIENT_SECRET
+#       redirectURI: {{ getenv "DEX_ISSUER" "http://localhost:5556/dex" }}/callback
+#       insecureSkipEmailVerified: false
+
+{{- if getenv "DEX_LOCAL_USERS" }}
+
+# Local development only: three example people kept in Dex itself, standing in for a connector.
+# The deployment CLI generates their passwords and passes the hashes; nothing is built in.
+enablePasswordDB: true
+staticPasswords:
+  - email: admin@example.com
+    username: admin
+    userID: 4c8f6f0e-0001-4a51-9d4e-a3a1f0c0a001
+    hashFromEnv: DEX_ADMIN_HASH
+  - email: alice@example.com
+    username: alice
+    userID: 4c8f6f0e-0002-4a51-9d4e-a3a1f0c0a002
+    hashFromEnv: DEX_ALICE_HASH
+  - email: bob@example.com
+    username: bob
+    userID: 4c8f6f0e-0003-4a51-9d4e-a3a1f0c0a003
+    hashFromEnv: DEX_BOB_HASH
+{{- else }}
+
+enablePasswordDB: false
+{{- end }}

@@ -1,0 +1,113 @@
+services:
+  # PostgreSQL 18 with the token validator. Its only password login is the administrator's, and
+  # not from the relay's network: from there, a token is the only way in.
+  postgres:
+    build: ../postgres
+    image: platform-postgres:local
+    environment:
+      POSTGRES_DB: platform
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD for local development}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+      PLATFORM_OIDC_ISSUER: http://localhost:${DEX_PORT:-5556}/dex
+      PLATFORM_TOKEN_ONLY_FROM: 10.89.71.0/24
+    networks: [default, relay]
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+      # Dex, below, listens in this container's network namespace.
+      - "127.0.0.1:${DEX_PORT:-5556}:${DEX_PORT:-5556}"
+    volumes:
+      # Not the volume a PostgreSQL 16 stack used: that one is left as it was.
+      - data18:/var/lib/postgresql
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres -d platform"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  # The one issuer PostgreSQL trusts. Upstream sign-in systems are connectors in its config.
+  # An issuer has a single URL, which the browser and PostgreSQL must both be able to open. On a
+  # developer's machine that is localhost, so Dex joins PostgreSQL's network namespace, where
+  # localhost reaches it too. A real deployment gives Dex an HTTPS name instead.
+  dex:
+    image: ghcr.io/dexidp/dex:v2.46.1
+    command: [dex, serve, /etc/dex/config.yaml]
+    network_mode: service:postgres
+    environment:
+      DEX_ISSUER: http://localhost:${DEX_PORT:-5556}/dex
+      DEX_HTTP_PORT: ${DEX_PORT:-5556}
+      PLATFORM_PUBLIC_ORIGIN: http://localhost:${PLATFORM_HTTP_PORT:-8080}
+      DEX_LOCAL_USERS: "1"
+      DEX_ADMIN_HASH: ${DEX_ADMIN_HASH:-}
+      DEX_ALICE_HASH: ${DEX_ALICE_HASH:-}
+      DEX_BOB_HASH: ${DEX_BOB_HASH:-}
+    volumes:
+      - ../dex/config.yaml.tmpl:/etc/dex/config.yaml:ro
+      - dex:/var/dex
+    tmpfs: [/tmp]
+    depends_on: [postgres]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+  # The installer: the only container that is given the administrator's credentials. It runs once,
+  # through `compose --profile install run`, and is never part of `up`.
+  migrate:
+    profiles: [install]
+    build:
+      context: ../..
+      target: cli
+    image: platform-cli:local
+    command: [migrate]
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_NAME: platform
+      DATABASE_SSL: disable
+      PGUSER: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD for local development}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+  # Forwards the interface's WebSockets to PostgreSQL's port, byte for byte. It holds no
+  # credentials and reads nothing it carries: the token inside the stream is PostgreSQL's to check.
+  relay:
+    image: ghcr.io/vi/websocat:v1.14.2
+    command: [--binary, --exit-on-eof, --conncap, "256", "ws-l:0.0.0.0:8081", "tcp:postgres:5432"]
+    networks: [relay, edge]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+  # The interface: static pages and their bundle, served by nginx, with /pg handed to the relay.
+  ui:
+    build:
+      context: ../..
+      target: ui
+    image: platform-ui:local
+    environment:
+      PUBLIC_URL: http://localhost:${PLATFORM_HTTP_PORT:-8080}
+      OIDC_ISSUER: http://localhost:${DEX_PORT:-5556}/dex
+      DATABASE_NAME: platform
+      RELAY_UPSTREAM: relay:8081
+    # The default network publishes the port; the edge network reaches the relay.
+    networks: [default, edge]
+    ports: ["127.0.0.1:${PLATFORM_HTTP_PORT:-8080}:8080"]
+    depends_on: [relay]
+    restart: unless-stopped
+    tmpfs: [/tmp]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+networks:
+  default: {}
+  # PostgreSQL and the relay. Its address range is the one PostgreSQL takes only tokens from.
+  relay:
+    ipam:
+      config:
+        - subnet: 10.89.71.0/24
+  # The interface and the relay.
+  edge: {}
+volumes:
+  data18:
+  dex:

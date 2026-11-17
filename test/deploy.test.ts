@@ -1,926 +1,354 @@
 import { describe, expect, test } from 'bun:test'
-import { spawnSync } from 'bun'
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import {
-  assignmentsOf,
-  BOOTSTRAP_FILES,
-  checkCredentials,
-  checkDeploy,
-  checkConsoleProbes,
-  checkFilesOfStack,
-  checkInfrastructure,
-  checkLayout,
-  checkMinimumEnvironment,
-  checkStacks,
-  checkConsoleCredentials,
-  checkConsoleTenantCredential,
-  checkTrackedInfrastructure,
-  credentialsOfTemplates,
-  imagesOfTemplates,
-  providerVersionsOf,
-  TEMPLATE_FILES,
-  valueOfAssignment,
-  variablesOfTemplates,
-} from '../scripts/check-deploy'
+import { deploy, type DeployRuntime, renderKubernetes } from '../src/deploy.ts'
+import { VERSION } from '../src/version.ts'
 
-/**
- * The deployment of the platform.
- *
- * Every file of a deployment is in `deploy/`, and every service of the
- * platform is deployed on its own and as part of the composition of the
- * three. These tests prove that the directory of the repository holds
- * what it should hold, and that the check answers when it does not.
- */
-const root = join(import.meta.dir, '..')
+type Call = { argv: string[]; options?: Parameters<DeployRuntime['run']>[1] }
+function fake(env: Record<string, string | undefined> = {}) {
+  const envFile = join(mkdtempSync(join(tmpdir(), 'platform-env-')), '.env')
+  const calls: Call[] = []
+  const output: string[] = []
+  const urls: string[] = []
+  const r: DeployRuntime = {
+    env,
+    envFile,
+    which: (name) => name,
+    print: (text) => {
+      output.push(text)
+    },
+    run: async (argv, options) => {
+      calls.push({ argv, options })
+      return 0
+    },
+    sleep: async () => undefined,
+    healthy: async (url) => {
+      urls.push(url)
+      return true
+    },
+    hash: async (password) => `hash-of(${password})`,
+  }
+  return { r, calls, output, urls, envFile }
+}
+const settings = {
+  image: 'registry.example.com/platform:2.0.0',
+  publicUrl: 'https://platform.example.com',
+  oidcIssuer: 'https://sso.example.com/dex',
+  databaseHost: 'db.internal',
+  databaseName: 'platform',
+  databasePort: '5432',
+}
+const kenv = {
+  PLATFORM_IMAGE: settings.image,
+  PUBLIC_URL: settings.publicUrl,
+  OIDC_ISSUER: settings.oidcIssuer,
+  DATABASE_HOST: settings.databaseHost,
+}
 
-describe('the directory of the deployment', () => {
-  test('it holds what it should hold', async () => {
-    expect(await checkDeploy(root)).toEqual([])
+describe('version and CLI entry points', () => {
+  test('package, database, API expectation and runtime agree on 2.1.0', () => {
+    expect(VERSION).toBe('2.1.0')
+    expect(
+      JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
+    ).toBe(VERSION)
+    expect(
+      readFileSync(new URL('../migrations/0001_native.sql', import.meta.url), 'utf8')
+    ).toContain("version='2.0.0'")
+    expect(
+      readFileSync(new URL('../migrations/0002_harden_catalogs.sql', import.meta.url), 'utf8')
+    ).toContain("version = '2.0.1'")
+    expect(
+      readFileSync(new URL('../migrations/0003_metadata.sql', import.meta.url), 'utf8')
+    ).toContain("version = '2.1.0'")
   })
-
-  test('a deployment file outside of the directory is reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-deploy-'))
-    try {
-      await mkdir(join(directory, 'packages', 'gateway', 'deploy'), { recursive: true })
-      await mkdir(join(directory, 'deploy', 'compose'), { recursive: true })
-      await mkdir(join(directory, 'deploy', 'kubernetes'), { recursive: true })
-      await mkdir(join(directory, 'deploy', 'config'), { recursive: true })
-      const findings = checkLayout(directory)
-      expect(findings).toEqual([
-        {
-          file: 'packages/gateway/deploy',
-          message: 'the deployment files are in the directory of the deployment',
-        },
-      ])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
+  test('deploy help and version run without database credentials or external tools', async () => {
+    for (const args of [['--version'], ['deploy', 'help']]) {
+      const child = Bun.spawn([process.execPath, 'src/cli.ts', ...args], {
+        cwd: new URL('..', import.meta.url).pathname,
+        env: { PATH: process.env.PATH },
+        stdout: 'pipe',
+        stderr: 'pipe',
+      })
+      const out = await new Response(child.stdout).text()
+      expect(await child.exited).toBe(0)
+      expect(out).toContain(args[0] === '--version' ? '2.1.0' : 'platform deploy')
     }
   })
-
-  test('a stack that deploys another service is reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-deploy-'))
-    try {
-      await mkdir(join(directory, 'deploy', 'compose'), { recursive: true })
-      await writeFile(
-        join(directory, 'deploy', 'compose', 'gateway.compose.yaml'),
-        'name: platform-gateway\nservices:\n  gateway:\n    image: gateway\n  access:\n    image: access\n'
-      )
-      const findings = await checkStacks(directory)
-      expect(findings.some((finding) => finding.message.includes('deploys the access'))).toBe(true)
-    } finally {
-      await rm(directory, { recursive: true, force: true })
+})
+describe('local deployment orchestration', () => {
+  test('up installs with a one-off credential-bearing process before starting the interface', async () => {
+    const f = fake({ POSTGRES_PASSWORD: 'private-secret', PLATFORM_HTTP_PORT: '8087' })
+    expect(await deploy(['local', 'up'], f.r)).toBe(0)
+    const cmds = f.calls.map((c) => c.argv)
+    expect(cmds[1]!.slice(-4)).toEqual(['build', 'postgres', 'ui', 'migrate'])
+    // The installer's image is built too, so its profile is named for the build.
+    expect(cmds[1]).toContain('--profile')
+    expect(cmds[2]!.slice(-4)).toEqual(['up', '-d', 'postgres', 'dex'])
+    const init = f.calls.find((c) => c.argv.includes('migrate') && c.argv.includes('run'))!
+    expect(init.argv).toContain('--rm')
+    expect(init.argv).toContain('--no-deps')
+    expect(init.argv.slice(-7)).toEqual([
+      '-f',
+      init.argv.at(-6)!,
+      'run',
+      '--rm',
+      '--no-deps',
+      '-T',
+      'migrate',
+    ])
+    expect(init.argv).toContain('--profile')
+    expect(init.argv.some((a) => a.includes('='))).toBe(false)
+    expect(init.options?.env?.POSTGRES_PASSWORD).toBe('private-secret')
+    expect(JSON.stringify(cmds)).not.toContain('private-secret')
+    expect(cmds.at(-1)!.slice(-4)).toEqual(['up', '-d', 'relay', 'ui'])
+    // Dex answers before the installer runs; the interface is checked last.
+    expect(f.urls).toEqual([
+      'http://localhost:5556/dex/.well-known/openid-configuration',
+      'http://localhost:8087/health',
+    ])
+    const stack = readFileSync(new URL('../deploy/compose/compose.yaml', import.meta.url), 'utf8')
+    const services = (Bun.YAML.parse(stack) as any).services
+    // Only the installer is given a password: the interface and the relay hold none.
+    for (const name of ['ui', 'relay']) expect(JSON.stringify(services[name])).not.toContain('PASS')
+    // From the relay's network, PostgreSQL takes tokens and nothing else.
+    expect(services.postgres.environment.PLATFORM_TOKEN_ONLY_FROM).toBe(
+      (Bun.YAML.parse(stack) as any).networks.relay.ipam.config[0].subnet
+    )
+    expect(stack).not.toContain('postgres:16')
+  })
+  test('Dex is given hashes of the example people’s passwords, never the passwords', async () => {
+    const f = fake({ POSTGRES_PASSWORD: 'secret', ALICE_PASSWORD: 'chosen-by-alice' })
+    writeFileSync(f.envFile, 'BOB_PASSWORD=saved-for-bob\n')
+    expect(await deploy(['local', 'up'], f.r)).toBe(0)
+    const saved = readFileSync(f.envFile, 'utf8')
+    const admin = saved.match(/^PLATFORM_ADMIN_PASSWORD=([A-Za-z0-9_-]{32})$/m)![1]!
+    expect(saved).not.toContain('ALICE_PASSWORD')
+    expect(saved.match(/BOB_PASSWORD/g)).toHaveLength(1)
+    const env = f.calls.at(-1)!.options!.env!
+    expect(env.DEX_ADMIN_HASH).toBe(`hash-of(${admin})`)
+    expect(env.DEX_ALICE_HASH).toBe('hash-of(chosen-by-alice)')
+    expect(env.DEX_BOB_HASH).toBe('hash-of(saved-for-bob)')
+    expect(JSON.stringify([f.output, f.calls.map((c) => c.argv)])).not.toContain(admin)
+    expect(f.output.at(-1)).toContain('admin@example.com')
+    const dex = readFileSync(new URL('../deploy/compose/compose.yaml', import.meta.url), 'utf8')
+      .split('  dex:')[1]!
+      .split('  migrate:')[0]!
+    expect(dex).not.toContain('PASSWORD')
+  })
+  test('installer failure propagates its exit code and prevents the interface starting', async () => {
+    const f = fake({ POSTGRES_PASSWORD: 'private-secret' })
+    const original = f.r.run
+    f.r.run = async (argv, options) => {
+      await original(argv, options)
+      return argv.includes('migrate') && argv.includes('run') ? 7 : 0
+    }
+    expect(await deploy(['local', 'up'], f.r)).toBe(7)
+    expect(f.calls.some((c) => c.argv.slice(-4).join(' ') === 'up -d relay ui')).toBe(false)
+  })
+  test('build failure prevents database startup', async () => {
+    const f = fake({ POSTGRES_PASSWORD: 'secret' })
+    f.r.run = async (argv) => (argv.includes('build') ? 5 : 0)
+    expect(await deploy(['local', 'up'], f.r)).toBe(5)
+  })
+  test('init runs only the installer and never starts the interface', async () => {
+    const f = fake({ POSTGRES_PASSWORD: 'secret' })
+    expect(await deploy(['local', 'init'], f.r)).toBe(0)
+    expect(f.calls.at(-1)!.argv.slice(-2)).toEqual(['-T', 'migrate'])
+    expect(f.urls).toEqual(['http://localhost:5556/dex/.well-known/openid-configuration'])
+  })
+  test('Podman is selected when Docker Compose is unavailable', async () => {
+    const f = fake()
+    f.r.which = (name) => (name === 'podman' ? name : null)
+    expect(await deploy(['local', 'status'], f.r)).toBe(0)
+    expect(f.calls.at(-1)!.argv[0]).toBe('podman')
+  })
+  test('status, logs and down do not require credentials or delete volumes implicitly', async () => {
+    for (const action of ['status', 'logs', 'down']) {
+      const f = fake()
+      expect(await deploy(['local', action], f.r)).toBe(0)
+      expect(f.calls.at(-1)!.argv).not.toContain('--volumes')
+    }
+    const f = fake()
+    await deploy(['local', 'logs', '-f', 'ui'], f.r)
+    expect(f.calls.at(-1)!.argv.slice(-3)).toEqual(['logs', '-f', 'ui'])
+  })
+  test('a missing administrator password is generated once, saved privately and reused', async () => {
+    const f = fake()
+    writeFileSync(f.envFile, 'APP_ENV=development')
+    expect(await deploy(['local', 'up'], f.r)).toBe(0)
+    const password = f.calls.find((c) => c.argv.includes('migrate'))!.options!.env!
+      .POSTGRES_PASSWORD!
+    expect(password).toMatch(/^[A-Za-z0-9_-]{32}$/)
+    expect(readFileSync(f.envFile, 'utf8')).toStartWith(
+      `APP_ENV=development\nPOSTGRES_PASSWORD=${password}\nPLATFORM_ADMIN_PASSWORD=`
+    )
+    expect(f.output[0]).toContain('Generated POSTGRES_PASSWORD')
+    expect(JSON.stringify([f.output, f.calls.map((c) => c.argv)])).not.toContain(password)
+    f.calls.length = 0
+    f.output.length = 0
+    expect(await deploy(['local', 'init'], f.r)).toBe(0)
+    expect(f.calls.at(-1)!.options!.env!.POSTGRES_PASSWORD).toBe(password)
+    expect(readFileSync(f.envFile, 'utf8').match(/POSTGRES_PASSWORD/g)).toHaveLength(1)
+    expect(f.output).toEqual([])
+    const fresh = fake()
+    expect(await deploy(['local', 'validate'], fresh.r)).toBe(0)
+    expect(statSync(fresh.envFile).mode & 0o777).toBe(0o600)
+  })
+  test('a supplied password or password file is used and nothing is generated', async () => {
+    const f = fake({ POSTGRES_PASSWORD: 'from-environment' })
+    writeFileSync(f.envFile, 'POSTGRES_PASSWORD="from-file"\n')
+    await deploy(['local', 'init'], f.r)
+    expect(f.calls.at(-1)!.options!.env!.POSTGRES_PASSWORD).toBe('from-environment')
+    const g = fake()
+    writeFileSync(join(g.envFile, '..', 'secret'), 'from-secret-file\n')
+    writeFileSync(g.envFile, `POSTGRES_PASSWORD_FILE=${join(g.envFile, '..', 'secret')}\n`)
+    await deploy(['local', 'init'], g.r)
+    expect(g.calls.at(-1)!.options!.env!.POSTGRES_PASSWORD).toBe('from-secret-file')
+    expect(readFileSync(g.envFile, 'utf8')).not.toMatch(/^POSTGRES_PASSWORD=/m)
+    for (const action of ['status', 'logs', 'down']) {
+      const h = fake()
+      await deploy(['local', action], h.r)
+      expect(existsSync(h.envFile)).toBe(false)
     }
   })
-
-  test('a stack that does not deploy a service is reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-deploy-'))
-    try {
-      await mkdir(join(directory, 'deploy', 'compose'), { recursive: true })
-      await writeFile(
-        join(directory, 'deploy', 'compose', 'gateway.compose.yaml'),
-        'name: platform-gateway\nservices:\n  dex:\n    image: ghcr.io/dexidp/dex:v2.46.1\n'
-      )
-      const findings = await checkStacks(directory)
+  test('options are validated before any process starts or value is generated', async () => {
+    const f = fake()
+    await expect(
+      deploy(['local', 'up', '--engine=podman', '--engine=docker'], f.r)
+    ).rejects.toThrow('Repeated')
+    await expect(deploy(['local', 'up', '--timeout=0'], f.r)).rejects.toThrow('--timeout')
+    const port = fake({ PLATFORM_HTTP_PORT: 'no' })
+    await expect(deploy(['local', 'up'], port.r)).rejects.toThrow('PLATFORM_HTTP_PORT')
+    expect(existsSync(port.envFile)).toBe(false)
+    await expect(deploy(['local', 'up'], fake({ DEX_PORT: '0' }).r)).rejects.toThrow('DEX_PORT')
+    expect(f.calls).toEqual([])
+    expect(existsSync(f.envFile)).toBe(false)
+    const bad = fake({ POSTGRES_PASSWORD: 'secret', PLATFORM_HTTP_PORT: 'no' })
+    await expect(deploy(['local', 'up'], bad.r)).rejects.toThrow('PLATFORM_HTTP_PORT')
+    expect(bad.calls).toEqual([])
+  })
+  test('failed interface readiness times out instead of reporting success', async () => {
+    const f = fake({ POSTGRES_PASSWORD: 'secret' })
+    f.r.healthy = async (url) => url.includes('/dex/')
+    await expect(deploy(['local', 'up', '--timeout=2'], f.r)).rejects.toThrow(
+      'The interface did not become ready'
+    )
+    expect(f.output.filter((line) => !line.startsWith('Generated '))).toEqual([])
+    f.r.healthy = async () => false
+    await expect(deploy(['local', 'up', '--timeout=2'], f.r)).rejects.toThrow(
+      'Dex did not become ready'
+    )
+    expect(f.calls.some((c) => c.argv.includes('migrate') && c.argv.includes('run'))).toBe(true)
+  })
+})
+describe('Kubernetes deployment orchestration', () => {
+  test('render is offline and emits concrete, namespaced YAML without database credentials', async () => {
+    const f = fake(kenv)
+    f.r.which = () => null
+    expect(await deploy(['k8s', 'render', '--namespace=team'], f.r)).toBe(0)
+    const docs = f.output[0]!.split(/^---$/m).map((s) => Bun.YAML.parse(s)) as any[]
+    expect(docs).toHaveLength(2)
+    expect(docs.every((d) => d.metadata.namespace === 'team')).toBe(true)
+    const [container, relay] = docs[0].spec.template.spec.containers
+    expect(container.image).toBe(settings.image)
+    expect(container.env.find((e: any) => e.name === 'OIDC_ISSUER').value).toBe(settings.oidcIssuer)
+    expect(container.env.find((e: any) => e.name === 'PUBLIC_URL').value).toBe(settings.publicUrl)
+    // The relay beside it forwards to the database, and is given nothing else.
+    expect(relay.args.at(-1)).toBe('tcp:db.internal:5432')
+    expect(relay.env).toBeUndefined()
+    for (const c of [container, relay])
       expect(
-        findings.some((finding) => finding.message.includes('the stack does not deploy'))
-      ).toBe(true)
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
+        (c.env ?? []).some((e: any) => ['PGUSER', 'PGPASSWORD', 'DATABASE_URL'].includes(e.name))
+      ).toBe(false)
+    expect(f.calls).toEqual([])
   })
-
-  test('a variable that a stack requires and the minimum environment does not hold is reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-deploy-'))
-    try {
-      await mkdir(join(directory, 'deploy', 'compose'), { recursive: true })
-      await writeFile(
-        join(directory, 'deploy', 'compose', 'gateway.compose.yaml'),
-        `name: platform-gateway
-services:
-  gateway:
-    environment:
-      GATEWAY_SESSION_SECRET: \${GATEWAY_SESSION_SECRET:?the secret of the sessions is required}
-`
-      )
-      await writeFile(join(directory, '.env.min'), 'GATEWAY_OIDC_ISSUER=http://access:8081\n')
-      const findings = await checkMinimumEnvironment(directory)
-      expect(findings).toEqual([
-        {
-          file: '.env.min',
-          message:
-            'the variable GATEWAY_SESSION_SECRET is not set: the stack deploy/compose/gateway.compose.yaml refuses to start without it',
-        },
-      ])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
+  test('apply renders supplied settings then waits for rollout in the same namespace', async () => {
+    const f = fake(kenv)
+    expect(await deploy(['k8s', 'apply', '--namespace', 'team', '--timeout=60'], f.r)).toBe(0)
+    expect(f.calls[0]!.argv).toEqual(['kubectl', '-n', 'team', 'apply', '-f', '-'])
+    expect(f.calls[0]!.options?.input).toContain(settings.databaseHost)
+    expect(f.calls[1]!.argv).toEqual([
+      'kubectl',
+      '-n',
+      'team',
+      'rollout',
+      'status',
+      'deployment/platform',
+      '--timeout=60s',
+    ])
   })
-
-  test('the minimum environment holds every variable a stack requires', async () => {
-    const findings = await checkMinimumEnvironment(root)
-    expect(findings).toEqual([])
+  test('failed apply does not attempt a rollout, and diff preserves exit 1', async () => {
+    const f = fake(kenv)
+    f.r.run = async (argv, options) => {
+      f.calls.push({ argv, options })
+      return 1
+    }
+    expect(await deploy(['k8s', 'apply'], f.r)).toBe(1)
+    expect(f.calls).toHaveLength(1)
+    expect(await deploy(['k8s', 'diff'], f.r)).toBe(1)
+  })
+  test('validate uses a server-side dry run and status needs no image configuration', async () => {
+    const f = fake(kenv)
+    await deploy(['k8s', 'validate'], f.r)
+    expect(f.calls[0]!.argv).toContain('--dry-run=server')
+    const status = fake()
+    expect(await deploy(['k8s', 'status'], status.r)).toBe(0)
+    expect(status.calls[0]!.argv).toContain('deployment,service,pod')
+  })
+  test('render rejects placeholders, insecure origins and invalid port values', () => {
+    expect(() => renderKubernetes({ ...settings, image: '' })).toThrow('--image')
+    expect(() => renderKubernetes({ ...settings, publicUrl: 'http://example.com' })).toThrow(
+      'HTTPS'
+    )
+    expect(() => renderKubernetes({ ...settings, oidcIssuer: '' })).toThrow('--oidc-issuer')
+    expect(() => renderKubernetes({ ...settings, oidcIssuer: 'http://sso.example.com' })).toThrow(
+      'OIDC_ISSUER must be an HTTPS URL'
+    )
+    expect(() => renderKubernetes({ ...settings, databasePort: '5432\nmalicious' })).toThrow('port')
+    expect(() => renderKubernetes({ ...settings, databaseHost: 'db --conncap 1' })).toThrow(
+      'host name'
+    )
+    expect(() => renderKubernetes({ ...settings, namespace: 'bad/namespace' })).toThrow('namespace')
+  })
+  test('YAML string quoting prevents values from creating extra configuration', () => {
+    const yaml = renderKubernetes({ ...settings, databaseName: 'mydb"\n  injected: true' })
+    const doc = Bun.YAML.parse(yaml.split(/^---$/m)[0]!) as any
+    expect(
+      doc.spec.template.spec.containers[0].env.find((e: any) => e.name === 'DATABASE_NAME').value
+    ).toBe('mydb"\n  injected: true')
   })
 })
 
-/**
- * The templates of the deployment.
- *
- * The templates are the platform's artifacts, and the values of one
- * deployment are not. The tests prove that the templates of the
- * repository hold what they should hold, and that the check answers
- * when they do not.
- */
-
-/** The tree of the templates of a deployment that holds what it should hold. */
-async function templatesOf(directory: string): Promise<string> {
-  const templates = join(directory, 'deploy', 'tofu', 'azure')
-  await mkdir(join(templates, 'bootstrap'), { recursive: true })
-  for (const file of TEMPLATE_FILES) {
-    await writeFile(join(templates, file), '')
-  }
-  for (const file of BOOTSTRAP_FILES) {
-    await writeFile(join(templates, 'bootstrap', file), '')
-  }
-  await writeFile(join(directory, '.gitignore'), 'deploy/tofu/runtime/\n')
-  return templates
-}
-
-/**
- * A repository that holds the templates.
- *
- * The check reads the index of the repository, and the index is what
- * tells a file of the repository from a file of the machine of the
- * operator.
- *
- * @param directory the root of the repository.
- */
-async function repositoryOf(directory: string): Promise<void> {
-  spawnSync(['git', 'init', '--quiet'], { cwd: directory })
-  spawnSync(['git', 'add', '.'], { cwd: directory })
-  spawnSync(
-    [
-      'git',
-      '-c',
-      'user.email=operator@example.com',
-      '-c',
-      'user.name=operator',
-      'commit',
-      '--quiet',
-      '-m',
-      'the templates',
-    ],
-    { cwd: directory }
-  )
-}
-
-describe('the infrastructure as code of the deployment', () => {
-  test('the templates of the repository hold what they should hold', async () => {
-    expect(await checkInfrastructure(root)).toEqual([])
-  })
-
-  test('the tracked files of the templates are the files of the templates', () => {
-    expect(checkTrackedInfrastructure(root)).toEqual([])
-  })
-
-  test('a variable that the example of the values does not name is reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
-    try {
-      const templates = await templatesOf(directory)
-      await writeFile(
-        join(templates, 'variables.tf'),
-        'variable "location" {\n  type = string\n}\n'
-      )
-      const findings = await checkInfrastructure(directory)
-      expect(findings).toEqual([
-        {
-          file: 'deploy/tofu/azure/terraform.tfvars.example',
-          message: 'the variable location is not in the example of the values',
-        },
-      ])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-
-  test('a name that the example of the values holds and the templates do not declare is reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
-    try {
-      const templates = await templatesOf(directory)
-      await writeFile(join(templates, 'terraform.tfvars.example'), 'region = "westeurope"\n')
-      const findings = await checkInfrastructure(directory)
-      expect(findings).toEqual([
-        {
-          file: 'deploy/tofu/azure/terraform.tfvars.example',
-          message: 'the example names region, which the templates do not declare',
-        },
-      ])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-
-  test('an image of the example of the values that is not a digest is reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
-    try {
-      const templates = await templatesOf(directory)
-      await writeFile(
-        join(templates, 'variables.tf'),
-        'variable "gateway_image" {\n  type = string\n}\n'
-      )
-      await writeFile(
-        join(templates, 'terraform.tfvars.example'),
-        'gateway_image = "ghcr.io/ggpwnkthx/gateway:1.0.0"\n'
-      )
-      const findings = await checkInfrastructure(directory)
-      expect(findings).toEqual([
-        {
-          file: 'deploy/tofu/azure/terraform.tfvars.example',
-          message:
-            'the image gateway_image is not a digest: the deployment runs the bytes that the release proved',
-        },
-      ])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-
-  test('an image that a template names down and that is not a digest is reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
-    try {
-      const templates = await templatesOf(directory)
-      await writeFile(
-        join(templates, 'containerapps.tf'),
-        'resource "azurerm_container_app" "gateway" {\n  image = "ghcr.io/ggpwnkthx/gateway:1.0.0"\n}\n'
-      )
-      const findings = await checkInfrastructure(directory)
-      expect(findings).toEqual([
-        {
-          file: 'deploy/tofu/azure',
-          message: 'the image ghcr.io/ggpwnkthx/gateway:1.0.0 is not a digest',
-        },
-      ])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-
-  test('the state of a deployment in the templates is reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
-    try {
-      const templates = await templatesOf(directory)
-      await writeFile(join(templates, 'terraform.tfstate'), '{}\n')
-      const findings = await checkInfrastructure(directory)
-      expect(findings).toEqual([
-        {
-          file: 'deploy/tofu/azure/terraform.tfstate',
-          message: 'the state of a deployment holds the credentials of the deployment',
-        },
-      ])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-
-  test('the state of a deployment that is not committed is not reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
-    try {
-      const templates = await templatesOf(directory)
-      await repositoryOf(directory)
-      await writeFile(join(templates, 'terraform.tfstate'), '{}\n')
-      const findings = await checkInfrastructure(directory)
-      expect(findings).toEqual([])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-
-  test('the state of a deployment that is committed is reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
-    try {
-      const templates = await templatesOf(directory)
-      await repositoryOf(directory)
-      await writeFile(join(templates, 'terraform.tfstate'), '{}\n')
-      spawnSync(['git', 'add', 'deploy/tofu/azure/terraform.tfstate'], { cwd: directory })
-      const findings = await checkInfrastructure(directory)
-      expect(findings).toEqual([
-        {
-          file: 'deploy/tofu/azure/terraform.tfstate',
-          message: 'the state of a deployment holds the credentials of the deployment',
-        },
-      ])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-
-  test('the values of a deployment in the templates are reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
-    try {
-      const templates = await templatesOf(directory)
-      await writeFile(join(templates, 'terraform.tfvars'), 'location = "westeurope"\n')
-      const findings = await checkInfrastructure(directory)
-      expect(findings).toEqual([
-        {
-          file: 'deploy/tofu/azure/terraform.tfvars',
-          message: 'the values of a deployment belong to one deployment and not to the repository',
-        },
-      ])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-
-  test('a plan of a deployment in the templates is reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
-    try {
-      const templates = await templatesOf(directory)
-      await writeFile(join(templates, 'plan.bin'), 'plan\n')
-      const findings = await checkInfrastructure(directory)
-      expect(findings).toEqual([
-        {
-          file: 'deploy/tofu/azure/plan.bin',
-          message: 'a plan of a deployment is not a file of the repository',
-        },
-      ])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-
-  test('a provider that is not pinned is reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
-    try {
-      const templates = await templatesOf(directory)
-      await writeFile(
-        join(templates, 'versions.tf'),
-        'terraform {\n  required_providers {\n    azurerm = {\n      source = "hashicorp/azurerm"\n    }\n  }\n}\n'
-      )
-      const findings = await checkInfrastructure(directory)
-      expect(findings).toEqual([
-        {
-          file: 'deploy/tofu/azure/versions.tf',
-          message:
-            'the provider azurerm is not pinned: a provider that changes changes the deployment',
-        },
-      ])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-
-  test('the runtime directory that is not ignored is reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
-    try {
-      await templatesOf(directory)
-      await writeFile(join(directory, '.gitignore'), 'node_modules\n')
-      const findings = await checkInfrastructure(directory)
-      expect(findings).toEqual([
-        {
-          file: '.gitignore',
-          message:
-            'the directory deploy/tofu/runtime is not ignored: the files of a deployment are not files of the repository',
-        },
-      ])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-
-  test('a tracked file of the templates that is not a template is reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
-    try {
-      const templates = await templatesOf(directory)
-      await writeFile(join(templates, 'terraform.tfstate'), '{}\n')
-      spawnSync(['git', 'init', '--quiet'], { cwd: directory })
-      spawnSync(['git', 'add', '--all', 'deploy/tofu'], { cwd: directory })
-      const findings = checkTrackedInfrastructure(directory)
-      expect(findings).toEqual([
-        {
-          file: 'deploy/tofu/azure/terraform.tfstate',
-          message: 'the file is not a file of the templates of the platform',
-        },
-      ])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-})
-
-describe('the console of the deployment', () => {
-  test('it names the address of every service it probes', async () => {
-    expect(await checkConsoleProbes(root)).toEqual([])
-  })
-
-  test('a console that names no address of a service is reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
-    try {
-      const templates = join(directory, 'deploy', 'tofu', 'azure')
-      await mkdir(templates, { recursive: true })
-      await writeFile(
-        join(templates, 'containerapps.tf'),
-        [
-          'resource "azurerm_container_app" "console" {',
-          '  template {',
-          '    container {',
-          '      env {',
-          '        name  = "CONSOLE_ACCESS_URL"',
-          '        value = "http://access"',
-          '      }',
-          '      env {',
-          '        name  = "CONSOLE_GATEWAY_URL"',
-          '        value = "https://api"',
-          '      }',
-          '    }',
-          '  }',
-          '}',
-          '',
-        ].join('\n')
-      )
-      const findings = await checkConsoleProbes(directory)
-      expect(findings).toEqual([
-        {
-          file: join('deploy', 'tofu', 'azure', 'containerapps.tf'),
-          message:
-            'the console of the deployment does not name the variable CONSOLE_DATA_URL: the status board of the console shows the service as not configured',
-        },
-      ])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-})
-
-describe('the credentials of the console of the deployment', () => {
-  test('the console is the client of the tenant', async () => {
-    expect(await checkConsoleCredentials(root)).toEqual([])
-  })
-
-  test('a console that is a client of its own is reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
-    try {
-      const templates = join(directory, 'deploy', 'tofu', 'azure')
-      await mkdir(templates, { recursive: true })
-      await writeFile(
-        join(templates, 'containerapps.tf'),
-        [
-          'resource "azurerm_container_app" "gateway" {',
-          '  template {',
-          '    container {',
-          '      env {',
-          '        name  = "GATEWAY_OIDC_CLIENT_ID"',
-          '        value = var.client_id',
-          '      }',
-          '    }',
-          '  }',
-          '}',
-          '',
-          'resource "azurerm_container_app" "console" {',
-          '  template {',
-          '    container {',
-          '      env {',
-          '        name  = "CONSOLE_CLIENT_ID"',
-          '        value = "console"',
-          '      }',
-          '    }',
-          '  }',
-          '}',
-          '',
-        ].join('\n')
-      )
-      const findings = await checkConsoleCredentials(directory)
-      expect(findings).toEqual([
-        {
-          file: join('deploy', 'tofu', 'azure', 'containerapps.tf'),
-          message:
-            'the console of the deployment is a client of Access of its own ("console"), and the gateway is another one (var.client_id): Access holds one client for a tenant, and the sign-in of the console fails with a request that names no tenant',
-        },
-      ])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-
-  test('a console that reads a secret of its own is reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
-    try {
-      const templates = join(directory, 'deploy', 'tofu', 'azure')
-      await mkdir(templates, { recursive: true })
-      await writeFile(
-        join(templates, 'containerapps.tf'),
-        [
-          'locals {',
-          '  gateway_env_secrets = {',
-          '    GATEWAY_OIDC_CLIENT_SECRET = "client-secret"',
-          '  }',
-          '  console_env_secrets = {',
-          '    CONSOLE_CLIENT_SECRET = "console-client-secret"',
-          '  }',
-          '}',
-          '',
-        ].join('\n')
-      )
-      const findings = await checkConsoleCredentials(directory)
-      expect(findings).toEqual([
-        {
-          file: join('deploy', 'tofu', 'azure', 'containerapps.tf'),
-          message:
-            'the console of the deployment reads the secret console-client-secret of the vault and the gateway reads the secret client-secret, and the two of them are the one client of the tenant: the sign-in of the console fails with a request that is not valid',
-        },
-      ])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-
-  test('a console whose credential of the access context is not registered is reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
-    try {
-      const templates = join(directory, 'deploy', 'tofu', 'azure')
-      await mkdir(templates, { recursive: true })
-      await writeFile(
-        join(templates, 'locals.tf'),
-        [
-          'locals {',
-          '  access_context_tokens = {',
-          '    (random_bytes.access_context.hex) = [var.access_tenant_id]',
-          '  }',
-          '  secret_values = {',
-          '    "console-access-context-token" = random_bytes.console_access_context.hex',
-          '  }',
-          '  console_env_secrets = {',
-          '    CONSOLE_ACCESS_CONTEXT_TOKEN = "console-access-context-token"',
-          '  }',
-          '}',
-          '',
-        ].join('\n')
-      )
-      const findings = await checkConsoleCredentials(directory)
-      expect(findings).toEqual([
-        {
-          file: join('deploy', 'tofu', 'azure', 'locals.tf'),
-          message:
-            'the console of the deployment reads the credential of the access context and that credential is not registered at Access: the console reads no scope for the people that sign in, and it opens nothing',
-        },
-      ])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-
-  test('a console that holds the token of the control plane is reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
-    try {
-      const templates = join(directory, 'deploy', 'tofu', 'azure')
-      await mkdir(templates, { recursive: true })
-      await writeFile(
-        join(templates, 'locals.tf'),
-        [
-          'locals {',
-          '  control_tokens = {',
-          '    (random_bytes.client_secret.hex) = {',
-          '      operator = "the-operator-of-the-deployment"',
-          '      scope    = "operate"',
-          '    }',
-          '  }',
-          '  secret_values = {',
-          '    "client-secret" = random_bytes.client_secret.hex',
-          '  }',
-          '  console_env_secrets = {',
-          '    CONSOLE_CLIENT_SECRET = "client-secret"',
-          '  }',
-          '}',
-          '',
-        ].join('\n')
-      )
-      const findings = await checkConsoleCredentials(directory)
-      expect(findings).toEqual([
-        {
-          file: join('deploy', 'tofu', 'azure', 'locals.tf'),
-          message:
-            'the console of the deployment reads the secret of the client, and that secret is the token of the control plane: the service that the browsers reach holds a credential of the control plane',
-        },
-      ])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-})
-
-describe('the credential of the tenant of the deployment', () => {
-  test('the console holds the credential of its tenant', async () => {
-    expect(await checkConsoleTenantCredential(root)).toEqual([])
-  })
-
-  test('a console that holds no credential of its tenant is reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
-    try {
-      const templates = join(directory, 'deploy', 'tofu', 'azure')
-      await mkdir(templates, { recursive: true })
-      await writeFile(
-        join(templates, 'locals.tf'),
-        [
-          'locals {',
-          '  access_env_secrets = {',
-          '    ACCESS_ADMIN_TOKENS = "access-admin-tokens"',
-          '  }',
-          '  admin_tokens = {',
-          '    (random_bytes.access_tenant_admin.hex) = {',
-          '      tenant   = var.data_workspace_slug',
-          '      operator = "the-console-of-the-deployment"',
-          '    }',
-          '  }',
-          '  tenant_admin_tokens = {',
-          '    (var.data_workspace_slug) = random_bytes.access_tenant_admin.hex',
-          '  }',
-          '}',
-          '',
-        ].join('\n')
-      )
-      const findings = await checkConsoleTenantCredential(directory)
-      expect(findings).toEqual([
-        {
-          file: join('deploy', 'tofu', 'azure', 'containerapps.tf'),
-          message:
-            'the console of the deployment holds no credential of the administration of its tenant: it signs every change of the tenant with the token of the platform, and the audit of the change names nobody',
-        },
-      ])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-
-  test('a credential that Access does not know is reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
-    try {
-      const templates = join(directory, 'deploy', 'tofu', 'azure')
-      await mkdir(templates, { recursive: true })
-      await writeFile(
-        join(templates, 'locals.tf'),
-        [
-          'locals {',
-          '  console_env_secrets = {',
-          '    CONSOLE_TENANT_ADMIN_TOKENS = "console-tenant-admin-tokens"',
-          '  }',
-          '  admin_tokens = {',
-          '    (random_bytes.access_admin.hex) = {',
-          '      tenant   = var.data_workspace_slug',
-          '      operator = "the-console-of-the-deployment"',
-          '    }',
-          '  }',
-          '  tenant_admin_tokens = {',
-          '    (var.data_workspace_slug) = random_bytes.access_tenant_admin.hex',
-          '  }',
-          '}',
-          '',
-        ].join('\n')
-      )
-      const findings = await checkConsoleTenantCredential(directory)
-      expect(findings).toEqual([
-        {
-          file: join('deploy', 'tofu', 'azure', 'containerapps.tf'),
-          message:
-            'Access of the deployment holds no credential of the administration of the tenant of the deployment: the console presents a credential that Access refuses, and the administration of the tenant is refused to every operator',
-        },
-        {
-          file: join('deploy', 'tofu', 'azure', 'locals.tf'),
-          message:
-            'the console of the deployment and Access do not hold the same credential of the administration of the tenant: the console presents a credential that Access refuses, and the administration of the tenant is refused to every operator',
-        },
-      ])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-
-  test('a credential that names no tenant is reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-tofu-'))
-    try {
-      const templates = join(directory, 'deploy', 'tofu', 'azure')
-      await mkdir(templates, { recursive: true })
-      await writeFile(
-        join(templates, 'locals.tf'),
-        [
-          'locals {',
-          '  access_env_secrets = {',
-          '    ACCESS_ADMIN_TOKENS = "access-admin-tokens"',
-          '  }',
-          '  console_env_secrets = {',
-          '    CONSOLE_TENANT_ADMIN_TOKENS = "console-tenant-admin-tokens"',
-          '  }',
-          '  admin_tokens = {',
-          '    (random_bytes.access_tenant_admin.hex) = {',
-          '      operator = "the-console-of-the-deployment"',
-          '    }',
-          '  }',
-          '  tenant_admin_tokens = {',
-          '    (var.data_workspace_slug) = random_bytes.access_tenant_admin.hex',
-          '  }',
-          '}',
-          '',
-        ].join('\n')
-      )
-      const findings = await checkConsoleTenantCredential(directory)
-      expect(findings).toEqual([
-        {
-          file: join('deploy', 'tofu', 'azure', 'locals.tf'),
-          message:
-            'Access of the deployment holds a credential of the administration that names no tenant: the credential is scoped to no tenant, and it refuses every call',
-        },
-      ])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-})
-
-describe('the files of the templates of the deployment', () => {
-  test('a file of the directory of the templates that is not a file of the templates is reported', async () => {
-    // The tool that writes the deployment reads the whole directory of
-    // the templates, and a file that is named `tests` and that is not
-    // a directory stops the tool with the stack trace of the tool: the
-    // operator is told nothing about the file that is in the way.
-    const directory = await mkdtemp(join(tmpdir(), 'platform-templates-'))
-    try {
-      const templates = join(directory, 'deploy', 'tofu', 'azure')
-      await mkdir(templates, { recursive: true })
-      await writeFile(join(templates, 'locals.tf'), 'locals {}\n')
-      await writeFile(join(templates, 'tests'), '')
-      const findings = await checkFilesOfStack(directory, {
-        directory: join('deploy', 'tofu', 'azure'),
-        files: ['locals.tf'],
-      })
-      expect(findings).toEqual([
-        {
-          file: join('deploy', 'tofu', 'azure', 'tests'),
-          message:
-            'the file is not a file of the templates: the tool that writes the deployment reads the whole directory, and a file it cannot read stops the deployment',
-        },
-      ])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-
-  test('the files of the templates and the files of a deployment are not reported', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'platform-templates-'))
-    try {
-      const templates = join(directory, 'deploy', 'tofu', 'azure')
-      await mkdir(templates, { recursive: true })
-      await writeFile(join(templates, 'locals.tf'), 'locals {}\n')
-      await writeFile(join(templates, 'README.md'), '# the templates\n')
-      await writeFile(join(templates, 'terraform.tfstate'), '{}\n')
-      const findings = await checkFilesOfStack(directory, {
-        directory: join('deploy', 'tofu', 'azure'),
-        files: ['locals.tf'],
-      })
-      expect(findings).toEqual([])
-    } finally {
-      await rm(directory, { recursive: true, force: true })
-    }
-  })
-})
-
-describe('the credentials of the templates of the deployment', () => {
-  /**
-   * The templates of the deployment of the repository.
-   *
-   * The credentials the templates generate are credentials that the
-   * services of the deployment read, and the services count their bytes
-   * the way they read them: a secret of hexadecimal is counted in half
-   * of its characters, and a passphrase is counted in three quarters of
-   * them when it is a part of the alphabet of base64.
-   */
-  async function templatesOf(): Promise<{ file: string; source: string }[]> {
-    const directory = join(root, 'deploy', 'tofu', 'azure')
-    const entries = await readdir(directory, { withFileTypes: true })
-    const sources: { file: string; source: string }[] = []
-    for (const entry of entries) {
-      if (!entry.isFile()) continue
-      if (!entry.name.endsWith('.tf')) continue
-      sources.push({
-        file: join('deploy', 'tofu', 'azure', entry.name),
-        source: await readFile(join(directory, entry.name), 'utf8'),
-      })
-    }
-    return sources
-  }
-
-  test('the credentials the templates generate are strong enough for the services', async () => {
-    expect(await checkCredentials(await templatesOf())).toEqual([])
-  })
-
-  test('a credential that is counted in fewer than thirty-two bytes is reported', () => {
-    // A passphrase of forty characters is a credential of thirty bytes:
-    // the services count the characters of a passphrase as the
-    // characters of base64, and a deployment that holds one starts a
-    // service that stops.
-    const source = [
-      'resource "random_password" "gateway_access_token" {',
-      '  length  = 40',
-      '  special = false',
-      '}',
-      'locals {',
-      '  token = random_password.gateway_access_token.result',
-      '}',
-    ].join('\n')
-    expect(checkCredentials([{ file: 'locals.tf', source }])).toEqual([
-      {
-        file: 'locals.tf',
-        message:
-          'the credential gateway_access_token is counted in 30 bytes: a service refuses to start with a credential of fewer than 32 bytes',
+test('CLI apply invokes the real subprocess adapter and sends the manifest through stdin', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'platform-deploy-'))
+  try {
+    writeFileSync(
+      join(dir, 'kubectl'),
+      `#!/bin/sh
+printf '%s\\n' "$@" >> "$DEPLOY_TEST_CALLS"
+if [ "$3" = "apply" ]; then cat > "$DEPLOY_TEST_MANIFEST"; fi
+`,
+      { mode: 0o755 }
+    )
+    const child = Bun.spawn([process.execPath, 'src/cli.ts', 'deploy', 'k8s', 'apply'], {
+      cwd: new URL('..', import.meta.url).pathname,
+      env: {
+        PATH: dir + ':' + process.env.PATH,
+        ...kenv,
+        DEPLOY_TEST_CALLS: join(dir, 'calls'),
+        DEPLOY_TEST_MANIFEST: join(dir, 'manifest'),
       },
-    ])
-  })
-
-  test('a password of a role of a database is not a credential of a service', () => {
-    // The password of a role is carried by the address of the database,
-    // and a service reads the address and not the password.
-    const source = [
-      'resource "random_password" "data_owner" {',
-      '  length  = 32',
-      '  special = false',
-      '}',
-      'locals {',
-      `  url = "postgres://data_owner:\${random_password.data_owner.result}@localhost:5432/data"`,
-      '}',
-    ].join('\n')
-    expect(checkCredentials([{ file: 'locals.tf', source }])).toEqual([])
-  })
-
-  test('the credentials of the templates are read', () => {
-    const source = [
-      'resource "random_bytes" "access_admin" {',
-      '  length = 32',
-      '}',
-      'resource "random_password" "postgres_admin" {',
-      '  length  = 32',
-      '  special = false',
-      '}',
-    ].join('\n')
-    expect(credentialsOfTemplates([{ file: 'locals.tf', source }])).toEqual([
-      { name: 'access_admin', file: 'locals.tf', bytes: 32, carriedByDatabase: false },
-      { name: 'postgres_admin', file: 'locals.tf', bytes: 24, carriedByDatabase: false },
-    ])
-  })
-})
-
-describe('the reading of the templates', () => {
-  test('the variables of the templates are read', () => {
-    expect(
-      variablesOfTemplates([
-        'variable "location" {\n  type = string\n}\n',
-        'variable "name_prefix" {\n  type = string\n}\n',
-        '# variable "commented" {\n',
-      ])
-    ).toEqual(['location', 'name_prefix'])
-  })
-
-  test('the names of the example of the values are read, and not the names inside a value', () => {
-    const example = [
-      '# the name of the deployment',
-      'name_prefix = "platform"',
-      '',
-      'services = {',
-      '  gateway = { min_replicas = 2 }',
-      '  access  = { min_replicas = 2 }',
-      '}',
-      '',
-      'operator_addresses = ["203.0.113.4/32"]',
-    ].join('\n')
-    expect(assignmentsOf(example)).toEqual(['name_prefix', 'operator_addresses', 'services'])
-  })
-
-  test('the value of a name of the example of the values is read', () => {
-    const example = 'name_prefix = "platform"\nservices = {\n  gateway = { min_replicas = 2 }\n}\n'
-    expect(valueOfAssignment(example, 'name_prefix')).toBe('platform')
-    expect(valueOfAssignment(example, 'services')).toBe('{\n  gateway = { min_replicas = 2 }\n}')
-    expect(valueOfAssignment(example, 'nothing')).toBeUndefined()
-  })
-
-  test('the images of the templates are read', () => {
-    expect(
-      imagesOfTemplates([
-        'image = "ghcr.io/ggpwnkthx/gateway:1.0.0"\n',
-        '  image = var.gateway_image\n',
-      ])
-    ).toEqual(['ghcr.io/ggpwnkthx/gateway:1.0.0'])
-  })
-
-  test('the versions of the providers are read', () => {
-    const versions = [
-      'terraform {',
-      '  required_providers {',
-      '    azurerm  = { source = "hashicorp/azurerm", version = "~> 4.0" }',
-      '    azuread = { source = "hashicorp/azuread", version = "~> 2.0" }',
-      '    random  = { source = "hashicorp/random" }',
-      '  }',
-      '}',
-    ].join('\n')
-    const found = providerVersionsOf(versions)
-    expect(found.find((entry) => entry.provider === 'azurerm')?.version).toBe('~> 4.0')
-    expect(found.find((entry) => entry.provider === 'azuread')?.version).toBe('~> 2.0')
-    expect(found.find((entry) => entry.provider === 'random')?.version).toBe('')
-  })
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+    const stderr = await new Response(child.stderr).text()
+    expect(stderr).toBe('')
+    expect(await child.exited).toBe(0)
+    expect(readFileSync(join(dir, 'calls'), 'utf8')).toContain('rollout')
+    expect(readFileSync(join(dir, 'manifest'), 'utf8')).toContain(settings.image)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })
