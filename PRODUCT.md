@@ -70,11 +70,11 @@ the interface alike.
   after their email exists.
 - psql 18 signs in through Dex itself: it prints an address and a code. `PGOAUTHDEBUG=UNSAFE` is
   needed only because the local Dex is plain HTTP.
-- The interface is a static site in `ui/`, generated at build time (`bun run build:ui` →
-  `ui/dist`) and served by nginx (the `ui` image), which proxies the WebSocket `/pg` to the relay
-  (websocat) in front of PostgreSQL. The page reads its issuer, client, claim, relay and database
-  from `/config.json`, written by the deployment at start. The access token lives in memory only,
-  so a page load always starts signed out — which is exactly the state the generated pages show.
+- The interface is a static site in `packages/ui/`, generated at build time (`bun run build:ui` →
+  `packages/ui/dist`) and published to a CDN: it is files, not a container. The page opens a WebSocket to
+  the relay in front of PostgreSQL and reads its issuer, client, claim, relay and database from
+  `/config.json`, served beside the pages. The access token lives in memory only, so a page load
+  always starts signed out — which is exactly the state the generated pages show.
 - The relay reaches PostgreSQL in plain TCP, so it runs next to PostgreSQL or on a private
   network the operator trusts; PostgreSQL takes only tokens from the relay's addresses
   (`PLATFORM_TOKEN_ONLY_FROM`).
@@ -101,7 +101,7 @@ the interface alike.
 
 **Capabilities**
 
-- The interface (`ui/`): a data studio in the manner of a headless CMS — a module bar (Content,
+- The interface (`packages/ui/`): a data studio in the manner of a headless CMS — a module bar (Content,
   Data model, Access, Activity, SQL), a navigation pane with the workspace switcher and the
   collections, and a sidebar with the collection's information, the reader's rights and the row
   policies that apply. Records, model inspection, runtime collection and field creation, roles,
@@ -160,9 +160,9 @@ the interface alike.
   `updated_by` and `version`, and a dropped collection leaves its metadata behind, unread.
 - Writes return counts rather than `RETURNING *`.
 - The browser surface: a strict CSP (`default-src 'self'`, `script-src 'self'`, `style-src 'self'`,
-  `connect-src` limited to the site, its WebSocket origin and the issuer, `frame-ancestors 'none'`,
-  `base-uri 'none'`), a WebSocket to `/pg` refused with 403 from any Origin but PUBLIC_URL's, and a
-  cap on the database sessions one client address may hold (SESSIONS_PER_ADDRESS).
+  `connect-src` limited to the site, the relay's origin and the issuer, `frame-ancestors 'none'`,
+  `base-uri 'none'`), a WebSocket refused with 403 from any Origin but the site's own, and a
+  cap on the database sessions one client address may hold (RELAY_SESSIONS_PER_ADDRESS).
 - The relay to PostgreSQL leg is plain TCP and must stay on a network the operator trusts.
 
 **Open decisions** (explicitly undecided; do not invent them):
@@ -177,15 +177,15 @@ One commitment is in force: the interface's visual reference is pinned by the us
 combination of Directus and Keystone" — a headless-CMS data studio at that level of craft, light
 and dense. Beyond that, no name, voice, asset or personality has been declared binding. The
 product currently goes by "Platform"; the interface carries its own title, and
-`ui/src/favicon.svg` is the only logo asset in the repository. The written voice across the
+`packages/ui/src/favicon.svg` is the only logo asset in the repository. The written voice across the
 README and `docs/` is plain, declarative and technical — a statement of what the system does,
 not of how it feels — which future work may keep or replace.
 
 ## Evidence on Hand
 
 - Real content: `examples/newsroom.json`, `deploy/models/crm.json`, the development seed
-  `ui/src/dev/seed.sql`, the product documents in `docs/`, and the generated interface pages in
-  `ui/dist`.
+  `packages/ui/src/dev/seed.sql`, the product documents in `docs/`, and the generated interface pages in
+  `packages/ui/dist`.
 - Real demonstrations: the local stack with its three example accounts; integration tests and CI
   against PostgreSQL 18 with real token logins; the CLI's `doctor`, `token`, `apply --dry-run`,
   `harden` and `deploy` commands.

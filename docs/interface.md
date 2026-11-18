@@ -1,6 +1,6 @@
 # Interface
 
-The interface is a static site in `ui/`. Its pages are generated at build time, and the client
+The interface is a static site in `packages/ui/`. Its pages are generated at build time, and the client
 in them speaks PostgreSQL's own wire protocol: it logs in to PostgreSQL with the reader's token,
 runs ordinary SQL as the reader, and lets PostgreSQL decide every right. There is no application
 server, no `/api` and no session of the interface's own. The same rules apply in psql, the CLI
@@ -8,7 +8,7 @@ and any other client.
 
 ## Pages
 
-`bun run build:ui` prerenders every page with `preact-iso` into `ui/dist`, beside one client
+`bun run build:ui` prerenders every page with `preact-iso` into `packages/ui/dist`, beside one client
 bundle (`app.js`), `styles.css`, the self-hosted Inter and JetBrains Mono fonts and
 `config.json`. Each page is its own file, so a bookmark, a new tab and a reload all land on a
 real page; inside the app, links move between pages without a reload, which is what keeps the
@@ -54,7 +54,7 @@ changes use native SQL.
 
 ## How the page reaches PostgreSQL
 
-`ui/src/pg/wire.ts` is a PostgreSQL client for protocol version 3, written for the page:
+`packages/ui/src/pg/wire.ts` is a PostgreSQL client for protocol version 3, written for the page:
 
 - Login is OAUTHBEARER (RFC 7628) with the reader's own token, as the role the token's claim
   names. PostgreSQL's validator checks the token's signature, issuer and expiry; the page
@@ -64,20 +64,20 @@ changes use native SQL.
 - The startup message sends `statement_timeout` (STATEMENT_TIMEOUT_MS from `config.json`) and
   `idle_in_transaction_session_timeout`, and the application name `platform-ui`.
 
-In a browser, the protocol travels over a WebSocket (`ui/src/pg/socket.ts`) to `/pg` on the
-page's own origin. The web server forwards it to the relay: websocat
-(`ghcr.io/vi/websocat:v1.14.2`, run as `--binary --exit-on-eof --conncap 256 ws-l:... tcp:...`),
-a stock WebSocket-to-TCP forwarder that hands the bytes to PostgreSQL's port and understands
-none of them. The relay holds no credentials and runs no code of this project's.
+In a browser, the protocol travels over a WebSocket (`packages/ui/src/pg/socket.ts`) to the relay, at
+the address `config.json` names (`wss://relay.example.com`). The relay (`packages/relay/src/relay.ts`, the
+`relay` image) hands the bytes to PostgreSQL's port and understands none of them. It holds no
+credentials and reads nothing it carries: the reader's token travels inside the PostgreSQL
+startup packet, and PostgreSQL alone checks it.
 
-Each action opens one login and closes it (`withDb` in `ui/src/session.tsx`): loading a page's
+Each action opens one login and closes it (`withDb` in `packages/ui/src/session.tsx`): loading a page's
 data, saving a record, running a statement. One connection per action, always closed. Session
 state such as SET ROLE or an open transaction does not survive into the next action. A token
 that has expired signs the reader out before a connection is attempted; a login PostgreSQL
 refuses signs them out with PostgreSQL's message.
 
-What the page runs is ordinary SQL, all of it in `ui/src/db/platform.ts` and
-`ui/src/db/model.ts`:
+What the page runs is ordinary SQL, all of it in `packages/ui/src/db/platform.ts` and
+`packages/ui/src/db/model.ts`:
 
 - The catalog, from PostgreSQL's privilege functions (`has_table_privilege`,
   `has_column_privilege`, `has_schema_privilege`, `pg_has_role`).
@@ -93,7 +93,7 @@ What the page runs is ordinary SQL, all of it in `ui/src/db/platform.ts` and
   since it was opened, otherwise a row policy refused the change or the row is gone, and the
   page says "PostgreSQL changed no row".
 - Metadata in `platform.item_metadata`.
-- DDL and DCL built by `ui/src/db/model.ts`: workspaces, collections, fields, grants, row
+- DDL and DCL built by `packages/ui/src/db/model.ts`: workspaces, collections, fields, grants, row
   policies, memberships and roles.
 
 ## Shown before it runs
@@ -127,42 +127,58 @@ is guarded by its version, as a record is.
 ## config.json
 
 The pages are static, so what they need to find the issuer and the database is a file served
-beside them, read once at start (`ui/src/config.ts`). The deployment writes it when the web
-server starts; changing it needs no rebuild.
+beside them, read once at start (`packages/ui/src/config.ts`). It is a file in the published site, so
+a deployment changes it without rebuilding the bundle.
 
 | Field                | Example                       | Purpose                                                    |
 | -------------------- | ----------------------------- | ---------------------------------------------------------- |
 | `issuer`             | `https://sso.example.com/dex` | The one OpenID Connect issuer PostgreSQL trusts: your Dex  |
 | `clientId`           | `platform-console`            | The public client the page signs in with                   |
 | `claim`              | `email`                       | The token claim PostgreSQL matches against the role name   |
-| `relay`              | `/pg`                         | The relay's WebSocket; a path is resolved against the page |
+| `relay`              | `wss://relay.example.com`     | The relay's WebSocket; a path is resolved against the page |
 | `database`           | `platform`                    | The database Platform is installed in                      |
 | `statementTimeoutMs` | `15000`                       | Sent as `statement_timeout` with each login                |
 
-A relative `relay` becomes `ws://` on an `http` page and `wss://` on an `https` one.
+A relative `relay` becomes `ws://` on an `http` page and `wss://` on an `https` one. An
+absolute `ws://` or `wss://` address is used as it is, which is what a site on a CDN needs:
+the relay is a different origin from the pages.
 
-## The ui image
+## Publishing the site
 
-The `ui` image (Dockerfile target `ui`, based on `nginxinc/nginx-unprivileged:1.27-alpine`)
-serves `ui/dist` and proxies the WebSocket `/pg` to the relay. At start, `deploy/ui/platform.sh`
-writes `/tmp/platform/config.json` and the server block from the environment:
+The interface is files, not a container. `bun run build:ui` writes `packages/ui/dist`: one HTML file
+per page, the client bundle, the styles, the fonts, `config.json` and `_headers`. A CDN
+serves that directory; there is nothing to run. `deploy/cdn/README.md` has the details.
 
-| Variable             | Default          | Purpose                                                           |
-| -------------------- | ---------------- | ----------------------------------------------------------------- |
-| PUBLIC_URL           | required         | The address people open; WebSockets from any other Origin get 403 |
-| OIDC_ISSUER          | required         | Your Dex, the issuer PostgreSQL trusts                            |
-| OIDC_CLIENT_ID       | platform-console | The public client the pages sign in with                          |
-| OIDC_CLAIM           | email            | The claim that names the role; must match the validator's         |
-| DATABASE_NAME        | platform         | The database Platform is installed in                             |
-| RELAY_UPSTREAM       | relay:8081       | host:port of the relay                                            |
-| STATEMENT_TIMEOUT_MS | 15000            | Sent with each login as `statement_timeout`                       |
-| SESSIONS_PER_ADDRESS | 20               | Open WebSockets one client address may hold on `/pg`              |
-| LISTEN_PORT          | 8080             | The port nginx listens on                                         |
+The deployment's names live in `config.json` and in the headers, not in the bundle, so one
+build serves every deployment. The build reads them from the environment:
 
-PUBLIC_URL and OIDC_ISSUER must be http(s) URLs. A value containing a quote, a backslash, a
-semicolon, a brace, a dollar sign or whitespace is refused, since the values are written into
-the server's configuration. `/health` answers `ok` without touching the database. The image
-holds no database credentials and no OAuth client secret.
+| Variable                      | Default                   | Purpose                                                   |
+| ----------------------------- | ------------------------- | --------------------------------------------------------- |
+| PLATFORM_PUBLIC_URL           | http://localhost:5173     | The address people open; the only origin the relay allows |
+| PLATFORM_ISSUER               | http://localhost:5556/dex | Your Dex, the issuer PostgreSQL trusts                    |
+| PLATFORM_CLIENT_ID            | platform-console          | The public client the pages sign in with                  |
+| PLATFORM_CLAIM                | email                     | The claim that names the role; must match the validator's |
+| PLATFORM_RELAY_URL            | ws://localhost:8081       | The relay the pages open their sessions through           |
+| PLATFORM_DATABASE_NAME        | platform                  | The database Platform is installed in                     |
+| PLATFORM_STATEMENT_TIMEOUT_MS | 15000                     | Sent with each login as `statement_timeout`               |
+
+## The relay image
+
+The `relay` image (Dockerfile target `relay`, based on `oven/bun`) is the only part of the
+interface's path that answers on the network. It is configured from the environment:
+
+| Variable                   | Default        | Purpose                                           |
+| -------------------------- | -------------- | ------------------------------------------------- |
+| RELAY_UPSTREAM             | 127.0.0.1:5432 | host:port of PostgreSQL                           |
+| RELAY_PORT                 | 8081           | The port the relay listens on                     |
+| RELAY_ORIGINS              | any            | Comma-separated origins allowed to open a session |
+| RELAY_SESSIONS_PER_ADDRESS | 20             | Open sessions one client address may hold         |
+| RELAY_TLS_CERT             | none           | The certificate the relay serves TLS with         |
+| RELAY_TLS_KEY              | none           | Its key                                           |
+
+`/health` answers `ok` without touching the database. The image holds no database
+credentials and no OAuth client secret. Put it behind TLS: an ingress controller, a load
+balancer, a tunnel, or the relay itself with a certificate.
 
 ## The browser surface
 
@@ -171,29 +187,30 @@ holds no database credentials and no OAuth client secret.
   verifier across the redirect to Dex and is cleared when the page returns. The page is a
   public client and has no client secret. XSS or a compromised page could still read the
   in-memory token, as it could in any single-page application.
-- **Content security policy.** Every page and the `/pg` endpoint are sent `default-src 'self';
+- **Content security policy.** Every page is sent `default-src 'self';
   script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'
-  <ws(s) origin of PUBLIC_URL> <issuer origin>; frame-ancestors 'none'; base-uri 'none';
+  <relay origin> <issuer origin>; frame-ancestors 'none'; base-uri 'none';
   form-action 'self'`, with `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
-  and HSTS when PUBLIC_URL is https. There is no inline script and no third-party asset: the
-  fonts are bundled. Pages are sent with `Cache-Control: no-cache` and `config.json` with
-  `no-store`.
-- **Origin check.** nginx refuses a WebSocket to `/pg` whose Origin is not PUBLIC_URL's with
-  403, so another site's page cannot open a database session through a visitor's browser.
-- **Session cap.** One open WebSocket is one database session. `limit_conn` caps how many one
-  client address may hold at once (SESSIONS_PER_ADDRESS); behind a proxy, every client shares
-  the proxy's address. websocat's `--conncap 256` caps the relay as a whole. Size PostgreSQL's
-  `max_connections` and per-role connection limits accordingly.
+  and HSTS. There is no inline script and no third-party asset: the fonts are bundled. Pages
+  are sent with `Cache-Control: no-cache` and `config.json` with `no-store`. The headers are
+  written by `packages/ui/scripts/headers.ts`, in the `_headers` file a CDN reads.
+- **Origin check.** The relay refuses a handshake whose Origin is not one of
+  `RELAY_ORIGINS`, so another site's page cannot open a database session through a visitor's
+  browser. A handshake with no Origin at all is refused too when the list is not empty.
+- **Session cap.** One open WebSocket is one database session. The relay caps how many one
+  client address may hold at once (RELAY_SESSIONS_PER_ADDRESS); behind a proxy, every client
+  shares the proxy's address. Size PostgreSQL's `max_connections` and per-role connection
+  limits accordingly.
 - **statement_timeout.** Each login asks for STATEMENT_TIMEOUT_MS. It is a session setting the
   reader may change with SET on their own connection, not a resource boundary; set role or
   database defaults and connection limits in PostgreSQL where it matters.
-- **What the relay can see.** The relay and nginx carry the whole protocol stream: the token in
-  the login, every statement and every row. Between the browser and nginx the stream is inside
-  the deployment's HTTPS (wss). Between the relay and PostgreSQL it is plain TCP: the browser
-  cannot negotiate PostgreSQL's TLS inside the stream, and websocat does not speak PostgreSQL's
-  SSLRequest. The relay must therefore run next to PostgreSQL or on a private network you
-  trust: the same host, the same pod network, a service mesh with mTLS, or a tunnel. Whoever
-  controls the relay or that network can read tokens in flight and use them until they expire.
+- **What the relay can see.** The relay carries the whole protocol stream: the token in
+  the login, every statement and every row. Between the browser and the relay the stream is
+  inside the deployment's WSS. Between the relay and PostgreSQL it is plain TCP: the browser
+  cannot negotiate PostgreSQL's TLS inside the stream. The relay must therefore run next to
+  PostgreSQL or on a private network you trust: the same host, the same pod network, a service
+  mesh with mTLS, or a tunnel. Whoever controls the relay or that network can read tokens in
+  flight and use them until they expire.
 - **Only tokens from the relay's network.** PostgreSQL's image takes PLATFORM_TOKEN_ONLY_FROM, a
   list of CIDR blocks from which a login is by token or not at all, written before the
   administrator's password rule. Set it to the relay's addresses, so that nobody, the
@@ -201,26 +218,27 @@ holds no database credentials and no OAuth client secret.
 
 ## Development
 
-`bun run dev:ui` (scripts/dev-ui.ts) builds the development interface into `ui/dist-dev` and
-serves it on http://localhost:5173 (PORT to change). Every change under `ui/src` rebuilds the
+`bun run dev:ui` (packages/ui/scripts/dev.ts) builds the development interface into `packages/ui/dist-dev` and
+serves it on http://localhost:5173 (PORT to change). Every change under `packages/ui/src` rebuilds the
 pages; reload to see it.
 
 In it, PostgreSQL 18 runs inside the page: PGlite (`@electric-sql/pglite`, a devDependency),
-installed with the real `migrations/*.sql` and seeded by `ui/src/dev/seed.sql`. The seed is
+installed with the real `migrations/*.sql` and seeded by `packages/ui/src/dev/seed.sql`. The seed is
 what the example manifest and the CRM model would leave behind, with rows: the newsroom
 workspace with sections, articles and corrections and its grants and policies; the crm
 workspace, owned by the group `sales`, with accounts, contacts and deals and real foreign
 keys; revisions and metadata. The sign-in page offers the three example people, admin, alice
 and bob. Choosing one logs that role in with `SET SESSION AUTHORIZATION`, so grants, row
 policies and triggers apply as they would on a server. Signing in as someone else reloads the
-page, and the database is kept in IndexedDB across reloads.
+page, and the database is kept in IndexedDB across reloads. Clearing the site's storage
+forgets it: the next load starts from the seed again.
 
-The swap happens at build time: a Bun plugin replaces `ui/src/db/connect.ts` with
-`ui/src/dev/database.ts`, so PGlite never reaches the production bundle. The development
+The swap happens at build time: a Bun plugin replaces `packages/ui/src/db/connect.ts` with
+`packages/ui/src/dev/database.ts`, so PGlite never reaches the production bundle. The development
 server's CSP adds `'wasm-unsafe-eval'` to `script-src`, there only, because PGlite is
 WebAssembly.
 
-`bun run dev:ui --relay=HOST:PORT` serves the real build from `ui/dist` instead and forwards
+`bun run dev:ui --relay=HOST:PORT` serves the real build from `packages/ui/dist` instead and forwards
 `/pg` WebSockets to a PostgreSQL at HOST:PORT, byte for byte, as the deployment's relay does.
 Sign-in then goes through the issuer in `ui/public/config.json`. Use it to work against the
 local stack.

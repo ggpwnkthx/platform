@@ -12,7 +12,7 @@
 | Complex queries and relationships | Native SQL, foreign keys, joins and views                                                                            |
 | Audit                             | Trigger-generated transactional revisions, including direct SQL writes                                               |
 | Interface                         | Content, data model, access, activity and SQL, read one workspace at a time; the page speaks PostgreSQL's protocol   |
-| Deployment                        | CLI for Docker/Podman Compose (PostgreSQL 18, Dex, relay, interface) and Kubernetes                                  |
+| Deployment                        | CLI for Docker/Podman Compose (PostgreSQL 18, Dex, relay) and Kubernetes; the interface is static files for a CDN    |
 
 The interface reads one workspace at a time, and inside it one collection at a time: the
 navigation pane lists the collections of the workspace in view, Content holds a collection's

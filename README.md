@@ -34,7 +34,14 @@ bun run cli deploy local up
 bun run cli apply local examples/newsroom.json
 ```
 
-Open http://localhost:8080 and choose Sign in. Dex asks for an email and password: use
+The interface is a static site, not a container: build it and open the files.
+
+```bash
+bun run cli deploy local ui
+bun run dev:ui --relay=127.0.0.1:5432
+```
+
+Choose Sign in. Dex asks for an email and password: use
 `admin@example.com`, `alice@example.com` or `bob@example.com` with PLATFORM_ADMIN_PASSWORD,
 ALICE_PASSWORD or BOB_PASSWORD from .env. There are no built-in credentials. Those three live in
 the local stack's Dex and stand in for a real sign-in system; in a deployment you add your
@@ -42,7 +49,8 @@ providers to Dex as connectors instead (deploy/dex/config.yaml.tmpl). A person c
 role named after their email exists. The bootstrap administrator is a database user with
 `CREATEROLE` and permission to create schemas; it has no application administrator flag.
 The deploy command builds the images, starts PostgreSQL and Dex, installs the database, then
-starts the relay and the interface. Docker Compose and Podman Compose are detected
+starts the relay. In a deployment the interface is published to a CDN and the relay is the only
+part of the path that answers on the network. Docker Compose and Podman Compose are detected
 automatically; use `--engine=podman` to choose. Local HTTP and disabled database TLS are for
 loopback development only.
 
@@ -69,7 +77,7 @@ while the graph stays with the operators. See [operations](docs/operations.md).
 
 ## The interface in development
 
-The interface is a static site in `ui/`: the pages are generated at build time and the client
+The interface is a static site in `packages/ui/`: the pages are generated at build time and the client
 speaks to PostgreSQL itself. To work on it without a server, an issuer or a relay, run it on
 its own:
 
@@ -78,14 +86,14 @@ bun run dev:ui     # http://localhost:5173/
 ```
 
 The development build runs **PostgreSQL 18 inside the page** (PGlite), installed with the real
-`migrations/*.sql` and seeded by `ui/src/dev/seed.sql`: the newsroom workspace with its
+`migrations/*.sql` and seeded by `packages/ui/src/dev/seed.sql`: the newsroom workspace with its
 sections, articles and corrections, the crm workspace owned by the group `sales` with its
 accounts, contacts and deals, and their grants, policies, revisions and metadata. The sign-in
 page offers the three example people, admin, alice and bob; choosing one logs that role in,
 and every grant, row policy and trigger applies to them as it would on a server. The database
 is kept in the browser's IndexedDB across reloads. `PORT=8080 bun run dev:ui` chooses the port.
 
-Editing anything under `ui/src` rebuilds the pages and the page picks it up on the next
+Editing anything under `packages/ui/src` rebuilds the pages and the page picks it up on the next
 reload. The in-page database is swapped in when the bundle is built, so it never reaches a
 production bundle: `bun run build:ui` writes the real interface, which signs in through the
 issuer and reaches PostgreSQL through the relay. `bun run dev:ui --relay=HOST:PORT` serves that
@@ -128,19 +136,34 @@ New collections have RLS enabled with **no policies**. Grants alone do not make 
 visible to non-owners. Owners administer their tables; ordinary users must never own them.
 See [access control](docs/access.md) for concrete policies and delegation.
 
+## The packages
+
+| Package          | What it is                                                                    |
+| ---------------- | ----------------------------------------------------------------------------- |
+| `packages/sql`   | The SQL the platform writes: identifiers, literals, columns, relation names.  |
+| `packages/cli`   | The operator's tools: install, apply, harden, deploy. Depends on `pg`, `zod`. |
+| `packages/relay` | The WebSocket in front of PostgreSQL's port. No dependencies, no credentials. |
+| `packages/ui`    | The interface: a Preact application, its static build and its headers.        |
+
+Each package declares its own dependencies and owns its unit tests; the root holds the
+migrations, the deployment files and the integration tests that cross the packages. The
+repository root is a Bun workspace, so `bun install` installs all of them.
+
 ## Commands
 
 ```bash
 bun run check          # build the interface, typecheck, lint, format, PostgreSQL integration tests
-bun run build:ui       # generate the static interface into ui/dist
+bun run build:ui       # generate the static interface into packages/ui/dist
 bun run dev:ui         # the interface on http://localhost:5173/ with PostgreSQL in the page
 bun run dev:ui --relay=127.0.0.1:5432  # the real interface against a real PostgreSQL
 bun test               # needs the test server and relay: see docs/operations.md, Testing
 bun run cli deploy help
 bun run cli deploy local up
 bun run cli deploy local status
-bun run cli deploy local logs -f ui
+bun run cli deploy local logs -f relay
 bun run cli deploy local down  # keeps the database volume
+bun run cli deploy local ui   # build the static interface into packages/ui/dist, for a CDN
+bun run relay                # the WebSocket relay in front of PostgreSQL's port
 bun run cli --version  # 2.1.0
 bun run cli migrate    # installs what is missing, upgrades what is behind; CLI credentials required
 bun run cli harden local  # hide the role catalogs from ordinary connections; cluster superuser
@@ -157,15 +180,16 @@ installer's administrator, with `PGUSER` and `PGPASSWORD` or `PGPASSWORD_FILE`, 
 endpoint configuration. These secrets belong in operator sessions and migration jobs, never the
 interface or the relay. Tests use `TEST_ADMIN_URL`; see [operations](docs/operations.md).
 
-| Document                             | Contents                                                 |
-| ------------------------------------ | -------------------------------------------------------- |
-| [Architecture](docs/architecture.md) | Connection identity and database layout                  |
-| [Access](docs/access.md)             | Roles, grants, RLS, delegation and revocation            |
-| [Interface](docs/interface.md)       | Pages, the relay, configuration and the browser surface  |
-| [Security](docs/security.md)         | Boundaries and practical limitations                     |
-| [Operations](docs/operations.md)     | Deploying, PostgreSQL 18, Dex, TLS and testing           |
-| [Applying changes](docs/apply.md)    | Declaring users, groups, workspaces, grants and policies |
-| [Importing data](docs/import.md)     | Data, identity mappings and native permissions           |
-| [Features](docs/features.md)         | Native data and access capabilities                      |
+| Document                             | Contents                                                  |
+| ------------------------------------ | --------------------------------------------------------- |
+| [Architecture](docs/architecture.md) | Connection identity and database layout                   |
+| [Access](docs/access.md)             | Roles, grants, RLS, delegation and revocation             |
+| [Interface](docs/interface.md)       | Pages, the relay, configuration and the browser surface   |
+| [Publishing](deploy/cdn/README.md)   | The static site on a CDN: config.json, headers, the relay |
+| [Security](docs/security.md)         | Boundaries and practical limitations                      |
+| [Operations](docs/operations.md)     | Deploying, PostgreSQL 18, Dex, TLS and testing            |
+| [Applying changes](docs/apply.md)    | Declaring users, groups, workspaces, grants and policies  |
+| [Importing data](docs/import.md)     | Data, identity mappings and native permissions            |
+| [Features](docs/features.md)         | Native data and access capabilities                       |
 
 MIT. See [LICENSE](LICENSE).

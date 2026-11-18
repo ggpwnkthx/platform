@@ -14,11 +14,12 @@ upstream providers -> Dex (one issuer) -> token -> interface / psql / CLI
 ```
 
 There is no application server. The interface is a static site whose pages speak PostgreSQL's
-frontend/backend protocol themselves. In a browser the protocol travels over a WebSocket to a
-relay, a stock WebSocket-to-TCP forwarder in front of PostgreSQL's port:
+frontend/backend protocol themselves. It is published to a CDN as files, and never runs in a
+container. In a browser the protocol travels over a WebSocket to the relay, a forwarder in
+front of PostgreSQL's port:
 
 ```
-page (wire protocol) -> wss://.../pg -> nginx (Origin check, session cap) -> relay -> PostgreSQL
+page (wire protocol) -> wss://relay.example.com -> relay (Origin check, session cap) -> PostgreSQL
 ```
 
 For each action, the page:
@@ -70,32 +71,32 @@ same transaction. Failed and rolled-back changes leave no committed revision.
 
 ## Interface
 
-The interface is a static site in `ui/`, generated at build time. `ui/src` is a TypeScript
-Preact application; `scripts/build-ui.tsx` renders every page to HTML with `preact-iso`'s
-prerenderer and bundles the client with Bun's bundler into `ui/dist`: one file per page, one
+The interface is a static site in `packages/ui/`, generated at build time. `packages/ui/src` is a TypeScript
+Preact application; `packages/ui/scripts/build.tsx` renders every page to HTML with `preact-iso`'s
+prerenderer and bundles the client with Bun's bundler into `packages/ui/dist`: one file per page, one
 client bundle (`app.js`), `styles.css`, the self-hosted Inter and JetBrains Mono fonts and
 `config.json`. A web server hands out those files; nothing renders a page at request time,
 holds a session or adds authorization of its own. The pages are listed in
-`ui/src/routes.ts` and described in [interface](interface.md).
+`packages/ui/src/routes.ts` and described in [interface](interface.md).
 
 Routing is `preact-iso`: the same location contract drives the generator and the browser, so a
 page is generated where it is served, links are ordinary anchors that the router intercepts,
 and the back button, bookmarks and new tabs all work. Because the token is held in memory only,
 a page load always starts signed out, which is exactly the state the generated pages show.
 
-The page speaks PostgreSQL's protocol version 3 itself (`ui/src/pg/wire.ts`): OAUTHBEARER
+The page speaks PostgreSQL's protocol version 3 itself (`packages/ui/src/pg/wire.ts`): OAUTHBEARER
 (RFC 7628) login with the reader's token, the extended query protocol with exactly one
 statement per query and every value bound as a parameter, and text-format results. In a
-browser the bytes go over a WebSocket (`ui/src/pg/socket.ts`) to the relay, which forwards
+browser the bytes go over a WebSocket (`packages/ui/src/pg/socket.ts`) to the relay, which forwards
 them to PostgreSQL's port and understands none of them. Each action opens one login and closes
-it (`withDb` in `ui/src/session.tsx`).
+it (`withDb` in `packages/ui/src/session.tsx`).
 
-What the page does is ordinary SQL, all of it in two files. `ui/src/db/platform.ts` reads the
+What the page does is ordinary SQL, all of it in two files. `packages/ui/src/db/platform.ts` reads the
 catalog with PostgreSQL's privilege functions, the roles and memberships through
 `platform.visible_roles()` and `platform.visible_memberships()`, policies from `pg_policies`,
 grants from the ACLs through `aclexplode`, and activity; it reads records with filters, search,
 sort, paging and a row count, writes them without RETURNING, and guards an update with the
-version the reader saw (`WHERE id = $n AND version = $m`). `ui/src/db/model.ts` builds the DDL
+version the reader saw (`WHERE id = $n AND version = $m`). `packages/ui/src/db/model.ts` builds the DDL
 for collections, fields, grants, policies, memberships and roles. Every statement that changes
 the model or access is shown to the reader before it runs, then runs as them in one
 transaction.
@@ -110,17 +111,18 @@ roles. The interface keeps no second opinion about rights; it asks the database,
 fields it withholds (hidden from you, write-only, read-only), and shows a refusal with its
 SQLSTATE.
 
-The interface reaches the database through one seam, `ui/src/db/connect.ts`. A production
+The interface reaches the database through one seam, `packages/ui/src/db/connect.ts`. A production
 build leaves it alone, and the page opens a WebSocket to the relay. A development build
-(`bun run dev:ui`) resolves the same seam to `ui/src/dev/database.ts`, PostgreSQL 18 running
+(`bun run dev:ui`) resolves the same seam to `packages/ui/src/dev/database.ts`, PostgreSQL 18 running
 inside the page (PGlite) and installed with the real migrations, so the interface can be built
 without a server, an issuer or a relay. The swap happens while the bundle is built, so PGlite
 never reaches a production bundle.
 
 Sign-in is authorization code with PKCE against the one configured issuer, done by the page
-itself (`ui/src/auth/oidc.ts`): the token kept in memory, the PKCE verifier held in
+itself (`packages/ui/src/auth/oidc.ts`): the token kept in memory, the PKCE verifier held in
 sessionStorage only across the redirect. The page reads the issuer, client id, claim, relay
-path and database name from `/config.json`, which the deployment writes when it starts.
+address and database name from `/config.json`, a file served beside the pages, so that a
+deployment changes it without rebuilding the bundle.
 
 The interface reads in one workspace at a time. A workspace is the unit of ownership and of
 permission here, so it is the unit the interface presents in: the workspace in view lives in
@@ -142,10 +144,25 @@ what it is (its metadata) and who may use it (the rights on the schema).
 
 ## Repository
 
-`src/db.ts` owns the CLI's connections, the token login and SQL quoting; `requirements.ts`
-checks the server version and its authentication rules; `token.ts` signs a terminal in;
-`model.ts` builds typed DDL for the model importer; `cli.ts` runs operator tasks; `apply.ts`
-converges a database on a JSON manifest; `harden.ts` hides the role catalogs; `deploy.ts` runs
-the deployments. `ui/src` is the interface; `scripts/build-ui.tsx` generates its static pages
-and `scripts/dev-ui.ts` serves it in development. `deploy/ui` holds the web server's
-configuration. There is no access-policy compiler or authorization service.
+Four packages, each with its own dependencies and its own tests, and a repository root that
+holds what belongs to the deployment as a whole: the migrations, the deployment files, the
+documentation and the integration tests that cross the packages.
+
+- `packages/sql` — the SQL the platform writes, written once: identifiers, literals, columns
+  and the names a relation's constraint carries. The operator's tools and the interface both
+  build DDL, and they must build it the same way, so the rules live here rather than twice.
+- `packages/cli` — the operator's tools. `db.ts` owns the CLI's connections and the token
+  login; `requirements.ts` checks the server version and its authentication rules;
+  `token.ts` signs a terminal in; `model.ts` builds typed DDL for the model importer;
+  `cli.ts` runs the operator tasks; `apply.ts` converges a database on a JSON manifest;
+  `harden.ts` hides the role catalogs; `deployment/` runs the deployments, split into the
+  local stack, Kubernetes, the help text and the runtime they share.
+- `packages/relay` — the WebSocket in front of PostgreSQL's port: `relay.ts`, and nothing else.
+  It holds no credentials and reads nothing it carries.
+- `packages/ui` — the interface. `src` is the Preact application; `scripts/build.tsx` generates
+  its static pages, `scripts/headers.ts` holds the headers the site is served with, and
+  `scripts/dev.ts` serves it in development.
+
+`migrations/` holds the installation scripts the CLI applies and the development build
+installs into its in-page PostgreSQL. `deploy/cdn` explains how the site is published. There
+is no access-policy compiler or authorization service.

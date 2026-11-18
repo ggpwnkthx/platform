@@ -110,6 +110,9 @@ and `cli token`). For a real deployment:
 
 - Give Dex one HTTPS URL that browsers and the PostgreSQL server can both open, and use it
   as DEX_ISSUER, PLATFORM_OIDC_ISSUER and OIDC_ISSUER.
+- Give Dex the address of the site as PLATFORM_PUBLIC_ORIGIN: it is the origin Dex allows to
+  exchange the code, and the one it redirects to after the sign-in. With the interface on a
+  CDN, that is the CDN's address, not the relay's.
 - Add your providers under `connectors` and leave DEX_LOCAL_USERS unset.
 - Run this Dex for Platform alone. The validator checks a token's signature, issuer and
   expiry but not its audience, so any client registered with this Dex can obtain tokens that
@@ -133,41 +136,44 @@ local stack only.
 ## Interface configuration
 
 The interface is a static site generated at build time: `bun run build:ui` writes the pages,
-the client bundle, the stylesheet and the fonts to `ui/dist`. The `ui` image (Dockerfile target
-`ui`) builds them in a separate stage and serves them with nginx, which proxies the WebSocket
-`/pg` to the relay; a deployment never renders a page at runtime and runs no application
-server. The relay is websocat (`ghcr.io/vi/websocat:v1.14.2`), run as
-`--binary --exit-on-eof --conncap 256 ws-l:<listen> tcp:<postgres>:<port>`.
+the client bundle, the stylesheet, the fonts, `config.json` and `_headers` to `packages/ui/dist`. A
+deployment never renders a page at runtime and runs no application server: the files are
+published to a CDN. The relay (`packages/relay/src/relay.ts`, the Dockerfile target `relay`) is the only
+part of the path that answers on the network.
 
-| Variable             | Default          | Purpose                                                           |
-| -------------------- | ---------------- | ----------------------------------------------------------------- |
-| PUBLIC_URL           | required         | The address people open; WebSockets from any other Origin get 403 |
-| OIDC_ISSUER          | required         | Your Dex. The same issuer PostgreSQL trusts; HTTPS in production  |
-| OIDC_CLIENT_ID       | platform-console | The public client the interface signs in with                     |
-| OIDC_CLAIM           | email            | Token claim holding the role name; must match the validator's     |
-| DATABASE_NAME        | platform         | The database Platform is installed in                             |
-| RELAY_UPSTREAM       | relay:8081       | host:port of the relay                                            |
-| STATEMENT_TIMEOUT_MS | 15000            | `statement_timeout` sent with each login                          |
-| SESSIONS_PER_ADDRESS | 20               | Open database sessions one client address may hold on `/pg`       |
-| LISTEN_PORT          | 8080             | The port nginx listens on                                         |
+| Variable                       | Default                   | Purpose                                                       |
+| ------------------------------ | ------------------------- | ------------------------------------------------------------- |
+| PLATFORM_PUBLIC_URL            | http://localhost:5173     | The address people open; the only origin the relay allows     |
+| PLATFORM_ISSUER                | http://localhost:5556/dex | Your Dex. The same issuer PostgreSQL trusts                   |
+| PLATFORM_CLIENT_ID             | platform-console          | The public client the interface signs in with                 |
+| PLATFORM_CLAIM                 | email                     | Token claim holding the role name; must match the validator's |
+| PLATFORM_RELAY_URL             | ws://localhost:8081       | The relay the pages open their sessions through               |
+| PLATFORM_DATABASE_NAME         | platform                  | The database Platform is installed in                         |
+| PLATFORM_STATEMENT_TIMEOUT_MS  | 15000                     | `statement_timeout` sent with each login                      |
+| RELAY_UPSTREAM                 | 127.0.0.1:5432            | host:port of PostgreSQL, for the relay                        |
+| RELAY_PORT                     | 8081                      | The port the relay listens on                                 |
+| RELAY_ORIGINS                  | any                       | Comma-separated origins allowed to open a session             |
+| RELAY_SESSIONS_PER_ADDRESS     | 20                        | Open database sessions one client address may hold            |
+| RELAY_TLS_CERT / RELAY_TLS_KEY | none                      | The certificate the relay serves TLS with                     |
 
-`deploy/ui/platform.sh` writes `/config.json` and nginx's server block from these at start. See
-[interface](interface.md) for `config.json`, the headers and the browser surface.
+`bun run build:ui` writes `config.json` and the `_headers` file from these; see
+[interface](interface.md) for `config.json`, the headers and the browser surface, and
+`deploy/cdn/README.md` for publishing the site.
 
 Each action opens a fresh connection intentionally. Reusing a shared service pool would lose
 real authentication and session_user semantics; retaining per-user sessions would delay
 expiry/NOLOGIN rechecks. Every open WebSocket is one PostgreSQL connection: size PostgreSQL's
 `max_connections` and per-role connection limits for the people who use the interface at once.
-nginx caps the sessions per client address (SESSIONS_PER_ADDRESS); behind a proxy all users
-share its address, so set the cap for that or limit at the edge. The relay caps its own total
-at 256. Neither trusts X-Forwarded-For for identity.
+The relay caps the sessions per client address (RELAY_SESSIONS_PER_ADDRESS); behind a proxy
+all users share its address, so set the cap for that or limit at the edge. Neither the relay
+nor PostgreSQL trusts X-Forwarded-For for identity.
 
 The relay connects to PostgreSQL in plain TCP: the browser cannot negotiate PostgreSQL's TLS
-inside the stream, and websocat does not speak PostgreSQL's SSLRequest. Run it next to
-PostgreSQL or on a private network you trust: the same host, the same pod network, a service
-mesh with mTLS, or a tunnel. DATABASE_SSL and DATABASE_CA_FILE apply to the CLI's connections,
-not to the interface's. Restrict PostgreSQL's rules to tokens only from the relay's addresses
-(PLATFORM_TOKEN_ONLY_FROM or your own pg_hba rule).
+inside the stream. Run it next to PostgreSQL or on a private network you trust: the same host,
+the same pod network, a service mesh with mTLS, or a tunnel. DATABASE_SSL and
+DATABASE_CA_FILE apply to the CLI's connections, not to the interface's. Restrict PostgreSQL's
+rules to tokens only from the relay's addresses (PLATFORM_TOKEN_ONLY_FROM or your own pg_hba
+rule).
 
 Connect directly to PostgreSQL for this design's authentication semantics. Do not put it
 behind a pooler using a forced backend user: that changes session_user and breaks identity
@@ -188,21 +194,23 @@ is shorthand for `bun run cli deploy ...`.
 ```bash
 bun run cli deploy local validate
 bun run cli deploy local up
+bun run cli deploy local ui
 bun run cli deploy local status
-bun run cli deploy local logs -f ui
+bun run cli deploy local logs -f relay
 bun run cli deploy local down
 ```
 
-`up` builds the PostgreSQL, interface and installer images, starts PostgreSQL 18 and Dex, waits
+`up` builds the PostgreSQL, relay and installer images, starts PostgreSQL 18 and Dex, waits
 for both, runs the idempotent database installer in a one-off container (`migrate`, image
-`platform-cli:local`, Dockerfile target `cli`), then starts the relay and the interface and
-waits for http://localhost:8080/health. The installer receives the operator password only in
-its own environment and is removed when it exits. The relay and the interface have no
+`platform-cli:local`, Dockerfile target `cli`), then starts the relay and waits for
+http://localhost:8081/health. The installer receives the operator password only in
+its own environment and is removed when it exits. The relay has no
 PostgreSQL credentials. PostgreSQL and the relay share the network `relay` (10.89.71.0/24),
 from which PostgreSQL takes tokens and nothing else. A build or install failure returns that
-tool's exit status and stops the sequence before the interface starts. `init` runs the
-database/build portion without starting the relay and the interface; `build` builds the images
-only.
+tool's exit status and stops the sequence before the relay starts. `init` runs the
+database/build portion without starting the relay; `build` builds the images only. `ui`
+builds the static interface into `packages/ui/dist` and says what to publish; the interface is
+files on a CDN, not a container.
 
 Dex is published at http://localhost:5556/dex (DEX_PORT) and keeps three example people,
 admin@example.com, alice@example.com and bob@example.com. Their passwords are
@@ -223,8 +231,8 @@ must match an existing PostgreSQL volume: changing the variable does not reset e
 PostgreSQL credentials. Provision users with `bun run cli apply local FILE` (see
 [applying changes](apply.md)) or with psql and the example scripts.
 
-The Compose project name is consistently `platform`. The default interface/SQL host ports are
-8080/5432, and Dex's is 5556; override PLATFORM_HTTP_PORT/POSTGRES_PORT/DEX_PORT to avoid
+The Compose project name is consistently `platform`. The default relay/SQL host ports are
+8081/5432, and Dex's is 5556; override RELAY_PORT/POSTGRES_PORT/DEX_PORT to avoid
 conflicts. `--timeout=120` sets the readiness allowance per component. `status`, `logs`, and
 `down` work without a password. `down` preserves data; explicitly passing `--volumes` removes
 the volume and its data. The supplied stack binds both published ports to loopback and is for
@@ -232,14 +240,15 @@ local development.
 
 ### Kubernetes
 
-Build and push the interface image (Dockerfile target `ui`) first. PostgreSQL 18 with the
-validator and Dex are yours to run, configured as described under PostgreSQL 18 and sign-in.
-Provision the database with `bun run cli migrate` in a separate operator session/job (the
-Dockerfile target `cli` is an image for that), and provision native users/grants. Then
-configure a pre-existing namespace, HTTPS ingress and network policies.
+Build and push the relay image (Dockerfile target `relay`) first, and publish the interface to
+a CDN. PostgreSQL 18 with the validator and Dex are yours to run, configured as described
+under PostgreSQL 18 and sign-in. Provision the database with `bun run cli migrate` in a
+separate operator session/job (the Dockerfile target `cli` is an image for that), and provision
+native users/grants. Then configure a pre-existing namespace, HTTPS ingress and network
+policies.
 
 ```bash
-export PLATFORM_IMAGE=your-registry/platform-ui:2.1.0
+export PLATFORM_IMAGE=your-registry/platform-relay:2.1.0
 export PUBLIC_URL=https://platform.example.com
 export OIDC_ISSUER=https://sso.example.com/dex
 export DATABASE_HOST=your-postgres.example.com
@@ -258,15 +267,16 @@ Equivalent flags are --image, --public-url, --oidc-issuer, --database-host, --da
 `render` is offline. `validate` is a server-side dry run and needs cluster connectivity.
 `diff` preserves kubectl's exit 1 for differences; `apply` waits for rollout and propagates
 failure. Namespace defaults to `default`, and `--timeout=120` controls the rollout timeout.
-`down` deletes only the `platform` deployment and service, not the external PostgreSQL
+`down` deletes only the `platform-relay` deployment and service, not the external PostgreSQL
 database. No namespace is created automatically.
 
 The renderer uses deploy/k8s/deployment.yaml, fills endpoint/image values, adds the selected
 namespace and feeds the resulting manifest to kubectl through stdin. The source template
-remains unchanged. It is one Deployment, `platform`, whose pod runs two containers: `ui`, the
-interface image, and `relay`, websocat forwarding to `tcp:DATABASE_HOST:DATABASE_PORT`; and a
-Service in front of it. Neither container holds database credentials. Supply your own HTTPS
-ingress; PUBLIC_URL is not an HTTPS listener.
+remains unchanged. It is one Deployment, `platform-relay`, whose pod runs the relay, and a
+Service in front of it. The container holds no database credentials. PUBLIC_URL is the site's
+address, and the only origin the relay allows; it is not an HTTPS listener. Supply your own
+HTTPS ingress or tunnel: deploy/k8s/ingress.yaml is an example of one, and the address it
+names is the one the site's `config.json` must carry (PLATFORM_RELAY_URL).
 
 The relay reaches PostgreSQL in plain TCP, so the pods must reach it over a network you trust:
 the same cluster network with network policies, a service mesh with mTLS, or a tunnel. Restrict
@@ -275,10 +285,9 @@ rule, so that from there PostgreSQL accepts tokens and nothing else. For Azure o
 hosting platform, provision the same endpoint and separate operator installation through that
 platform's normal infrastructure tooling.
 
-`/health` proves nginx responds; it intentionally does not assert database health. The
-Kubernetes liveness and readiness checks use it. Sign in through the interface, or use an
-external database monitor, for end-to-end readiness. A login can fail per role even when other
-roles can connect.
+`/health` proves the relay responds; it intentionally does not assert database health.
+Sign in through the interface, or use an external database monitor, for end-to-end readiness.
+A login can fail per role even when other roles can connect.
 
 ## Testing
 
@@ -286,7 +295,7 @@ Tests create a random database and roles, log in over TCP with tokens, then drop
 resources. They run their own OpenID Connect issuer in the test process, at TEST_OIDC_ISSUER
 (default http://127.0.0.1:54330), and the server under test is the deploy/postgres image
 started trusting that issuer. Host networking lets the server fetch the issuer's keys from the
-loopback address. A websocat relay in front of the server carries the page's wire client the
+loopback address. The relay in front of the server carries the page's wire client the
 way a browser's WebSocket does, at TEST_RELAY_URL (default ws://127.0.0.1:54331):
 
 ```bash
@@ -295,8 +304,7 @@ docker run -d --name platform-test-pg --network host -e PGPORT=54329 \
   -e POSTGRES_PASSWORD=test-admin-password -e POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 \
   -e PLATFORM_OIDC_ISSUER=http://127.0.0.1:54330 \
   platform-postgres:test postgres -c listen_addresses=127.0.0.1
-docker run -d --name platform-test-relay --network host ghcr.io/vi/websocat:v1.14.2 \
-  --binary --exit-on-eof ws-l:127.0.0.1:54331 tcp:127.0.0.1:54329
+RELAY_UPSTREAM=127.0.0.1:54329 RELAY_PORT=54331 bun run relay &
 bun run check
 ```
 
@@ -306,6 +314,17 @@ your test instance; TEST_DATABASE_SSL=require enables verified TLS for per-user 
 and the administrator URL should also specify its TLS settings. CI builds the same image and
 starts the same relay. Dex itself is not part of the automated tests. `bun run check` builds the
 interface, typechecks, lints, checks formatting and runs `bun test`.
+
+The server under test must be PostgreSQL 18 with the OAuth validator, and it must trust the
+issuer the tests run in-process: the image above is one way to get that. Any PostgreSQL 18 with
+`oauth_validator_libraries=pg_oidc_validator` will do, reached through TEST_ADMIN_URL, with its
+`pg_hba.conf` allowing the administrator's password and nothing else but a token:
+
+```
+local   all  all                trust
+host   all  "postgres"      all  scram-sha-256
+host   all  all           all  oauth issuer="http://127.0.0.1:54330" scope=""
+```
 
 `test/wire.test.ts` covers the page's wire client over TCP and through the relay.
 `test/platform.test.ts` and `test/metadata.test.ts` exercise the security properties through the

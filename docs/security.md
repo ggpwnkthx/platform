@@ -103,11 +103,11 @@ proxy or ingress; PUBLIC_URL itself does not enable an HTTPS listener. Do not lo
 payloads or proxy request bodies: the `/pg` stream carries tokens, statements and rows.
 
 The relay connects to PostgreSQL in plain TCP. The browser cannot negotiate PostgreSQL's TLS
-inside the stream, and websocat does not speak PostgreSQL's SSLRequest, so DATABASE_SSL does not
-apply to the interface's connections. Run the relay next to PostgreSQL or on a private network
-you trust: the same host, the same pod network, a service mesh with mTLS, or a tunnel. The
-encryption between the browser and the web server is the deployment's HTTPS (wss). CLI
-connections are unaffected and still require verified PostgreSQL TLS in production.
+inside the stream, so DATABASE_SSL does not apply to the interface's connections. Run the relay
+next to PostgreSQL or on a private network you trust: the same host, the same pod network, a
+service mesh with mTLS, or a tunnel. The encryption between the browser and the relay is the
+deployment's WSS. CLI connections are unaffected and still require verified PostgreSQL TLS in
+production.
 
 The interface signs in with the authorization code flow and PKCE, as a public client: it has no
 client secret. It keeps the token only in JavaScript memory and hands it to PostgreSQL inside
@@ -116,21 +116,22 @@ the redirect to Dex and is cleared when the page returns. XSS or a compromised p
 read the in-memory token. Reloading or signing out discards it. JavaScript strings cannot be
 reliably zeroed from process memory.
 
-The pages are static files generated at build time, sent with a content security policy that
-allows only the site's own scripts, styles, fonts and images, and connections to the site's own
-origin, its WebSocket origin and the issuer's: `frame-ancestors 'none'`, `base-uri 'none'`,
+The pages are static files generated at build time and published to a CDN, sent with a
+content security policy that allows only the site's own scripts, styles, fonts and images, and
+connections to the site's own origin, the relay's origin and the issuer's: `frame-ancestors
+'none'`, `base-uri 'none'`,
 `form-action 'self'`, with nosniff, no-referrer and, on https, HSTS. There is no inline script
 and no server-side rendering of interface state, so the only code the browser executes is the
 bundled application. The interface sets its own faces from fonts bundled into the build, so it
 asks no third party for anything at runtime.
 
-A WebSocket to `/pg` from any Origin but PUBLIC_URL's is refused with 403, so another site's page
+A WebSocket from any Origin but the site's own is refused with 403, so another site's page
 cannot open a database session through a visitor's browser. Each open WebSocket is one database
-session; nginx caps how many one client address may hold (SESSIONS_PER_ADDRESS, 20), and the
-relay caps its own total (256). Each login asks for STATEMENT_TIMEOUT_MS as `statement_timeout`,
+session; the relay caps how many one client address may hold (RELAY_SESSIONS_PER_ADDRESS, 20).
+Each login asks for STATEMENT_TIMEOUT_MS as `statement_timeout`,
 which a reader may change on their own session. See [interface](interface.md) for the whole
 browser surface.
 
-The web server and the relay never read PGTOKEN, PGUSER/PGPASSWORD or an administrator URL, and
+The relay never reads PGTOKEN, PGUSER/PGPASSWORD or an administrator URL, and
 hold no database credentials and no OAuth client secret. Keep CLI secrets out of their
 environment and manifests. Neither talks to Dex: the page does, from the browser.

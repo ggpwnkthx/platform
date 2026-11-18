@@ -1,19 +1,36 @@
 # Platform 2.1.0 validation
 
-Verified on November 18, 2026 using Bun 1.4.4 and a real PostgreSQL 18.7 server built from
-deploy/postgres, with pg_oidc_validator 1.1.0 and token-only network logins, and a websocat
-v1.14.2 relay in front of it as described in [operations](operations.md#testing). No live
-project database was accessed.
+Verified on November 18, 2026 using Bun 1.4.4 and a real PostgreSQL 18.7 server with
+pg_oidc_validator 1.1.0 — the pinned, checksummed release the deploy/postgres image builds —
+and token-only network logins, and the project's own relay in front of it, as described in
+[operations](operations.md#testing). No live project database was accessed.
+
+The suites live with the packages they belong to — `packages/cli/test`, `packages/relay/test`,
+`packages/sql/test`, `packages/ui/test` — and the suites that cross the packages, and need
+PostgreSQL, are in `test/`.
 
 | Check                                 | Result                                                                                  |
 | ------------------------------------- | --------------------------------------------------------------------------------------- |
 | TypeScript strict typecheck           | Passed                                                                                  |
-| PostgreSQL 18.7: `bun test`           | 110 tests passed, 0 failed, 403 assertions, across 6 files                              |
-| The page's wire client                | 8 tests passed, over TCP and through the websocat relay                                 |
+| `bun run check`                       | Passed: build, typecheck, lint, formatting and the whole suite                          |
+| PostgreSQL 18.7: `bun test`           | 129 tests passed, 0 failed, 459 assertions, across 10 files                             |
+| Deployment CLI orchestration          | 20 tests passed, including subprocess stdin delivery                                    |
+| The relay                             | 4 tests passed: bytes both ways, the origin check, the session cap                      |
+| The SQL the platform writes           | 8 tests passed, and 3 that hold the manifest and the interface to the same column       |
+| The headers the site is served with   | 4 tests passed                                                                          |
+| Record filters                        | 15 tests passed                                                                         |
+| Smaller pieces                        | 6 unit tests passed                                                                     |
+| The page's wire client                | 8 tests passed, over TCP and through the relay                                          |
 | Security properties through the page  | 46 platform and 15 metadata tests passed, using the page's own client (`test/page.ts`)  |
 | Token logins in the integration suite | Real OAUTHBEARER logins verified by the server's validator against an in-process issuer |
-| Record filters and smaller pieces     | 15 filter and 6 unit tests passed                                                       |
-| Deployment CLI orchestration          | 20 tests passed, including subprocess stdin delivery                                    |
+
+Beyond the suite, the model path was checked against the running server: `platform migrate`
+installed the database, and `platform apply` applied `examples/newsroom.json` (20 changes) and
+`deploy/models/crm.json` (59 changes). The columns carry the defaults their manifests declare
+(`'USD'::text`, `false`, `true`) and the checks their options ask for
+(`char_length(title) <= 120`, the allowed values of a status), and every relation's constraint
+carries the name the interface computes for it — `fk_8325918d8f2048e7a353fd51` for
+`crm.notes.contact`, the same name `constraintName('notes', 'contact')` returns.
 
 An earlier run, on November 17, 2026, against the architecture that preceded the interface,
 covered what the interface did not change. Dex v2.46.1 ran end to end under podman-compose with
@@ -32,10 +49,11 @@ still answered through the platform's functions, `information_schema.applicable_
 Not verified here:
 
 - The interface in a real browser: rendering, the sign-in redirect round trip, the WebSocket
-  through nginx, the Origin check, the session cap and browser-enforced CSP were not observed
-  in this run. The development build's in-page PostgreSQL was not exercised by the tests.
-- `bun run build:ui`, Biome lint and formatting, which are part of `bun run check` and were not
-  part of this record.
+  through the relay, the Origin check, the session cap and browser-enforced CSP were not
+  observed in this run. The development build's in-page PostgreSQL was not exercised by the tests.
+- The PostgreSQL-backed suites after the packages were split: `bun test` needs the test
+  server of [operations](operations.md#testing), and it was not available where the split was
+  made.
 - `deploy local up` from start to finish; its sequencing is covered by the orchestration tests
   with controlled command substitutes.
 - Docker Compose, Kubernetes rollout, TLS, an upstream Dex connector, and Dex storage other
