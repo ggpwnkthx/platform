@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { deploy, type DeployRuntime, renderKubernetes } from '../packages/cli/src/deploy.ts'
+import { deploy, type DeployRuntime, renderKubernetes } from '../packages/cli/src/deployment/index.ts'
 import { VERSION } from '../packages/cli/src/version.ts'
 
 type Call = { argv: string[]; options?: Parameters<DeployRuntime['run']>[1] }
