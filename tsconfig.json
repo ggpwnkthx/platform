@@ -17,6 +17,6 @@
     "jsx": "react-jsx",
     "jsxImportSource": "preact"
   },
-  "include": ["packages/*/src", "packages/ui/scripts", "test"],
+  "include": ["packages/*/src", "packages/*/test", "packages/ui/scripts", "test"],
   "exclude": ["node_modules", "packages/ui/dist", "packages/ui/dist-dev"]
 }

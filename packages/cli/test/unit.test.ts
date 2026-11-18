@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
-import { ident, literal } from '../packages/sql/src/index.ts'
-import { bearer } from '../packages/cli/src/db.ts'
-import { loadConfig } from '../packages/cli/src/config.ts'
-import { fieldSchema, fieldSql } from '../packages/cli/src/model.ts'
+import { ident, literal } from '@platform/sql'
+import { bearer } from '../src/db.ts'
+import { loadConfig } from '../src/config.ts'
+import { fieldSchema, fieldSql } from '../src/model.ts'
 
 describe('SQL construction and credentials', () => {
   test('quotes identifiers without treating names as SQL', () => {

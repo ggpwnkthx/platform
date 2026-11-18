@@ -2,8 +2,8 @@ import { describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { deploy, type DeployRuntime, renderKubernetes } from '../packages/cli/src/deployment/index.ts'
-import { VERSION } from '../packages/cli/src/version.ts'
+import { deploy, type DeployRuntime, renderKubernetes } from '../src/deployment/index.ts'
+import { VERSION } from '../src/version.ts'
 
 type Call = { argv: string[]; options?: Parameters<DeployRuntime['run']>[1] }
 function fake(env: Record<string, string | undefined> = {}) {
@@ -50,21 +50,21 @@ describe('version and CLI entry points', () => {
   test('package, database, API expectation and runtime agree on 2.1.0', () => {
     expect(VERSION).toBe('2.1.0')
     expect(
-      JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
+      JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')).version
     ).toBe(VERSION)
     expect(
-      readFileSync(new URL('../migrations/0001_native.sql', import.meta.url), 'utf8')
+      readFileSync(new URL('../../../migrations/0001_native.sql', import.meta.url), 'utf8')
     ).toContain("version='2.0.0'")
     expect(
-      readFileSync(new URL('../migrations/0002_harden_catalogs.sql', import.meta.url), 'utf8')
+      readFileSync(new URL('../../../migrations/0002_harden_catalogs.sql', import.meta.url), 'utf8')
     ).toContain("version = '2.0.1'")
     expect(
-      readFileSync(new URL('../migrations/0003_metadata.sql', import.meta.url), 'utf8')
+      readFileSync(new URL('../../../migrations/0003_metadata.sql', import.meta.url), 'utf8')
     ).toContain("version = '2.1.0'")
     // The workspace packages carry the same version, so a release is one number everywhere.
     for (const name of ['cli', 'relay', 'ui']) {
       const manifest = JSON.parse(
-        readFileSync(new URL(`../packages/${name}/package.json`, import.meta.url), 'utf8')
+        readFileSync(new URL(`../../../packages/${name}/package.json`, import.meta.url), 'utf8')
       )
       expect(manifest.version).toBe(VERSION)
     }
@@ -72,7 +72,7 @@ describe('version and CLI entry points', () => {
   test('deploy help and version run without database credentials or external tools', async () => {
     for (const args of [['--version'], ['deploy', 'help']]) {
       const child = Bun.spawn([process.execPath, 'packages/cli/src/cli.ts', ...args], {
-        cwd: new URL('..', import.meta.url).pathname,
+        cwd: new URL('../../..', import.meta.url).pathname,
         env: { PATH: process.env.PATH },
         stdout: 'pipe',
         stderr: 'pipe',
@@ -114,7 +114,10 @@ describe('local deployment orchestration', () => {
       'http://localhost:5556/dex/.well-known/openid-configuration',
       'http://localhost:8087/health',
     ])
-    const stack = readFileSync(new URL('../deploy/compose/compose.yaml', import.meta.url), 'utf8')
+    const stack = readFileSync(
+      new URL('../../../deploy/compose/compose.yaml', import.meta.url),
+      'utf8'
+    )
     const services = (Bun.YAML.parse(stack) as any).services
     // Only the installer is given a password: the relay holds none.
     expect(JSON.stringify(services.relay)).not.toContain('PASS')
@@ -141,7 +144,10 @@ describe('local deployment orchestration', () => {
     expect(env.DEX_BOB_HASH).toBe('hash-of(saved-for-bob)')
     expect(JSON.stringify([f.output, f.calls.map((c) => c.argv)])).not.toContain(admin)
     expect(f.output.at(-1)).toContain('admin@example.com')
-    const dex = readFileSync(new URL('../deploy/compose/compose.yaml', import.meta.url), 'utf8')
+    const dex = readFileSync(
+      new URL('../../../deploy/compose/compose.yaml', import.meta.url),
+      'utf8'
+    )
       .split('  dex:')[1]!
       .split('  migrate:')[0]!
     expect(dex).not.toContain('PASSWORD')
@@ -348,7 +354,7 @@ if [ "$3" = "apply" ]; then cat > "$DEPLOY_TEST_MANIFEST"; fi
     const child = Bun.spawn(
       [process.execPath, 'packages/cli/src/cli.ts', 'deploy', 'k8s', 'apply'],
       {
-        cwd: new URL('..', import.meta.url).pathname,
+        cwd: new URL('../../..', import.meta.url).pathname,
         env: {
           PATH: dir + ':' + process.env.PATH,
           ...kenv,
