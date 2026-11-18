@@ -1,5 +1,6 @@
-import { cp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { headersFile, type Origins } from './headers.ts'
 
 /**
  * Static site generation for the interface. Every page is rendered to HTML at build time
@@ -75,6 +76,12 @@ export async function buildUi(dev: boolean, out: string): Promise<number> {
   await cp(join(sources, 'styles.css'), join(out, 'styles.css'))
   await cp(join(sources, 'favicon.svg'), join(out, 'favicon.svg'))
   await cp(join(project, 'public'), out, { recursive: true })
+  await writeFile(join(out, 'config.json'), JSON.stringify(await siteConfig(dev), null, 2))
+  await writeFile(join(out, '_headers'), headersFile(siteOrigins()))
+  if (!dev && !process.env.PLATFORM_RELAY_URL)
+    console.warn(
+      'PLATFORM_RELAY_URL is not set: the pages will look for the relay on their own origin. Set it to the relay\u2019s address (wss://...) before publishing.'
+    )
   await mkdir(join(out, 'fonts'), { recursive: true })
   const fonts = {
     'inter-latin-wght-normal.woff2':
@@ -106,6 +113,39 @@ export async function buildUi(dev: boolean, out: string): Promise<number> {
     await writeFile(target, page(html, title, dev))
   }
   return pages.length
+}
+
+/**
+ * The deployment's names, as the environment gives them. The pages are static, so these are
+ * the only things that differ between one deployment and the next: the bundle itself is the
+ * same file everywhere.
+ */
+export function siteOrigins(env: Record<string, string | undefined> = process.env): Origins {
+  const publicUrl = env.PLATFORM_PUBLIC_URL ?? 'http://localhost:5173'
+  const issuer = env.PLATFORM_ISSUER ?? env.OIDC_ISSUER ?? 'http://localhost:5556/dex'
+  const relay = env.PLATFORM_RELAY_URL ?? 'ws://localhost:8081'
+  return { public: publicUrl, issuer, relay }
+}
+
+/**
+ * The file the pages read to find the issuer, the relay and the database. It is served
+ * beside the pages, so a deployment changes it without rebuilding the bundle.
+ */
+async function siteConfig(dev: boolean): Promise<Record<string, unknown>> {
+  const env = process.env
+  const file = await readFile(join(project, 'public/config.json'), 'utf8')
+  const base = JSON.parse(file) as Record<string, unknown>
+  return {
+    ...base,
+    issuer: env.PLATFORM_ISSUER ?? env.OIDC_ISSUER ?? base.issuer,
+    clientId: env.PLATFORM_CLIENT_ID ?? base.clientId,
+    claim: env.PLATFORM_CLAIM ?? base.claim,
+    relay: dev ? base.relay : (env.PLATFORM_RELAY_URL ?? base.relay),
+    database: env.PLATFORM_DATABASE_NAME ?? base.database,
+    statementTimeoutMs: Number(
+      env.PLATFORM_STATEMENT_TIMEOUT_MS ?? base.statementTimeoutMs ?? 15000
+    ),
+  }
 }
 
 if (import.meta.main) {

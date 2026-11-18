@@ -37,8 +37,13 @@ export function relayUrl(relay: string, page: URL): string {
 
 export function runtimeConfig(): Promise<RuntimeConfig> {
   loaded ??= fetch('/config.json', { cache: 'no-store' })
-    .then((response) => (response.ok ? response.json() : {}))
-    .catch(() => ({}))
+    .then((response) => {
+      // A site without its configuration cannot work, and saying so is better than sending
+      // the reader to a relay that is not there.
+      if (!response.ok)
+        throw new Error('The interface has no configuration: config.json is missing from the site.')
+      return response.json()
+    })
     .then((found: Partial<RuntimeConfig>) => {
       const config = { ...defaults, ...found }
       config.issuer = config.issuer.replace(/\/+$/, '')

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, statSync, watch } from 'node:fs'
 import { connect } from 'node:net'
 import { join } from 'node:path'
+import { securityHeaders } from './headers.ts'
 
 /**
  * The interface in development, served as the static files it is.
@@ -34,13 +35,10 @@ const types: Record<string, string> = {
 }
 
 async function build() {
-  const child = Bun.spawn(
-    ['bun', join(project, 'scripts/build.tsx'), ...(dev ? ['--dev'] : [])],
-    {
-      stdout: 'inherit',
-      stderr: 'inherit',
-    }
-  )
+  const child = Bun.spawn(['bun', join(project, 'scripts/build.tsx'), ...(dev ? ['--dev'] : [])], {
+    stdout: 'inherit',
+    stderr: 'inherit',
+  })
   return (await child.exited) === 0
 }
 
@@ -51,19 +49,20 @@ function fileFor(path: string): string | null {
   return existsSync(candidate) && statSync(candidate).isFile() ? candidate : null
 }
 
-// The same policy the deployment's web server sends; WebAssembly is allowed only here, in
-// development, where PostgreSQL itself runs in the page.
-const policy = [
-  "default-src 'self'",
-  `script-src 'self'${dev ? " 'wasm-unsafe-eval'" : ''}`,
-  "style-src 'self'",
-  "font-src 'self'",
-  "img-src 'self' data:",
-  `connect-src 'self'${dev ? '' : ` ws://localhost:${port} ${JSON.parse(readFileSync(join(project, 'public/config.json'), 'utf8')).issuer.replace(/^(https?:\/\/[^/]+).*/, '$1')}`}`,
-  "frame-ancestors 'none'",
-  "base-uri 'none'",
-  "form-action 'self'",
-].join('; ')
+// The same headers a CDN serves the built site with, from the same source.
+const issuer = JSON.parse(readFileSync(join(project, 'public/config.json'), 'utf8'))
+  .issuer as string
+const headers = securityHeaders({
+  public: `http://localhost:${port}`,
+  issuer,
+  relay: `ws://localhost:${port}`,
+})
+// WebAssembly is allowed only here, in development, where PostgreSQL itself runs in the page.
+if (dev)
+  headers['Content-Security-Policy'] = headers['Content-Security-Policy']!.replace(
+    "script-src 'self'",
+    "script-src 'self' 'wasm-unsafe-eval'"
+  )
 
 if (!(await build())) process.exit(1)
 
@@ -80,13 +79,17 @@ Bun.serve<Pipe>({
     }
     const file = fileFor(url.pathname)
     if (!file) return new Response('Not found', { status: 404 })
-    return new Response(new Uint8Array(readFileSync(file)), {
+    // The built site's config.json names the deployment's relay; the development server
+    // relays /pg itself, so it serves the configuration the source holds.
+    const content =
+      url.pathname === '/config.json'
+        ? readFileSync(join(project, 'public/config.json'), 'utf8')
+        : new Uint8Array(readFileSync(file))
+    return new Response(content, {
       headers: {
         'content-type': types[file.slice(file.lastIndexOf('.'))] ?? 'application/octet-stream',
-        'content-security-policy': policy,
         'cache-control': 'no-store',
-        'x-content-type-options': 'nosniff',
-        'referrer-policy': 'no-referrer',
+        ...headers,
       },
     })
   },

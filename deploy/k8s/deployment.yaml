@@ -1,7 +1,9 @@
+# The relay: the WebSocket in front of PostgreSQL's port. The interface itself is a static
+# site on a CDN and is not deployed here; only the relay and the database it forwards to.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: platform
+  name: platform-relay
   labels: { app: platform }
 spec:
   replicas: 2
@@ -14,18 +16,19 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: 101
-        runAsGroup: 101
+        runAsUser: 65532
+        runAsGroup: 65532
       containers:
-        # The interface: static pages served by nginx, with /pg forwarded to the relay beside it.
-        - name: ui
-          image: YOUR_REGISTRY/platform-ui:2.1.0
-          ports: [{ containerPort: 8080 }]
+        # Forwards each WebSocket to PostgreSQL's port, byte for byte. No credentials, no SQL:
+        # the reader's token travels inside the stream and PostgreSQL checks it.
+        - name: relay
+          image: YOUR_REGISTRY/platform-relay:2.1.0
+          ports: [{ containerPort: 8081 }]
           env:
-            - { name: PUBLIC_URL, value: "https://platform.example.com" }
-            - { name: OIDC_ISSUER, value: "https://sso.example.com/dex" }
-            - { name: DATABASE_NAME, value: platform }
-            - { name: RELAY_UPSTREAM, value: "127.0.0.1:8081" }
+            - { name: RELAY_UPSTREAM, value: "postgres.example.com:5432" }
+            - { name: RELAY_PORT, value: "8081" }
+            # The only origin allowed to open a session: the address of the site on the CDN.
+            - { name: RELAY_ORIGINS, value: "https://platform.example.com" }
           resources:
             requests: { cpu: 50m, memory: 32Mi }
             limits: { cpu: 500m, memory: 128Mi }
@@ -33,37 +36,21 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: [ALL] }
-          volumeMounts: [{ name: tmp, mountPath: /tmp }]
           livenessProbe:
-            httpGet: { path: /health, port: 8080 }
+            httpGet: { path: /health, port: 8081 }
           readinessProbe:
-            httpGet: { path: /health, port: 8080 }
-        # Forwards each WebSocket to PostgreSQL's port, byte for byte. No credentials, no SQL:
-        # the reader's token travels inside the stream and PostgreSQL checks it.
-        - name: relay
-          image: ghcr.io/vi/websocat:v1.14.2
-          args:
-            - --binary
-            - --exit-on-eof
-            - --conncap
-            - "256"
-            - ws-l:127.0.0.1:8081
-            - "tcp:postgres.example.com:5432"
-          resources:
-            requests: { cpu: 50m, memory: 16Mi }
-            limits: { cpu: 500m, memory: 64Mi }
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities: { drop: [ALL] }
-      volumes:
-        - { name: tmp, emptyDir: { medium: Memory, sizeLimit: 8Mi } }
+            httpGet: { path: /health, port: 8081 }
 ---
+# The Service in front of the relay. The address the pages open their sessions through is
+# yours to choose: put this service behind an ingress, a load balancer or a tunnel that
+# serves TLS. deploy/k8s/ingress.yaml is an example of one, and it names the host and the
+# certificate to use.
 apiVersion: v1
 kind: Service
 metadata:
-  name: platform
+  name: platform-relay
   labels: { app: platform }
 spec:
   selector: { app: platform }
-  ports: [{ port: 80, targetPort: 8080 }]
+  ports:
+    - { name: relay, port: 8081, targetPort: 8081 }

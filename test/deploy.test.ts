@@ -61,6 +61,13 @@ describe('version and CLI entry points', () => {
     expect(
       readFileSync(new URL('../migrations/0003_metadata.sql', import.meta.url), 'utf8')
     ).toContain("version = '2.1.0'")
+    // The workspace packages carry the same version, so a release is one number everywhere.
+    for (const name of ['cli', 'relay', 'ui']) {
+      const manifest = JSON.parse(
+        readFileSync(new URL(`../packages/${name}/package.json`, import.meta.url), 'utf8')
+      )
+      expect(manifest.version).toBe(VERSION)
+    }
   })
   test('deploy help and version run without database credentials or external tools', async () => {
     for (const args of [['--version'], ['deploy', 'help']]) {
@@ -77,11 +84,11 @@ describe('version and CLI entry points', () => {
   })
 })
 describe('local deployment orchestration', () => {
-  test('up installs with a one-off credential-bearing process before starting the interface', async () => {
-    const f = fake({ POSTGRES_PASSWORD: 'private-secret', PLATFORM_HTTP_PORT: '8087' })
+  test('up installs with a one-off credential-bearing process before starting the relay', async () => {
+    const f = fake({ POSTGRES_PASSWORD: 'private-secret', RELAY_PORT: '8087' })
     expect(await deploy(['local', 'up'], f.r)).toBe(0)
     const cmds = f.calls.map((c) => c.argv)
-    expect(cmds[1]!.slice(-5)).toEqual(['build', 'postgres', 'relay', 'ui', 'migrate'])
+    expect(cmds[1]!.slice(-4)).toEqual(['build', 'postgres', 'relay', 'migrate'])
     // The installer's image is built too, so its profile is named for the build.
     expect(cmds[1]).toContain('--profile')
     expect(cmds[2]!.slice(-4)).toEqual(['up', '-d', 'postgres', 'dex'])
@@ -101,16 +108,19 @@ describe('local deployment orchestration', () => {
     expect(init.argv.some((a) => a.includes('='))).toBe(false)
     expect(init.options?.env?.POSTGRES_PASSWORD).toBe('private-secret')
     expect(JSON.stringify(cmds)).not.toContain('private-secret')
-    expect(cmds.at(-1)!.slice(-4)).toEqual(['up', '-d', 'relay', 'ui'])
-    // Dex answers before the installer runs; the interface is checked last.
+    expect(cmds.at(-1)!.slice(-3)).toEqual(['up', '-d', 'relay'])
+    // Dex answers before the installer runs; the relay is checked last.
     expect(f.urls).toEqual([
       'http://localhost:5556/dex/.well-known/openid-configuration',
       'http://localhost:8087/health',
     ])
     const stack = readFileSync(new URL('../deploy/compose/compose.yaml', import.meta.url), 'utf8')
     const services = (Bun.YAML.parse(stack) as any).services
-    // Only the installer is given a password: the interface and the relay hold none.
-    for (const name of ['ui', 'relay']) expect(JSON.stringify(services[name])).not.toContain('PASS')
+    // Only the installer is given a password: the relay holds none.
+    expect(JSON.stringify(services.relay)).not.toContain('PASS')
+    // The interface is a static site, published to a CDN: it is not a container.
+    expect(services.ui).toBeUndefined()
+    expect(Object.keys(services).sort()).toEqual(['dex', 'migrate', 'postgres', 'relay'])
     // From the relay's network, PostgreSQL takes tokens and nothing else.
     expect(services.postgres.environment.PLATFORM_TOKEN_ONLY_FROM).toBe(
       (Bun.YAML.parse(stack) as any).networks.relay.ipam.config[0].subnet
@@ -144,7 +154,7 @@ describe('local deployment orchestration', () => {
       return argv.includes('migrate') && argv.includes('run') ? 7 : 0
     }
     expect(await deploy(['local', 'up'], f.r)).toBe(7)
-    expect(f.calls.some((c) => c.argv.slice(-4).join(' ') === 'up -d relay ui')).toBe(false)
+    expect(f.calls.some((c) => c.argv.slice(-3).join(' ') === 'up -d relay')).toBe(false)
   })
   test('build failure prevents database startup', async () => {
     const f = fake({ POSTGRES_PASSWORD: 'secret' })
@@ -170,8 +180,8 @@ describe('local deployment orchestration', () => {
       expect(f.calls.at(-1)!.argv).not.toContain('--volumes')
     }
     const f = fake()
-    await deploy(['local', 'logs', '-f', 'ui'], f.r)
-    expect(f.calls.at(-1)!.argv.slice(-3)).toEqual(['logs', '-f', 'ui'])
+    await deploy(['local', 'logs', '-f', 'relay'], f.r)
+    expect(f.calls.at(-1)!.argv.slice(-3)).toEqual(['logs', '-f', 'relay'])
   })
   test('a missing administrator password is generated once, saved privately and reused', async () => {
     const f = fake()
@@ -218,21 +228,21 @@ describe('local deployment orchestration', () => {
       deploy(['local', 'up', '--engine=podman', '--engine=docker'], f.r)
     ).rejects.toThrow('Repeated')
     await expect(deploy(['local', 'up', '--timeout=0'], f.r)).rejects.toThrow('--timeout')
-    const port = fake({ PLATFORM_HTTP_PORT: 'no' })
-    await expect(deploy(['local', 'up'], port.r)).rejects.toThrow('PLATFORM_HTTP_PORT')
-    expect(existsSync(port.envFile)).toBe(false)
+    const relay = fake({ RELAY_PORT: 'no' })
+    await expect(deploy(['local', 'up'], relay.r)).rejects.toThrow('RELAY_PORT')
+    expect(existsSync(relay.envFile)).toBe(false)
     await expect(deploy(['local', 'up'], fake({ DEX_PORT: '0' }).r)).rejects.toThrow('DEX_PORT')
     expect(f.calls).toEqual([])
     expect(existsSync(f.envFile)).toBe(false)
-    const bad = fake({ POSTGRES_PASSWORD: 'secret', PLATFORM_HTTP_PORT: 'no' })
-    await expect(deploy(['local', 'up'], bad.r)).rejects.toThrow('PLATFORM_HTTP_PORT')
+    const bad = fake({ POSTGRES_PASSWORD: 'secret', RELAY_PORT: 'no' })
+    await expect(deploy(['local', 'up'], bad.r)).rejects.toThrow('RELAY_PORT')
     expect(bad.calls).toEqual([])
   })
-  test('failed interface readiness times out instead of reporting success', async () => {
+  test('failed relay readiness times out instead of reporting success', async () => {
     const f = fake({ POSTGRES_PASSWORD: 'secret' })
     f.r.healthy = async (url) => url.includes('/dex/')
     await expect(deploy(['local', 'up', '--timeout=2'], f.r)).rejects.toThrow(
-      'The interface did not become ready'
+      'The relay did not become ready'
     )
     expect(f.output.filter((line) => !line.startsWith('Generated '))).toEqual([])
     f.r.healthy = async () => false
@@ -250,17 +260,21 @@ describe('Kubernetes deployment orchestration', () => {
     const docs = f.output[0]!.split(/^---$/m).map((s) => Bun.YAML.parse(s)) as any[]
     expect(docs).toHaveLength(2)
     expect(docs.every((d) => d.metadata.namespace === 'team')).toBe(true)
-    const [container, relay] = docs[0].spec.template.spec.containers
+    const [container] = docs[0].spec.template.spec.containers
     expect(container.image).toBe(settings.image)
-    expect(container.env.find((e: any) => e.name === 'OIDC_ISSUER').value).toBe(settings.oidcIssuer)
-    expect(container.env.find((e: any) => e.name === 'PUBLIC_URL').value).toBe(settings.publicUrl)
-    // The relay beside it forwards to the database, and is given nothing else.
-    expect(relay.args.at(-1)).toBe('tcp:db.internal:5432')
-    expect(relay.env).toBeUndefined()
-    for (const c of [container, relay])
-      expect(
-        (c.env ?? []).some((e: any) => ['PGUSER', 'PGPASSWORD', 'DATABASE_URL'].includes(e.name))
-      ).toBe(false)
+    // The relay forwards to the database and allows only the site's own origin.
+    expect(container.env.find((e: any) => e.name === 'RELAY_UPSTREAM').value).toBe(
+      'db.internal:5432'
+    )
+    expect(container.env.find((e: any) => e.name === 'RELAY_ORIGINS').value).toBe(
+      settings.publicUrl
+    )
+    expect(container.args).toBeUndefined()
+    expect(
+      (container.env ?? []).some((e: any) =>
+        ['PGUSER', 'PGPASSWORD', 'DATABASE_URL'].includes(e.name)
+      )
+    ).toBe(false)
     expect(f.calls).toEqual([])
   })
   test('apply renders supplied settings then waits for rollout in the same namespace', async () => {
@@ -274,7 +288,7 @@ describe('Kubernetes deployment orchestration', () => {
       'team',
       'rollout',
       'status',
-      'deployment/platform',
+      'deployment/platform-relay',
       '--timeout=60s',
     ])
   })
@@ -312,11 +326,11 @@ describe('Kubernetes deployment orchestration', () => {
     expect(() => renderKubernetes({ ...settings, namespace: 'bad/namespace' })).toThrow('namespace')
   })
   test('YAML string quoting prevents values from creating extra configuration', () => {
-    const yaml = renderKubernetes({ ...settings, databaseName: 'mydb"\n  injected: true' })
+    const yaml = renderKubernetes({ ...settings, publicUrl: 'https://platform.example.com/?a="b' })
     const doc = Bun.YAML.parse(yaml.split(/^---$/m)[0]!) as any
     expect(
-      doc.spec.template.spec.containers[0].env.find((e: any) => e.name === 'DATABASE_NAME').value
-    ).toBe('mydb"\n  injected: true')
+      doc.spec.template.spec.containers[0].env.find((e: any) => e.name === 'RELAY_ORIGINS').value
+    ).toBe('https://platform.example.com/?a="b')
   })
 })
 
@@ -331,18 +345,21 @@ if [ "$3" = "apply" ]; then cat > "$DEPLOY_TEST_MANIFEST"; fi
 `,
       { mode: 0o755 }
     )
-    const child = Bun.spawn([process.execPath, 'packages/cli/src/cli.ts', 'deploy', 'k8s', 'apply'], {
-      cwd: new URL('..', import.meta.url).pathname,
-      env: {
-        PATH: dir + ':' + process.env.PATH,
-        ...kenv,
-        DEPLOY_TEST_CALLS: join(dir, 'calls'),
-        DEPLOY_TEST_MANIFEST: join(dir, 'manifest'),
-      },
-      stdin: 'ignore',
-      stdout: 'pipe',
-      stderr: 'pipe',
-    })
+    const child = Bun.spawn(
+      [process.execPath, 'packages/cli/src/cli.ts', 'deploy', 'k8s', 'apply'],
+      {
+        cwd: new URL('..', import.meta.url).pathname,
+        env: {
+          PATH: dir + ':' + process.env.PATH,
+          ...kenv,
+          DEPLOY_TEST_CALLS: join(dir, 'calls'),
+          DEPLOY_TEST_MANIFEST: join(dir, 'manifest'),
+        },
+        stdin: 'ignore',
+        stdout: 'pipe',
+        stderr: 'pipe',
+      }
+    )
     const stderr = await new Response(child.stderr).text()
     expect(stderr).toBe('')
     expect(await child.exited).toBe(0)

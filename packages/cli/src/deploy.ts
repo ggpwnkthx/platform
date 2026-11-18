@@ -6,19 +6,20 @@ const ROOT = resolve(import.meta.dir, '../../..')
 export const DEPLOY_HELP = `platform deploy <local|k8s> <action> [options]
 
   local  Docker Compose or Podman Compose, using deploy/compose/compose.yaml.
-    up          Build, start PostgreSQL 18 and Dex, install the database, then start the relay
-                and the interface.
+    up          Build, start PostgreSQL 18 and Dex, install the database, then start the relay.
+                The interface is not a container: it is a static site, published to a CDN.
     init        Build/start PostgreSQL and Dex and run the idempotent database installer only.
+    ui          Build the static interface into packages/ui/dist and print what to publish.
     validate    Validate the Compose configuration without printing its secrets.
-    build       Build the PostgreSQL, interface and installer images.
+    build       Build the PostgreSQL, relay and installer images.
     status      Show containers.
-    logs        Show logs; trailing Compose arguments are accepted (for example -f ui).
+    logs        Show logs; trailing Compose arguments are accepted (for example -f relay).
     down        Stop containers; volumes are retained unless you explicitly pass --volumes.
     --engine=auto|docker|podman  Default: auto. Also supports standalone Compose tools.
     --timeout=120              Startup timeout in seconds, per readiness check.
     POSTGRES_PASSWORD or POSTGRES_PASSWORD_FILE is the database administrator password. When
     neither is set, up/init/build/validate generate one and save it in .env for later runs.
-    The interface and the relay receive no password. People sign in through Dex, at DEX_PORT
+    The relay receives no password. People sign in through Dex, at DEX_PORT
     (5556), and PostgreSQL takes only tokens from the relay's network. The stack's Dex
     keeps three example people: admin@example.com, alice@example.com and bob@example.com, whose
     passwords are PLATFORM_ADMIN_PASSWORD, ALICE_PASSWORD and BOB_PASSWORD, generated likewise.
@@ -27,26 +28,29 @@ export const DEPLOY_HELP = `platform deploy <local|k8s> <action> [options]
     render      Print configured manifests without contacting a cluster.
     validate    Server-side dry run; needs the target cluster.
     diff        Show the server-side diff (exit 1 means differences).
-    apply       Apply manifests and wait for deployment/platform to roll out.
+    apply       Apply manifests and wait for deployment/platform-relay to roll out.
     status      Show deployment, service and pods.
     logs        Show deployment logs; trailing kubectl arguments are accepted.
-    down        Delete the interface's deployment and service; PostgreSQL is external.
+    down        Delete the relay's deployment and service; PostgreSQL is external.
     --namespace=default        Namespace must already exist.
-    --image=REGISTRY/platform-ui:2.1.0  Or PLATFORM_IMAGE: the interface image (Dockerfile target ui).
-    --public-url=https://...        Or PUBLIC_URL.
+    --image=REGISTRY/platform-relay:2.1.0  Or PLATFORM_IMAGE: the relay image (Dockerfile target relay).
+    --public-url=https://...        Or PUBLIC_URL: the address of the site, the only origin the relay allows.
     --oidc-issuer=https://...       Or OIDC_ISSUER: your Dex, which PostgreSQL must trust too.
     --database-host=HOST            Or DATABASE_HOST.
     --database-name=platform        Or DATABASE_NAME.
     --database-port=5432            Or DATABASE_PORT.
     --timeout=120                   Rollout timeout in seconds.
     PostgreSQL 18 and Dex are yours to run. Install the database separately with your own
-    operator credentials. Each pod runs the interface and a relay that forwards to
-    DATABASE_HOST:DATABASE_PORT; set PLATFORM_TOKEN_ONLY_FROM (or your own pg_hba rule) to the
-    pods' address range, so that from there PostgreSQL accepts tokens and nothing else.
+    operator credentials. Each pod runs the relay that forwards to DATABASE_HOST:DATABASE_PORT;
+    set PLATFORM_TOKEN_ONLY_FROM (or your own pg_hba rule) to the pods' address range, so that
+    from there PostgreSQL accepts tokens and nothing else. The interface is a static site you
+    publish to a CDN; deploy/k8s/ingress.yaml is an example of the address it reaches the
+    relay at.
 
   bun run cli deploy local up
-  bun run cli deploy local logs -f ui
-  bun run cli deploy k8s apply --namespace=platform --image=registry/platform-ui:2.1.0 \\
+  bun run cli deploy local logs -f relay
+  bun run cli deploy local ui
+  bun run cli deploy k8s apply --namespace=platform --image=registry/platform-relay:2.1.0 \\
     --public-url=https://platform.example.com --database-host=db.example.com \\
     --oidc-issuer=https://sso.example.com/dex
 `
@@ -191,9 +195,11 @@ async function wait(
 async function local(action: string, args: string[], r: DeployRuntime): Promise<number> {
   const engine = option(args, 'engine') ?? 'auto'
   const timeout = seconds(option(args, 'timeout'))
-  if (!['up', 'init', 'validate', 'build', 'status', 'logs', 'down'].includes(action))
+  if (!['up', 'init', 'ui', 'validate', 'build', 'status', 'logs', 'down'].includes(action))
     throw new Error(`Unknown local action: ${action}`)
   if (!['logs', 'down'].includes(action)) noExtra(args)
+  // The interface is a static site: building it needs no container, only the toolchain.
+  if (action === 'ui') return buildInterface(r)
   let password = administratorPassword(r)
   const setting = (name: string, fallback: string) => {
     const value = r.env[name] ?? saved(r.envFile, name) ?? fallback
@@ -201,7 +207,6 @@ async function local(action: string, args: string[], r: DeployRuntime): Promise<
       throw new Error(`Invalid ${name}`)
     return value
   }
-  const port = setting('PLATFORM_HTTP_PORT', '8080')
   const dexPort = setting('DEX_PORT', '5556')
   const relayPort = setting('RELAY_PORT', '8081')
   const tool = await compose(engine, r)
@@ -223,11 +228,11 @@ async function local(action: string, args: string[], r: DeployRuntime): Promise<
   const env: Record<string, string | undefined> = {
     ...r.env,
     POSTGRES_PASSWORD: password ?? 'unused-for-inspection',
-    PLATFORM_HTTP_PORT: port,
     DEX_PORT: dexPort,
     RELAY_PORT: relayPort,
     // The only origin the relay allows: the address the site is served from.
-    PLATFORM_PUBLIC_ORIGIN: r.env.PLATFORM_PUBLIC_URL ?? r.env.PUBLIC_URL ?? 'http://localhost:8080',
+    PLATFORM_PUBLIC_ORIGIN:
+      r.env.PLATFORM_PUBLIC_URL ?? r.env.PUBLIC_URL ?? 'http://localhost:5173',
   }
   // Dex is given only hashes. The passwords stay in the saved file for the people to read.
   if (prepares)
@@ -248,7 +253,6 @@ async function local(action: string, args: string[], r: DeployRuntime): Promise<
       'build',
       'postgres',
       'relay',
-      'ui',
       'migrate',
     ],
     { env }
@@ -285,14 +289,39 @@ async function local(action: string, args: string[], r: DeployRuntime): Promise<
     { env }
   )
   if (installed || action === 'init') return installed
-  const served = await run(['up', '-d', 'relay', 'ui'])
+  const served = await run(['up', '-d', 'relay'])
   if (served) return served
-  const url = `http://localhost:${port}`
-  await wait(() => r.healthy(`${url}/health`), timeout, r, 'The interface')
+  await wait(() => r.healthy(`http://localhost:${relayPort}/health`), timeout, r, 'The relay')
+  const relayUrl = `ws://localhost:${relayPort}`
   r.print(
-    `Platform running at ${url}. People sign in through Dex at ${issuer}.
+    `PostgreSQL, Dex and the relay are running. The relay answers at ${relayUrl}.
+The interface is a static site: build it with \`bun run cli deploy local ui\` and publish the
+files in packages/ui/dist to a CDN, with config.json pointing at ${relayUrl}.
+People sign in through Dex at ${issuer}.
 Create the example roles: bun run cli apply local examples/newsroom.json
 Then sign in as admin@example.com, alice@example.com or bob@example.com with the passwords saved in ${r.envFile}.`
+  )
+  return 0
+}
+
+/**
+ * Builds the static interface and says what to publish. The bundle is the same everywhere;
+ * the deployment's own names live in config.json and in the headers file beside it.
+ */
+async function buildInterface(r: DeployRuntime): Promise<number> {
+  const env = {
+    ...r.env,
+    PLATFORM_PUBLIC_URL: r.env.PLATFORM_PUBLIC_URL ?? r.env.PUBLIC_URL ?? '',
+    PLATFORM_ISSUER: r.env.PLATFORM_ISSUER ?? r.env.OIDC_ISSUER ?? '',
+    PLATFORM_RELAY_URL: r.env.PLATFORM_RELAY_URL ?? '',
+  }
+  const built = await r.run(['bun', 'run', 'build:ui'], { env })
+  if (built) return built
+  r.print(
+    `The interface is built in packages/ui/dist: publish those files to your CDN, including config.json
+and the _headers file (Cloudflare Pages and Netlify read it; other CDNs need the same headers).
+The relay is at ${env.PLATFORM_RELAY_URL || 'ws://localhost:8081'}; set PLATFORM_RELAY_URL to
+its address before publishing, and PLATFORM_PUBLIC_URL to the address of the site.`
   )
   return 0
 }
@@ -337,12 +366,12 @@ export function renderKubernetes(options: {
       'metadata:\n  name: platform',
       `metadata:\n  namespace: ${JSON.stringify(namespace)}\n  name: platform`
     )
-    .replace('YOUR_REGISTRY/platform-ui:2.1.0', JSON.stringify(options.image))
+    .replace('YOUR_REGISTRY/platform-relay:2.1.0', JSON.stringify(options.image))
     .replace('"https://platform.example.com"', JSON.stringify(options.publicUrl))
     .replace('"https://sso.example.com/dex"', JSON.stringify(options.oidcIssuer))
     .replace(
-      '"tcp:postgres.example.com:5432"',
-      JSON.stringify(`tcp:${options.databaseHost}:${options.databasePort}`)
+      '"postgres.example.com:5432"',
+      JSON.stringify(`${options.databaseHost}:${options.databasePort}`)
     )
     .replace(
       '{ name: DATABASE_NAME, value: platform }',
@@ -383,14 +412,19 @@ async function kubernetes(action: string, args: string[], r: DeployRuntime): Pro
   const run = (a: string[], input?: string) => r.run([k, '-n', namespace, ...a], { input })
   if (action === 'status')
     return run(['get', 'deployment,service,pod', '-l', 'app=platform', '-o', 'wide'])
-  if (action === 'logs') return run(['logs', 'deployment/platform', ...args])
+  if (action === 'logs') return run(['logs', 'deployment/platform-relay', ...args])
   if (action === 'down')
-    return run(['delete', 'deployment/platform', 'service/platform', '--ignore-not-found'])
+    return run([
+      'delete',
+      'deployment/platform-relay',
+      'service/platform-relay',
+      '--ignore-not-found',
+    ])
   if (action === 'diff') return run(['diff', '-f', '-'], manifest)
   if (action === 'validate') return run(['apply', '--dry-run=server', '-f', '-'], manifest)
   const applied = await run(['apply', '-f', '-'], manifest)
   if (applied) return applied
-  return run(['rollout', 'status', 'deployment/platform', `--timeout=${timeout}s`])
+  return run(['rollout', 'status', 'deployment/platform-relay', `--timeout=${timeout}s`])
 }
 export async function deploy(args: string[], r: DeployRuntime = runtime): Promise<number> {
   const [target, action, ...rest] = args

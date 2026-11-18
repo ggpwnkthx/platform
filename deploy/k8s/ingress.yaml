@@ -1,0 +1,30 @@
+# An example Ingress for the relay: the address the pages open their sessions through.
+#
+# The interface is a static site on a CDN; the relay is the only thing of ours that answers
+# on the network. Put it behind whatever serves TLS in your cluster: this ingress, a cloud
+# load balancer or a tunnel. `platform deploy k8s apply` does not apply this file: it is a
+# starting point, and it names the host and the certificate to use.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: platform-relay
+  labels: { app: platform }
+  annotations:
+    # A database session may stay open for a long while.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [relay.example.com]
+      secretName: platform-relay-tls
+  rules:
+    - host: relay.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: platform-relay
+                port: { name: relay }

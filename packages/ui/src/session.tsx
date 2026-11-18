@@ -164,10 +164,10 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
   useEffect(() => {
     let live = true
     void (async () => {
-      const cfg = await runtimeConfig()
-      if (!live) return
-      setConfig(cfg)
       try {
+        const cfg = await runtimeConfig()
+        if (!live) return
+        setConfig(cfg)
         if (inPageDatabase) {
           const as = sessionStorage.getItem('platform.dev.as')
           if (as) {
