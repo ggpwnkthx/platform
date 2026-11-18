@@ -38,43 +38,104 @@
 }
 
 :root {
-  /* Neutrals: cool slate, from the module bar's ink to the page's white. */
-  --ink: #141c27;
-  --ink-2: #263243;
-  --ink-3: #3a475a;
-  --text: #17202c;
-  --text-soft: #354153;
-  --text-muted: #5a6779;
-  --text-faint: #6b788b;
-  --line: #dfe4eb;
-  --line-soft: #ebeef3;
-  --line-strong: #c6cfdb;
+  /* The palette: the only source of hue in the interface.
+     The sixteen chromatic families and five neutrals, named. The families the chrome does
+     not use yet are reserved for categorical data, and stay out of the interface until
+     the product has something categorical to colour. */
+  --palette-orange: #f15a2b;
+  --palette-red: #ee2a3d;
+  --palette-green: #6cbe4f;
+  --palette-blue: #449fd8;
+  --palette-amber: #f1ad29;
+  --palette-indigo: #5e54a3;
+  --palette-mint: #65c081;
+  --palette-pink: #ed2c8f;
+  --palette-steel: #5379a3;
+  --palette-olive: #bebf4f;
+  --palette-purple: #aa519f;
+  --palette-cyan: #43c1d8;
+  --palette-bronze: #be964e;
+  --palette-violet: #8553a2;
+  --palette-teal: #60c5bc;
+  --palette-clay: #bf704e;
+  --palette-grey: #a9abae;
+  --palette-mid: #383838;
+  --palette-raised: #2c2c2c;
+  --palette-black: #141414;
+  --palette-white: #fafafa;
+
+  /* The palette's own light and dark steps, for the families the chrome uses. */
+  --palette-orange-light: #ee8a6a;
+  --palette-orange-dark: #ad401e;
+  --palette-blue-light: #7eb5d7;
+  --palette-blue-dark: #3379a5;
+  --palette-green-light: #8af464;
+  --palette-green-dark: #3e702d;
+  --palette-amber-light: #fcc967;
+  --palette-amber-dark: #7f5c24;
+  --palette-red-light: #ed6875;
+  --palette-red-dark: #ab1d2b;
+
+  /* Neutrals: the palette's grey ramp, from the module bar's black to the page's white.
+     Every step the palette does not name is mixed from one it does, and says so here. */
+  --ink: var(--palette-black);
+  --ink-2: var(--palette-raised);
+  --ink-3: var(--palette-mid);
+  --text: #1f1f1f; /* palette black mixed 5% into white */
+  --text-soft: var(--palette-mid); /* palette */
+  --text-muted: #5d5e5f; /* palette grey mixed into palette black, 33% */
+  --text-faint: #717273; /* palette grey mixed into palette black, 52% */
+  --line: #eaeaeb; /* palette grey mixed 75% into white */
+  --line-soft: #f3f3f4; /* palette grey mixed 86% into white */
+  --line-strong: #8b8d8f; /* palette grey mixed 20% into palette black: 3.3:1 on paper */
+  --grey: var(--palette-grey);
   --bg: #ffffff;
-  --bg-subdued: #f4f6f9;
-  --bg-sunk: #eaeef3;
-  --bg-hover: #eef1f6;
+  --bg-subdued: #f4f4f5; /* palette grey mixed 7% into palette white */
+  --bg-sunk: #e8e9e9; /* palette grey mixed 16% into palette white */
+  --bg-hover: #eff0f0; /* palette grey mixed 13% into palette white */
 
-  /* One violet for action and selection. */
-  --primary: #5b3ee6;
-  --primary-hover: #4b2fd3;
-  --primary-press: #4027b8;
-  --primary-wash: #f0edfe;
-  --primary-wash-2: #e3ddfd;
-  --primary-ink: #3b23a8;
+  /* The accent: the palette's orange. Its bright step fills; its deep step carries the
+     text and the small marks that sit on light grounds. */
+  --primary: var(--palette-orange);
+  --primary-hover: #e05428; /* palette orange mixed 25% into palette orange-dark */
+  --primary-press: #dd5227; /* palette orange mixed 30% into palette orange-dark */
+  --primary-wash: #f9e0d9; /* palette orange mixed 16% into palette white */
+  --primary-wash-2: #f7cabc; /* palette orange mixed 30% into palette white */
+  --primary-ink: var(--palette-orange-dark);
+  --on-primary: var(--palette-black);
+  --on-primary-soft: #351e17; /* palette black mixed 85% into palette orange */
 
-  --success: #16794c;
-  --success-wash: #e6f5ed;
-  --warning: #965a00;
-  --warning-wash: #fff3dc;
-  --danger: #c52f2b;
-  --danger-hover: #ab2522;
-  --danger-wash: #fdeceb;
+  /* Information: the palette's blue, the split-complementary partner of the accent. */
+  --info: var(--palette-blue);
+  --info-ink: #2b6081; /* palette blue-dark mixed 25% into palette black */
+  --info-wash: #e0edf5; /* palette blue mixed 14% into palette white */
+  --info-wash-2: #c7e1f0; /* palette blue mixed 28% into palette white */
+
+  /* Status: each family's deep step for its text, a bright tint for its ground. */
+  --success: var(--palette-green-dark);
+  --success-wash: #e6f2e5; /* palette green mixed 14% into palette white */
+  --success-wash-2: #cfe8c7; /* palette green mixed 30% into palette white */
+  --warning: var(--palette-amber-dark);
+  --warning-wash: #f9eed9; /* palette amber mixed 16% into palette white */
+  --warning-wash-2: #f7e1b7; /* palette amber mixed 32% into palette white */
+  --danger: var(--palette-red-dark);
+  --danger-hover: #8a1b26; /* palette red-dark mixed 22% into palette black */
+  --danger-wash: #f8d5d8; /* palette red mixed 18% into palette white */
+  --danger-wash-2: #f6b3ba; /* palette red mixed 34% into palette white */
+
+  /* On the module bar and the toast: the palette's light steps. */
+  --on-dark: var(--palette-white);
+  --on-dark-soft: var(--palette-grey);
+  --light-primary: var(--palette-orange-light);
+  --light-info: var(--palette-blue-light);
+  --light-success: var(--palette-green-light);
+  --light-danger: var(--palette-red-light);
 
   --radius: 6px;
   --radius-lg: 10px;
-  --shadow-1: 0 1px 2px rgb(20 28 39 / 6%), 0 1px 1px rgb(20 28 39 / 4%);
-  --shadow-2: 0 4px 12px rgb(20 28 39 / 8%), 0 1px 3px rgb(20 28 39 / 6%);
-  --shadow-3: 0 16px 40px rgb(20 28 39 / 16%), 0 4px 12px rgb(20 28 39 / 8%);
+  --shadow-1: 0 1px 2px rgb(20 20 20 / 6%), 0 1px 1px rgb(20 20 20 / 4%);
+  --shadow-2: 0 4px 12px rgb(20 20 20 / 8%), 0 1px 3px rgb(20 20 20 / 6%);
+  --shadow-3: 0 16px 40px rgb(20 20 20 / 16%), 0 4px 12px rgb(20 20 20 / 8%);
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
 
   --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -157,7 +218,7 @@ kbd,
 }
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--line-strong) transparent;
+  scrollbar-color: var(--grey) transparent;
 }
 input,
 textarea {
@@ -192,7 +253,7 @@ textarea {
 }
 .mark-line {
   fill: none;
-  stroke: #fff;
+  stroke: var(--on-primary);
   stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -214,7 +275,7 @@ textarea {
   flex-direction: column;
   align-items: center;
   background: var(--ink);
-  color: #b8c3d2;
+  color: var(--on-dark-soft);
   padding: 0 0 12px;
   z-index: 30;
 }
@@ -237,18 +298,18 @@ textarea {
   width: 44px;
   height: 44px;
   border-radius: var(--radius);
-  color: #9fabbc;
+  color: var(--on-dark-soft);
   transition:
     background 0.15s,
     color 0.15s;
 }
 .module:hover {
   background: var(--ink-2);
-  color: #fff;
+  color: var(--on-dark);
 }
 .module.is-active {
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
 }
 .modules-foot {
   margin-top: auto;
@@ -274,7 +335,7 @@ textarea {
   height: 36px;
   border-radius: 50%;
   background: var(--primary-hover);
-  color: #fff;
+  color: var(--on-primary);
   font-weight: 600;
   font-size: 13px;
   letter-spacing: 0.02em;
@@ -324,7 +385,7 @@ textarea {
 }
 .nav-add:hover {
   background: var(--bg-sunk);
-  color: var(--primary);
+  color: var(--primary-ink);
 }
 .nav-list {
   display: flex;
@@ -354,7 +415,7 @@ textarea {
   color: var(--primary-ink);
 }
 .nav-item.is-active svg {
-  color: var(--primary);
+  color: var(--primary-ink);
 }
 .nav-text {
   overflow: hidden;
@@ -532,7 +593,7 @@ textarea {
   color: var(--line-strong);
 }
 .crumbs a:hover {
-  color: var(--primary);
+  color: var(--primary-ink);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -543,7 +604,7 @@ textarea {
   flex: none;
 }
 .sidebar-toggle.is-on {
-  color: var(--primary);
+  color: var(--primary-ink);
 }
 
 .toolbar {
@@ -711,7 +772,7 @@ textarea {
 }
 .button-primary {
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
   box-shadow: var(--shadow-1);
 }
 .button-primary:hover:not(:disabled) {
@@ -763,8 +824,8 @@ textarea {
 }
 .action-primary {
   background: var(--primary);
-  color: #fff;
-  box-shadow: 0 4px 12px rgb(91 62 230 / 30%);
+  color: var(--on-primary);
+  box-shadow: 0 4px 12px rgb(241 90 43 / 32%);
 }
 .action-primary:hover:not(:disabled) {
   background: var(--primary-hover);
@@ -814,11 +875,12 @@ textarea {
   border: 0;
   background: none;
   padding: 0;
-  color: var(--primary-ink);
+  color: var(--text);
   font-weight: 500;
   text-align: left;
 }
 .link-button:hover {
+  color: var(--primary-ink);
   text-decoration: underline;
 }
 
@@ -918,7 +980,7 @@ textarea {
   width: 18px;
   height: 18px;
   margin-top: 3px;
-  border: 1.5px solid var(--line-strong);
+  border: 1.5px solid var(--grey);
   border-radius: 4px;
   background: var(--bg);
   color: transparent;
@@ -931,7 +993,7 @@ textarea {
 .checkbox input:checked + .checkbox-box {
   background: var(--primary);
   border-color: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
 }
 .checkbox input:focus-visible + .checkbox-box {
   outline: 2px solid var(--primary);
@@ -973,7 +1035,7 @@ input[type="checkbox"]:not(.checkbox input) {
   width: 36px;
   height: 20px;
   border-radius: 10px;
-  background: var(--line-strong);
+  background: var(--grey);
   flex: none;
   transition: background 0.18s;
 }
@@ -1035,7 +1097,7 @@ input[type="checkbox"]:not(.checkbox input) {
 }
 .search kbd {
   font-size: 11px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--line);
   border-radius: 4px;
   padding: 0 6px;
   color: var(--text-muted);
@@ -1107,6 +1169,10 @@ td .badge:first-child:not(:only-child) {
   background: var(--primary-wash);
   color: var(--primary-ink);
 }
+.badge-info {
+  background: var(--info-wash);
+  color: var(--info-ink);
+}
 .badge-success {
   background: var(--success-wash);
   color: var(--success);
@@ -1121,7 +1187,7 @@ td .badge:first-child:not(:only-child) {
 }
 .badge-outline {
   background: transparent;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--grey);
   color: var(--text-muted);
   font-weight: 500;
 }
@@ -1182,22 +1248,22 @@ td .badge:first-child:not(:only-child) {
   line-height: 1.55;
 }
 .notice-info > svg {
-  color: var(--primary);
+  color: var(--info-ink);
 }
 .notice-info {
-  background: var(--primary-wash);
-  border-color: var(--primary-wash-2);
+  background: var(--info-wash);
+  border-color: var(--info-wash-2);
 }
 .notice-warning {
   background: var(--warning-wash);
-  border-color: #f3dcae;
+  border-color: var(--warning-wash-2);
 }
 .notice-warning > svg {
   color: var(--warning);
 }
 .notice-danger {
   background: var(--danger-wash);
-  border-color: #f6c9c6;
+  border-color: var(--danger-wash-2);
 }
 .notice-danger > svg,
 .notice-danger .notice-title {
@@ -1205,7 +1271,7 @@ td .badge:first-child:not(:only-child) {
 }
 .notice-success {
   background: var(--success-wash);
-  border-color: #bfe6cf;
+  border-color: var(--success-wash-2);
 }
 .notice-success > svg {
   color: var(--success);
@@ -1241,13 +1307,13 @@ td .badge:first-child:not(:only-child) {
   margin-top: 1px;
 }
 .toast-success > svg {
-  color: #6ee2a6;
+  color: var(--light-success);
 }
 .toast-error > svg {
-  color: #ff9b94;
+  color: var(--light-danger);
 }
 .toast-info > svg {
-  color: #b5a6ff;
+  color: var(--light-info);
 }
 .toast > div {
   flex: 1;
@@ -1257,12 +1323,12 @@ td .badge:first-child:not(:only-child) {
   font-weight: 600;
 }
 .toast-detail {
-  color: #c4cedb;
+  color: var(--on-dark-soft);
   font-size: 13px;
   margin-top: 2px;
 }
 .toast .icon-button {
-  color: #9fabbc;
+  color: var(--on-dark-soft);
   width: 28px;
   height: 28px;
 }
@@ -1316,7 +1382,7 @@ td .badge:first-child:not(:only-child) {
   padding: 32px 4px;
 }
 .loading svg {
-  color: var(--primary);
+  color: var(--primary-ink);
 }
 .skeleton {
   display: inline-block;
@@ -1473,7 +1539,7 @@ td .badge:first-child:not(:only-child) {
 }
 .drawer::backdrop,
 .confirm::backdrop {
-  background: rgb(20 28 39 / 38%);
+  background: rgb(20 20 20 / 38%);
   backdrop-filter: blur(1px);
 }
 .drawer {
@@ -1572,7 +1638,7 @@ td .badge:first-child:not(:only-child) {
   /* A shadow at the right edge while there is more table to scroll to. */
   background:
     linear-gradient(to left, var(--bg) 40%, rgb(255 255 255 / 0%)) right / 40px 100% no-repeat local,
-    radial-gradient(farthest-side at 100% 50%, rgb(20 28 39 / 14%), transparent) right / 12px 100%
+    radial-gradient(farthest-side at 100% 50%, rgb(20 20 20 / 14%), transparent) right / 12px 100%
     no-repeat scroll,
     var(--bg);
   transition: opacity 0.2s;
@@ -2004,7 +2070,7 @@ td .badge:first-child:not(:only-child) {
   box-shadow: inset 0 0 0 1px var(--primary);
 }
 .type-option.is-chosen svg {
-  color: var(--primary);
+  color: var(--primary-ink);
 }
 .type-option:has(input:focus-visible) {
   outline: 2px solid var(--primary);
@@ -2134,8 +2200,8 @@ td .badge:first-child:not(:only-child) {
   padding: 10px 12px;
 }
 .policy.is-yours {
-  border-color: var(--primary-wash-2);
-  background: #faf9ff;
+  border-color: var(--info-wash-2);
+  background: var(--info-wash);
 }
 .policy-head {
   display: flex;
@@ -2195,7 +2261,7 @@ button.perm:hover:not(:disabled) {
   background: linear-gradient(90deg, var(--primary) 50%, var(--primary-wash-2) 50%);
 }
 .perm-none .perm-mark {
-  border: 1.5px solid var(--line-strong);
+  border: 1.5px solid var(--grey);
 }
 .legend {
   display: flex;
@@ -2274,7 +2340,7 @@ button.perm:hover:not(:disabled) {
   height: 34px;
   border-radius: var(--radius);
   background: var(--primary-wash);
-  color: var(--primary);
+  color: var(--primary-ink);
 }
 .tile-count {
   color: var(--text-muted);
@@ -2320,11 +2386,11 @@ button.perm:hover:not(:disabled) {
   height: 30px;
   border-radius: 50%;
   background: var(--primary-wash);
-  color: var(--primary);
+  color: var(--primary-ink);
 }
 .tile-add:hover {
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
 }
 
 /* ------------------------------------------------------------------ activity */
@@ -2354,14 +2420,14 @@ button.perm:hover:not(:disabled) {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: var(--line-strong);
+  background: var(--grey);
   translate: 0 -1px;
 }
 .dot-success {
   background: var(--success);
 }
-.dot-primary {
-  background: var(--primary);
+.dot-info {
+  background: var(--info-ink);
 }
 .dot-danger {
   background: var(--danger);
@@ -2410,11 +2476,11 @@ button.perm:hover:not(:disabled) {
 }
 .diff-before {
   background: var(--danger-wash);
-  color: #8f1f1c;
+  color: var(--danger);
 }
 .diff-after {
   background: var(--success-wash);
-  color: #0e5a37;
+  color: var(--success);
 }
 
 /* ------------------------------------------------------------------ sql */
@@ -2510,7 +2576,7 @@ button.perm:hover:not(:disabled) {
 }
 .history-item.is-refused code {
   text-decoration: line-through;
-  text-decoration-color: rgb(197 47 43 / 50%);
+  text-decoration-color: rgb(171 29 43 / 50%);
 }
 .history-item span {
   display: flex;
@@ -2559,7 +2625,7 @@ button.perm:hover:not(:disabled) {
 .signin-diagram span:nth-of-type(2) {
   background: var(--primary);
   border-color: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
 }
 .signin-diagram i {
   width: 1px;
@@ -2575,7 +2641,7 @@ button.perm:hover:not(:disabled) {
   margin-top: 2px;
 }
 .signin-diagram span:nth-of-type(2) small {
-  color: #e6e0ff;
+  color: var(--on-primary-soft);
 }
 .signin-panel {
   display: grid;
@@ -2709,7 +2775,7 @@ button.perm:hover:not(:disabled) {
     inset: 0;
     z-index: 15;
     border: 0;
-    background: rgb(20 28 39 / 30%);
+    background: rgb(20 20 20 / 30%);
   }
   .nav-open .nav-scrim {
     display: block;
@@ -2838,8 +2904,8 @@ button.perm:hover:not(:disabled) {
   color: var(--warning);
 }
 .choice-2 {
-  background: var(--primary-wash);
-  color: var(--primary-ink);
+  background: var(--info-wash);
+  color: var(--info-ink);
 }
 .choice-3 {
   background: var(--success-wash);

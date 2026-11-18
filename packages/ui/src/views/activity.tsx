@@ -14,7 +14,7 @@ import { Drawer } from '../ui/overlay.tsx'
 
 const operations: Record<string, { label: string; tone: BadgeTone }> = {
   INSERT: { label: 'Created', tone: 'success' },
-  UPDATE: { label: 'Updated', tone: 'primary' },
+  UPDATE: { label: 'Updated', tone: 'info' },
   DELETE: { label: 'Deleted', tone: 'danger' },
   TRUNCATE: { label: 'Truncated', tone: 'danger' },
 }

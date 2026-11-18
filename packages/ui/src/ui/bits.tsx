@@ -2,7 +2,14 @@ import clsx from 'clsx'
 import type { ComponentChildren } from 'preact'
 import { ErrorIcon, InfoIcon, SpinnerIcon, SuccessIcon, WarningIcon } from './icons.tsx'
 
-export type BadgeTone = 'neutral' | 'primary' | 'success' | 'warning' | 'danger' | 'outline'
+export type BadgeTone =
+  | 'neutral'
+  | 'primary'
+  | 'info'
+  | 'success'
+  | 'warning'
+  | 'danger'
+  | 'outline'
 
 export function Badge({
   tone = 'neutral',

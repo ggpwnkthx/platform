@@ -165,7 +165,7 @@ export function CollectionSidebar({
           <dt>Row security</dt>
           <dd>
             {info.rls ? (
-              <Badge tone="primary">{info.force_rls ? 'On, forced' : 'On'}</Badge>
+              <Badge tone="info">{info.force_rls ? 'On, forced' : 'On'}</Badge>
             ) : (
               <Badge>Off</Badge>
             )}
