@@ -134,3 +134,40 @@ export function columnSql(spec: ColumnSpec): string {
   if (spec.max !== undefined) sql += ` CHECK (${name} <= ${spec.max})`
   return sql
 }
+
+/**
+ * The statement that sets one metadata key of an item, and the statement that removes it.
+ * The interface writes an item's metadata through them, so the reader is shown the same
+ * statement a psql session would run, and runs exactly that.
+ */
+export function metadataStatement(
+  scope: 'workspace' | 'collection',
+  schema: string,
+  table: string | null,
+  key: string,
+  value: unknown
+): string {
+  const target =
+    scope === 'workspace'
+      ? `'workspace', ${literal(schema)}, NULL`
+      : `'collection', ${literal(schema)}, ${literal(table)}`
+  return `INSERT INTO platform.item_metadata (scope, schema_name, table_name, key, value)
+VALUES (${target}, ${literal(key)}, ${literal(JSON.stringify(value ?? null))}::jsonb)
+ON CONFLICT (scope, schema_name, coalesce(table_name, ''), key)
+DO UPDATE SET value = EXCLUDED.value;`
+}
+
+/** The statement that removes one metadata key of an item. */
+export function metadataRemoval(
+  scope: 'workspace' | 'collection',
+  schema: string,
+  table: string | null,
+  key: string
+): string {
+  const target =
+    scope === 'workspace'
+      ? `scope = 'workspace' AND schema_name = ${literal(schema)} AND table_name IS NULL`
+      : `scope = 'collection' AND schema_name = ${literal(schema)} AND table_name = ${literal(table)}`
+  return `DELETE FROM platform.item_metadata
+ WHERE ${target} AND key = ${literal(key)};`
+}

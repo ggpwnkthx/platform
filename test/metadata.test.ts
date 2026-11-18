@@ -3,7 +3,12 @@ import { readFileSync } from 'node:fs'
 import pg from 'pg'
 import { ident } from '../packages/sql/src/index.ts'
 import { TokenClient, transaction } from '../packages/cli/src/db.ts'
-import { metadata, removeMetadata, setMetadata } from '../packages/ui/src/db/platform.ts'
+import {
+  metadata,
+  presentations,
+  removeMetadata,
+  setMetadata,
+} from '../packages/ui/src/db/metadata.ts'
 import type { Connection } from '../packages/ui/src/pg/wire.ts'
 import { startIssuer } from './issuer.ts'
 import { openPage, refusal } from './page.ts'
@@ -248,5 +253,49 @@ describe('metadata of a workspace and of a collection', () => {
 
   test('the page’s client reads the metadata of what it may reach', async () => {
     expect(await as('owner', collection)).toHaveLength(2)
+  })
+})
+
+describe('the presentation of an item', () => {
+  test('the owner writes the name, the icon and the colour of a workspace', async () => {
+    await as('owner', async (db) => {
+      expect(await setMetadata(db, 'newsroom', null, 'display_name', 'Newsroom')).toBe(1)
+      expect(await setMetadata(db, 'newsroom', null, 'icon', 'newspaper')).toBe(1)
+      expect(await setMetadata(db, 'newsroom', null, 'color', 'steel')).toBe(1)
+    })
+    const shown = await as('owner', workspace)
+    expect(shown.find((one) => one.key === 'display_name')?.value).toBe('Newsroom')
+    expect(shown.find((one) => one.key === 'icon')?.value).toBe('newspaper')
+    expect(shown.find((one) => one.key === 'color')?.value).toBe('steel')
+  })
+
+  test('a reader of the workspace reads its presentation and may not change it', async () => {
+    const shown = await as('blind', workspace)
+    expect(shown.find((one) => one.key === 'display_name')?.value).toBe('Newsroom')
+    await as('blind', async (db) => {
+      expect(await refusal(setMetadata(db, 'newsroom', null, 'display_name', 'Mine'))).toBe('42501')
+    })
+    const after = await as('owner', workspace)
+    expect(after.find((one) => one.key === 'display_name')?.value).toBe('Newsroom')
+  })
+
+  test('the presentation of every item the reader may reach is read at once', async () => {
+    await as('owner', async (db) => {
+      expect(await setMetadata(db, 'newsroom', 'articles', 'display_name', 'Articles')).toBe(1)
+      expect(await setMetadata(db, 'newsroom', 'articles', 'icon', 'file-text')).toBe(1)
+    })
+    const rows = await as('owner', presentations)
+    expect(
+      rows
+        .filter((row) => row.key === 'display_name')
+        .map((row) => `${row.schema_name}.${row.table_name ?? ''}`)
+        .sort()
+    ).toEqual(['newsroom.', 'newsroom.articles'])
+    // One who may use the workspace alone reads the workspace, and no collection.
+    const blind = await as('blind', presentations)
+    expect(blind.map((row) => row.key).sort()).toEqual(['color', 'display_name', 'icon'])
+    expect(blind.every((row) => row.table_name === null)).toBe(true)
+    // A stranger reaches nothing at all.
+    expect(await as('outsider', presentations)).toEqual([])
   })
 })

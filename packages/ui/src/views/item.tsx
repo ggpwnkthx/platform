@@ -24,6 +24,7 @@ import {
   systemColumns,
   tableOf,
 } from '../state/catalog.ts'
+import { presentationOf } from '../state/presentation.ts'
 import { href } from '../state/url.ts'
 import { Badge, Loading, Notice, Statement } from '../ui/bits.tsx'
 import { Action } from '../ui/button.tsx'
@@ -201,10 +202,12 @@ function RelationPicker({
 }
 
 export function Item() {
-  const { catalog, withDb, notify } = useSession()
+  const { catalog, withDb, notify, presentations } = useSession()
   const location = useLocation()
   const ws = useWorkspace()
   const table = location.query.c ?? ''
+  const workspace = presentationOf(presentations, ws)
+  const collection = presentationOf(presentations, ws, table)
   const id = location.query.id ?? '+'
   const creating = id === '+'
   const info = tableOf(catalog, ws, table)
@@ -386,8 +389,8 @@ export function Item() {
         </a>
       }
       crumbs={[
-        { label: ws, href: href('/content', { ws }) },
-        { label: table, href: back },
+        { label: workspace.displayName ?? ws, href: href('/content', { ws }) },
+        { label: collection.displayName ?? table, href: back },
       ]}
       actions={
         <>

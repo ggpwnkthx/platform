@@ -7,7 +7,6 @@ import type {
   GrantInfo,
   Identity,
   MembershipInfo,
-  MetadataEntry,
   PolicyInfo,
   RoleInfo,
   SchemaGrantInfo,
@@ -363,55 +362,6 @@ export async function relationOptions(
 /** Runs the reader's own statement: one statement, as them. */
 export async function run(db: Db, sql: string) {
   return db.query(sql)
-}
-
-export async function metadata(db: Db, schema: string, table: string | null) {
-  const result = await db.query<MetadataEntry>(
-    `SELECT key, value, version::int AS version, updated_at::text AS updated_at, updated_by
-       FROM platform.item_metadata
-      WHERE scope = $1 AND schema_name = $2 AND table_name IS NOT DISTINCT FROM $3::text
-      ORDER BY key`,
-    [table === null ? 'workspace' : 'collection', schema, table]
-  )
-  return result.rows
-}
-
-/** Sets one key; with a version, only if the key still carries it. */
-export async function setMetadata(
-  db: Db,
-  schema: string,
-  table: string | null,
-  key: string,
-  value: unknown,
-  version?: number
-) {
-  const params: unknown[] = [
-    table === null ? 'workspace' : 'collection',
-    schema,
-    table,
-    key,
-    JSON.stringify(value === undefined ? null : value),
-  ]
-  const sql =
-    version === undefined
-      ? `INSERT INTO platform.item_metadata (scope, schema_name, table_name, key, value)
-         VALUES ($1, $2, $3, $4, $5::jsonb)
-         ON CONFLICT (scope, schema_name, coalesce(table_name, ''), key)
-         DO UPDATE SET value = EXCLUDED.value`
-      : `UPDATE platform.item_metadata SET value = $5::jsonb
-          WHERE scope = $1 AND schema_name = $2 AND table_name IS NOT DISTINCT FROM $3::text
-            AND key = $4 AND version = $6`
-  if (version !== undefined) params.push(version)
-  return (await db.query(sql, params)).affected ?? 0
-}
-
-export async function removeMetadata(db: Db, schema: string, table: string | null, key: string) {
-  const result = await db.query(
-    `DELETE FROM platform.item_metadata
-      WHERE scope = $1 AND schema_name = $2 AND table_name IS NOT DISTINCT FROM $3::text AND key = $4`,
-    [table === null ? 'workspace' : 'collection', schema, table, key]
-  )
-  return result.affected ?? 0
 }
 
 /** Runs statements as one transaction: all of them happen, or none. */

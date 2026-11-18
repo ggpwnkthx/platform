@@ -4,13 +4,14 @@ import { schemaGrantStatement, schemaPrivileges, workspaceStatements } from '../
 import { roles as readRoles, schemaGrants } from '../db/platform.ts'
 import { describe, useLoad, useSession } from '../session.tsx'
 import { Page, useWorkspace } from '../shell.tsx'
+import { presentationOf } from '../state/presentation.ts'
 import { href } from '../state/url.ts'
 import { Badge, Loading, Notice, Statement } from '../ui/bits.tsx'
 import { Action, Button } from '../ui/button.tsx'
 import { Checkbox, Field, Input, Select } from '../ui/form.tsx'
-import { GrantIcon, PlusIcon, TrashIcon, WorkspaceIcon } from '../ui/icons.tsx'
+import { GrantIcon, iconFor, PlusIcon, TrashIcon, WorkspaceIcon } from '../ui/icons.tsx'
 import { Confirm, Drawer } from '../ui/overlay.tsx'
-import { MetadataPanel } from './metadata.tsx'
+import { MetadataPanel, PresentationPanel } from './metadata.tsx'
 import { useRunner } from './runner.tsx'
 
 export function NewWorkspace() {
@@ -92,9 +93,11 @@ export function NewWorkspace() {
 }
 
 export function WorkspaceSettings() {
-  const { catalog } = useSession()
+  const { catalog, presentations } = useSession()
   const ws = useWorkspace()
   const schema = catalog.schemas.find((s) => s.name === ws)
+  const shown = presentationOf(presentations, ws)
+  const WorkspaceGlyph = iconFor(shown.icon) ?? WorkspaceIcon
   const grants = useLoad(ws ? (db) => schemaGrants(db, ws) : null, [ws, catalog])
   const roles = useLoad((db) => readRoles(db), [])
   const runner = useRunner()
@@ -121,9 +124,13 @@ export function WorkspaceSettings() {
     byGrantee.set(g.grantee, [...(byGrantee.get(g.grantee) ?? []), g.privilege])
   return (
     <Page
-      title={`${ws} settings`}
-      icon={<WorkspaceIcon size={22} />}
-      crumbs={[{ label: 'Content', href: href('/content', { ws }) }, { label: ws }]}
+      title={`${shown.displayName ?? ws} settings`}
+      icon={<WorkspaceGlyph size={22} />}
+      presentation={shown}
+      crumbs={[
+        { label: 'Content', href: href('/content', { ws }) },
+        { label: shown.displayName ?? ws },
+      ]}
       subtitle={`Owned by ${schema.owner}.`}
     >
       {runner.problem && (
@@ -131,6 +138,7 @@ export function WorkspaceSettings() {
           {runner.problem.detail}
         </Notice>
       )}
+      <PresentationPanel schema={ws} table={null} owner={owner} />
       <MetadataPanel schema={ws} table={null} owner={owner} />
       <section class="panel">
         <header class="panel-head">

@@ -23,10 +23,17 @@ access is shown as SQL before it runs as the reader. The settings of a workspace
 metadata and the access on the schema. See [interface](interface.md).
 
 Metadata is the description of an item rather than a row of it: a workspace may say what it
-is for, a collection may say how it should be read. It is stored in the platform schema and
-gated by row security that asks PostgreSQL's own privilege functions: a reader reaches the
-metadata of the items they may reach, and only the owner of an item may change it. A grant, a
-revoke or a membership change takes effect on the next statement, as everywhere else.
+is for, a collection may say how it should be read, a field may say what it holds. It is
+stored in the platform schema and gated by row security that asks PostgreSQL's own privilege
+functions: a reader reaches the metadata of the items they may reach, and only the owner of an
+item may change it. A grant, a revoke or a membership change takes effect on the next
+statement, as everywhere else.
+
+Three keys of that metadata are reserved for presentation: `display_name`, `icon` and
+`color`. A workspace or a collection may carry a name people read, a mark of the platform's own
+icons and a colour from the pinned palette, and the interface draws them wherever the item
+appears — the workspace switcher, the collection tiles, the header of the item's own page.
+They are metadata like any other: the same rights, the same refusals.
 
 Data modeling is available at runtime. Constraints, indexes, relations, renames and drops use
 native SQL when not covered by typed collection/field builders. Descriptive text is stored

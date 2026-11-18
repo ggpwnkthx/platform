@@ -25,6 +25,7 @@ import {
   tableOf,
   tablesIn,
 } from '../state/catalog.ts'
+import { presentationOf } from '../state/presentation.ts'
 import { href } from '../state/url.ts'
 import { Badge, Empty, Notice, Statement } from '../ui/bits.tsx'
 import { Action, Button } from '../ui/button.tsx'
@@ -34,6 +35,7 @@ import {
   ChevronRightIcon,
   CollectionIcon,
   DateIcon,
+  iconFor,
   IntegerIcon,
   JsonIcon,
   LockIcon,
@@ -48,7 +50,7 @@ import {
   UuidIcon,
 } from '../ui/icons.tsx'
 import { Confirm, Drawer } from '../ui/overlay.tsx'
-import { MetadataPanel } from './metadata.tsx'
+import { MetadataPanel, PresentationPanel } from './metadata.tsx'
 import { Rights } from './rights.tsx'
 import { useRunner } from './runner.tsx'
 
@@ -295,15 +297,16 @@ function usePreview(
 }
 
 export function ModelHome() {
-  const { catalog } = useSession()
+  const { catalog, presentations } = useSession()
   const ws = useWorkspace()
   const schema = catalog.schemas.find((s) => s.name === ws)
+  const shown = presentationOf(presentations, ws)
   const tables = tablesIn(catalog, ws)
   return (
     <Page
       title="Data model"
       icon={<ModelIcon size={22} />}
-      crumbs={[{ label: ws }]}
+      crumbs={[{ label: shown.displayName ?? ws }]}
       subtitle={schema ? `Collections are tables in ${ws}; fields are their columns.` : undefined}
       actions={
         schema?.can_create ? (
@@ -379,13 +382,15 @@ export function ModelHome() {
 }
 
 export function CollectionModel() {
-  const { catalog } = useSession()
+  const { catalog, presentations } = useSession()
   const location = useLocation()
   const ws = useWorkspace()
   const table = location.query.c ?? ''
   const tab = location.query.tab ?? 'fields'
   const info = tableOf(catalog, ws, table)
   const columns = columnsOf(catalog, ws, table)
+  const shown = presentationOf(presentations, ws, table)
+  const CollectionGlyph = iconFor(shown.icon) ?? CollectionIcon
   const runner = useRunner()
   const [adding, setAdding] = useState<FieldDraft | null>(null)
   const [dropping, setDropping] = useState<string | null>(null)
@@ -434,8 +439,9 @@ export function CollectionModel() {
   )
   return (
     <Page
-      title={table}
-      icon={<CollectionIcon size={22} />}
+      title={shown.displayName ?? table}
+      icon={<CollectionGlyph size={22} />}
+      presentation={shown}
       crumbs={[{ label: 'Data model', href: href('/model', { ws }) }, { label: ws }]}
       subtitle={
         owner
@@ -542,6 +548,7 @@ export function CollectionModel() {
               </div>
             </div>
           </section>
+          <PresentationPanel schema={ws} table={table} owner={owner} />
           <MetadataPanel schema={ws} table={table} owner={owner} />
         </>
       ) : (
@@ -733,10 +740,11 @@ export function CollectionModel() {
 }
 
 export function NewCollection() {
-  const { catalog } = useSession()
+  const { catalog, presentations } = useSession()
   const location = useLocation()
   const ws = useWorkspace()
   const schema = catalog.schemas.find((s) => s.name === ws)
+  const shown = presentationOf(presentations, ws)
   const [name, setName] = useState('')
   const [note, setNote] = useState('')
   const [fields, setFields] = useState<FieldDraft[]>([
@@ -760,7 +768,10 @@ export function NewCollection() {
     <Page
       title="New collection"
       icon={<CollectionIcon size={22} />}
-      crumbs={[{ label: 'Data model', href: href('/model', { ws }) }, { label: ws }]}
+      crumbs={[
+        { label: 'Data model', href: href('/model', { ws }) },
+        { label: shown.displayName ?? ws },
+      ]}
       subtitle="A table made by platform.create_collection: id, timestamps, who changed it, a version, revisions and row security on."
       actions={
         <Action

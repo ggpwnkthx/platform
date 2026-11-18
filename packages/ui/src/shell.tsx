@@ -5,8 +5,11 @@ import { useLocation } from 'preact-iso'
 import type { Module } from './routes.ts'
 import { useSession } from './session.tsx'
 import { tablesIn } from './state/catalog.ts'
+import { toneClass } from './state/color.ts'
+import { presentationOf, type Presentation } from './state/presentation.ts'
 import { href, type Place } from './state/url.ts'
 import { Initials } from './ui/bits.tsx'
+import { Avatar } from './ui/avatar.tsx'
 import {
   AccessIcon,
   ActivityIcon,
@@ -14,6 +17,7 @@ import {
   CollectionIcon,
   ContentIcon,
   GroupIcon,
+  iconFor,
   MenuIcon,
   ModelIcon,
   PlusIcon,
@@ -132,10 +136,11 @@ function ModuleBar({ module }: { module: Module | null }) {
 }
 
 function WorkspaceSwitcher({ path }: { path: string }) {
-  const { catalog, identity } = useSession()
+  const { catalog, identity, presentations } = useSession()
   const ws = useWorkspace()
   const [open, setOpen] = useState(false)
   const current = catalog.schemas.find((s) => s.name === ws)
+  const shown = presentationOf(presentations, ws)
   return (
     <div class="switcher">
       <button
@@ -145,29 +150,31 @@ function WorkspaceSwitcher({ path }: { path: string }) {
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
-        <span class="switcher-icon" aria-hidden="true">
-          <WorkspaceIcon size={18} />
-        </span>
+        <Avatar presentation={shown} fallback={WorkspaceIcon} class="switcher-icon" size={18} />
         <span class="switcher-text">
-          <strong>{ws || 'No workspace'}</strong>
+          <strong>{shown.displayName ?? (ws || 'No workspace')}</strong>
           <small>{current ? `owned by ${current.owner}` : 'Choose a workspace'}</small>
         </span>
         <ChevronDownIcon size={16} aria-hidden="true" />
       </button>
       <Menu open={open} onClose={() => setOpen(false)} align="start">
         <p class="menu-label">Workspaces you may use</p>
-        {catalog.schemas.map((s) => (
-          <a
-            key={s.name}
-            class={clsx('menu-item', s.name === ws && 'is-current')}
-            href={href(path, { ws: s.name })}
-            onClick={() => setOpen(false)}
-          >
-            <WorkspaceIcon size={16} aria-hidden="true" />
-            <span>{s.name}</span>
-            <small>{tablesIn(catalog, s.name).length}</small>
-          </a>
-        ))}
+        {catalog.schemas.map((s) => {
+          const item = presentationOf(presentations, s.name)
+          return (
+            <a
+              key={s.name}
+              class={clsx('menu-item', s.name === ws && 'is-current')}
+              href={href(path, { ws: s.name })}
+              title={item.displayName ? s.name : undefined}
+              onClick={() => setOpen(false)}
+            >
+              <Avatar presentation={item} fallback={WorkspaceIcon} class="menu-avatar" size={14} />
+              <span>{item.displayName ?? s.name}</span>
+              <small>{tablesIn(catalog, s.name).length}</small>
+            </a>
+          )
+        })}
         {!catalog.schemas.length && (
           <p class="menu-note">PostgreSQL gives you USAGE on no workspace yet.</p>
         )}
@@ -192,25 +199,30 @@ function WorkspaceSwitcher({ path }: { path: string }) {
 }
 
 function CollectionList({ base }: { base: string }) {
-  const { catalog } = useSession()
+  const { catalog, presentations } = useSession()
   const { query } = useLocation()
   const ws = useWorkspace()
   const tables = tablesIn(catalog, ws)
   return (
     <ul class="nav-list">
-      {tables.map((t) => (
-        <li key={t.name}>
-          <a
-            href={href(base, { ws, c: t.name })}
-            class={clsx('nav-item', query.c === t.name && 'is-active')}
-            aria-current={query.c === t.name ? 'page' : undefined}
-          >
-            <CollectionIcon size={18} aria-hidden="true" />
-            <span class="nav-text">{t.name}</span>
-            {t.kind === 'v' && <small class="nav-tag">view</small>}
-          </a>
-        </li>
-      ))}
+      {tables.map((t) => {
+        const item = presentationOf(presentations, ws, t.name)
+        const Icon = iconFor(item.icon) ?? CollectionIcon
+        return (
+          <li key={t.name}>
+            <a
+              href={href(base, { ws, c: t.name })}
+              class={clsx('nav-item', query.c === t.name && 'is-active')}
+              aria-current={query.c === t.name ? 'page' : undefined}
+              title={item.displayName ? t.name : undefined}
+            >
+              <Icon size={18} aria-hidden="true" />
+              <span class="nav-text">{item.displayName ?? t.name}</span>
+              {t.kind === 'v' && <small class="nav-tag">view</small>}
+            </a>
+          </li>
+        )
+      })}
       {!tables.length && ws && <li class="nav-note">No collection here that you may reach.</li>}
     </ul>
   )
@@ -351,6 +363,7 @@ export function Page({
   sidebar,
   children,
   subtitle,
+  presentation,
 }: {
   title: ComponentChildren
   crumbs?: Crumb[]
@@ -360,6 +373,8 @@ export function Page({
   sidebar?: ComponentChildren
   subtitle?: ComponentChildren
   children: ComponentChildren
+  /** The item this page is about: its colour marks the icon in the header. */
+  presentation?: Presentation | null
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   return (
@@ -367,7 +382,7 @@ export function Page({
       <main class="main" id="main">
         <header class="header">
           {icon && (
-            <span class="header-icon" aria-hidden="true">
+            <span class={clsx('header-icon', toneClass(presentation?.color))} aria-hidden="true">
               {icon}
             </span>
           )}

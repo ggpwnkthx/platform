@@ -1,22 +1,34 @@
 import { Fragment } from 'preact'
-import { activity, metadata } from '../db/platform.ts'
+import { activity } from '../db/platform.ts'
+import { metadata } from '../db/metadata.ts'
 import { qualified } from '@platform/sql'
 import { display, count as formatCount } from '../format.ts'
 import { useLoad, useSession } from '../session.tsx'
 import { Page, useWorkspace } from '../shell.tsx'
 import { columnsOf, tablesIn } from '../state/catalog.ts'
+import { presentationOf, presentationKeys } from '../state/presentation.ts'
 import { href } from '../state/url.ts'
+import { Avatar } from '../ui/avatar.tsx'
 import { Badge, Empty, Notice } from '../ui/bits.tsx'
 import { Action } from '../ui/button.tsx'
-import { CollectionIcon, ContentIcon, LockIcon, PlusIcon, WorkspaceIcon } from '../ui/icons.tsx'
+import {
+  CollectionIcon,
+  ContentIcon,
+  iconFor,
+  LockIcon,
+  PlusIcon,
+  WorkspaceIcon,
+} from '../ui/icons.tsx'
 import { RevisionList } from './activity.tsx'
 import { Rights } from './rights.tsx'
 
 /** A workspace at a glance: its collections, how many rows reach you, and what you may do. */
 export function ContentHome() {
-  const { catalog, identity } = useSession()
+  const { catalog, identity, presentations } = useSession()
   const ws = useWorkspace()
   const schema = catalog.schemas.find((s) => s.name === ws)
+  const shown = presentationOf(presentations, ws)
+  const WorkspaceGlyph = iconFor(shown.icon) ?? WorkspaceIcon
   const tables = tablesIn(catalog, ws)
   const counts = useLoad(
     ws
@@ -69,9 +81,10 @@ export function ContentHome() {
     )
   return (
     <Page
-      title={ws}
+      title={shown.displayName ?? ws}
       crumbs={[{ label: 'Content' }]}
-      icon={<WorkspaceIcon size={22} />}
+      icon={<WorkspaceGlyph size={22} />}
+      presentation={shown}
       subtitle={typeof purpose === 'string' ? purpose : `Owned by ${schema.owner}`}
       actions={
         schema.can_create ? (
@@ -88,13 +101,17 @@ export function ContentHome() {
         <div class="tiles">
           {tables.map((t) => {
             const n = counts.data?.counts[t.name]
+            const item = presentationOf(presentations, ws, t.name)
             return (
               <article key={t.name} class="tile">
                 <a class="tile-link" href={href('/content/records', { ws, c: t.name })}>
-                  <span class="tile-icon" aria-hidden="true">
-                    <CollectionIcon size={18} />
-                  </span>
-                  <h2>{t.name}</h2>
+                  <Avatar
+                    presentation={item}
+                    fallback={CollectionIcon}
+                    class="tile-icon"
+                    size={18}
+                  />
+                  <h2>{item.displayName ?? t.name}</h2>
                   {t.kind === 'v' && <Badge tone="outline">view</Badge>}
                 </a>
                 <p class="tile-count">
@@ -161,7 +178,7 @@ export function ContentHome() {
           <section class="panel">
             <header class="panel-head">
               <div>
-                <h2>About {ws}</h2>
+                <h2>About {shown.displayName ?? ws}</h2>
                 <p>What this workspace is, as its owner describes it.</p>
               </div>
               <a
@@ -182,14 +199,16 @@ export function ContentHome() {
                     ? 'Make collections here'
                     : 'Use the collections granted to you'}
               </dd>
-              {counts.data.about.map((entry) => (
-                <Fragment key={entry.key}>
-                  <dt>{entry.key.replaceAll('_', ' ')}</dt>
-                  <dd class={typeof entry.value === 'string' ? '' : 'mono'}>
-                    {display(entry.value)}
-                  </dd>
-                </Fragment>
-              ))}
+              {counts.data.about
+                .filter((entry) => !(presentationKeys as readonly string[]).includes(entry.key))
+                .map((entry) => (
+                  <Fragment key={entry.key}>
+                    <dt>{entry.key.replaceAll('_', ' ')}</dt>
+                    <dd class={typeof entry.value === 'string' ? '' : 'mono'}>
+                      {display(entry.value)}
+                    </dd>
+                  </Fragment>
+                ))}
             </dl>
           </section>
         </div>

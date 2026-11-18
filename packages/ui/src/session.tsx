@@ -5,8 +5,10 @@ import { beginSignIn, completeSignIn, expiresAt, roleOf } from './auth/oidc.ts'
 import { type RuntimeConfig, runtimeConfig } from './config.ts'
 import { connect, type Credentials, type Db, inPageDatabase } from './db/connect.ts'
 import { catalog as readCatalog, identity as readIdentity } from './db/platform.ts'
+import { presentations as readPresentations } from './db/metadata.ts'
 import type { Catalog, Identity } from './db/types.ts'
 import { ConnectionError, PgError } from './pg/wire.ts'
+import { indexPresentations, type PresentationIndex } from './state/presentation.ts'
 
 export type Phase = 'starting' | 'signed-out' | 'signing-in' | 'ready'
 
@@ -24,6 +26,8 @@ export interface Session {
   config: RuntimeConfig | null
   identity: Identity | null
   catalog: Catalog
+  /** How each item presents itself: its display name, its icon and its colour. */
+  presentations: PresentationIndex
   /** Opens a login as the reader, runs the work, and closes it: one connection per action. */
   withDb: <T>(work: (db: Db) => Promise<T>) => Promise<T>
   /** Reads the catalog again: after a change to the model or to a right. */
@@ -81,6 +85,7 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
   const [config, setConfig] = useState<RuntimeConfig | null>(null)
   const [identity, setIdentity] = useState<Identity | null>(null)
   const [catalog, setCatalog] = useState<Catalog>(emptyCatalog)
+  const [presentations, setPresentations] = useState<PresentationIndex>({})
   const [toasts, setToasts] = useState<Toast[]>([])
   const [lastWorkspace, setLastWorkspace] = useState<string | null>(null)
   // The token lives here and nowhere else: not a cookie, not storage.
@@ -103,6 +108,7 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
       credentials.current = null
       setIdentity(null)
       setCatalog(emptyCatalog)
+      setPresentations({})
       setNotice(reason ?? null)
       setPhase('signed-out')
       if (inPageDatabase) sessionStorage.removeItem('platform.dev.as')
@@ -141,9 +147,14 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
     credentials.current = who
     const db = await connect(cfg, who)
     try {
-      const [me, found] = [await readIdentity(db), await readCatalog(db)]
+      const [me, found, shown] = [
+        await readIdentity(db),
+        await readCatalog(db),
+        await readPresentations(db),
+      ]
       setIdentity(me)
       setCatalog(found)
+      setPresentations(indexPresentations(shown))
       setPhase('ready')
       setNotice(null)
     } finally {
@@ -155,9 +166,11 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
     const found = await withDb(async (db) => ({
       identity: await readIdentity(db),
       catalog: await readCatalog(db),
+      presentations: await readPresentations(db),
     }))
     setIdentity(found.identity)
     setCatalog(found.catalog)
+    setPresentations(indexPresentations(found.presentations))
   }, [withDb])
 
   // Start: read the configuration, finish a sign-in the issuer sent back, or stay signed out.
@@ -262,6 +275,7 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
       config,
       identity,
       catalog,
+      presentations,
       withDb,
       refresh,
       signIn,
@@ -279,6 +293,7 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
       config,
       identity,
       catalog,
+      presentations,
       withDb,
       refresh,
       signIn,

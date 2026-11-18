@@ -124,6 +124,42 @@ reader is shown the keys they may see and nothing for the rest; a write by anyon
 owner is refused by PostgreSQL. A value is any JSON value. A change to a key the reader opened
 is guarded by its version, as a record is.
 
+### Presentation
+
+Three keys are reserved: an item may say how it presents itself.
+
+| Key            | Value                                               | What it does                                               |
+| -------------- | --------------------------------------------------- | ---------------------------------------------------------- |
+| `display_name` | Text, up to 80 characters                           | The name people read, in place of the schema or table name |
+| `icon`         | The name of one of the platform's icons             | The mark drawn beside the name                             |
+| `color`        | A family of the palette, or a colour of the owner's | The colour of the mark                                     |
+
+They are ordinary metadata rows, so the same rules hold: a reader sees the presentation of
+the items they may reach, and only the owner of an item may change it. The interface writes
+them as ordinary statements, shown before they run:
+
+```sql
+INSERT INTO platform.item_metadata (scope, schema_name, table_name, key, value)
+VALUES ('workspace', 'newsroom', NULL, 'display_name', '"Newsroom"'::jsonb)
+ON CONFLICT (scope, schema_name, coalesce(table_name, ''), key)
+DO UPDATE SET value = EXCLUDED.value;
+```
+
+The icon names are the platform's own, one stroke and one weight: `newspaper`, `globe`,
+`building-2`, `briefcase`, `folder`, `database`, `boxes`, `book-open`, `graduation-cap`,
+`landmark`, `factory`, `store`, `file-text`, `camera`, `film`, `audio-lines`, `clipboard-list`,
+`list-todo`, `calendar-days`, `mail`, `message-square`, `bell`, `users`, `tags`, `star`,
+`shopping-bag`, `package`, `truck`, `wallet`, `receipt`, `chart-column`, `map-pin`,
+`pencil-ruler`, `megaphone`, `rss`, `lightbulb`, `wrench`, `puzzle`, `heart-pulse`, `scale`. A
+name the platform does not draw falls back to the generic mark.
+
+The colour is a family of the pinned palette: `orange`, `red`, `green`, `blue`, `amber`,
+`indigo`, `mint`, `pink`, `steel`, `olive`, `purple`, `cyan`, `bronze`, `violet`, `teal`,
+`clay`. A colour written as `#rrggbb` is drawn as the family nearest to it, so the interface
+stays inside its own palette whatever the owner asks for. The colour fills the item's mark
+alone — the workspace switcher's tile, a collection tile, the icon in a page header — and never
+a heading, a border or a ground.
+
 ## config.json
 
 The pages are static, so what they need to find the issuer and the database is a file served

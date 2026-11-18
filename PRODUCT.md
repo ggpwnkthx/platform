@@ -121,6 +121,9 @@ the interface alike.
   It is stored in the platform schema and gated by row security that asks PostgreSQL's own
   privilege functions, so a reader reaches the metadata of the items they may reach and only
   the owner of an item may change it.
+  Three keys of it are reserved for presentation: `display_name`, `icon` and `color`, so a
+  workspace or a collection can carry the name people read, a mark of the platform's own icons
+  and a colour, and the interface draws them wherever the item appears.
 - A record browser with named-operator filters, a case-insensitive search across the readable
   columns, sorting, paging with a row count, and updates guarded by the version the reader saw.
 - A one-statement SQL page executing as the signed-in reader; native PostgreSQL checks every

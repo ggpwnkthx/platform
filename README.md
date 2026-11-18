@@ -115,9 +115,11 @@ real build and forwards its WebSockets to a real PostgreSQL. See [interface](doc
   and Preact with `preact-iso` routing, generated at build time and served as files.
 - Typed collection/field builders; real CHECK, NOT NULL, UNIQUE, indexes and foreign keys.
   Use native ALTER TABLE for other schema changes and native views/joins for relationships.
-- Metadata for workspaces and collections: what an item is, as opposed to what it holds. It
-  is stored in the platform schema, and PostgreSQL's own rights decide it — a reader reaches
-  the metadata of the items they may reach, and only the owner of an item may change it.
+- Metadata for workspaces, collections and fields: what an item is, as opposed to what it
+  holds. It is stored in the platform schema, and PostgreSQL's own rights decide it — a reader
+  reaches the metadata of the items they may reach, and only the owner of an item may change it.
+  Three keys are reserved: a workspace or a collection may carry a display name, an icon and a
+  primary colour, and the interface draws them as the item's mark wherever it appears.
 - Record reads and writes as parameterized SQL on the reader's own login: inserts and updates
   without RETURNING, and updates guarded by the version the reader saw.
 - A one-statement SQL page executing as the signed-in reader. Native PostgreSQL checks every

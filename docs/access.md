@@ -94,14 +94,15 @@ client but not one reader from another.
 ## Metadata
 
 Metadata describes an item instead of holding its records: what a workspace is for, how a
-collection should be read, who answers for it. It lives in `platform.item_metadata`, one row
-per key per item, and it is reached under the same two rules as the items themselves:
+collection should be read, who answers for it, what a field holds. It lives in
+`platform.item_metadata`, one row per key per item, and it is reached under the same two rules
+as the items themselves:
 
 - a reader sees the metadata of the items they may reach — USAGE on the schema for a
   workspace, any right on the table for a collection, whether the right is on the table or on
-  one of its columns;
+  one of its columns, and any right on the column for a field;
 - only the owner of an item may change its metadata — the schema owner for a workspace, the
-  table owner for a collection.
+  table owner for a collection and for every field in it.
 
 Both rules are row security policies that call PostgreSQL's own privilege functions
 (`has_schema_privilege`, `has_table_privilege`, `has_any_column_privilege`,
@@ -115,6 +116,12 @@ use the workspace. A collection's metadata describes that collection, so it is r
 who hold a right on it and not by those who merely share the workspace. Delegating a model
 without giving away the database is native: a NOLOGIN role that owns the workspace owns its
 metadata for its members.
+
+Three keys are reserved for how an item presents itself — `display_name`, `icon` and `color`
+(see [interface](interface.md#presentation)). They are metadata like any other, so the same two
+rules hold for them: a reader sees the presentation of the items they may reach, and only the
+owner of an item may change it. The presentation is data, not a privilege: an owner cannot
+present an item they do not own, and a reader cannot change one they may merely read.
 
 A COMMENT is not metadata. PostgreSQL's comments are catalog text that every connected user
 reads, and only an owner may change them; they suit a label, not anything that should follow

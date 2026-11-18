@@ -270,8 +270,9 @@ The neutrals are `#fafafa`, `#a9abae`, `#383838`, `#2c2c2c` and `#141414`.
 
 **The Reserved Palette Rule.** A reserved family enters the chrome only when the product has
 categorical data that deserves a colour of its own. It never decorates: not a heading, not a
-border at rest, not an empty state. Until such data exists, the reserved families sit in the
-token layer and nowhere else.
+border at rest, not an empty state. A workspace and a collection are categorical data — each
+one is an item with its own name and its own mark — so the reserved families have their job
+now: an item's colour.
 
 ### Primary
 - **Studio Orange** (primary): the round create button, primary buttons, the active module tile, the focus border on inputs, the active tab underline, the brand mark's tile, and the filled privilege mark. Hover deepens to **Orange Deep** (primary-hover) and active to **Orange Press** (primary-press).
@@ -303,6 +304,16 @@ token layer and nowhere else.
 **The Palette-Only Rule.** No colour enters the interface that the pinned palette does not hold. A step the palette does not name is mixed from one it does, and says so in the token layer.
 
 **The Word-Meaning Tone Rule.** A listed value's badge colour follows what the word means, not its position in the list: settled words (published, active, paid, done) are green, ended or refused words (lost, rejected, closed, blocked) are red, in-progress words (review, negotiate, partner) are amber, starting words (draft, new, pending) are grey, and anything else is blue. The accent never takes a value's tone: the palette's orange and red are near neighbours, so a value that means nothing in particular takes blue and stays clear of the red that means refusal.
+
+**The Item Colour Rule.** A workspace or a collection may carry a colour of its own, chosen by
+its owner and stored with its metadata. The colour fills that item's mark — the small tile
+that carries its icon — and nowhere else: never a heading, never a border, never a ground, and
+never the accent, which keeps meaning "do this" and "chosen". The colour comes from the pinned
+palette, the reserved families first, since they carry no meaning of their own; the studio's
+own five are offered too, but last, because they already mean action, information and status.
+A colour the palette does not hold is drawn as the family nearest to it, so the interface stays
+inside its own palette whatever the owner asks for. The ink on the fill is the palette's black
+or its white, whichever reads.
 
 ## Typography
 
@@ -382,6 +393,24 @@ Gently rounded rectangles (6px) for controls, nav items and statements; softer c
 - **Navigation pane:** Subdued Grey with a workspace switcher at the top and 36px items; the active item is Orange Wash with Orange Ink text and an orange icon.
 - **Tabs:** 48px, semibold muted labels; active is Orange Ink with a 2px orange underline.
 
+### Item Marks (signature)
+A workspace or a collection may present itself: a display name, an icon and a colour, kept in
+its own metadata and drawn by the interface wherever the item appears. The mark is a small
+rounded tile — 36px in the workspace switcher, 34px on a collection tile, 44px in a page
+header — filled with the item's colour and carrying its icon in the ink that reads on it.
+Without a colour the mark keeps the ground its place gives it: ink in the switcher, Orange Wash
+on a tile, Subdued Grey in a header. The icon set is the platform's own, one stroke and one
+weight, named by the metadata (`newspaper`, `file-text`, `building-2`); an icon the platform
+does not draw falls back to the generic mark. The navigation pane keeps its list quiet: the
+item's icon there, in the neutral grey, and the colour in the places where the item is
+presented.
+
+### Presentation Panel
+The panel where an item's presentation is set: a preview of the mark as it will read, the
+display name in a field, the icon as a grid of choices, and the colour as the palette's
+families — the reserved ones first, the studio's own five after a hairline. The panel shows
+the statements that will run before the button that runs them, like every other change.
+
 ### Data Table
 Header row on Subdued Grey (42px, label type), body rows 46px with soft hairline dividers, row hover in Hover Grey, selected rows in Orange Wash, numbers right-aligned in mono, null as faint mono "null". Columns sort from the header. Follows The Sticky First Column Rule.
 
@@ -414,12 +443,14 @@ The sign-in is light like the rest: a Subdued Grey art panel on the left with a 
 - **Do** pin the first column of record tables, clip long values with an ellipsis, and put the full value in the tooltip.
 - **Do** separate page sections with a heading and a hairline; let the card be the only box.
 - **Do** tone choice badges by what the word means.
+- **Do** let an item carry its own name, icon and colour, and draw them as its mark alone.
 - **Do** keep the frame light, sign-in included; the only dark surface is the module bar.
 
 ### Don't:
 - **Don't** nest a bordered box inside a section box or a card inside a card.
 - **Don't** introduce a second accent hue or use orange decoratively.
 - **Don't** put a reserved palette family into the chrome while no categorical data asks for it.
+- **Don't** let an item's colour spread past its mark, or take the accent's place.
 - **Don't** describe rights with checkmarks, toggles or words other than PostgreSQL's privileges.
 - **Don't** run a change whose statement the reader has not been shown.
 - **Don't** colour choice badges by their position in the list.

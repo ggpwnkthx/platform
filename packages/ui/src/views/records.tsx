@@ -9,7 +9,8 @@ import {
   operatorLabels,
   valueless,
 } from '../db/filter.ts'
-import { deleteRecord, metadata, records } from '../db/platform.ts'
+import { deleteRecord, records } from '../db/platform.ts'
+import { metadata } from '../db/metadata.ts'
 import { ident, qualified } from '@platform/sql'
 import type { Catalog, ColumnInfo, PolicyInfo } from '../db/types.ts'
 import { count, plural } from '../format.ts'
@@ -24,6 +25,7 @@ import {
   systemColumns,
   tableOf,
 } from '../state/catalog.ts'
+import { presentationOf } from '../state/presentation.ts'
 import { href } from '../state/url.ts'
 import { Badge, Empty, Loading, Notice } from '../ui/bits.tsx'
 import { Action, Button } from '../ui/button.tsx'
@@ -37,6 +39,7 @@ import {
   CollectionIcon,
   FilterIcon,
   HiddenIcon,
+  iconFor,
   InfoIcon,
   LockIcon,
   PlusIcon,
@@ -328,12 +331,15 @@ function FilterBuilder({
 const pageSizes = [25, 50, 100, 250]
 
 export function Records() {
-  const { catalog, withDb, notify } = useSession()
+  const { catalog, withDb, notify, presentations } = useSession()
   const location = useLocation()
   const { query } = location
   const ws = useWorkspace()
   const table = query.c ?? ''
   const info = tableOf(catalog, ws, table)
+  const mark = presentationOf(presentations, ws, table)
+  const workspace = presentationOf(presentations, ws)
+  const CollectionGlyph = iconFor(mark.icon) ?? CollectionIcon
   const columns = columnsOf(catalog, ws, table)
   const readable = columns.filter((c) => c.can_select)
   const [showSystem, setShowSystem] = useState(false)
@@ -497,11 +503,12 @@ export function Records() {
 
   return (
     <Page
-      title={table}
-      icon={<CollectionIcon size={22} />}
+      title={mark.displayName ?? table}
+      icon={<CollectionGlyph size={22} />}
+      presentation={mark}
       crumbs={[
         { label: 'Content', href: href('/content', { ws }) },
-        { label: ws, href: href('/content', { ws }) },
+        { label: workspace.displayName ?? ws, href: href('/content', { ws }) },
       ]}
       subtitle={
         loaded.data

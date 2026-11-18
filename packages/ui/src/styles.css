@@ -402,7 +402,7 @@ textarea {
   color: var(--text-soft);
   font-weight: 500;
 }
-.nav-item svg {
+.nav-item > svg {
   color: var(--text-faint);
   flex: none;
 }
@@ -414,7 +414,7 @@ textarea {
   background: var(--primary-wash);
   color: var(--primary-ink);
 }
-.nav-item.is-active svg {
+.nav-item.is-active > svg {
   color: var(--primary-ink);
 }
 .nav-text {
@@ -466,8 +466,8 @@ textarea {
   width: 36px;
   height: 36px;
   border-radius: var(--radius);
-  background: var(--ink);
-  color: #fff;
+  background: var(--tone-fill, var(--ink));
+  color: var(--tone-ink, #fff);
   flex: none;
 }
 .switcher-text {
@@ -539,8 +539,8 @@ textarea {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: var(--bg-subdued);
-  color: var(--text-soft);
+  background: var(--tone-fill, var(--bg-subdued));
+  color: var(--tone-ink, var(--text-soft));
   flex: none;
 }
 .header-back {
@@ -1473,9 +1473,17 @@ td .badge:first-child:not(:only-child) {
   text-align: left;
   color: var(--text);
 }
-.menu-item svg {
+.menu-item > svg {
   color: var(--text-muted);
   flex: none;
+}
+/* The workspace's own mark in the list: a colour when it has one, a quiet glyph when not. */
+.menu-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius);
+  background: var(--tone-fill, transparent);
+  color: var(--tone-ink, var(--text-muted));
 }
 .menu-item small {
   margin-left: auto;
@@ -1589,6 +1597,15 @@ td .badge:first-child:not(:only-child) {
   flex: 1;
   overflow-y: auto;
   padding: 24px 28px;
+}
+/* A second part of a drawer: the keys of an item, under its presentation. */
+.drawer-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
 }
 .drawer-foot {
   display: flex;
@@ -2109,6 +2126,280 @@ td .badge:first-child:not(:only-child) {
   flex-direction: column;
 }
 
+/* The name a field is read by, beside the name the database gave it. */
+.field-alias {
+  margin-left: 8px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------- presentation */
+
+/* An item's colour: the palette family it belongs to, and the ink that reads on it. The
+   fill is the family's own step; the ink is the palette's black or its white. */
+.tone-orange {
+  --tone-fill: var(--palette-orange);
+  --tone-ink: var(--palette-black);
+}
+.tone-red {
+  --tone-fill: var(--palette-red);
+  --tone-ink: var(--palette-black);
+}
+.tone-green {
+  --tone-fill: var(--palette-green);
+  --tone-ink: var(--palette-black);
+}
+.tone-blue {
+  --tone-fill: var(--palette-blue);
+  --tone-ink: var(--palette-black);
+}
+.tone-amber {
+  --tone-fill: var(--palette-amber);
+  --tone-ink: var(--palette-black);
+}
+.tone-indigo {
+  --tone-fill: var(--palette-indigo);
+  --tone-ink: var(--palette-white);
+}
+.tone-mint {
+  --tone-fill: var(--palette-mint);
+  --tone-ink: var(--palette-black);
+}
+.tone-pink {
+  --tone-fill: var(--palette-pink);
+  --tone-ink: var(--palette-black);
+}
+.tone-steel {
+  --tone-fill: var(--palette-steel);
+  --tone-ink: var(--palette-white);
+}
+.tone-olive {
+  --tone-fill: var(--palette-olive);
+  --tone-ink: var(--palette-black);
+}
+.tone-purple {
+  --tone-fill: var(--palette-purple);
+  --tone-ink: var(--palette-white);
+}
+.tone-cyan {
+  --tone-fill: var(--palette-cyan);
+  --tone-ink: var(--palette-black);
+}
+.tone-bronze {
+  --tone-fill: var(--palette-bronze);
+  --tone-ink: var(--palette-black);
+}
+.tone-violet {
+  --tone-fill: var(--palette-violet);
+  --tone-ink: var(--palette-white);
+}
+.tone-teal {
+  --tone-fill: var(--palette-teal);
+  --tone-ink: var(--palette-black);
+}
+.tone-clay {
+  --tone-fill: var(--palette-clay);
+  --tone-ink: var(--palette-black);
+}
+
+/* An item's mark: its icon, on its colour when its owner gave it one. */
+.avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.presentation {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.presentation-preview {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--bg-subdued);
+}
+.avatar-preview {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius);
+  background: var(--tone-fill, var(--primary-wash));
+  color: var(--tone-ink, var(--primary-ink));
+}
+.presentation-preview strong {
+  display: block;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.presentation-preview .note {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  gap: 6px;
+}
+.icon-choice {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    color 0.15s;
+}
+.icon-choice input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  cursor: pointer;
+}
+.icon-choice:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+.icon-choice.is-chosen {
+  border-color: var(--primary);
+  background: var(--primary-wash);
+  color: var(--primary-ink);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+.icon-choice:has(input:focus-visible) {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.icon-choice:has(input:disabled) {
+  cursor: default;
+  opacity: 0.55;
+}
+.colour-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.swatch-gap {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--line);
+}
+.swatch {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    transform 0.12s var(--ease),
+    box-shadow 0.12s;
+}
+.swatch input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  cursor: pointer;
+}
+.swatch:hover {
+  transform: translateY(-1px);
+}
+.swatch.is-chosen {
+  border-color: var(--line-strong);
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px var(--primary);
+}
+.swatch:has(input:focus-visible) {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.swatch:has(input:disabled) {
+  cursor: default;
+  opacity: 0.55;
+}
+.swatch-none {
+  background: var(--bg);
+}
+.swatch-none::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18px;
+  height: 1.5px;
+  background: var(--line-strong);
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+.swatch-orange {
+  background: var(--palette-orange);
+}
+.swatch-red {
+  background: var(--palette-red);
+}
+.swatch-green {
+  background: var(--palette-green);
+}
+.swatch-blue {
+  background: var(--palette-blue);
+}
+.swatch-amber {
+  background: var(--palette-amber);
+}
+.swatch-indigo {
+  background: var(--palette-indigo);
+}
+.swatch-mint {
+  background: var(--palette-mint);
+}
+.swatch-pink {
+  background: var(--palette-pink);
+}
+.swatch-steel {
+  background: var(--palette-steel);
+}
+.swatch-olive {
+  background: var(--palette-olive);
+}
+.swatch-purple {
+  background: var(--palette-purple);
+}
+.swatch-cyan {
+  background: var(--palette-cyan);
+}
+.swatch-bronze {
+  background: var(--palette-bronze);
+}
+.swatch-violet {
+  background: var(--palette-violet);
+}
+.swatch-teal {
+  background: var(--palette-teal);
+}
+.swatch-clay {
+  background: var(--palette-clay);
+}
+.colour-input {
+  width: 108px;
+}
+
 /* ------------------------------------------------------------------ panels */
 
 .panel {
@@ -2339,8 +2630,8 @@ button.perm:hover:not(:disabled) {
   width: 34px;
   height: 34px;
   border-radius: var(--radius);
-  background: var(--primary-wash);
-  color: var(--primary-ink);
+  background: var(--tone-fill, var(--primary-wash));
+  color: var(--tone-ink, var(--primary-ink));
 }
 .tile-count {
   color: var(--text-muted);

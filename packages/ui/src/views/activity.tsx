@@ -6,6 +6,7 @@ import type { ActivityInfo } from '../db/types.ts'
 import { ago, display, moment } from '../format.ts'
 import { describe, useLoad, useSession } from '../session.tsx'
 import { Page, useWorkspace } from '../shell.tsx'
+import { presentationOf } from '../state/presentation.ts'
 import { href } from '../state/url.ts'
 import { Badge, type BadgeTone, Empty, Loading, Notice } from '../ui/bits.tsx'
 import { Button } from '../ui/button.tsx'
@@ -160,10 +161,11 @@ export function RevisionList({
 }
 
 export function Activity() {
-  const { catalog } = useSession()
+  const { catalog, presentations } = useSession()
   const location = useLocation()
   const ws = useWorkspace()
   const table = location.query.c
+  const shown = presentationOf(presentations, ws)
   const [before, setBefore] = useState<number | undefined>(undefined)
   const [open, setOpen] = useState<ActivityInfo | null>(null)
   const found = useLoad(
@@ -177,7 +179,7 @@ export function Activity() {
       title="Activity"
       icon={<ActivityIcon size={22} />}
       crumbs={[
-        { label: ws, href: href('/content', { ws }) },
+        { label: shown.displayName ?? ws, href: href('/content', { ws }) },
         ...(table ? [{ label: 'Every collection', href: href('/activity', { ws }) }] : []),
       ]}
       subtitle={table ? `Revisions of ${ws}.${table}` : `Revisions in ${ws}`}

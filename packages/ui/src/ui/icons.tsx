@@ -1,4 +1,46 @@
-import type { LucideProps } from 'lucide-preact'
+import type { LucideIcon, LucideProps } from 'lucide-preact'
+import {
+  AudioLines,
+  Bell,
+  BookOpen,
+  Boxes,
+  Briefcase,
+  Building2,
+  CalendarDays,
+  Camera,
+  ChartColumn,
+  ClipboardList,
+  Database,
+  Factory,
+  FileText,
+  Film,
+  Folder,
+  Globe,
+  GraduationCap,
+  HeartPulse,
+  Landmark,
+  Lightbulb,
+  ListTodo,
+  Mail,
+  MapPin,
+  Megaphone,
+  MessageSquare,
+  Newspaper,
+  Package,
+  PencilRuler,
+  Puzzle,
+  Receipt,
+  Rss,
+  Scale,
+  ShoppingBag,
+  Star,
+  Store,
+  Tags,
+  Truck,
+  Users,
+  Wallet,
+  Wrench,
+} from 'lucide-preact'
 export {
   Activity as ActivityIcon,
   ArrowDown as ArrowDownIcon,
@@ -59,3 +101,56 @@ export {
   X as CloseIcon,
 } from 'lucide-preact'
 export type { LucideProps }
+
+/**
+ * The icons a workspace or a collection may carry. One set, one stroke and one weight, so a
+ * mark always reads as the platform's own: a name in the metadata, a drawn glyph here.
+ */
+export const itemIcons: Record<string, LucideIcon> = {
+  newspaper: Newspaper,
+  globe: Globe,
+  'building-2': Building2,
+  briefcase: Briefcase,
+  folder: Folder,
+  database: Database,
+  boxes: Boxes,
+  'book-open': BookOpen,
+  'graduation-cap': GraduationCap,
+  landmark: Landmark,
+  factory: Factory,
+  store: Store,
+  'file-text': FileText,
+  camera: Camera,
+  film: Film,
+  'audio-lines': AudioLines,
+  'clipboard-list': ClipboardList,
+  'list-todo': ListTodo,
+  'calendar-days': CalendarDays,
+  mail: Mail,
+  'message-square': MessageSquare,
+  bell: Bell,
+  users: Users,
+  tags: Tags,
+  star: Star,
+  'shopping-bag': ShoppingBag,
+  package: Package,
+  truck: Truck,
+  wallet: Wallet,
+  receipt: Receipt,
+  'chart-column': ChartColumn,
+  'map-pin': MapPin,
+  'pencil-ruler': PencilRuler,
+  megaphone: Megaphone,
+  rss: Rss,
+  lightbulb: Lightbulb,
+  wrench: Wrench,
+  puzzle: Puzzle,
+  'heart-pulse': HeartPulse,
+  scale: Scale,
+}
+
+/** The icon an item named, or null when it named none the platform draws. */
+export function iconFor(name: string | null | undefined): LucideIcon | null {
+  if (!name) return null
+  return itemIcons[name] ?? null
+}
