@@ -81,7 +81,7 @@ describe('local deployment orchestration', () => {
     const f = fake({ POSTGRES_PASSWORD: 'private-secret', PLATFORM_HTTP_PORT: '8087' })
     expect(await deploy(['local', 'up'], f.r)).toBe(0)
     const cmds = f.calls.map((c) => c.argv)
-    expect(cmds[1]!.slice(-4)).toEqual(['build', 'postgres', 'ui', 'migrate'])
+    expect(cmds[1]!.slice(-5)).toEqual(['build', 'postgres', 'relay', 'ui', 'migrate'])
     // The installer's image is built too, so its profile is named for the build.
     expect(cmds[1]).toContain('--profile')
     expect(cmds[2]!.slice(-4)).toEqual(['up', '-d', 'postgres', 'dex'])

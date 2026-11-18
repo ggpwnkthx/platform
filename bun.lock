@@ -24,6 +24,10 @@
         "@types/pg": "8.23.1",
       },
     },
+    "packages/relay": {
+      "name": "@platform/relay",
+      "version": "2.1.0",
+    },
     "packages/sql": {
       "name": "@platform/sql",
       "version": "2.1.0",
@@ -76,6 +80,8 @@
     "@fontsource/jetbrains-mono": ["@fontsource/jetbrains-mono@5.2.8", "", {}, "sha512-6w8/SG4kqvIMu7xd7wt6x3idn1Qux3p9N62s6G3rfldOUYHpWcc2FKrqf+Vo44jRvqWj2oAtTHrZXEP23oSKwQ=="],
 
     "@platform/cli": ["@platform/cli@workspace:packages/cli"],
+
+    "@platform/relay": ["@platform/relay@workspace:packages/relay"],
 
     "@platform/sql": ["@platform/sql@workspace:packages/sql"],
 

@@ -69,8 +69,15 @@ services:
   # Forwards the interface's WebSockets to PostgreSQL's port, byte for byte. It holds no
   # credentials and reads nothing it carries: the token inside the stream is PostgreSQL's to check.
   relay:
-    image: ghcr.io/vi/websocat:v1.14.2
-    command: [--binary, --exit-on-eof, --conncap, "256", "ws-l:0.0.0.0:8081", "tcp:postgres:5432"]
+    build:
+      context: ../..
+      target: relay
+    image: platform-relay:local
+    environment:
+      RELAY_UPSTREAM: postgres:5432
+      RELAY_PORT: 8081
+      # The only origin allowed to open a session: the address the site is served from.
+      RELAY_ORIGINS: ${PLATFORM_PUBLIC_ORIGIN:-http://localhost:8080}
     networks: [relay, edge]
     depends_on:
       postgres:

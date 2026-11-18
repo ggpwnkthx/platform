@@ -203,6 +203,7 @@ async function local(action: string, args: string[], r: DeployRuntime): Promise<
   }
   const port = setting('PLATFORM_HTTP_PORT', '8080')
   const dexPort = setting('DEX_PORT', '5556')
+  const relayPort = setting('RELAY_PORT', '8081')
   const tool = await compose(engine, r)
   const base = tool.length
   const cmd = [
@@ -224,6 +225,9 @@ async function local(action: string, args: string[], r: DeployRuntime): Promise<
     POSTGRES_PASSWORD: password ?? 'unused-for-inspection',
     PLATFORM_HTTP_PORT: port,
     DEX_PORT: dexPort,
+    RELAY_PORT: relayPort,
+    // The only origin the relay allows: the address the site is served from.
+    PLATFORM_PUBLIC_ORIGIN: r.env.PLATFORM_PUBLIC_URL ?? r.env.PUBLIC_URL ?? 'http://localhost:8080',
   }
   // Dex is given only hashes. The passwords stay in the saved file for the people to read.
   if (prepares)
@@ -243,6 +247,7 @@ async function local(action: string, args: string[], r: DeployRuntime): Promise<
       ...cmd.slice(base),
       'build',
       'postgres',
+      'relay',
       'ui',
       'migrate',
     ],

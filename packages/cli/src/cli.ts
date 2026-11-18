@@ -157,7 +157,9 @@ async function main() {
     )
     return
   }
-  if (!['migrate', 'apply', 'model:apply', 'sql', 'doctor', 'harden'].includes(command ?? '')) {
+  if (
+    !['migrate', 'apply', 'model:apply', 'sql', 'doctor', 'harden', 'relay'].includes(command ?? '')
+  ) {
     console.log(`platform <command>
   migrate           Install or upgrade Platform ${VERSION} in a dedicated PostgreSQL 18 database.
                     Needs PGUSER/PGPASSWORD[_FILE] of its administrator.

@@ -12,6 +12,7 @@
     "build:ui": "bun packages/ui/scripts/build.tsx",
     "dev:ui": "bun packages/ui/scripts/dev.ts",
     "cli": "bun packages/cli/src/cli.ts",
+    "relay": "bun packages/relay/src/relay.ts",
     "migrate": "bun packages/cli/src/cli.ts migrate",
     "deploy": "bun packages/cli/src/cli.ts deploy",
     "test": "bun test",
