@@ -71,14 +71,6 @@ async function start(role: string): Promise<PGlite> {
   return db
 }
 
-/** Forgets every change: the next load starts from the seed again. */
-export async function resetDevelopmentDatabase(): Promise<void> {
-  await new Promise<void>((resolve) => {
-    const request = indexedDB.deleteDatabase(`/pglite/${storageKey}`)
-    request.onsuccess = request.onerror = request.onblocked = () => resolve()
-  })
-}
-
 function commandOf(text: string): string {
   const words = text
     .replace(/--[^\n]*\n/g, ' ')

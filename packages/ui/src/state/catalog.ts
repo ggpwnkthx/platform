@@ -92,6 +92,3 @@ export function kindOf(type: string): Kind {
   if (/^jsonb?$/.test(type)) return 'json'
   return 'other'
 }
-
-/** Is the reader the owner of the table, or a member of the owning role? */
-export const mayAlter = (table: TableInfo | undefined) => Boolean(table?.can_alter)
