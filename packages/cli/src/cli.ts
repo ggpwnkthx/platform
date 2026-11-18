@@ -209,7 +209,7 @@ login that has a password. The HTTP server never loads any of them.`)
         }
         for (const migration of pending)
           await q.query(
-            readFileSync(join(import.meta.dir, '../migrations', migration.file), 'utf8')
+            readFileSync(join(import.meta.dir, '../../../migrations', migration.file), 'utf8')
           )
         console.log(
           installed

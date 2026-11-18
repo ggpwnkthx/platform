@@ -1,0 +1,23 @@
+{
+  "name": "@platform/ui",
+  "version": "2.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The interface: a static site whose pages speak PostgreSQL's protocol themselves.",
+  "license": "MIT",
+  "dependencies": {
+    "clsx": "2.1.1",
+    "lucide-preact": "1.75.0",
+    "preact": "10.27.2",
+    "preact-iso": "2.12.2",
+    "preact-render-to-string": "6.6.4"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.16",
+    "@fontsource-variable/inter": "5.2.8",
+    "@fontsource/jetbrains-mono": "5.2.8"
+  },
+  "engines": {
+    "bun": ">=1.4.3"
+  }
+}

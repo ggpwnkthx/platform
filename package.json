@@ -5,12 +5,15 @@
   "type": "module",
   "description": "PostgreSQL-native identity, modeling, grants and row security, with a static interface that speaks to PostgreSQL itself.",
   "license": "MIT",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "build:ui": "bun run scripts/build-ui.tsx",
-    "dev:ui": "bun run scripts/dev-ui.ts",
-    "cli": "bun src/cli.ts",
-    "migrate": "bun src/cli.ts migrate",
-    "deploy": "bun src/cli.ts deploy",
+    "build:ui": "bun packages/ui/scripts/build.tsx",
+    "dev:ui": "bun packages/ui/scripts/dev.ts",
+    "cli": "bun packages/cli/src/cli.ts",
+    "migrate": "bun packages/cli/src/cli.ts migrate",
+    "deploy": "bun packages/cli/src/cli.ts deploy",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "lint": "biome lint .",
@@ -18,22 +21,11 @@
     "format:check": "biome format .",
     "check": "bun run build:ui && bun run typecheck && bun run lint && bun run format:check && bun test"
   },
-  "dependencies": {
-    "@fontsource-variable/inter": "5.2.8",
-    "@fontsource/jetbrains-mono": "5.2.8",
-    "clsx": "2.1.1",
-    "lucide-preact": "1.75.0",
-    "pg": "8.23.1",
-    "preact": "10.27.2",
-    "preact-iso": "2.12.2",
-    "preact-render-to-string": "6.6.4",
-    "zod": "4.6.7"
-  },
   "devDependencies": {
     "@biomejs/biome": "2.6.8",
-    "@electric-sql/pglite": "0.5.16",
     "@types/bun": "1.4.4",
     "@types/pg": "8.23.1",
+    "pg": "8.23.1",
     "typescript": "7.0.2"
   },
   "engines": {

@@ -5,8 +5,8 @@ import {
   operatorLabels,
   operators,
   parseFilter,
-} from '../ui/src/db/filter.ts'
-import { predicate } from '../ui/src/db/platform.ts'
+} from '../packages/ui/src/db/filter.ts'
+import { predicate } from '../packages/ui/src/db/platform.ts'
 
 describe('The filter of a record query', () => {
   test('a plain value is an equality', () => {

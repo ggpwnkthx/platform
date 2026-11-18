@@ -8,8 +8,8 @@
       "!**/.tofu",
       "!**/deploy/tofu/**/.terraform",
       "!DESIGN.md",
-      "!ui/dist",
-      "!ui/dist-dev",
+      "!packages/ui/dist",
+      "!packages/ui/dist-dev",
       "!**/.impeccable"
     ]
   },

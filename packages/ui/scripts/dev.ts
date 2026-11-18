@@ -10,15 +10,15 @@ import { join } from 'node:path'
  *                                  The real interface, against a real PostgreSQL: this process
  *                                  also forwards /pg WebSockets to HOST:PORT, byte for byte,
  *                                  as the deployment's relay does. Sign-in goes through the
- *                                  issuer in ui/public/config.json.
+ *                                  issuer in public/config.json.
  *
- * Every change under ui/src rebuilds the pages; reload to see it.
+ * Every change under packages/ui/src rebuilds the pages; reload to see it.
  */
 
 const project = join(import.meta.dir, '..')
 const relayArg = process.argv.find((a) => a.startsWith('--relay='))?.slice('--relay='.length)
 const dev = !relayArg
-const dist = join(project, dev ? 'ui/dist-dev' : 'ui/dist')
+const dist = join(project, dev ? 'dist-dev' : 'dist')
 const port = Number(process.env.PORT ?? 5173)
 
 const types: Record<string, string> = {
@@ -35,7 +35,7 @@ const types: Record<string, string> = {
 
 async function build() {
   const child = Bun.spawn(
-    ['bun', join(project, 'scripts/build-ui.tsx'), ...(dev ? ['--dev'] : [])],
+    ['bun', join(project, 'scripts/build.tsx'), ...(dev ? ['--dev'] : [])],
     {
       stdout: 'inherit',
       stderr: 'inherit',
@@ -59,7 +59,7 @@ const policy = [
   "style-src 'self'",
   "font-src 'self'",
   "img-src 'self' data:",
-  `connect-src 'self'${dev ? '' : ` ws://localhost:${port} ${JSON.parse(readFileSync(join(project, 'ui/public/config.json'), 'utf8')).issuer.replace(/^(https?:\/\/[^/]+).*/, '$1')}`}`,
+  `connect-src 'self'${dev ? '' : ` ws://localhost:${port} ${JSON.parse(readFileSync(join(project, 'public/config.json'), 'utf8')).issuer.replace(/^(https?:\/\/[^/]+).*/, '$1')}`}`,
   "frame-ancestors 'none'",
   "base-uri 'none'",
   "form-action 'self'",
@@ -114,7 +114,7 @@ console.log(
 )
 
 let timer: ReturnType<typeof setTimeout> | null = null
-watch(join(project, 'ui'), { recursive: true }, (_, name) => {
+watch(join(project, 'src'), { recursive: true }, (_, name) => {
   if (!name || name.startsWith('dist')) return
   if (timer) clearTimeout(timer)
   timer = setTimeout(() => void build(), 150)

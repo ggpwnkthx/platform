@@ -2,8 +2,8 @@ import { describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { deploy, type DeployRuntime, renderKubernetes } from '../src/deploy.ts'
-import { VERSION } from '../src/version.ts'
+import { deploy, type DeployRuntime, renderKubernetes } from '../packages/cli/src/deploy.ts'
+import { VERSION } from '../packages/cli/src/version.ts'
 
 type Call = { argv: string[]; options?: Parameters<DeployRuntime['run']>[1] }
 function fake(env: Record<string, string | undefined> = {}) {
@@ -64,7 +64,7 @@ describe('version and CLI entry points', () => {
   })
   test('deploy help and version run without database credentials or external tools', async () => {
     for (const args of [['--version'], ['deploy', 'help']]) {
-      const child = Bun.spawn([process.execPath, 'src/cli.ts', ...args], {
+      const child = Bun.spawn([process.execPath, 'packages/cli/src/cli.ts', ...args], {
         cwd: new URL('..', import.meta.url).pathname,
         env: { PATH: process.env.PATH },
         stdout: 'pipe',
@@ -331,7 +331,7 @@ if [ "$3" = "apply" ]; then cat > "$DEPLOY_TEST_MANIFEST"; fi
 `,
       { mode: 0o755 }
     )
-    const child = Bun.spawn([process.execPath, 'src/cli.ts', 'deploy', 'k8s', 'apply'], {
+    const child = Bun.spawn([process.execPath, 'packages/cli/src/cli.ts', 'deploy', 'k8s', 'apply'], {
       cwd: new URL('..', import.meta.url).pathname,
       env: {
         PATH: dir + ':' + process.env.PATH,

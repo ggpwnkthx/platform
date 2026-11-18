@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path'
  */
 
 const project = join(import.meta.dir, '..')
-const sources = join(project, 'ui/src')
+const sources = join(project, 'src')
 
 /** The seam between the interface and its database, and what the development build puts there. */
 function inPageDatabase(): Bun.BunPlugin {
@@ -54,8 +54,8 @@ export async function buildUi(dev: boolean, out: string): Promise<number> {
   // Imported after the seam is in place, so the prerender reads the same database as the bundle.
   const { prerender } = await import('preact-iso')
   const { locationStub } = await import('preact-iso/prerender')
-  const { App } = await import('../ui/src/app.tsx')
-  const { fileFor, pages } = await import('../ui/src/routes.ts')
+  const { App } = await import('../src/app.tsx')
+  const { fileFor, pages } = await import('../src/routes.ts')
 
   await rm(out, { recursive: true, force: true })
   await mkdir(out, { recursive: true })
@@ -74,7 +74,7 @@ export async function buildUi(dev: boolean, out: string): Promise<number> {
 
   await cp(join(sources, 'styles.css'), join(out, 'styles.css'))
   await cp(join(sources, 'favicon.svg'), join(out, 'favicon.svg'))
-  await cp(join(project, 'ui/public'), out, { recursive: true })
+  await cp(join(project, 'public'), out, { recursive: true })
   await mkdir(join(out, 'fonts'), { recursive: true })
   const fonts = {
     'inter-latin-wght-normal.woff2':
@@ -110,9 +110,9 @@ export async function buildUi(dev: boolean, out: string): Promise<number> {
 
 if (import.meta.main) {
   const dev = process.argv.includes('--dev')
-  const out = join(project, dev ? 'ui/dist-dev' : 'ui/dist')
+  const out = join(project, dev ? 'dist-dev' : 'dist')
   const count = await buildUi(dev, out)
   console.log(
-    `Built ${count} static pages and one client bundle in ${out.replace(project, '.')}${dev ? ' (development: PostgreSQL runs in the page)' : ''}`
+    `Built ${count} static pages and one client bundle in ${out.replace(join(project, '..', '..'), '.')}${dev ? ' (development: PostgreSQL runs in the page)' : ''}`
   )
 }

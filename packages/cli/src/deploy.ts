@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { appendFileSync, existsSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
-const ROOT = resolve(import.meta.dir, '..')
+const ROOT = resolve(import.meta.dir, '../../..')
 export const DEPLOY_HELP = `platform deploy <local|k8s> <action> [options]
 
   local  Docker Compose or Podman Compose, using deploy/compose/compose.yaml.

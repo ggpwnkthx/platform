@@ -1,7 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { connect as tcp } from 'node:net'
 import pg from 'pg'
-import { Connection, PgError, parseArray, serialize, type Transport } from '../ui/src/pg/wire.ts'
+import {
+  Connection,
+  PgError,
+  parseArray,
+  serialize,
+  type Transport,
+} from '../packages/ui/src/pg/wire.ts'
 import { startIssuer } from './issuer.ts'
 
 /**
@@ -122,7 +128,7 @@ describe('through the relay', () => {
   // A stock WebSocket-to-TCP relay in front of the test server: docs/operations.md.
   const relay = process.env.TEST_RELAY_URL ?? 'ws://127.0.0.1:54331'
   test('the browser transport logs in and runs a statement', async () => {
-    const { openSocket } = await import('../ui/src/pg/socket.ts')
+    const { openSocket } = await import('../packages/ui/src/pg/socket.ts')
     const q = await Connection.open(await openSocket(relay), {
       user: person,
       database,

@@ -1,5 +1,5 @@
 import { connect as tcp } from 'node:net'
-import { Connection, PgError, type Transport } from '../ui/src/pg/wire.ts'
+import { Connection, PgError, type Transport } from '../packages/ui/src/pg/wire.ts'
 
 /**
  * The page's own PostgreSQL client in a test: the same login and the same statements a

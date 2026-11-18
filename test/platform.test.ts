@@ -3,19 +3,19 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import pg from 'pg'
-import { applyManifest, parseManifest } from '../src/apply.ts'
-import { ident, literal, TokenClient, transaction } from '../src/db.ts'
-import { hardenSql } from '../src/harden.ts'
-import { applyModel } from '../src/model.ts'
-import { authenticationProblems, requirePostgres18 } from '../src/requirements.ts'
+import { applyManifest, parseManifest } from '../packages/cli/src/apply.ts'
+import { ident, literal, TokenClient, transaction } from '../packages/cli/src/db.ts'
+import { hardenSql } from '../packages/cli/src/harden.ts'
+import { applyModel } from '../packages/cli/src/model.ts'
+import { authenticationProblems, requirePostgres18 } from '../packages/cli/src/requirements.ts'
 import {
   collectionStatements,
   emptyField,
   type FieldDraft,
   fieldStatements,
-} from '../ui/src/db/model.ts'
-import * as page from '../ui/src/db/platform.ts'
-import type { Connection } from '../ui/src/pg/wire.ts'
+} from '../packages/ui/src/db/model.ts'
+import * as page from '../packages/ui/src/db/platform.ts'
+import type { Connection } from '../packages/ui/src/pg/wire.ts'
 import { startIssuer } from './issuer.ts'
 import { openPage, refusal } from './page.ts'
 
@@ -859,7 +859,7 @@ describe('declarative apply', () => {
     writeFileSync(join(dir, 'not-json'), 'plain text\n')
     writeFileSync(file, JSON.stringify({ users: [{ name: role('ap_cli') }] }))
     const run = async (args: string[], operator?: Record<string, string>) => {
-      const child = Bun.spawn([process.execPath, 'src/cli.ts', 'apply', ...args], {
+      const child = Bun.spawn([process.execPath, 'packages/cli/src/cli.ts', 'apply', ...args], {
         cwd: new URL('..', import.meta.url).pathname,
         env: {
           PATH: process.env.PATH,
@@ -911,7 +911,7 @@ test('CLI installs a new database at 2.1.0 and safely repeats the installation',
   await root.query(`CREATE DATABASE ${ident(name)}`)
   try {
     for (let i = 0; i < 2; i++) {
-      const child = Bun.spawn([process.execPath, 'src/cli.ts', 'migrate'], {
+      const child = Bun.spawn([process.execPath, 'packages/cli/src/cli.ts', 'migrate'], {
         cwd: new URL('..', import.meta.url).pathname,
         env: {
           PATH: process.env.PATH,

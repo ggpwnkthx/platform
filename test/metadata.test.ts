@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import pg from 'pg'
-import { ident, TokenClient, transaction } from '../src/db.ts'
-import { metadata, removeMetadata, setMetadata } from '../ui/src/db/platform.ts'
-import type { Connection } from '../ui/src/pg/wire.ts'
+import { ident, TokenClient, transaction } from '../packages/cli/src/db.ts'
+import { metadata, removeMetadata, setMetadata } from '../packages/ui/src/db/platform.ts'
+import type { Connection } from '../packages/ui/src/pg/wire.ts'
 import { startIssuer } from './issuer.ts'
 import { openPage, refusal } from './page.ts'
 

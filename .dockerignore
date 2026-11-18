@@ -8,5 +8,5 @@ node_modules
 coverage
 test
 docs
-ui/dist
-ui/dist-dev
+packages/ui/dist
+packages/ui/dist-dev
