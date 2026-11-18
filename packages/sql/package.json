@@ -1,0 +1,14 @@
+{
+  "name": "@platform/sql",
+  "version": "2.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The SQL the platform writes: identifiers, literals, columns and relation names, written once.",
+  "license": "MIT",
+  "engines": {
+    "bun": ">=1.4.3"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

@@ -16,6 +16,7 @@
       "name": "@platform/cli",
       "version": "2.1.0",
       "dependencies": {
+        "@platform/sql": "workspace:*",
         "pg": "8.23.1",
         "zod": "4.6.7",
       },
@@ -23,10 +24,15 @@
         "@types/pg": "8.23.1",
       },
     },
+    "packages/sql": {
+      "name": "@platform/sql",
+      "version": "2.1.0",
+    },
     "packages/ui": {
       "name": "@platform/ui",
       "version": "2.1.0",
       "dependencies": {
+        "@platform/sql": "workspace:*",
         "clsx": "2.1.1",
         "lucide-preact": "1.75.0",
         "preact": "10.27.2",
@@ -70,6 +76,8 @@
     "@fontsource/jetbrains-mono": ["@fontsource/jetbrains-mono@5.2.8", "", {}, "sha512-6w8/SG4kqvIMu7xd7wt6x3idn1Qux3p9N62s6G3rfldOUYHpWcc2FKrqf+Vo44jRvqWj2oAtTHrZXEP23oSKwQ=="],
 
     "@platform/cli": ["@platform/cli@workspace:packages/cli"],
+
+    "@platform/sql": ["@platform/sql@workspace:packages/sql"],
 
     "@platform/ui": ["@platform/ui@workspace:packages/ui"],
 

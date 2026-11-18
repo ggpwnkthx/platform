@@ -1,4 +1,15 @@
-import { ident, InvalidName, literal, qualified, role } from './sql.ts'
+import {
+  columnSql as columnDefinition,
+  constraintName,
+  defaultLiteral,
+  ident,
+  InvalidName,
+  literal,
+  qualified,
+  role,
+  systemFields,
+  type ColumnType,
+} from '@platform/sql'
 
 /**
  * The model, written as the statements PostgreSQL runs. A builder in the interface produces
@@ -6,22 +17,22 @@ import { ident, InvalidName, literal, qualified, role } from './sql.ts'
  * as the reader, exactly as shown. PostgreSQL decides whether the reader may.
  */
 
-export const fieldTypes = {
-  text: 'text',
-  integer: 'integer',
-  bigint: 'bigint',
-  decimal: 'numeric',
-  float: 'double precision',
-  boolean: 'boolean',
-  date: 'date',
-  time: 'time',
-  timestamp: 'timestamptz',
-  uuid: 'uuid',
-  json: 'jsonb',
-  relation: 'uuid',
-} as const
+export type FieldType =
+  | 'text'
+  | 'integer'
+  | 'bigint'
+  | 'decimal'
+  | 'float'
+  | 'boolean'
+  | 'date'
+  | 'time'
+  | 'timestamp'
+  | 'uuid'
+  | 'json'
+  | 'relation'
 
-export type FieldType = keyof typeof fieldTypes
+/** The column type a field of this type is stored as: a relation is a uuid. */
+const columnType = (type: FieldType): ColumnType => (type === 'relation' ? 'uuid' : type)
 
 export const fieldTypeLabels: Record<FieldType, string> = {
   text: 'Text',
@@ -58,16 +69,6 @@ export interface FieldDraft {
   onDelete?: OnDelete
 }
 
-/** The columns every collection is made with, by platform.create_collection. */
-export const systemFields = [
-  'id',
-  'created_at',
-  'updated_at',
-  'created_by',
-  'updated_by',
-  'version',
-]
-
 export function emptyField(): FieldDraft {
   return {
     name: '',
@@ -80,50 +81,22 @@ export function emptyField(): FieldDraft {
   }
 }
 
-/** A default value as the column's type would read it. */
-function defaultLiteral(field: FieldDraft): string {
-  const text = field.default.trim()
-  if (['integer', 'bigint', 'decimal', 'float'].includes(field.type)) {
-    if (!/^-?\d+(\.\d+)?([eE][-+]?\d+)?$/.test(text))
-      throw new InvalidName(`${field.name}: the default is not a number`)
-    return text
-  }
-  if (field.type === 'boolean') {
-    if (!/^(true|false)$/i.test(text))
-      throw new InvalidName(`${field.name}: the default is true or false`)
-    return text.toUpperCase()
-  }
-  return literal(text)
-}
-
 /** The column definition: type, default, NOT NULL, UNIQUE and the CHECKs its options ask for. */
-export function columnSql(field: FieldDraft): string {
+function columnSql(field: FieldDraft): string {
   if (systemFields.includes(field.name))
     throw new InvalidName(`${field.name} is made with every collection`)
-  const name = ident(field.name)
-  let sql = `${name} ${fieldTypes[field.type]}`
-  if (field.default.trim()) sql += ` DEFAULT ${defaultLiteral(field)}`
-  if (field.required) sql += ' NOT NULL'
-  if (field.unique) sql += ' UNIQUE'
-  if (field.maxLength !== undefined) sql += ` CHECK (char_length(${name}) <= ${field.maxLength})`
-  if (field.choices?.length)
-    sql += ` CHECK (${name} IN (${field.choices.map((c) => literal(c)).join(', ')}))`
-  if (field.min !== undefined) sql += ` CHECK (${name} >= ${field.min})`
-  if (field.max !== undefined) sql += ` CHECK (${name} <= ${field.max})`
-  return sql
-}
-
-/**
- * The name a relation's constraint carries: the same one `apply` gives it, so a model made
- * here and a manifest applied later agree on what already exists.
- */
-export async function relationName(table: string, field: string): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(`${table}\0${field}`)
-  )
-  const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
-  return `fk_${hex.slice(0, 24)}`
+  const type = columnType(field.type)
+  return columnDefinition({
+    name: field.name,
+    type,
+    required: field.required,
+    unique: field.unique,
+    default: defaultLiteral(type, field.default.trim(), field.name),
+    maxLength: field.maxLength,
+    choices: field.choices,
+    min: field.min,
+    max: field.max,
+  })
 }
 
 const onDeleteSql: Record<OnDelete, string> = {
@@ -144,7 +117,7 @@ export async function fieldStatements(
   if (field.type === 'relation') {
     if (!field.relation) throw new InvalidName(`${field.name}: choose the collection it points at`)
     out.push(
-      `ALTER TABLE ${target} ADD CONSTRAINT ${ident(await relationName(table, field.name))}
+      `ALTER TABLE ${target} ADD CONSTRAINT ${ident(await constraintName(table, field.name))}
   FOREIGN KEY (${ident(field.name)}) REFERENCES ${qualified(schema, field.relation)} (id) ON DELETE ${onDeleteSql[field.onDelete ?? 'restrict']};`
     )
   }

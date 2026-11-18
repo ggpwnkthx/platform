@@ -114,18 +114,3 @@ export async function transaction<T>(q: pg.Client, fn: () => Promise<T>): Promis
     throw error
   }
 }
-/** Identifiers may be quoted PostgreSQL names; values are always bound separately. */
-export function ident(name: string): string {
-  if (!name || name.includes('\0') || Buffer.byteLength(name) > 63)
-    throw new InputError('Invalid PostgreSQL identifier')
-  return `"${name.replaceAll('"', '""')}"`
-}
-export const qualified = (schema: string, table: string) => `${ident(schema)}.${ident(table)}`
-export function literal(value: unknown): string {
-  if (value === null) return 'NULL'
-  if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE'
-  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
-  const s = typeof value === 'object' ? JSON.stringify(value) : String(value)
-  if (s.includes('\0')) throw new InputError('Invalid literal')
-  return `E'${s.replaceAll('\\', '\\\\').replaceAll("'", "''")}'`
-}

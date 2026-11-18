@@ -1,6 +1,6 @@
 import type pg from 'pg'
 import { z } from 'zod'
-import { ident, qualified } from './db.ts'
+import { ident, qualified } from '@platform/sql'
 import { applyCollections, collectionSchema, type Report, relationSchema } from './model.ts'
 
 const name = z.string().min(1)

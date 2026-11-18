@@ -1,6 +1,6 @@
 import { Fragment } from 'preact'
 import { activity, metadata } from '../db/platform.ts'
-import { qualified } from '../db/sql.ts'
+import { qualified } from '@platform/sql'
 import { display, count as formatCount } from '../format.ts'
 import { useLoad, useSession } from '../session.tsx'
 import { Page, useWorkspace } from '../shell.tsx'

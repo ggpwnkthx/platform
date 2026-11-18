@@ -1,6 +1,6 @@
 import type { Db } from './connect.ts'
 import { conditionClause, type Filter } from './filter.ts'
-import { ident, qualified } from './sql.ts'
+import { ident, qualified } from '@platform/sql'
 import type {
   ActivityInfo,
   Catalog,

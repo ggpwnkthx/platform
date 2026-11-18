@@ -10,7 +10,7 @@ import {
   relationOptions,
   updateRecord,
 } from '../db/platform.ts'
-import { ident, qualified } from '../db/sql.ts'
+import { ident, qualified } from '@platform/sql'
 import type { ColumnInfo } from '../db/types.ts'
 import { ago, display, moment, shortType } from '../format.ts'
 import { describe, useLoad, useSession } from '../session.tsx'

@@ -6,6 +6,7 @@
   "description": "The interface: a static site whose pages speak PostgreSQL's protocol themselves.",
   "license": "MIT",
   "dependencies": {
+    "@platform/sql": "workspace:*",
     "clsx": "2.1.1",
     "lucide-preact": "1.75.0",
     "preact": "10.27.2",

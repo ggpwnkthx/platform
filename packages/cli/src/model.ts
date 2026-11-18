@@ -1,7 +1,16 @@
-import { createHash } from 'node:crypto'
 import type pg from 'pg'
 import { z } from 'zod'
-import { InputError, ident, literal, qualified, transaction } from './db.ts'
+import {
+  columnSql,
+  constraintName,
+  defaultLiteral,
+  ident,
+  literal,
+  qualified,
+  systemFields,
+  type ColumnType,
+} from '@platform/sql'
+import { InputError, transaction } from './db.ts'
 
 const types = {
   string: 'text',
@@ -18,6 +27,12 @@ const types = {
   json: 'jsonb',
   m2o: 'uuid',
 } as const
+/** The column type each field type is stored as: a relation is a uuid. */
+const columnType = (type: keyof typeof types): ColumnType => {
+  if (type === 'm2o') return 'uuid'
+  if (type === 'string') return 'text'
+  return type
+}
 export const fieldSchema = z.object({
   name: z.string().min(1),
   type: z.enum(Object.keys(types) as [keyof typeof types, ...Array<keyof typeof types>]),
@@ -49,23 +64,20 @@ export const collectionSchema = z.object({
   note: z.string().optional(),
 })
 export type Field = z.infer<typeof fieldSchema>
-const system = new Set(['id', 'created_at', 'updated_at', 'created_by', 'updated_by', 'version'])
 export function fieldSql(field: Field): string {
-  if (system.has(field.name)) throw new InputError(`Reserved field ${field.name}`)
-  const n = ident(field.name)
-  let sql = `${n} ${types[field.type]}`
-  if (field.default !== undefined) sql += ` DEFAULT ${literal(field.default)}`
-  if (field.required) sql += ' NOT NULL'
-  if (field.unique) sql += ' UNIQUE'
-  const checks: string[] = []
-  const o = field.options
-  if (o.max_length !== undefined) checks.push(`char_length(${n}) <= ${o.max_length}`)
-  if (o.choices)
-    checks.push(o.choices.length ? `${n} IN (${o.choices.map(literal).join(',')})` : 'false')
-  if (o.min !== undefined) checks.push(`${n} >= ${literal(o.min)}`)
-  if (o.max !== undefined) checks.push(`${n} <= ${literal(o.max)}`)
-  for (const check of checks) sql += ` CHECK (${check})`
-  return sql
+  if (systemFields.includes(field.name)) throw new InputError(`Reserved field ${field.name}`)
+  const type = columnType(field.type)
+  return columnSql({
+    name: field.name,
+    type,
+    required: field.required,
+    unique: field.unique,
+    default: defaultLiteral(type, field.default, field.name),
+    maxLength: field.options.max_length,
+    choices: field.options.choices,
+    min: field.options.min,
+    max: field.options.max,
+  })
 }
 export async function addField(
   q: pg.Client,
@@ -81,20 +93,6 @@ export async function addField(
     await addRelation(q, schema, table, f.name, f.relation.collection, f.relation.on_delete)
   if (f.note || f.label)
     await q.query(`COMMENT ON COLUMN ${target}.${ident(f.name)} IS ${literal(f.note ?? f.label)}`)
-}
-export async function createCollection(q: pg.Client, schema: string, raw: unknown) {
-  const model = collectionSchema.parse(raw)
-  // Validate identifiers before PostgreSQL can truncate them.
-  qualified(schema, model.name)
-  return transaction(q, async () => {
-    await q.query('SELECT platform.create_collection($1,$2)', [schema, model.name])
-    for (const f of model.fields) await addField(q, schema, model.name, f)
-    if (model.note || model.label)
-      await q.query(
-        `COMMENT ON TABLE ${qualified(schema, model.name)} IS ${literal(model.note ?? model.label)}`
-      )
-    return model
-  })
 }
 const onDelete = z.enum(['restrict', 'cascade', 'set_null'])
 export const relationSchema = z.object({
@@ -191,12 +189,7 @@ async function addRelation(
   related: string,
   onDelete: 'restrict' | 'cascade' | 'set_null'
 ) {
-  const name =
-    'fk_' +
-    createHash('sha256')
-      .update(table + '\0' + field)
-      .digest('hex')
-      .slice(0, 24)
+  const name = await constraintName(table, field)
   const found = await q.query(
     `SELECT 1 FROM pg_constraint
     WHERE conrelid=to_regclass($1) AND conname=$2`,

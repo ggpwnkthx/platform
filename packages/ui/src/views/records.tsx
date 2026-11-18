@@ -10,7 +10,7 @@ import {
   valueless,
 } from '../db/filter.ts'
 import { deleteRecord, metadata, records } from '../db/platform.ts'
-import { ident, qualified } from '../db/sql.ts'
+import { ident, qualified } from '@platform/sql'
 import type { Catalog, ColumnInfo, PolicyInfo } from '../db/types.ts'
 import { count, plural } from '../format.ts'
 import { describe, useLoad, useSession } from '../session.tsx'
