@@ -1,33 +1,43 @@
 import type { DataSource } from '@platform/vocabulary'
+import { systemSchema } from './catalog.ts'
 import type { Catalog } from './types.ts'
 
 /**
  * The catalog: what PostgreSQL holds, read with PostgreSQL's own privilege functions. Every
  * answer is the reader's own, and none of it is cached: the catalog is read again whenever
  * something may have changed.
+ *
+ * The platform's own schema is in the answer, marked as what it is: a system workspace,
+ * whose tables are collections like any other — read under their own row security — and
+ * whose model is not the reader's to change. PostgreSQL's own schemas, and `public`, are not.
  */
 
-const notPlatform = `n.nspname NOT LIKE 'pg\\_%' ESCAPE '\\' AND n.nspname NOT IN ('information_schema','platform','public')`
+const held = `n.nspname NOT LIKE 'pg\\_%' ESCAPE '\\' AND n.nspname NOT IN ('information_schema','public')`
+
+/** Is the schema the platform's own? */
+const system = `n.nspname = '${systemSchema}'`
 
 export async function catalog(db: DataSource): Promise<Catalog> {
   const schemas = await db.query(`
     SELECT n.nspname::text AS name, pg_get_userbyid(n.nspowner)::text AS owner,
-           has_schema_privilege(n.oid, 'CREATE') AS can_create,
-           pg_has_role(current_user, n.nspowner, 'USAGE') AS can_alter
+           CASE WHEN ${system} THEN 'system' ELSE 'user' END AS kind,
+           has_schema_privilege(n.oid, 'CREATE') AND NOT ${system} AS can_create,
+           pg_has_role(current_user, n.nspowner, 'USAGE') AND NOT ${system} AS can_alter
       FROM pg_namespace n
-     WHERE ${notPlatform} AND has_schema_privilege(n.oid, 'USAGE') ORDER BY 1`)
+     WHERE ${held} AND has_schema_privilege(n.oid, 'USAGE') ORDER BY ${system}, 1`)
   const tables = await db.query(`
     SELECT n.nspname::text AS schema, c.relname::text AS name, c.relkind::text AS kind,
            c.relrowsecurity AS rls, c.relforcerowsecurity AS force_rls,
            pg_get_userbyid(c.relowner)::text AS owner, obj_description(c.oid, 'pg_class') AS comment,
+           ${system} AS system,
            has_table_privilege(c.oid, 'SELECT') AS can_select,
            has_table_privilege(c.oid, 'INSERT') AS can_insert,
            has_table_privilege(c.oid, 'UPDATE') AS can_update,
            has_table_privilege(c.oid, 'DELETE') AS can_delete,
-           has_table_privilege(c.oid, 'TRUNCATE') AS can_truncate,
-           pg_has_role(current_user, c.relowner, 'USAGE') AS can_alter
+           has_table_privilege(c.oid, 'TRUNCATE') AND NOT ${system} AS can_truncate,
+           pg_has_role(current_user, c.relowner, 'USAGE') AND NOT ${system} AS can_alter
       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-     WHERE c.relkind IN ('r','p','v') AND ${notPlatform} AND has_schema_privilege(n.oid, 'USAGE')
+     WHERE c.relkind IN ('r','p','v') AND ${held} AND has_schema_privilege(n.oid, 'USAGE')
        AND (has_any_column_privilege(c.oid, 'SELECT,INSERT,UPDATE')
             OR has_table_privilege(c.oid, 'DELETE,TRUNCATE')
             OR pg_has_role(current_user, c.relowner, 'USAGE'))
@@ -45,7 +55,7 @@ export async function catalog(db: DataSource): Promise<Catalog> {
       JOIN pg_namespace n ON n.oid = c.relnamespace
       LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = a.attnum
      WHERE a.attnum > 0 AND NOT a.attisdropped AND c.relkind IN ('r','p','v')
-       AND ${notPlatform} AND has_schema_privilege(n.oid, 'USAGE')
+       AND ${held} AND has_schema_privilege(n.oid, 'USAGE')
      ORDER BY 1, 2, a.attnum`)
   const relations = await db.query(`
     SELECT n.nspname::text AS schema, c.relname::text AS table, a.attname::text AS column,
@@ -55,7 +65,7 @@ export async function catalog(db: DataSource): Promise<Catalog> {
       JOIN pg_class c ON c.oid = con.conrelid JOIN pg_namespace n ON n.oid = c.relnamespace
       JOIN pg_class rc ON rc.oid = con.confrelid JOIN pg_namespace rn ON rn.oid = rc.relnamespace
       JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = con.conkey[1]
-     WHERE con.contype = 'f' AND ${notPlatform} AND has_schema_privilege(n.oid, 'USAGE')
+     WHERE con.contype = 'f' AND ${held} AND has_schema_privilege(n.oid, 'USAGE')
      ORDER BY 1, 2, 3`)
   const constraints = await db.query(`
     SELECT n.nspname::text AS schema, c.relname::text AS table, con.conname::text AS name,
@@ -64,7 +74,7 @@ export async function catalog(db: DataSource): Promise<Catalog> {
                   WHERE a.attrelid = con.conrelid AND a.attnum = ANY(con.conkey)) AS columns
       FROM pg_constraint con
       JOIN pg_class c ON c.oid = con.conrelid JOIN pg_namespace n ON n.oid = c.relnamespace
-     WHERE ${notPlatform} AND has_schema_privilege(n.oid, 'USAGE') AND con.contype IN ('c','u','p','f','x')
+     WHERE ${held} AND has_schema_privilege(n.oid, 'USAGE') AND con.contype IN ('c','u','p','f','x')
      ORDER BY 1, 2, 3`)
   // The types the installation holds outside PostgreSQL's own: an extension's, or its own.
   // A table's own row type is not one of them: typrelid names the table it belongs to.

@@ -4,9 +4,15 @@
 export interface SchemaInfo {
   name: string
   owner: string
-  /** CREATE on the schema: what a new collection needs. */
+  /**
+   * What kind of workspace the schema is: one of the installation's, whose owner administers
+   * its model, or the platform's own, whose model is the platform's and whose collections
+   * are read under their own row security.
+   */
+  kind: 'user' | 'system'
+  /** CREATE on the schema: what a new collection needs. Never the reader's in the platform's own. */
   can_create: boolean
-  /** The reader is, or is a member of, the owner. */
+  /** The reader is, or is a member of, the owner. Never the reader's in the platform's own. */
   can_alter: boolean
 }
 
@@ -19,12 +25,17 @@ export interface TableInfo {
   force_rls: boolean
   owner: string
   comment: string | null
+  /** One of the platform's own tables: a system collection. Its model is not the reader's to change. */
+  system: boolean
   can_select: boolean
   can_insert: boolean
   can_update: boolean
   can_delete: boolean
   can_truncate: boolean
-  /** Owner or member of the owner: ALTER, GRANT and CREATE POLICY are theirs. */
+  /**
+   * Owner or member of the owner: ALTER, GRANT and CREATE POLICY are theirs. Never the
+   * reader's on a system collection: the platform's model is changed by its migrations.
+   */
   can_alter: boolean
 }
 

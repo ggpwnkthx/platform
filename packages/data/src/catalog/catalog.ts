@@ -1,4 +1,4 @@
-import type { Catalog, ColumnInfo, RelationInfo, TableInfo } from './types.ts'
+import type { Catalog, ColumnInfo, RelationInfo, SchemaInfo, TableInfo } from './types.ts'
 
 /** Questions about the catalog. Every answer is one PostgreSQL gave this reader. */
 
@@ -10,6 +10,36 @@ export const systemColumns = [
   'updated_by',
   'version',
 ]
+
+/** The schema that is the platform's own: the one system workspace. */
+export const systemSchema = 'platform'
+
+/** The name people read for the system workspace. */
+export const systemWorkspaceName = 'Platform'
+
+/** The workspaces of the installation: every schema the reader may use but the platform's own. */
+export const userSchemas = (catalog: Catalog): SchemaInfo[] =>
+  catalog.schemas.filter((s) => s.kind !== 'system')
+
+/** The system workspace, when the reader may use it. */
+export const systemWorkspace = (catalog: Catalog): SchemaInfo | undefined =>
+  catalog.schemas.find((s) => s.kind === 'system')
+
+/** Is this workspace the platform's own? */
+export const isSystemWorkspace = (catalog: Catalog, schema: string): boolean =>
+  catalog.schemas.some((s) => s.name === schema && s.kind === 'system')
+
+/**
+ * The column that names a row of a system collection. A collection of the installation's
+ * says it in its own metadata; the platform's own say it here, because what names a row of
+ * theirs is not the first text they hold — a piece of metadata is named by its key, not by
+ * the scope it is said of.
+ */
+const systemLabels: Record<string, string> = {
+  [`${systemSchema}.item_metadata`]: 'key',
+  [`${systemSchema}.activity`]: 'operation',
+  [`${systemSchema}.installation`]: 'version',
+}
 
 export const tablesIn = (catalog: Catalog, schema: string): TableInfo[] =>
   catalog.tables.filter((t) => t.schema === schema)
@@ -60,7 +90,10 @@ export function choicesOf(
   return null
 }
 
-/** The column that names a row: the metadata's display_field, else the first readable text column. */
+/**
+ * The column that names a row: the metadata's display_field, else the one a system
+ * collection is named by, else the first readable text column.
+ */
 export function labelColumn(
   catalog: Catalog,
   schema: string,
@@ -69,6 +102,8 @@ export function labelColumn(
 ): string | null {
   const columns = columnsOf(catalog, schema, table).filter((c) => c.can_select)
   if (display && columns.some((c) => c.name === display)) return display
+  const own = systemLabels[`${schema}.${table}`]
+  if (own && columns.some((c) => c.name === own)) return own
   const preferred = columns.find((c) => ['name', 'title', 'full_name', 'label'].includes(c.name))
   if (preferred) return preferred.name
   const text = columns.find(
