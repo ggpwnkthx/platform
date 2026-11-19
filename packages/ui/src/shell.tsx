@@ -4,7 +4,7 @@ import { useEffect, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import type { Module } from './routes.ts'
 import { useSession } from './session.tsx'
-import { tablesIn } from '@platform/data'
+import { systemWorkspace, systemWorkspaceName, tablesIn, userSchemas } from '@platform/data'
 import { toneClass } from './metadata/color.ts'
 import { presentationOf, type Presentation } from '@platform/data'
 import { href, type Place } from './url.ts'
@@ -30,14 +30,19 @@ import {
 } from './ui/icons.tsx'
 import { Menu } from './ui/overlay.tsx'
 
-/** The workspace in view: the address names it, else the last one chosen, else the first. */
+/**
+ * The workspace in view: the address names it, else the last one chosen, else the first of
+ * the installation's own. The platform's own is a workspace too, but nobody lands in it:
+ * it is in view when it is asked for.
+ */
 export function useWorkspace(): string {
   const { query } = useLocation()
   const { catalog, lastWorkspace, rememberWorkspace } = useSession()
   const named = query.ws
   const known = (name: string | null | undefined) =>
     Boolean(name && catalog.schemas.some((s) => s.name === name))
-  const ws = named ?? (known(lastWorkspace) ? lastWorkspace! : (catalog.schemas[0]?.name ?? ''))
+  const ws =
+    named ?? (known(lastWorkspace) ? lastWorkspace! : (userSchemas(catalog)[0]?.name ?? ''))
   useEffect(() => {
     if (named && named !== lastWorkspace) rememberWorkspace(named)
   }, [named])
@@ -141,6 +146,9 @@ function WorkspaceSwitcher({ path }: { path: string }) {
   const [open, setOpen] = useState(false)
   const current = catalog.schemas.find((s) => s.name === ws)
   const shown = presentationOf(presentations, ws)
+  const own = userSchemas(catalog)
+  const platform = systemWorkspace(catalog)
+  const inPlatform = current?.kind === 'system'
   return (
     <div class="switcher">
       <button
@@ -152,14 +160,22 @@ function WorkspaceSwitcher({ path }: { path: string }) {
       >
         <Avatar presentation={shown} fallback={WorkspaceIcon} class="switcher-icon" size={18} />
         <span class="switcher-text">
-          <strong>{shown.displayName ?? (ws || 'No workspace')}</strong>
-          <small>{current ? `owned by ${current.owner}` : 'Choose a workspace'}</small>
+          <strong>
+            {inPlatform ? systemWorkspaceName : (shown.displayName ?? (ws || 'No workspace'))}
+          </strong>
+          <small>
+            {inPlatform
+              ? 'the platform’s own collections'
+              : current
+                ? `owned by ${current.owner}`
+                : 'Choose a workspace'}
+          </small>
         </span>
         <ChevronDownIcon size={16} aria-hidden="true" />
       </button>
       <Menu open={open} onClose={() => setOpen(false)} align="start">
         <p class="menu-label">Workspaces you may use</p>
-        {catalog.schemas.map((s) => {
+        {own.map((s) => {
           const item = presentationOf(presentations, s.name)
           return (
             <a
@@ -175,11 +191,25 @@ function WorkspaceSwitcher({ path }: { path: string }) {
             </a>
           )
         })}
-        {!catalog.schemas.length && (
-          <p class="menu-note">PostgreSQL gives you USAGE on no workspace yet.</p>
+        {!own.length && <p class="menu-note">PostgreSQL gives you USAGE on no workspace yet.</p>}
+        {platform && (
+          <>
+            <div class="menu-sep" />
+            <p class="menu-label">The platform’s own</p>
+            <a
+              class={clsx('menu-item', inPlatform && 'is-current')}
+              href={href(path, { ws: platform.name })}
+              title={`${platform.name}: what the platform itself holds, each collection under its own row security`}
+              onClick={() => setOpen(false)}
+            >
+              <SettingsIcon size={14} aria-hidden="true" />
+              <span>{systemWorkspaceName}</span>
+              <small>{tablesIn(catalog, platform.name).length}</small>
+            </a>
+          </>
         )}
         <div class="menu-sep" />
-        {current && (
+        {current && !inPlatform && (
           <a
             class="menu-item"
             href={href('/workspace/settings', { ws })}
@@ -473,7 +503,7 @@ export function WorkspaceSelect({ path, place = {} }: { path: string; place?: Pl
         >
           {catalog.schemas.map((s) => (
             <option key={s.name} value={s.name}>
-              {s.name}
+              {s.kind === 'system' ? `${systemWorkspaceName} (${s.name})` : s.name}
             </option>
           ))}
         </select>

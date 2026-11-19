@@ -1,5 +1,5 @@
 import { Fragment } from 'preact'
-import { activity, columnsOf, metadata, tablesIn } from '@platform/data'
+import { activity, columnsOf, metadata, systemWorkspaceName, tablesIn } from '@platform/data'
 import { qualified, workspaceTarget, isReservedKey } from '@platform/vocabulary'
 import { display, count as formatCount } from '../format.ts'
 import { useLoad, useSession } from '../session.tsx'
@@ -25,6 +25,9 @@ export function ContentHome() {
   const { catalog, identity, presentations } = useSession()
   const ws = useWorkspace()
   const schema = catalog.schemas.find((s) => s.name === ws)
+  // The platform's own workspace: its collections are read like any other, each under its
+  // own row security, and there is nothing of it to administer from here.
+  const system = schema?.kind === 'system'
   const shown = presentationOf(presentations, ws)
   const WorkspaceGlyph = iconFor(shown.icon) ?? WorkspaceIcon
   const tables = tablesIn(catalog, ws)
@@ -79,11 +82,17 @@ export function ContentHome() {
     )
   return (
     <Page
-      title={shown.displayName ?? ws}
+      title={system ? systemWorkspaceName : (shown.displayName ?? ws)}
       crumbs={[{ label: 'Content' }]}
       icon={<WorkspaceGlyph size={22} />}
       presentation={shown}
-      subtitle={typeof purpose === 'string' ? purpose : `Owned by ${schema.owner}`}
+      subtitle={
+        system
+          ? 'What the platform itself holds. PostgreSQL’s row security decides which rows reach you.'
+          : typeof purpose === 'string'
+            ? purpose
+            : `Owned by ${schema.owner}`
+      }
       actions={
         schema.can_create ? (
           <Action
@@ -151,7 +160,7 @@ export function ContentHome() {
             : 'PostgreSQL shows you no table here: none exists yet, or none is granted to you.'}
         </Empty>
       )}
-      {tables.length > 0 && counts.data && (
+      {tables.length > 0 && counts.data && !system && (
         <div class="split">
           <section class="panel">
             <header class="panel-head">
