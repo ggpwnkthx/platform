@@ -14,7 +14,8 @@ import {
   type OnDelete,
   rowSecurityStatement,
 } from '../db/model.ts'
-import { useSession } from '../session.tsx'
+import { fieldMetadata } from '../db/metadata.ts'
+import { useLoad, useSession } from '../session.tsx'
 import { Page, useWorkspace } from '../shell.tsx'
 import { shortType } from '../format.ts'
 import {
@@ -44,13 +45,15 @@ import {
   NumberIcon,
   PlusIcon,
   RelationIcon,
+  TagIcon,
   TextIcon,
   TimeIcon,
   TrashIcon,
   UuidIcon,
 } from '../ui/icons.tsx'
 import { Confirm, Drawer } from '../ui/overlay.tsx'
-import { MetadataPanel, PresentationPanel } from './metadata.tsx'
+import { collectionTarget } from '../db/metadata.ts'
+import { FieldMetadataDrawer, MetadataPanel, PresentationPanel } from './metadata.tsx'
 import { Rights } from './rights.tsx'
 import { useRunner } from './runner.tsx'
 
@@ -390,10 +393,19 @@ export function CollectionModel() {
   const info = tableOf(catalog, ws, table)
   const columns = columnsOf(catalog, ws, table)
   const shown = presentationOf(presentations, ws, table)
+  const workspace = presentationOf(presentations, ws)
   const CollectionGlyph = iconFor(shown.icon) ?? CollectionIcon
   const runner = useRunner()
   const [adding, setAdding] = useState<FieldDraft | null>(null)
   const [dropping, setDropping] = useState<string | null>(null)
+  const [described, setDescribed] = useState<string | null>(null)
+  // The name each field is read by, when its owner gave it one.
+  const about = useLoad(info ? (db) => fieldMetadata(db, ws, table) : null, [ws, table])
+  const names = new Map<string, string>()
+  for (const row of about.data ?? []) {
+    if (row.key === 'display_name' && typeof row.value === 'string' && row.value.trim())
+      names.set(row.column_name ?? '', row.value.trim())
+  }
   const [deleting, setDeleting] = useState(false)
   const [confirmName, setConfirmName] = useState('')
   const [note, setNote] = useState<string | null>(null)
@@ -442,7 +454,10 @@ export function CollectionModel() {
       title={shown.displayName ?? table}
       icon={<CollectionGlyph size={22} />}
       presentation={shown}
-      crumbs={[{ label: 'Data model', href: href('/model', { ws }) }, { label: ws }]}
+      crumbs={[
+        { label: 'Data model', href: href('/model', { ws }) },
+        { label: workspace.displayName ?? ws },
+      ]}
       subtitle={
         owner
           ? `You own ${ws}.${table}: its model and its access are yours.`
@@ -548,8 +563,8 @@ export function CollectionModel() {
               </div>
             </div>
           </section>
-          <PresentationPanel schema={ws} table={table} owner={owner} />
-          <MetadataPanel schema={ws} table={table} owner={owner} />
+          <PresentationPanel target={collectionTarget(ws, table)} owner={owner} />
+          <MetadataPanel target={collectionTarget(ws, table)} owner={owner} />
         </>
       ) : (
         <div class="grid-wrap">
@@ -563,11 +578,9 @@ export function CollectionModel() {
                 <th>Constraints</th>
                 <th>You lack</th>
                 <th>Note</th>
-                {owner && (
-                  <th class="grid-actions">
-                    <span class="sr-only">Actions</span>
-                  </th>
-                )}
+                <th class="grid-actions">
+                  <span class="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -576,8 +589,9 @@ export function CollectionModel() {
                 const system = systemColumns.includes(c.name)
                 return (
                   <tr key={c.name} class={clsx(system && 'is-system')}>
-                    <td class="mono strong">
-                      {c.name}
+                    <td>
+                      <span class="mono strong">{c.name}</span>
+                      {names.has(c.name) && <span class="field-alias">{names.get(c.name)}</span>}
                       {system && <Badge tone="outline">system</Badge>}
                     </td>
                     <td class="mono">
@@ -622,21 +636,28 @@ export function CollectionModel() {
                         {c.comment}
                       </span>
                     </td>
-                    {owner && (
-                      <td class="grid-actions">
-                        {!system && info.kind !== 'v' && (
-                          <button
-                            type="button"
-                            class="icon-button"
-                            aria-label={`Drop ${c.name}`}
-                            title="Drop field"
-                            onClick={() => setDropping(c.name)}
-                          >
-                            <TrashIcon size={16} />
-                          </button>
-                        )}
-                      </td>
-                    )}
+                    <td class="grid-actions">
+                      <button
+                        type="button"
+                        class="icon-button"
+                        aria-label={`Metadata of ${c.name}`}
+                        title="Metadata"
+                        onClick={() => setDescribed(c.name)}
+                      >
+                        <TagIcon size={16} />
+                      </button>
+                      {owner && !system && info.kind !== 'v' && (
+                        <button
+                          type="button"
+                          class="icon-button"
+                          aria-label={`Drop ${c.name}`}
+                          title="Drop field"
+                          onClick={() => setDropping(c.name)}
+                        >
+                          <TrashIcon size={16} />
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 )
               })}
@@ -650,6 +671,14 @@ export function CollectionModel() {
           )}
         </div>
       )}
+      <FieldMetadataDrawer
+        schema={ws}
+        table={table}
+        column={described ?? ''}
+        owner={owner}
+        open={described !== null}
+        onClose={() => setDescribed(null)}
+      />
       <Drawer
         open={adding !== null}
         onClose={() => setAdding(null)}

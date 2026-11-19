@@ -29,7 +29,7 @@ export const DEPLOY_HELP = `platform deploy <local|k8s> <action> [options]
     logs        Show deployment logs; trailing kubectl arguments are accepted.
     down        Delete the relay's deployment and service; PostgreSQL is external.
     --namespace=default        Namespace must already exist.
-    --image=REGISTRY/platform-relay:2.1.0  Or PLATFORM_IMAGE: the relay image (Dockerfile target relay).
+    --image=REGISTRY/platform-relay:2.2.0  Or PLATFORM_IMAGE: the relay image (Dockerfile target relay).
     --public-url=https://...        Or PUBLIC_URL: the address of the site, the only origin the relay allows.
     --oidc-issuer=https://...       Or OIDC_ISSUER: your Dex, which PostgreSQL must trust too.
     --database-host=HOST            Or DATABASE_HOST.
@@ -46,7 +46,7 @@ export const DEPLOY_HELP = `platform deploy <local|k8s> <action> [options]
   bun run cli deploy local up
   bun run cli deploy local logs -f relay
   bun run cli deploy local ui
-  bun run cli deploy k8s apply --namespace=platform --image=registry/platform-relay:2.1.0 \\
+  bun run cli deploy k8s apply --namespace=platform --image=registry/platform-relay:2.2.0 \\
     --public-url=https://platform.example.com --database-host=db.example.com \\
     --oidc-issuer=https://sso.example.com/dex
 `

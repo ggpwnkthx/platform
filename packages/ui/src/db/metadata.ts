@@ -1,36 +1,65 @@
-import { metadataRemoval, metadataStatement } from '@platform/sql'
+import {
+  collectionTarget,
+  fieldTarget,
+  metadataRemoval,
+  metadataStatement,
+  type MetadataTarget,
+  workspaceTarget,
+} from '@platform/sql'
 import type { Db } from './connect.ts'
 import type { MetadataEntry, MetadataRow } from './types.ts'
 import { presentationKeys } from './types.ts'
 
 /**
- * The metadata of an item: what a workspace or a collection is, as opposed to what it holds.
+ * The metadata of an item: what a workspace, a collection or a field is, as opposed to what it
+ * holds.
  *
  * Every row is read and written as the reader, so PostgreSQL's own row security decides who
- * reaches it: a reader sees the metadata of the items they may reach, and only the owner of
- * an item may change it. Nothing here decides a right.
+ * reaches it: a reader sees the metadata of the items they may reach — a workspace they may
+ * use, a collection they hold a right on, a field they hold a right on — and only the owner
+ * of an item may change it. Nothing here decides a right.
  */
 
+export { collectionTarget, fieldTarget, workspaceTarget }
+export type { MetadataTarget }
+
 /** The metadata of one item, as its owner and its readers may see it. */
-export async function metadata(db: Db, schema: string, table: string | null) {
+export async function metadata(db: Db, target: MetadataTarget) {
   const result = await db.query<MetadataEntry>(
     `SELECT key, value, version::int AS version, updated_at::text AS updated_at, updated_by
        FROM platform.item_metadata
-      WHERE scope = $1 AND schema_name = $2 AND table_name IS NOT DISTINCT FROM $3::text
+      WHERE scope = $1 AND schema_name = $2
+        AND table_name IS NOT DISTINCT FROM $3::text
+        AND column_name IS NOT DISTINCT FROM $4::text
       ORDER BY key`,
-    [table === null ? 'workspace' : 'collection', schema, table]
+    [target.scope, target.schema, target.table, target.column]
+  )
+  return result.rows
+}
+
+/**
+ * The metadata of every field of a collection, as one read. PostgreSQL returns the rows of the
+ * fields the reader may reach and no others, so a field they may not read is not named here.
+ */
+export async function fieldMetadata(db: Db, schema: string, table: string) {
+  const result = await db.query<MetadataRow>(
+    `SELECT scope, schema_name, table_name, column_name, key, value
+       FROM platform.item_metadata
+      WHERE scope = 'field' AND schema_name = $1 AND table_name = $2
+      ORDER BY column_name, key`,
+    [schema, table]
   )
   return result.rows
 }
 
 /**
  * The presentation of every item the reader may reach: the name, the icon and the colour of
- * each workspace and collection. Row security decides which of them come back, so this is the
- * reader's own answer and no more.
+ * each workspace, collection and field. Row security decides which of them come back, so this
+ * is the reader's own answer and no more.
  */
 export async function presentations(db: Db): Promise<MetadataRow[]> {
   const result = await db.query<MetadataRow>(
-    `SELECT scope, schema_name, table_name, key, value
+    `SELECT scope, schema_name, table_name, column_name, key, value
        FROM platform.item_metadata
       WHERE key = ANY($1::text[])`,
     [[...presentationKeys]]
@@ -41,37 +70,41 @@ export async function presentations(db: Db): Promise<MetadataRow[]> {
 /** Sets one key; with a version, only if the key still carries it. */
 export async function setMetadata(
   db: Db,
-  schema: string,
-  table: string | null,
+  target: MetadataTarget,
   key: string,
   value: unknown,
   version?: number
 ) {
   const params: unknown[] = [
-    table === null ? 'workspace' : 'collection',
-    schema,
-    table,
+    target.scope,
+    target.schema,
+    target.table,
+    target.column,
     key,
     JSON.stringify(value === undefined ? null : value),
   ]
   const sql =
     version === undefined
-      ? `INSERT INTO platform.item_metadata (scope, schema_name, table_name, key, value)
-         VALUES ($1, $2, $3, $4, $5::jsonb)
-         ON CONFLICT (scope, schema_name, coalesce(table_name, ''), key)
+      ? `INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+         ON CONFLICT (scope, schema_name, coalesce(table_name, ''), coalesce(column_name, ''), key)
          DO UPDATE SET value = EXCLUDED.value`
-      : `UPDATE platform.item_metadata SET value = $5::jsonb
-          WHERE scope = $1 AND schema_name = $2 AND table_name IS NOT DISTINCT FROM $3::text
-            AND key = $4 AND version = $6`
+      : `UPDATE platform.item_metadata SET value = $6::jsonb
+          WHERE scope = $1 AND schema_name = $2
+            AND table_name IS NOT DISTINCT FROM $3::text
+            AND column_name IS NOT DISTINCT FROM $4::text
+            AND key = $5 AND version = $7`
   if (version !== undefined) params.push(version)
   return (await db.query(sql, params)).affected ?? 0
 }
 
-export async function removeMetadata(db: Db, schema: string, table: string | null, key: string) {
+export async function removeMetadata(db: Db, target: MetadataTarget, key: string) {
   const result = await db.query(
     `DELETE FROM platform.item_metadata
-      WHERE scope = $1 AND schema_name = $2 AND table_name IS NOT DISTINCT FROM $3::text AND key = $4`,
-    [table === null ? 'workspace' : 'collection', schema, table, key]
+      WHERE scope = $1 AND schema_name = $2
+        AND table_name IS NOT DISTINCT FROM $3::text
+        AND column_name IS NOT DISTINCT FROM $4::text AND key = $5`,
+    [target.scope, target.schema, target.table, target.column, key]
   )
   return result.affected ?? 0
 }
@@ -87,14 +120,12 @@ export interface MetadataChange {
  * runs, as them, in one transaction.
  */
 export function metadataStatements(
-  schema: string,
-  table: string | null,
+  target: MetadataTarget,
   changes: readonly MetadataChange[]
 ): string[] {
-  const scope = table === null ? 'workspace' : 'collection'
   return changes.map((change) =>
     change.value === null
-      ? metadataRemoval(scope, schema, table, change.key)
-      : metadataStatement(scope, schema, table, change.key, change.value)
+      ? metadataRemoval(target, change.key)
+      : metadataStatement(target, change.key, change.value)
   )
 }

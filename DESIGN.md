@@ -405,6 +405,14 @@ does not draw falls back to the generic mark. The navigation pane keeps its list
 item's icon there, in the neutral grey, and the colour in the places where the item is
 presented.
 
+### Field Names
+A field may carry a display name: the word the interface shows for a column where people read
+it — the header of a records table, the label of a record's own field. The name is the studio's
+word for the column, so it is set in Inter; the column's own name stays in JetBrains Mono
+beside it, in the address and in the SQL. The name reaches only the readers who may read the
+column: PostgreSQL does not return the metadata of a field they may not reach, so a hidden
+field keeps its raw name and nothing else.
+
 ### Presentation Panel
 The panel where an item's presentation is set: a preview of the mark as it will read, the
 display name in a field, the icon as a grid of choices, and the colour as the palette's

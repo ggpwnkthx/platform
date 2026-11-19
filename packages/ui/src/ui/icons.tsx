@@ -92,6 +92,7 @@ export {
   SlidersHorizontal as OptionsIcon,
   SquareTerminal as SqlIcon,
   Table2 as CollectionIcon,
+  Tag as TagIcon,
   ToggleLeft as BooleanIcon,
   Trash as TrashIcon,
   TriangleExclamationPoint as WarningIcon,

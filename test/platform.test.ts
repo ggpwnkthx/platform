@@ -184,7 +184,7 @@ describe('native identity', () => {
       username: role('alice'),
       effective_role: role('alice'),
       database: dbName,
-      platform_version: '2.1.0',
+      platform_version: '2.2.0',
     })
   })
   test('forged, expired, foreign and NOLOGIN sign-ins are refused at login', async () => {
@@ -907,7 +907,7 @@ describe('declarative apply', () => {
   })
 })
 
-test('CLI installs a new database at 2.1.0 and safely repeats the installation', async () => {
+test('CLI installs a new database at 2.2.0 and safely repeats the installation', async () => {
   const name = dbName + '_cli'
   await root.query(`CREATE DATABASE ${ident(name)}`)
   try {
@@ -933,8 +933,8 @@ test('CLI installs a new database at 2.1.0 and safely repeats the installation',
       expect(await child.exited).toBe(0)
       expect(output).toContain(
         i === 0
-          ? 'Installed PostgreSQL-native platform version 2.1.0'
-          : 'Already installed at version 2.1.0'
+          ? 'Installed PostgreSQL-native platform version 2.2.0'
+          : 'Already installed at version 2.2.0'
       )
     }
   } finally {

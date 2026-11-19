@@ -31,11 +31,16 @@ export interface Presentation {
 
 export const noPresentation: Presentation = { displayName: null, icon: null, color: null }
 
-/** Every presentation the reader may reach, by item: `schema` for a workspace, `schema.table` for a collection. */
+/** Every presentation the reader may reach, by item: `schema` for a workspace, `schema.table` for a collection, `schema.table.column` for a field. */
 export type PresentationIndex = Record<string, Presentation>
 
 /** The key an item's presentation is filed under. */
-export function itemKey(schema: string, table: string | null | undefined): string {
+export function itemKey(
+  schema: string,
+  table: string | null | undefined,
+  column?: string | null
+): string {
+  if (column) return `${schema}.${table}.${column}`
   return table ? `${schema}.${table}` : schema
 }
 
@@ -50,7 +55,7 @@ function text(value: unknown): string | null {
 export function indexPresentations(rows: readonly MetadataRow[]): PresentationIndex {
   const index: PresentationIndex = {}
   for (const row of rows) {
-    const key = itemKey(row.schema_name, row.table_name)
+    const key = itemKey(row.schema_name, row.table_name, row.column_name)
     const presentation = index[key] ?? { ...noPresentation }
     if (row.key === displayNameKey) presentation.displayName = text(row.value)
     else if (row.key === iconKey) presentation.icon = text(row.value)
@@ -64,7 +69,8 @@ export function indexPresentations(rows: readonly MetadataRow[]): PresentationIn
 export function presentationOf(
   index: PresentationIndex,
   schema: string,
-  table?: string | null
+  table?: string | null,
+  column?: string | null
 ): Presentation {
-  return index[itemKey(schema, table)] ?? noPresentation
+  return index[itemKey(schema, table, column)] ?? noPresentation
 }

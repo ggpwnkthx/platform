@@ -5,6 +5,7 @@ import { type Field, PgError, parseValue, type Result, serialize } from '../pg/w
 import migration1 from '../../../../migrations/0001_native.sql' with { type: 'text' }
 import migration2 from '../../../../migrations/0002_harden_catalogs.sql' with { type: 'text' }
 import migration3 from '../../../../migrations/0003_metadata.sql' with { type: 'text' }
+import migration4 from '../../../../migrations/0004_field_metadata.sql' with { type: 'text' }
 import seed from './seed.sql' with { type: 'text' }
 
 /**
@@ -64,7 +65,7 @@ async function start(role: string): Promise<PGlite> {
     .query<{ found: string }>(`SELECT to_regclass('platform.installation') IS NOT NULL AS found`)
     .then((r) => r.rows[0]?.found === 't')
   if (!installed) {
-    for (const sql of [migration1, migration2, migration3, seed]) await db.exec(sql)
+    for (const sql of [migration1, migration2, migration3, migration4, seed]) await db.exec(sql)
   }
   // From here on this page is one person, as a login is one token.
   await db.query(`SET SESSION AUTHORIZATION ${JSON.stringify(role)}`)

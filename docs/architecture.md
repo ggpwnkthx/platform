@@ -47,8 +47,8 @@ still authorizes every explicit projection, predicate, sort, relation and write.
 - User: LOGIN role; group: NOLOGIN role. Membership lives in pg_auth_members.
 - Table/column permissions: native ACLs. Row policies: CREATE POLICY and ALTER TABLE RLS.
 - `platform`: helper functions, installation marker, transactional row audit/revisions, and
-  `item_metadata`: what a workspace or a collection is, read and written under row security
-  that asks PostgreSQL's own privilege functions.
+  `item_metadata`: what a workspace, a collection or a field is, read and written under row
+  security that asks PostgreSQL's own privilege functions.
 
 `platform_core` owns the platform schema. It is NOLOGIN and has no CREATEROLE, CREATEDB,
 SUPERUSER or BYPASSRLS. Only installation administrators should be members. `platform_users`

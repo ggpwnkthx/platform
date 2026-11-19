@@ -113,15 +113,19 @@ the answer for an item they cannot see.
 
 A workspace's metadata is a description of the workspace, so it may be read by anyone who may
 use the workspace. A collection's metadata describes that collection, so it is read by those
-who hold a right on it and not by those who merely share the workspace. Delegating a model
-without giving away the database is native: a NOLOGIN role that owns the workspace owns its
-metadata for its members.
+who hold a right on it and not by those who merely share the workspace. A field's metadata
+describes that field, so it is read by those who hold a right on the column and by nobody
+else: the metadata of a field is as private as the field it describes, and a reader who may
+not read a column never learns what it is called. Delegating a model without giving away the
+database is native: a NOLOGIN role that owns the workspace owns its metadata for its members.
 
 Three keys are reserved for how an item presents itself — `display_name`, `icon` and `color`
 (see [interface](interface.md#presentation)). They are metadata like any other, so the same two
 rules hold for them: a reader sees the presentation of the items they may reach, and only the
 owner of an item may change it. The presentation is data, not a privilege: an owner cannot
-present an item they do not own, and a reader cannot change one they may merely read.
+present an item they do not own, and a reader cannot change one they may merely read. A field
+is presented by its name alone — a column is a label, not a mark — and its name reaches only
+the readers who may read the column.
 
 A COMMENT is not metadata. PostgreSQL's comments are catalog text that every connected user
 reads, and only an owner may change them; they suit a label, not anything that should follow

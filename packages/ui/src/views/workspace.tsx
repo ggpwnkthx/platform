@@ -11,6 +11,7 @@ import { Action, Button } from '../ui/button.tsx'
 import { Checkbox, Field, Input, Select } from '../ui/form.tsx'
 import { GrantIcon, iconFor, PlusIcon, TrashIcon, WorkspaceIcon } from '../ui/icons.tsx'
 import { Confirm, Drawer } from '../ui/overlay.tsx'
+import { workspaceTarget } from '../db/metadata.ts'
 import { MetadataPanel, PresentationPanel } from './metadata.tsx'
 import { useRunner } from './runner.tsx'
 
@@ -138,8 +139,8 @@ export function WorkspaceSettings() {
           {runner.problem.detail}
         </Notice>
       )}
-      <PresentationPanel schema={ws} table={null} owner={owner} />
-      <MetadataPanel schema={ws} table={null} owner={owner} />
+      <PresentationPanel target={workspaceTarget(ws)} owner={owner} />
+      <MetadataPanel target={workspaceTarget(ws)} owner={owner} />
       <section class="panel">
         <header class="panel-head">
           <div>

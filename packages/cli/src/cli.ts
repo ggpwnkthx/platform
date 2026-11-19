@@ -17,6 +17,7 @@ const MIGRATIONS = [
   { file: '0001_native.sql', version: '2.0.0' },
   { file: '0002_harden_catalogs.sql', version: '2.0.1' },
   { file: '0003_metadata.sql', version: '2.1.0' },
+  { file: '0004_field_metadata.sql', version: '2.2.0' },
 ]
 if (MIGRATIONS[MIGRATIONS.length - 1]!.version !== VERSION)
   throw new Error(`The last migration must produce version ${VERSION}`)

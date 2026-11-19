@@ -1,6 +1,6 @@
 {
   "name": "platform",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "private": true,
   "type": "module",
   "description": "PostgreSQL-native identity, modeling, grants and row security, with a static interface that speaks to PostgreSQL itself.",

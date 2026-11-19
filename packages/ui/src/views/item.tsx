@@ -24,6 +24,7 @@ import {
   systemColumns,
   tableOf,
 } from '../state/catalog.ts'
+import { fieldMetadata } from '../db/metadata.ts'
 import { presentationOf } from '../state/presentation.ts'
 import { href } from '../state/url.ts'
 import { Badge, Loading, Notice, Statement } from '../ui/bits.tsx'
@@ -235,6 +236,14 @@ export function Item() {
     [ws, table, id, catalog]
   )
   const original = loaded.data ?? null
+  // The name each field is read by, when its owner gave it one. A field this reader may not
+  // reach is not in the list: PostgreSQL did not return its metadata.
+  const described = useLoad(info ? (db) => fieldMetadata(db, ws, table) : null, [ws, table])
+  const names = new Map<string, string>()
+  for (const row of described.data ?? []) {
+    if (row.key === 'display_name' && typeof row.value === 'string' && row.value.trim())
+      names.set(row.column_name ?? '', row.value.trim())
+  }
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [confirming, setConfirming] = useState(false)
@@ -576,7 +585,7 @@ export function Item() {
               <Field
                 key={c.name}
                 id={fieldId}
-                label={c.name}
+                label={names.get(c.name) ?? c.name}
                 required={c.required && !c.default}
                 wide={wide}
                 error={errors[c.name]}

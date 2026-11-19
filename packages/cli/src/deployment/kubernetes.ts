@@ -44,7 +44,7 @@ export function renderKubernetes(options: {
       'metadata:\n  name: platform',
       `metadata:\n  namespace: ${JSON.stringify(namespace)}\n  name: platform`
     )
-    .replace('YOUR_REGISTRY/platform-relay:2.1.0', JSON.stringify(options.image))
+    .replace('YOUR_REGISTRY/platform-relay:2.2.0', JSON.stringify(options.image))
     .replace('"https://platform.example.com"', JSON.stringify(options.publicUrl))
     .replace(
       '"postgres.example.com:5432"',

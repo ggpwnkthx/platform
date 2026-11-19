@@ -136,38 +136,57 @@ export function columnSql(spec: ColumnSpec): string {
 }
 
 /**
+ * The item a metadata row names: a workspace, a collection, or a field of one. A field is a
+ * column of a collection, so it names both.
+ */
+export interface MetadataTarget {
+  scope: 'workspace' | 'collection' | 'field'
+  schema: string
+  table: string | null
+  column: string | null
+}
+
+/** The workspace named by a schema. */
+export const workspaceTarget = (schema: string): MetadataTarget => ({
+  scope: 'workspace',
+  schema,
+  table: null,
+  column: null,
+})
+
+/** The collection named by a schema and a table. */
+export const collectionTarget = (schema: string, table: string): MetadataTarget => ({
+  scope: 'collection',
+  schema,
+  table,
+  column: null,
+})
+
+/** The field named by a schema, a table and a column. */
+export const fieldTarget = (schema: string, table: string, column: string): MetadataTarget => ({
+  scope: 'field',
+  schema,
+  table,
+  column,
+})
+
+/**
  * The statement that sets one metadata key of an item, and the statement that removes it.
  * The interface writes an item's metadata through them, so the reader is shown the same
  * statement a psql session would run, and runs exactly that.
  */
-export function metadataStatement(
-  scope: 'workspace' | 'collection',
-  schema: string,
-  table: string | null,
-  key: string,
-  value: unknown
-): string {
-  const target =
-    scope === 'workspace'
-      ? `'workspace', ${literal(schema)}, NULL`
-      : `'collection', ${literal(schema)}, ${literal(table)}`
-  return `INSERT INTO platform.item_metadata (scope, schema_name, table_name, key, value)
-VALUES (${target}, ${literal(key)}, ${literal(JSON.stringify(value ?? null))}::jsonb)
-ON CONFLICT (scope, schema_name, coalesce(table_name, ''), key)
+export function metadataStatement(target: MetadataTarget, key: string, value: unknown): string {
+  return `INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value)
+VALUES (${literal(target.scope)}, ${literal(target.schema)}, ${literal(target.table)}, ${literal(target.column)}, ${literal(key)}, ${literal(JSON.stringify(value ?? null))}::jsonb)
+ON CONFLICT (scope, schema_name, coalesce(table_name, ''), coalesce(column_name, ''), key)
 DO UPDATE SET value = EXCLUDED.value;`
 }
 
 /** The statement that removes one metadata key of an item. */
-export function metadataRemoval(
-  scope: 'workspace' | 'collection',
-  schema: string,
-  table: string | null,
-  key: string
-): string {
-  const target =
-    scope === 'workspace'
-      ? `scope = 'workspace' AND schema_name = ${literal(schema)} AND table_name IS NULL`
-      : `scope = 'collection' AND schema_name = ${literal(schema)} AND table_name = ${literal(table)}`
+export function metadataRemoval(target: MetadataTarget, key: string): string {
   return `DELETE FROM platform.item_metadata
- WHERE ${target} AND key = ${literal(key)};`
+ WHERE scope = ${literal(target.scope)} AND schema_name = ${literal(target.schema)}
+   AND table_name IS NOT DISTINCT FROM ${literal(target.table)}
+   AND column_name IS NOT DISTINCT FROM ${literal(target.column)}
+   AND key = ${literal(key)};`
 }

@@ -1,4 +1,4 @@
-# Platform 2.1.0
+# Platform 2.2.0
 
 PostgreSQL is the identity and authorization system. A user is a PostgreSQL `LOGIN` role.
 People prove who they are to [Dex](https://dexidp.io), which fronts whatever sign-in systems you
@@ -119,7 +119,9 @@ real build and forwards its WebSockets to a real PostgreSQL. See [interface](doc
   holds. It is stored in the platform schema, and PostgreSQL's own rights decide it — a reader
   reaches the metadata of the items they may reach, and only the owner of an item may change it.
   Three keys are reserved: a workspace or a collection may carry a display name, an icon and a
-  primary colour, and the interface draws them as the item's mark wherever it appears.
+  primary colour, and the interface draws them as the item's mark wherever it appears. A field
+  carries metadata too, secured by the field's own rights: whoever holds a right on the column
+  reaches its metadata, and a field's display name is the label the interface shows for it.
 - Record reads and writes as parameterized SQL on the reader's own login: inserts and updates
   without RETURNING, and updates guarded by the version the reader saw.
 - A one-statement SQL page executing as the signed-in reader. Native PostgreSQL checks every
@@ -166,7 +168,7 @@ bun run cli deploy local logs -f relay
 bun run cli deploy local down  # keeps the database volume
 bun run cli deploy local ui   # build the static interface into packages/ui/dist, for a CDN
 bun run relay                # the WebSocket relay in front of PostgreSQL's port
-bun run cli --version  # 2.1.0
+bun run cli --version  # 2.2.0
 bun run cli migrate    # installs what is missing, upgrades what is behind; CLI credentials required
 bun run cli harden local  # hide the role catalogs from ordinary connections; cluster superuser
 bun run cli doctor     # server version, authentication rules, installation

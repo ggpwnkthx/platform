@@ -4,10 +4,14 @@ import pg from 'pg'
 import { ident } from '../packages/sql/src/index.ts'
 import { TokenClient, transaction } from '../packages/cli/src/db.ts'
 import {
+  collectionTarget,
+  fieldMetadata,
+  fieldTarget,
   metadata,
   presentations,
   removeMetadata,
   setMetadata,
+  workspaceTarget,
 } from '../packages/ui/src/db/metadata.ts'
 import type { Connection } from '../packages/ui/src/pg/wire.ts'
 import { startIssuer } from './issuer.ts'
@@ -54,8 +58,11 @@ async function as<T>(name: string, work: (db: Connection) => Promise<T>): Promis
   }
 }
 /** The metadata of the newsroom workspace, or of its articles collection. */
-const workspace = (db: Connection) => metadata(db, 'newsroom', null)
-const collection = (db: Connection) => metadata(db, 'newsroom', 'articles')
+const workspace = (db: Connection) => metadata(db, workspaceTarget('newsroom'))
+const collection = (db: Connection) => metadata(db, collectionTarget('newsroom', 'articles'))
+/** The metadata of one field of the articles collection. */
+const field = (db: Connection, column: string) =>
+  metadata(db, fieldTarget('newsroom', 'articles', column))
 const keys = (entries: { key: string }[]) => entries.map((one) => one.key)
 
 beforeAll(async () => {
@@ -68,7 +75,12 @@ beforeAll(async () => {
   admin = new pg.Client({ connectionString: dbUrl.toString() })
   await admin.connect()
   await transaction(admin, async () => {
-    for (const file of ['0001_native.sql', '0002_harden_catalogs.sql', '0003_metadata.sql'])
+    for (const file of [
+      '0001_native.sql',
+      '0002_harden_catalogs.sql',
+      '0003_metadata.sql',
+      '0004_field_metadata.sql',
+    ])
       await admin.query(readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'))
   })
   for (const name of roles) {
@@ -86,6 +98,8 @@ beforeAll(async () => {
     "CREATE SCHEMA newsroom; SELECT platform.create_collection('newsroom','articles')"
   )
   await owner.query('ALTER TABLE newsroom.articles ADD COLUMN title text')
+  // A second column that nobody is granted: the field nobody may reach.
+  await owner.query('ALTER TABLE newsroom.articles ADD COLUMN summary text')
   await owner.query(
     `GRANT USAGE ON SCHEMA newsroom TO ${['reader', 'writer', 'blind'].map((n) => ident(role(n))).join(',')}`
   )
@@ -107,8 +121,12 @@ afterAll(async () => {
 describe('metadata of a workspace and of a collection', () => {
   test('the owner writes the metadata of both and reads it back', async () => {
     await as('owner', async (db) => {
-      expect(await setMetadata(db, 'newsroom', null, 'description', 'The newsroom')).toBe(1)
-      expect(await setMetadata(db, 'newsroom', 'articles', 'display_field', 'title')).toBe(1)
+      expect(
+        await setMetadata(db, workspaceTarget('newsroom'), 'description', 'The newsroom')
+      ).toBe(1)
+      expect(
+        await setMetadata(db, collectionTarget('newsroom', 'articles'), 'display_field', 'title')
+      ).toBe(1)
       expect(await workspace(db)).toEqual([
         expect.objectContaining({
           key: 'description',
@@ -125,9 +143,9 @@ describe('metadata of a workspace and of a collection', () => {
 
   test('writing a key that is there replaces its value', async () => {
     await as('owner', async (db) => {
-      expect(await setMetadata(db, 'newsroom', null, 'description', 'First')).toBe(1)
+      expect(await setMetadata(db, workspaceTarget('newsroom'), 'description', 'First')).toBe(1)
       expect((await workspace(db)).find((one) => one.key === 'description')?.version).toBe(2)
-      expect(await setMetadata(db, 'newsroom', null, 'description', 'Second')).toBe(1)
+      expect(await setMetadata(db, workspaceTarget('newsroom'), 'description', 'Second')).toBe(1)
       const found = (await workspace(db)).find((one) => one.key === 'description')
       expect(found?.value).toBe('Second')
     })
@@ -136,17 +154,19 @@ describe('metadata of a workspace and of a collection', () => {
   test('the same key in another workspace is another key', async () => {
     await admin.query('CREATE SCHEMA IF NOT EXISTS other')
     await as('owner', async (db) => {
-      expect(await refusal(setMetadata(db, 'other', null, 'description', 'Somewhere else'))).toBe(
-        '42501'
-      )
-      expect(await metadata(db, 'other', null)).toEqual([])
+      expect(
+        await refusal(setMetadata(db, workspaceTarget('other'), 'description', 'Somewhere else'))
+      ).toBe('42501')
+      expect(await metadata(db, workspaceTarget('other'))).toEqual([])
     })
   })
 
   test('a value may be any JSON', async () => {
     const rules = { publish: ['draft', 'published'], limit: 10, live: false }
     await as('owner', async (db) => {
-      expect(await setMetadata(db, 'newsroom', 'articles', 'rules', rules)).toBe(1)
+      expect(await setMetadata(db, collectionTarget('newsroom', 'articles'), 'rules', rules)).toBe(
+        1
+      )
       const read = (await collection(db)).find((one) => one.key === 'rules')
       expect(read?.value).toEqual(rules)
     })
@@ -157,10 +177,14 @@ describe('metadata of a workspace and of a collection', () => {
       expect(keys(await collection(db)).sort()).toEqual(['display_field', 'rules'])
       // The write's new row fails the owner's WITH CHECK, so PostgreSQL refuses it.
       expect(
-        await refusal(setMetadata(db, 'newsroom', 'articles', 'display_field', 'headline'))
+        await refusal(
+          setMetadata(db, collectionTarget('newsroom', 'articles'), 'display_field', 'headline')
+        )
       ).toBe('42501')
       // A delete reaches only the rows the reader owns: none.
-      expect(await removeMetadata(db, 'newsroom', 'articles', 'display_field')).toBe(0)
+      expect(
+        await removeMetadata(db, collectionTarget('newsroom', 'articles'), 'display_field')
+      ).toBe(0)
     })
     // The reader's writes changed nothing.
     const display = (await as('owner', collection)).find((one) => one.key === 'display_field')
@@ -182,7 +206,9 @@ describe('metadata of a workspace and of a collection', () => {
     await as('outsider', async (db) => {
       expect(await workspace(db)).toEqual([])
       expect(await collection(db)).toEqual([])
-      expect(await refusal(setMetadata(db, 'newsroom', null, 'mine', 'mine'))).toBe('42501')
+      expect(await refusal(setMetadata(db, workspaceTarget('newsroom'), 'mine', 'mine'))).toBe(
+        '42501'
+      )
     })
   })
 
@@ -216,7 +242,7 @@ describe('metadata of a workspace and of a collection', () => {
       const first = (await collection(db)).find((one) => one.key === 'rules')
       if (!first) throw new Error('The rules were written above')
       const set = (value: unknown, version: number) =>
-        setMetadata(db, 'newsroom', 'articles', 'rules', value, version)
+        setMetadata(db, collectionTarget('newsroom', 'articles'), 'rules', value, version)
       // A version the row does not carry touches nothing.
       expect(await set({ publish: ['draft'] }, first.version + 5)).toBe(0)
       expect(await set({ publish: ['draft'] }, first.version)).toBe(1)
@@ -233,20 +259,30 @@ describe('metadata of a workspace and of a collection', () => {
     // A workspace of somebody else's: the owner of newsroom has no right on it.
     await admin.query('CREATE SCHEMA IF NOT EXISTS other')
     await as('owner', async (db) => {
-      expect(await refusal(setMetadata(db, 'other', null, 'mine', 'mine'))).toBe('42501')
-      expect(await metadata(db, 'other', null)).toEqual([])
+      expect(await refusal(setMetadata(db, workspaceTarget('other'), 'mine', 'mine'))).toBe('42501')
+      expect(await metadata(db, workspaceTarget('other'))).toEqual([])
     })
   })
 
   test('a key that is not there and a key that may not be touched are the same answer', async () => {
-    expect(await as('owner', (db) => removeMetadata(db, 'newsroom', 'articles', 'nothing'))).toBe(0)
-    expect(await as('reader', (db) => removeMetadata(db, 'newsroom', 'articles', 'rules'))).toBe(0)
+    expect(
+      await as('owner', (db) =>
+        removeMetadata(db, collectionTarget('newsroom', 'articles'), 'nothing')
+      )
+    ).toBe(0)
+    expect(
+      await as('reader', (db) =>
+        removeMetadata(db, collectionTarget('newsroom', 'articles'), 'rules')
+      )
+    ).toBe(0)
   })
 
   test('the owner removes a key it owns', async () => {
     await as('owner', async (db) => {
-      expect(await setMetadata(db, 'newsroom', 'articles', 'scratch', true)).toBe(1)
-      expect(await removeMetadata(db, 'newsroom', 'articles', 'scratch')).toBe(1)
+      expect(await setMetadata(db, collectionTarget('newsroom', 'articles'), 'scratch', true)).toBe(
+        1
+      )
+      expect(await removeMetadata(db, collectionTarget('newsroom', 'articles'), 'scratch')).toBe(1)
       expect(keys(await collection(db)).sort()).toEqual(['display_field', 'rules'])
     })
   })
@@ -256,12 +292,69 @@ describe('metadata of a workspace and of a collection', () => {
   })
 })
 
+describe('the metadata of a field', () => {
+  const title = fieldTarget('newsroom', 'articles', 'title')
+  const summary = fieldTarget('newsroom', 'articles', 'summary')
+
+  test('the owner writes the metadata of a field', async () => {
+    await as('owner', async (db) => {
+      expect(await setMetadata(db, title, 'display_name', 'Headline')).toBe(1)
+      expect(await setMetadata(db, summary, 'display_name', 'Summary')).toBe(1)
+    })
+    const shown = await as('owner', (db) => field(db, 'title'))
+    expect(shown.find((one) => one.key === 'display_name')?.value).toBe('Headline')
+  })
+
+  test('a reader of the column reads its metadata, and one who may not read it does not', async () => {
+    await as('reader', async (db) => {
+      expect(keys(await field(db, 'title'))).toEqual(['display_name'])
+      // The field nobody may reach: its metadata is not returned at all.
+      expect(await field(db, 'summary')).toEqual([])
+    })
+  })
+
+  test('a writer of the column reads its metadata', async () => {
+    expect(await as('writer', (db) => field(db, 'title'))).toHaveLength(1)
+    expect(await as('writer', (db) => field(db, 'summary'))).toEqual([])
+  })
+
+  test('only the owner of the collection may change the metadata of its fields', async () => {
+    await as('reader', async (db) => {
+      expect(await refusal(setMetadata(db, title, 'display_name', 'Mine'))).toBe('42501')
+      expect(await removeMetadata(db, title, 'display_name')).toBe(0)
+    })
+    const after = await as('owner', (db) => field(db, 'title'))
+    expect(after.find((one) => one.key === 'display_name')?.value).toBe('Headline')
+  })
+
+  test('one who may only use the workspace reaches no field of it', async () => {
+    expect(await as('blind', (db) => field(db, 'title'))).toEqual([])
+    expect(await as('outsider', (db) => field(db, 'title'))).toEqual([])
+  })
+
+  test('the metadata of every field of a collection is read at once, and only what reaches the reader', async () => {
+    const rows = await as('owner', (db) => fieldMetadata(db, 'newsroom', 'articles'))
+    expect(rows.map((row) => row.column_name).sort()).toEqual(['summary', 'title'])
+    const reader = await as('reader', (db) => fieldMetadata(db, 'newsroom', 'articles'))
+    expect(reader.map((row) => row.column_name)).toEqual(['title'])
+    expect(await as('blind', (db) => fieldMetadata(db, 'newsroom', 'articles'))).toEqual([])
+    expect(await as('outsider', (db) => fieldMetadata(db, 'newsroom', 'articles'))).toEqual([])
+  })
+
+  test('a field that is dropped leaves its metadata behind, unread', async () => {
+    await owner.query('ALTER TABLE newsroom.articles DROP COLUMN summary')
+    expect(await as('owner', (db) => field(db, 'summary'))).toEqual([])
+    // The collection's own metadata is untouched by the loss of one of its fields.
+    expect(await as('owner', collection)).toHaveLength(2)
+  })
+})
+
 describe('the presentation of an item', () => {
   test('the owner writes the name, the icon and the colour of a workspace', async () => {
     await as('owner', async (db) => {
-      expect(await setMetadata(db, 'newsroom', null, 'display_name', 'Newsroom')).toBe(1)
-      expect(await setMetadata(db, 'newsroom', null, 'icon', 'newspaper')).toBe(1)
-      expect(await setMetadata(db, 'newsroom', null, 'color', 'steel')).toBe(1)
+      expect(await setMetadata(db, workspaceTarget('newsroom'), 'display_name', 'Newsroom')).toBe(1)
+      expect(await setMetadata(db, workspaceTarget('newsroom'), 'icon', 'newspaper')).toBe(1)
+      expect(await setMetadata(db, workspaceTarget('newsroom'), 'color', 'steel')).toBe(1)
     })
     const shown = await as('owner', workspace)
     expect(shown.find((one) => one.key === 'display_name')?.value).toBe('Newsroom')
@@ -273,7 +366,9 @@ describe('the presentation of an item', () => {
     const shown = await as('blind', workspace)
     expect(shown.find((one) => one.key === 'display_name')?.value).toBe('Newsroom')
     await as('blind', async (db) => {
-      expect(await refusal(setMetadata(db, 'newsroom', null, 'display_name', 'Mine'))).toBe('42501')
+      expect(
+        await refusal(setMetadata(db, workspaceTarget('newsroom'), 'display_name', 'Mine'))
+      ).toBe('42501')
     })
     const after = await as('owner', workspace)
     expect(after.find((one) => one.key === 'display_name')?.value).toBe('Newsroom')
@@ -281,8 +376,12 @@ describe('the presentation of an item', () => {
 
   test('the presentation of every item the reader may reach is read at once', async () => {
     await as('owner', async (db) => {
-      expect(await setMetadata(db, 'newsroom', 'articles', 'display_name', 'Articles')).toBe(1)
-      expect(await setMetadata(db, 'newsroom', 'articles', 'icon', 'file-text')).toBe(1)
+      expect(
+        await setMetadata(db, collectionTarget('newsroom', 'articles'), 'display_name', 'Articles')
+      ).toBe(1)
+      expect(
+        await setMetadata(db, collectionTarget('newsroom', 'articles'), 'icon', 'file-text')
+      ).toBe(1)
     })
     const rows = await as('owner', presentations)
     expect(

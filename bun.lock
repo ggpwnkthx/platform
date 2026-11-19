@@ -14,7 +14,7 @@
     },
     "packages/cli": {
       "name": "@platform/cli",
-      "version": "2.1.0",
+      "version": "2.2.0",
       "dependencies": {
         "@platform/sql": "workspace:*",
         "pg": "8.23.1",
@@ -26,15 +26,15 @@
     },
     "packages/relay": {
       "name": "@platform/relay",
-      "version": "2.1.0",
+      "version": "2.2.0",
     },
     "packages/sql": {
       "name": "@platform/sql",
-      "version": "2.1.0",
+      "version": "2.2.0",
     },
     "packages/ui": {
       "name": "@platform/ui",
-      "version": "2.1.0",
+      "version": "2.2.0",
       "dependencies": {
         "@platform/sql": "workspace:*",
         "clsx": "2.1.1",

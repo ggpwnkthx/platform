@@ -1,4 +1,4 @@
-# Platform 2.1.0 capabilities
+# Platform 2.2.0 capabilities
 
 | Area                              | Behavior                                                                                                             |
 | --------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
@@ -34,6 +34,11 @@ Three keys of that metadata are reserved for presentation: `display_name`, `icon
 icons and a colour from the pinned palette, and the interface draws them wherever the item
 appears — the workspace switcher, the collection tiles, the header of the item's own page.
 They are metadata like any other: the same rights, the same refusals.
+
+A field may carry metadata too, and it is secured by the field's own rights: whoever holds a
+right on the column reaches its metadata, and nobody else does. A field's `display_name` is
+the label the interface shows for it — in the records table and in the record form — and a
+reader who may not read the column never learns it.
 
 Data modeling is available at runtime. Constraints, indexes, relations, renames and drops use
 native SQL when not covered by typed collection/field builders. Descriptive text is stored

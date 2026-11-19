@@ -10,7 +10,7 @@ import {
   valueless,
 } from '../db/filter.ts'
 import { deleteRecord, records } from '../db/platform.ts'
-import { metadata } from '../db/metadata.ts'
+import { collectionTarget, fieldMetadata, metadata } from '../db/metadata.ts'
 import { ident, qualified } from '@platform/sql'
 import type { Catalog, ColumnInfo, PolicyInfo } from '../db/types.ts'
 import { count, plural } from '../format.ts'
@@ -420,13 +420,22 @@ export function Records() {
             page.rows,
             readable.map((c) => c.name)
           )
-          const about = await metadata(db, ws, table)
-          return { ...page, labels, about }
+          const about = await metadata(db, collectionTarget(ws, table))
+          // The fields' own metadata: the names people read, for the fields this reader reaches.
+          const described = await fieldMetadata(db, ws, table)
+          return { ...page, labels, about, described }
         }
       : null,
     [ws, table, query.f, search, query.s, limit, pageNumber, catalog]
   )
 
+  // The name each field is read by, when its owner gave it one. A field this reader may not
+  // reach is not in the list: PostgreSQL did not return its metadata.
+  const names = new Map<string, string>()
+  for (const row of loaded.data?.described ?? []) {
+    if (row.key === 'display_name' && typeof row.value === 'string' && row.value.trim())
+      names.set(row.column_name ?? '', row.value.trim())
+  }
   const choices = (column: string) => choicesOf(catalog, ws, table, column)
   const rows = loaded.data?.rows ?? []
   const total = loaded.data?.total ?? 0
@@ -647,7 +656,9 @@ export function Records() {
                         )}
                       >
                         <button type="button" class="grid-sort" onClick={() => toggleSort(c.name)}>
-                          <span>{c.name}</span>
+                          <span title={names.has(c.name) ? c.name : undefined}>
+                            {names.get(c.name) ?? c.name}
+                          </span>
                           {direction === 'ascending' ? (
                             <ArrowUpIcon size={14} aria-hidden="true" />
                           ) : direction === 'descending' ? (

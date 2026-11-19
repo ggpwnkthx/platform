@@ -1,9 +1,14 @@
-# Platform 2.1.0 validation
+# Platform 2.2.0 validation
 
 Verified on November 18, 2026 using Bun 1.4.4 and a real PostgreSQL 18.7 server with
 pg_oidc_validator 1.1.0 — the pinned, checksummed release the deploy/postgres image builds —
 and token-only network logins, and the project's own relay in front of it, as described in
 [operations](operations.md#testing). No live project database was accessed.
+
+That run covered 2.1.0. The change from 2.1.0 to 2.2.0 — metadata for fields, secured by the
+field's own rights — was checked against PostgreSQL compiled to WebAssembly (PGlite) with the
+real migrations and the real seed, but not against the server under test: the suites that need
+it were not run here.
 
 The suites live with the packages they belong to — `packages/cli/test`, `packages/relay/test`,
 `packages/sql/test`, `packages/ui/test` — and the suites that cross the packages, and need

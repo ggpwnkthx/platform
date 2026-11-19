@@ -47,8 +47,8 @@ const kenv = {
 }
 
 describe('version and CLI entry points', () => {
-  test('package, database, API expectation and runtime agree on 2.1.0', () => {
-    expect(VERSION).toBe('2.1.0')
+  test('package, database, API expectation and runtime agree on 2.2.0', () => {
+    expect(VERSION).toBe('2.2.0')
     expect(
       JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')).version
     ).toBe(VERSION)
@@ -61,6 +61,9 @@ describe('version and CLI entry points', () => {
     expect(
       readFileSync(new URL('../../../migrations/0003_metadata.sql', import.meta.url), 'utf8')
     ).toContain("version = '2.1.0'")
+    expect(
+      readFileSync(new URL('../../../migrations/0004_field_metadata.sql', import.meta.url), 'utf8')
+    ).toContain("version = '2.2.0'")
     // The workspace packages carry the same version, so a release is one number everywhere.
     for (const name of ['cli', 'relay', 'ui']) {
       const manifest = JSON.parse(
@@ -79,7 +82,7 @@ describe('version and CLI entry points', () => {
       })
       const out = await new Response(child.stdout).text()
       expect(await child.exited).toBe(0)
-      expect(out).toContain(args[0] === '--version' ? '2.1.0' : 'platform deploy')
+      expect(out).toContain(args[0] === '--version' ? '2.2.0' : 'platform deploy')
     }
   })
 })

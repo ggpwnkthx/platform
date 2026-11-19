@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { metadataStatements } from '../src/db/metadata.ts'
+import {
+  collectionTarget,
+  fieldTarget,
+  metadataStatements,
+  workspaceTarget,
+} from '../src/db/metadata.ts'
 import { familyOf, palette, parseColor, reservedFamilies, toneClass } from '../src/state/color.ts'
 import { indexPresentations, presentationOf } from '../src/state/presentation.ts'
 import { itemIcons, iconFor } from '../src/ui/icons.tsx'
@@ -64,6 +69,7 @@ describe('The presentation of an item', () => {
       scope: 'workspace' as const,
       schema_name: 'newsroom',
       table_name: null,
+      column_name: null,
       key: 'display_name',
       value: 'Newsroom',
     },
@@ -71,6 +77,7 @@ describe('The presentation of an item', () => {
       scope: 'workspace' as const,
       schema_name: 'newsroom',
       table_name: null,
+      column_name: null,
       key: 'icon',
       value: 'newspaper',
     },
@@ -78,6 +85,7 @@ describe('The presentation of an item', () => {
       scope: 'workspace' as const,
       schema_name: 'newsroom',
       table_name: null,
+      column_name: null,
       key: 'color',
       value: 'steel',
     },
@@ -85,8 +93,17 @@ describe('The presentation of an item', () => {
       scope: 'collection' as const,
       schema_name: 'newsroom',
       table_name: 'articles',
+      column_name: null,
       key: 'display_name',
       value: 'Articles',
+    },
+    {
+      scope: 'field' as const,
+      schema_name: 'newsroom',
+      table_name: 'articles',
+      column_name: 'title',
+      key: 'display_name',
+      value: 'Headline',
     },
   ]
 
@@ -94,6 +111,7 @@ describe('The presentation of an item', () => {
     const index = indexPresentations(rows)
     expect(presentationOf(index, 'newsroom').displayName).toBe('Newsroom')
     expect(presentationOf(index, 'newsroom', 'articles').displayName).toBe('Articles')
+    expect(presentationOf(index, 'newsroom', 'articles', 'title').displayName).toBe('Headline')
     expect(presentationOf(index, 'crm')).toEqual({
       displayName: null,
       icon: null,
@@ -107,10 +125,18 @@ describe('The presentation of an item', () => {
         scope: 'workspace',
         schema_name: 'newsroom',
         table_name: null,
+        column_name: null,
         key: 'display_name',
         value: { name: 'Newsroom' },
       },
-      { scope: 'workspace', schema_name: 'newsroom', table_name: null, key: 'icon', value: '  ' },
+      {
+        scope: 'workspace',
+        schema_name: 'newsroom',
+        table_name: null,
+        column_name: null,
+        key: 'icon',
+        value: '  ',
+      },
     ])
     const found = presentationOf(index, 'newsroom')
     expect(found.displayName).toBeNull()
@@ -120,7 +146,9 @@ describe('The presentation of an item', () => {
 
 describe('The statements that write a presentation', () => {
   test('a key is written with the value it holds', () => {
-    const [set] = metadataStatements('newsroom', null, [{ key: 'display_name', value: 'Newsroom' }])
+    const [set] = metadataStatements(workspaceTarget('newsroom'), [
+      { key: 'display_name', value: 'Newsroom' },
+    ])
     expect(set).toContain("'workspace'")
     expect(set).toContain("'display_name'")
     expect(set).toContain('"Newsroom"')
@@ -128,19 +156,33 @@ describe('The statements that write a presentation', () => {
   })
 
   test('a collection names its table', () => {
-    const [set] = metadataStatements('newsroom', 'articles', [{ key: 'icon', value: 'file-text' }])
+    const [set] = metadataStatements(collectionTarget('newsroom', 'articles'), [
+      { key: 'icon', value: 'file-text' },
+    ])
     expect(set).toContain("'collection'")
     expect(set).toContain("'articles'")
   })
 
+  test('a field names its column', () => {
+    const [set] = metadataStatements(fieldTarget('newsroom', 'articles', 'title'), [
+      { key: 'display_name', value: 'Headline' },
+    ])
+    expect(set).toContain("'field'")
+    expect(set).toContain("'articles'")
+    expect(set).toContain("'title'")
+    expect(set).toContain('column_name')
+  })
+
   test('a key that is cleared is removed', () => {
-    const [remove] = metadataStatements('newsroom', 'articles', [{ key: 'icon', value: null }])
+    const [remove] = metadataStatements(collectionTarget('newsroom', 'articles'), [
+      { key: 'icon', value: null },
+    ])
     expect(remove).toContain('DELETE FROM platform.item_metadata')
     expect(remove).toContain("'icon'")
   })
 
   test('a value with a quote in it is written as a literal', () => {
-    const [set] = metadataStatements('newsroom', null, [
+    const [set] = metadataStatements(workspaceTarget('newsroom'), [
       { key: 'display_name', value: "O'Brien's desk" },
     ])
     expect(set).toContain("O''Brien")

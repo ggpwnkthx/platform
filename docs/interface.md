@@ -118,11 +118,17 @@ interactive transactions and scripts.
 ## Metadata
 
 Metadata is what an item is, as opposed to what it holds: a workspace may say what it is for,
-a collection may say how it should be read. It is stored in `platform.item_metadata`, one row
-per key per item, and PostgreSQL decides who reaches it (see [access](access.md#metadata)). A
-reader is shown the keys they may see and nothing for the rest; a write by anyone but the
-owner is refused by PostgreSQL. A value is any JSON value. A change to a key the reader opened
-is guarded by its version, as a record is.
+a collection may say how it should be read, a field may say what it holds. It is stored in
+`platform.item_metadata`, one row per key per item, and PostgreSQL decides who reaches it (see
+[access](access.md#metadata)). A reader is shown the keys they may see and nothing for the
+rest; a write by anyone but the owner is refused by PostgreSQL. A value is any JSON value. A
+change to a key the reader opened is guarded by its version, as a record is.
+
+An item is a workspace (`schema`), a collection (`schema.table`) or a field of one
+(`schema.table.column`). A field's metadata is as private as the field: PostgreSQL returns the
+rows of the fields the reader holds a right on, and no others, so a reader who may not read a
+column never learns what it is called. The interface reads a collection's fields in one
+statement, and labels the fields it may read with their `display_name` when they have one.
 
 ### Presentation
 
@@ -133,6 +139,9 @@ Three keys are reserved: an item may say how it presents itself.
 | `display_name` | Text, up to 80 characters                           | The name people read, in place of the schema or table name |
 | `icon`         | The name of one of the platform's icons             | The mark drawn beside the name                             |
 | `color`        | A family of the palette, or a colour of the owner's | The colour of the mark                                     |
+
+A field is presented by its name alone: a column is a label, not a mark, so the interface
+offers no icon and no colour for one.
 
 They are ordinary metadata rows, so the same rules hold: a reader sees the presentation of
 the items they may reach, and only the owner of an item may change it. The interface writes

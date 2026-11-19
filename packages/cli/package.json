@@ -1,6 +1,6 @@
 {
   "name": "@platform/cli",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "private": true,
   "type": "module",
   "description": "The operator's tools for a PostgreSQL-native platform: install, apply, harden, deploy.",

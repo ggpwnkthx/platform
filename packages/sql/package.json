@@ -1,6 +1,6 @@
 {
   "name": "@platform/sql",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "private": true,
   "type": "module",
   "description": "The SQL the platform writes: identifiers, literals, columns and relation names, written once.",

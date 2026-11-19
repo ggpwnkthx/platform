@@ -1,6 +1,6 @@
 import { Fragment } from 'preact'
 import { activity } from '../db/platform.ts'
-import { metadata } from '../db/metadata.ts'
+import { metadata, workspaceTarget } from '../db/metadata.ts'
 import { qualified } from '@platform/sql'
 import { display, count as formatCount } from '../format.ts'
 import { useLoad, useSession } from '../session.tsx'
@@ -50,7 +50,7 @@ export function ContentHome() {
               out[t.name] = null
             }
           }
-          const about = await metadata(db, ws, null)
+          const about = await metadata(db, workspaceTarget(ws))
           // Revisions reach the workspace's owners; anyone else reads none, and that is an answer.
           const recent = await activity(db, { schema: ws, limit: 8 }).catch(() => [])
           return { counts: out, about, recent }

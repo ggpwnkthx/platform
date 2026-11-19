@@ -248,7 +248,7 @@ native users/grants. Then configure a pre-existing namespace, HTTPS ingress and 
 policies.
 
 ```bash
-export PLATFORM_IMAGE=your-registry/platform-relay:2.1.0
+export PLATFORM_IMAGE=your-registry/platform-relay:2.2.0
 export PUBLIC_URL=https://platform.example.com
 export OIDC_ISSUER=https://sso.example.com/dex
 export DATABASE_HOST=your-postgres.example.com

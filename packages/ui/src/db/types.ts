@@ -152,9 +152,11 @@ export interface MetadataEntry {
 
 /** One row of the item's metadata: what it says about the item it names. */
 export interface MetadataRow {
-  scope: 'workspace' | 'collection'
+  scope: 'workspace' | 'collection' | 'field'
   schema_name: string
   table_name: string | null
+  /** The column, when the row names a field. */
+  column_name: string | null
   key: string
   value: unknown
 }
