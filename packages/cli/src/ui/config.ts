@@ -1,5 +1,6 @@
 /**
- * The interface's configuration: how the site is built, and which database it talks to.
+ * The interface's configuration: how the site is built, which database it talks to, and
+ * what the site adds to it.
  *
  * The file is `platform.json`, in the working directory or in the directory the caller
  * names. It is optional: without one, the interface is built as it is published — the real
@@ -22,6 +23,8 @@ export interface InterfaceConfig {
   mode: 'development' | 'production'
   /** The module that is the database in development mode, relative to the directory. */
   database?: string
+  /** The module that holds the site's own field types and renderers, relative to the directory. */
+  extensions?: string
   /** Where the site is written, relative to the directory. */
   out?: string
 }
@@ -30,7 +33,8 @@ export interface InterfaceConfig {
  * The configuration in a directory, if it has one.
  *
  * A development build names the module that is the database: the interface's own seam is
- * replaced by it, so that the pages and the bundle talk to the same PostgreSQL.
+ * replaced by it, so that the pages and the bundle talk to the same PostgreSQL. A build of
+ * either mode may name the module that holds the site's own field types and renderers.
  */
 export function findConfig(dir: string): InterfaceConfig | null {
   const file = join(dir, CONFIG_FILE)
@@ -47,8 +51,17 @@ export function findConfig(dir: string): InterfaceConfig | null {
   const database = raw.database === undefined ? undefined : String(raw.database)
   if (mode === 'development' && !database)
     throw new Error(`${file}: a development build needs the module that is the database.`)
+  const extensions = raw.extensions === undefined ? undefined : String(raw.extensions)
+  if (extensions !== undefined && !existsSync(resolve(dir, extensions)))
+    throw new Error(`${file}: there is no module at ${extensions} to be the site's extensions.`)
   const out = raw.out === undefined ? undefined : String(raw.out)
-  return { dir: resolve(dir), mode: mode as 'development' | 'production', database, out }
+  return {
+    dir: resolve(dir),
+    mode: mode as 'development' | 'production',
+    database,
+    extensions,
+    out,
+  }
 }
 
 /** The module a development build uses as the database, in full. */
@@ -56,6 +69,11 @@ export function databaseModule(config: InterfaceConfig): string {
   if (!config.database)
     throw new Error('A development build needs the module that is the database.')
   return resolve(config.dir, config.database)
+}
+
+/** The module that holds the site's own field types and renderers, in full, if it has one. */
+export function extensionsModule(config: InterfaceConfig | null): string | null {
+  return config?.extensions ? resolve(config.dir, config.extensions) : null
 }
 
 /**

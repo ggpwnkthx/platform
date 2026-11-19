@@ -1,8 +1,14 @@
 /** The ui command: build the interface, and serve it while it is worked on. */
 import { join } from 'node:path'
 import { root } from '@platform/ui/paths.ts'
-import { buildSite, inPageAssets, seamPlugin } from './build.ts'
-import { databaseModule, findConfig, findSiteConfig, type InterfaceConfig } from './config.ts'
+import { buildSite, extensionsPlugin, inPageAssets, seamPlugin } from './build.ts'
+import {
+  databaseModule,
+  extensionsModule,
+  findConfig,
+  findSiteConfig,
+  type InterfaceConfig,
+} from './config.ts'
 import { serveInterface } from './dev.ts'
 import { UI_HELP } from './help.ts'
 
@@ -51,13 +57,19 @@ export async function ui(args: string[]): Promise<number> {
   }
 
   const site = siteOf(config, development)
+  // What the site adds is the site's own in either mode; the database is the example's only.
+  const extensions = extensionsModule(config)
+  const plugins = [
+    ...(development ? [seamPlugin(databaseModule(config!))] : []),
+    ...(extensions ? [extensionsPlugin(extensions)] : []),
+  ]
   const count = await buildSite({
     out: site.out,
     environment: site.environment,
     title: site.title,
     relay: process.env.PLATFORM_RELAY_URL,
     config: findSiteConfig(dir),
-    plugins: development ? [seamPlugin(databaseModule(config!))] : [],
+    plugins,
     assets: development ? inPageAssets(config!.dir) : [],
   })
   console.log(

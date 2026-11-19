@@ -13,9 +13,13 @@ export const UI_HELP = `platform ui <build|dev> [options]
 
   The configuration is platform.json, in the directory the command is pointed at:
 
-    { "mode": "development", "database": "database.ts", "out": ".dist" }
+    { "mode": "development", "database": "database.ts", "extensions": "extensions.tsx",
+      "out": ".dist" }
 
   A development build replaces the interface's database seam with the module the
   configuration names, so that the pages and the bundle talk to the same PostgreSQL: the one
-  that runs inside the page. Without a configuration, the interface is built as it is
-  published: the real one, with the relay and the issuer.`
+  that runs inside the page. A build of either mode replaces the interface's extensions, which
+  are empty, with the module "extensions" names: the site's own field types and renderers,
+  registered with @platform/ui/fields/registry.ts and @platform/ui/fields/renderers.tsx.
+  Without a configuration, the interface is built as it is published: the real one, with the
+  relay and the issuer.`

@@ -6,8 +6,9 @@
  * served by any static web server.
  *
  * A build is one process. Whoever asks for a build may reshape it — a development build
- * swaps the database seam for the module its configuration names — and the prerendered
- * pages and the bundle are built from the same shape.
+ * swaps the database seam for the module its configuration names, and a site that has field
+ * types and renderers of its own swaps them in for the interface's empty ones — and the
+ * prerendered pages and the bundle are built from the same shape.
  */
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
@@ -177,6 +178,31 @@ export function seamPlugin(database: string): Bun.BunPlugin {
     setup(build) {
       build.onResolve({ filter: /\/pg\/connect\.ts$/ }, (args) =>
         resolve(args.importer) === replacement ? undefined : { path: replacement }
+      )
+    },
+  }
+}
+
+/**
+ * The other seam: the interface's own extensions, which are empty, replaced by the module a
+ * site names. The module registers the site's field types and renderers with what the
+ * interface publishes — `@platform/ui/fields/registry.ts`, `@platform/ui/fields/renderers.tsx`
+ * — and it is imported before any page draws a field, in the prerender and in the bundle.
+ *
+ * The seam is not resolved to the site's module: it is loaded as a module that imports it.
+ * The site's module is then found as any other is, so it is compiled as its own directory
+ * says — its JSX is its own `tsconfig.json`'s — and it may be named `extensions.ts` too.
+ */
+export function extensionsPlugin(extensions: string): Bun.BunPlugin {
+  const replacement = resolve(extensions)
+  const seam = join(sources, 'extensions.ts')
+  return {
+    name: 'the-extensions-seam',
+    setup(build) {
+      build.onLoad({ filter: /[\\/]extensions\.ts$/ }, (args) =>
+        resolve(args.path) === seam
+          ? { contents: `import ${JSON.stringify(replacement)}\n`, loader: 'ts' }
+          : undefined
       )
     },
   }

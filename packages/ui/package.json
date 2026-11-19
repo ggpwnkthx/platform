@@ -7,10 +7,17 @@
   "license": "MIT",
   "exports": {
     "./config.ts": "./src/config.ts",
+    "./fields/inputs.tsx": "./src/fields/inputs.tsx",
+    "./fields/registry.ts": "./src/fields/registry.ts",
+    "./fields/renderers.tsx": "./src/fields/renderers.tsx",
+    "./fields/text.ts": "./src/fields/text.ts",
+    "./fields/types.ts": "./src/fields/types.ts",
     "./headers.ts": "./src/headers.ts",
+    "./metadata/color.ts": "./src/metadata/color.ts",
     "./paths.ts": "./src/paths.ts",
     "./prerender.tsx": "./src/prerender.tsx",
-    "./pg/connect.ts": "./src/pg/connect.ts"
+    "./pg/connect.ts": "./src/pg/connect.ts",
+    "./ui/icons.tsx": "./src/ui/icons.tsx"
   },
   "dependencies": {
     "@platform/data": "workspace:*",
