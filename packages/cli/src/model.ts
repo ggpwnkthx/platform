@@ -5,6 +5,7 @@ import {
   constraintName,
   defaultLiteral,
   fieldsViewsStatement,
+  fieldRenderersStatement,
   fieldTarget,
   fieldViewsStatement,
   ident,
@@ -51,6 +52,12 @@ export const fieldSchema = z.object({
     .record(z.string(), z.enum(['show', 'hide', 'readonly']))
     .optional()
     .default({}),
+  /**
+   * How the field's values are drawn, in each of the situations: the name of a renderer, or
+   * the name of one and the options it takes. A field that says nothing is drawn as the
+   * platform draws it.
+   */
+  renderers: z.record(z.string(), z.unknown()).optional().default({}),
   relation: z
     .object({
       collection: z.string(),
@@ -105,6 +112,9 @@ export async function addField(
     await q.query(`COMMENT ON COLUMN ${target}.${ident(f.name)} IS ${literal(f.note ?? f.label)}`)
   // Every field carries its own views: what it says, or the platform's default.
   await q.query(fieldViewsStatement(fieldTarget(schema, table, f.name), f.views))
+  // And its own saying of how its values are drawn.
+  if (Object.keys(f.renderers ?? {}).length)
+    await q.query(fieldRenderersStatement(fieldTarget(schema, table, f.name), f.renderers))
 }
 const onDelete = z.enum(['restrict', 'cascade', 'set_null'])
 export const relationSchema = z.object({
