@@ -30,7 +30,7 @@ the packages, and need PostgreSQL, are in `test/`.
 | Token logins in the integration suite | Real OAUTHBEARER logins verified by the server's validator against an in-process issuer |
 
 Beyond the suite, the model path was checked against the running server: `platform migrate`
-installed the database, and `platform apply` applied `examples/newsroom.json` (20 changes) and
+installed the database, and `platform apply` applied the example manifest (20 changes) and
 `deploy/models/crm.json` (59 changes). The columns carry the defaults their manifests declare
 (`'USD'::text`, `false`, `true`) and the checks their options ask for
 (`char_length(title) <= 120`, the allowed values of a status), and every relation's constraint

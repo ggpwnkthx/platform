@@ -176,7 +176,7 @@ export async function local(action: string, args: string[], r: DeployRuntime): P
 The interface is a static site: build it with \`bun run cli deploy local ui\` and publish the
 files in packages/ui/dist to a CDN, with config.json pointing at ${relayUrl}.
 People sign in through Dex at ${issuer}.
-Create the example roles: bun run cli apply local examples/newsroom.json
+Create the example roles: bun run cli apply local --example
 Then sign in as admin@example.com, alice@example.com or bob@example.com with the passwords saved in ${r.envFile}.`
   )
   return 0

@@ -6,14 +6,19 @@ Everything is native PostgreSQL, done with the operator's own rights, in one tra
 every file is applied or nothing is.
 
 ```bash
-bun run cli apply local examples/newsroom.json --dry-run   # what would change
-bun run cli apply local examples/newsroom.json
-bun run cli apply local examples/newsroom.json deploy/models/crm.json
+bun run cli apply local --example --dry-run   # what would change
+bun run cli apply local --example
+bun run cli apply local --example deploy/models/crm.json
 ```
 
 Each change is printed, then a count of what changed and what was already in place. Applying
 the same manifest again changes nothing. `--dry-run` runs every statement and rolls back, so
 its report is PostgreSQL's answer, including any permission it would refuse.
+
+`--example` applies the example manifest the tools carry: the groups, the three example
+people, the `newsroom` workspace and its grants and row policy. It is applied before the files
+named beside it, so a manifest may name the example's administrator as the owner of a
+workspace.
 
 ## Deployments
 

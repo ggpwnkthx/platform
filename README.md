@@ -32,7 +32,7 @@ cp .env.example .env
 bun run cli deploy local up
 
 # Create the example roles, workspace, grants and policy.
-bun run cli apply local examples/newsroom.json
+bun run cli apply local --example
 ```
 
 The interface is a static site, not a container: build it, or serve it against the stack.
@@ -198,8 +198,8 @@ bun run cli migrate    # installs what is missing, upgrades what is behind; CLI 
 bun run cli harden local  # hide the role catalogs from ordinary connections; cluster superuser
 bun run cli doctor     # server version, authentication rules, installation
 bun run cli token      # sign in through Dex from a terminal; prints a token
-bun run cli apply local examples/newsroom.json --dry-run  # users, groups, workspaces, grants
-bun run cli apply local examples/newsroom.json deploy/models/crm.json
+bun run cli apply local --example --dry-run  # users, groups, workspaces, grants
+bun run cli apply local --example deploy/models/crm.json
 bun run cli model:apply deploy/models/crm.json
 bun run cli sql model.sql
 ```

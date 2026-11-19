@@ -60,9 +60,9 @@ the interface alike.
   runs Dex next to them. Docker Compose and Podman Compose are detected automatically;
   `--engine=podman` chooses. First use generates the administrator's and three example people's
   passwords into `.env`.
-- `bun run cli apply local examples/newsroom.json` creates the example roles, workspace, grants
-  and policy. `deploy/models/crm.json` is a second manifest, an additive CRM model with real
-  foreign keys and role names in its owner fields.
+- `bun run cli apply local --example` creates the example roles, workspace, grants and policy.
+  `deploy/models/crm.json` is a second manifest, an additive CRM model with real foreign keys
+  and role names in its owner fields.
 - The local Dex holds three example accounts — `admin@example.com`, `alice@example.com`,
   `bob@example.com` — with passwords in `.env` (`PLATFORM_ADMIN_PASSWORD`, `ALICE_PASSWORD`,
   `BOB_PASSWORD`). They stand in for a real sign-in system; a deployment adds providers to Dex
@@ -195,9 +195,9 @@ not of how it feels — which future work may keep or replace.
 
 ## Evidence on Hand
 
-- Real content: `examples/newsroom.json`, `deploy/models/crm.json`, the dev-mode seed
-  `examples/newsroom/seed.sql`, the product documents in `docs/`, and the generated interface pages in
-  `packages/ui/dist`.
+- Real content: the example manifest the CLI carries (`--example`), `deploy/models/crm.json`,
+  the dev-mode seed `examples/newsroom/seed.sql`, the product documents in `docs/`, and the
+  generated interface pages in `packages/ui/dist`.
 - Real demonstrations: the local stack with its three example accounts; integration tests and CI
   against PostgreSQL 18 with real token logins; the CLI's `doctor`, `token`, `apply --dry-run`,
   `harden` and `deploy` commands.

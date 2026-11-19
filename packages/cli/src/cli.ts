@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import pg from 'pg'
 import { ZodError, z } from 'zod'
 import { applyManifest } from './apply.ts'
+import { exampleManifest } from './example.ts'
 import { loadConfig } from './database/config.ts'
 import { bearer, clientConfig, TokenClient, transaction } from './database/db.ts'
 import { deploy, localDatabase } from './deployment/index.ts'
@@ -65,14 +66,22 @@ function connection(target?: string): pg.Client {
 }
 async function apply(q: pg.Client, args: string[]) {
   const dry = args.includes('--dry-run')
-  const files = args.filter((a) => a !== '--dry-run')
+  // The example manifest is the one the tools carry: the roles, workspace, grants and policy
+  // the example sign-ins need. It is applied first, so that a manifest beside it may name
+  // the example's administrator as the owner of a workspace.
+  const example = args.includes('--example')
+  const files = args.filter((a) => a !== '--dry-run' && a !== '--example')
   const unknown = files.find((a) => a.startsWith('--'))
   if (unknown) throw new Error(`Unknown option: ${unknown}`)
-  if (!files.length) throw new Error('apply needs a deployment and at least one manifest file')
+  if (!files.length && !example)
+    throw new Error('apply needs a deployment and at least one manifest file, or --example')
   // The manifests are applied through the platform's own functions, which the installation
   // provides from 2.0.1 on. An older database is upgraded first, not worked around.
   await requireInstalledVersion(q)
-  const manifests = files.map((file) => JSON.parse(readFileSync(file, 'utf8')))
+  const manifests = [
+    ...(example ? [exampleManifest] : []),
+    ...files.map((file) => JSON.parse(readFileSync(file, 'utf8'))),
+  ]
   const changes: string[] = []
   let unchanged = 0
   // One transaction for every file: a deployment is never left between two manifests.
@@ -170,10 +179,12 @@ async function main() {
                     Hide the role catalogs from ordinary connections, so that psql no longer
                     reads who belongs to which group. Needs the cluster superuser. --keep-names
                     leaves role names readable; --restore puts PostgreSQL's default back.
-  apply <local|k8s> FILE... [--dry-run]
+  apply <local|k8s> FILE... [--example] [--dry-run]
                     Apply JSON manifests of users, groups, workspaces, collections, grants and
-                    policies to a deployment, in one transaction. local signs in as the local
-                    stack's administrator unless PGTOKEN or PGUSER is set; k8s uses the settings below.
+                    policies to a deployment, in one transaction. --example applies the example
+                    manifest the tools carry: the roles, workspace, grants and policy the example
+                    sign-ins need. local signs in as the local stack's administrator unless PGTOKEN
+                    or PGUSER is set; k8s uses the settings below.
   model:apply FILE  Apply an additive JSON model using the caller's own DDL rights.
   sql FILE          Run a SQL file using the caller's own rights. Use BEGIN/COMMIT for atomic scripts.
   doctor            Check the server version, how it lets people in, and the installation.

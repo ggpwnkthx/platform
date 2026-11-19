@@ -4,6 +4,7 @@ import { bearer } from '../src/database/db.ts'
 import { loadConfig } from '../src/database/config.ts'
 import { fieldSchema, fieldSql } from '../src/model.ts'
 import { parseManifest } from '../src/apply.ts'
+import { exampleManifest } from '../src/example.ts'
 
 describe('SQL construction and credentials', () => {
   test('quotes identifiers without treating names as SQL', () => {
@@ -73,6 +74,15 @@ describe('SQL construction and credentials', () => {
     expect(() => parseManifest(manifest(['select', 'insert']))).not.toThrow()
     expect(() => parseManifest(manifest(['usage']))).not.toThrow()
     expect(() => parseManifest(manifest(['choose']))).toThrow()
+  })
+  test('the example manifest the tools carry is one the platform accepts', () => {
+    const manifest = parseManifest(exampleManifest)
+    expect(manifest.users.map((user) => user.name)).toEqual([
+      'admin@example.com',
+      'alice@example.com',
+      'bob@example.com',
+    ])
+    expect(manifest.workspaces.map((workspace) => workspace.slug)).toEqual(['newsroom'])
   })
 })
 
