@@ -179,17 +179,17 @@ its own component, reading the same saying, wherever it lives.
 A view the interface itself draws is a situation, and a situation is code. These are the
 places that hold one:
 
-| What                                          | Where                                                                            |
-| --------------------------------------------- | -------------------------------------------------------------------------------- |
-| The situations and the order they are offered | `packages/ui/src/metadata/views.ts` → `situations`                               |
-| What each situation is called                 | `packages/ui/src/metadata/views.ts` → `situationLabels`                          |
-| What a situation may be told                  | `packages/ui/src/metadata/views.ts` → `modeLabels`, and the rule in `parseViews` |
-| The default saying                            | `packages/sql/src/core.ts` → `defaultViews`                                      |
-| The editor                                    | `packages/ui/src/metadata/editors/views.tsx` → `ViewsEditor`                     |
-| The records grid                              | `packages/ui/src/content/records.tsx` → `inList`                                 |
-| The record form                               | `packages/ui/src/content/item.tsx` → `inRecord`, `isLocked`                      |
-| The filter builder                            | `packages/ui/src/content/records.tsx` → `inFilter`                               |
-| The marks in the field table                  | `packages/ui/src/model/model.tsx` → the situation marks                          |
+| What                                          | Where                                                                             |
+| --------------------------------------------- | --------------------------------------------------------------------------------- |
+| The situations and the order they are offered | `packages/sql/src/metadata.ts` → `situations`                                     |
+| What each situation is called                 | `packages/ui/src/metadata/labels.ts` → `situationLabels`                          |
+| What a situation may be told                  | `packages/ui/src/metadata/labels.ts` → `modeLabels`, and the rule in `parseViews` |
+| The default saying                            | `packages/sql/src/metadata.ts` → `defaultViews`                                   |
+| The editor                                    | `packages/ui/src/metadata/editors/views.tsx` → `ViewsEditor`                      |
+| The records grid                              | `packages/ui/src/content/records.tsx` → `inList`                                  |
+| The record form                               | `packages/ui/src/content/item.tsx` → `inRecord`, `isLocked`                       |
+| The filter builder                            | `packages/ui/src/content/records.tsx` → `inFilter`                                |
+| The marks in the field table                  | `packages/ui/src/model/model.tsx` → the situation marks                           |
 
 To add one:
 

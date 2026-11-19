@@ -191,7 +191,7 @@ the values a choice may take, and the options the owner gave it.
 | -------------------------------- | ------------------------------------------------------------------------ |
 | The renderers the platform holds | `packages/ui/src/fields/renderers.tsx` → `registerRenderer`              |
 | The drawings of each field type  | `packages/ui/src/fields/builtin.tsx` → `draw`                            |
-| The saying of a field            | `packages/ui/src/metadata/renderers.ts` → `parseRenderers`               |
+| The saying of a field            | `packages/sql/src/metadata.ts` → `parseRenderers`                        |
 | The fields of a collection       | `packages/ui/src/fields/resolve.ts` → `resolveFields`                    |
 | The drawing of a value           | `packages/ui/src/fields/renderers.tsx` → `Value`                         |
 | The records grid                 | `packages/ui/src/content/records.tsx` → `Value`, with `situation="list"` |

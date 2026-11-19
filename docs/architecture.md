@@ -76,7 +76,8 @@ The interface is a static site in `packages/ui/`, generated at build time. `pack
 Preact application; `packages/cli` renders every page to HTML with the interface's own
 prerenderer and bundles the client with Bun's bundler into `packages/ui/dist`: one file per page, one
 client bundle (`app.js`), `styles.css`, the self-hosted Inter and JetBrains Mono fonts and
-`config.json`. A web server hands out those files; nothing renders a page at request time,
+`config.json` — the file the site says in, written by the build from the site's own
+configuration and the environment. A web server hands out those files; nothing renders a page at request time,
 holds a session or adds authorization of its own. The pages are listed in
 `packages/ui/src/routes.ts` and described in [interface](interface.md).
 
@@ -85,25 +86,26 @@ page is generated where it is served, links are ordinary anchors that the router
 and the back button, bookmarks and new tabs all work. Because the token is held in memory only,
 a page load always starts signed out, which is exactly the state the generated pages show.
 
-The page speaks PostgreSQL's protocol version 3 itself (`packages/ui/src/pg/wire.ts`): OAUTHBEARER
+The page speaks PostgreSQL's protocol version 3 itself (`packages/pg/src/wire.ts`): OAUTHBEARER
 (RFC 7628) login with the reader's token, the extended query protocol with exactly one
 statement per query and every value bound as a parameter, and text-format results. In a
-browser the bytes go over a WebSocket (`packages/ui/src/pg/socket.ts`) to the relay, which forwards
+browser the bytes go over a WebSocket (`packages/pg/src/socket.ts`) to the relay, which forwards
 them to PostgreSQL's port and understands none of them. The page opens one login when the
-reader signs in and keeps it open while they work (`packages/ui/src/pg/kept.ts`,
+reader signs in and keeps it open while they work (`packages/pg/src/kept.ts`,
 `withDb` in `packages/ui/src/session.tsx`); the reader's own statements run on a login of
 their own, so that what they type cannot reach the platform's work.
 
-What the page does is ordinary SQL, and it belongs to the domain that asks for it. The catalog
-(`packages/ui/src/catalog/`) is read with PostgreSQL's privilege functions; the roles and
-memberships (`packages/ui/src/access/`) through `platform.visible_roles()` and
-`platform.visible_memberships()`, policies from `pg_policies`, grants from the ACLs through
-`aclexplode`; the revisions (`packages/ui/src/activity/`) from `platform.activity`; the records
-(`packages/ui/src/content/`) with filters, search, sort, paging and a row count, written
+What the page does is ordinary SQL, and it belongs to the domain that asks for it. The
+questions themselves are the platform's own, and they are asked of PostgreSQL in
+`packages/data`: the catalog is read with PostgreSQL's privilege functions; the roles and
+memberships through `platform.visible_roles()` and `platform.visible_memberships()`, policies
+from `pg_policies`, grants from the ACLs through `aclexplode`; the revisions from
+`platform.activity`; the records with filters, search, sort, paging and a row count, written
 without RETURNING, and guarded on update by the version the reader saw
-(`WHERE id = $n AND version = $m`). The model (`packages/ui/src/model/`) and the access
-(`packages/ui/src/access/`) build the DDL and the DCL: collections, fields, grants, policies,
-memberships and roles. Every statement that changes the model or access is shown to the reader
+(`WHERE id = $n AND version = $m`). The DDL and the DCL — collections, fields, grants,
+policies, memberships and roles — are the vocabulary's own, in `packages/sql`, and the
+interface's pages (`packages/ui/src/model/`, `packages/ui/src/access/`) show them to the
+reader before they run. Every statement that changes the model or access is shown to the reader
 before it runs, then runs as them in one transaction.
 
 Every right the interface shows is PostgreSQL's own. The catalog is built from
@@ -152,7 +154,7 @@ what it is (its metadata) and who may use it (the rights on the schema).
 
 ## Repository
 
-Four packages and an example, each with its own dependencies and its own tests, and a
+Six packages and an example, each with its own dependencies and its own tests, and a
 repository root that holds what belongs to the deployment as a whole: the migrations, the
 deployment files, the documentation and the integration tests that cross the packages.
 
@@ -161,6 +163,15 @@ deployment files, the documentation and the integration tests that cross the pac
   it grants) and the tokens and versions it reads. The operator's tools and the interface
   both build DDL and DCL, and they must build it the same way, so the rules live here rather
   than twice. It has no dependencies and runs in the browser, in Bun and in Node.
+- `packages/data` — the questions the platform asks PostgreSQL, and the answers it reads
+  back: the catalog, the records, the metadata, the access, the revisions, the identity and
+  the workspace. It holds no connection of its own: it asks through a source of statements
+  (`DataSource` in `packages/sql`), so the page may ask in the browser and a tool may ask
+  from Node, and the question means the same thing either way.
+- `packages/pg` — the PostgreSQL client the platform speaks with: the protocol itself
+  (`wire.ts`), the browser's way of carrying it (`socket.ts`) and the logins a client keeps
+  open (`kept.ts`). It knows nothing about the interface, and nothing about what a statement
+  means.
 - `packages/cli` — the operator's tools. `database/db.ts` owns the CLI's connections and the token
   login, `database/config.ts` the endpoint it reaches and `database/requirements.ts` the
   server version and its authentication rules; `token.ts` signs a terminal in; `model.ts`
@@ -172,14 +183,16 @@ deployment files, the documentation and the integration tests that cross the pac
 - `packages/relay` — the WebSocket in front of PostgreSQL's port: `relay.ts`, and nothing else.
   It holds no credentials, and it reads one setting: the role PostgreSQL reports, so that it
   can keep one role from taking the database's connections for itself.
-- `packages/ui` — the interface. `src` is the Preact application, and it is laid out by
-  domain: each domain holds its page, the SQL it runs and the types it speaks in.
-  `content/` reads and writes the records of a collection, `model/` the collections and their
-  fields, `access/` the roles, grants and row policies, `activity/` the revisions,
-  `metadata/` what an item is and how it presents itself, `sql/` the reader's own statement,
-  `workspace/` the schema and the rights on it, `identity/` who the reader is, and
-  `catalog/` PostgreSQL's own picture of the database. Two folders are shared by all of
-  them: `pg/` speaks PostgreSQL's protocol and `ui/` holds the interface's own widgets. The root of `src` holds
+- `packages/ui` — the interface, and little else: `src` is the Preact application, laid
+  out by domain, and each domain holds its page and what it draws. `content/` reads and
+  writes the records of a collection, `model/` the collections and their fields, `access/`
+  the roles, grants and row policies, `activity/` the revisions, `metadata/` what an item is
+  and how it presents itself, `sql/` the reader's own statement, `workspace/` the schema and
+  the rights on it, `identity/` who the reader is, and `fields/` what a column is drawn as.
+  The SQL these pages run is the platform's own, in `packages/data` and `packages/sql`; the
+  protocol is the client's, in `packages/pg`. What is left here is the interface: its
+  widgets (`ui/`), its shell, and the one seam (`pg/connect.ts`) that reaches the database.
+  The root of `src` holds
   the shell of the application: `app.tsx` routes, `session.tsx` holds the token and the
   catalog, `shell.tsx` draws the layout, `routes.ts` names the pages, `config.ts` reads
   `config.json`, `url.ts` carries the context in the address and `format.ts` the words.

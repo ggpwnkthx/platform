@@ -77,7 +77,7 @@ allow, and PostgreSQL refuses a write to such a column.
 
 ## How the page reaches PostgreSQL
 
-`packages/ui/src/pg/wire.ts` is a PostgreSQL client for protocol version 3, written for the page:
+`packages/pg/src/wire.ts` is a PostgreSQL client for protocol version 3, written for the page:
 
 - Login is OAUTHBEARER (RFC 7628) with the reader's own token, as the role the token's claim
   names. PostgreSQL's validator checks the token's signature, issuer and expiry; the page
@@ -87,7 +87,7 @@ allow, and PostgreSQL refuses a write to such a column.
 - The startup message sends `statement_timeout` (STATEMENT_TIMEOUT_MS from `config.json`) and
   `idle_in_transaction_session_timeout`, and the application name `platform-ui`.
 
-In a browser, the protocol travels over a WebSocket (`packages/ui/src/pg/socket.ts`) to the relay, at
+In a browser, the protocol travels over a WebSocket (`packages/pg/src/socket.ts`) to the relay, at
 the address `config.json` names (`wss://relay.example.com`). The relay (`packages/relay/src/relay.ts`, the
 `relay` image) hands the bytes to PostgreSQL's port and understands none of them. It holds no
 credentials: the reader's token travels inside the PostgreSQL startup packet, and PostgreSQL
@@ -95,7 +95,7 @@ alone checks it. The one thing the relay reads is the setting PostgreSQL reports
 it has signed the session in as, so that it can keep one role from taking the database's
 connections for itself.
 
-The page keeps its login open (`packages/ui/src/pg/kept.ts`): one login when the reader signs
+The page keeps its login open (`packages/pg/src/kept.ts`): one login when the reader signs
 in, closed when the sign-in ends or the token expires. Every action the platform runs — loading
 a page's data, saving a record, running a statement — runs on it, and a second action running
 at the same time gets a login of its own rather than waiting. A login the server has closed is
@@ -105,15 +105,17 @@ afterwards, so a transaction or a SET ROLE they leave open cannot reach the plat
 token that has expired signs the reader out before a connection is attempted; a login
 PostgreSQL refuses signs them out with PostgreSQL's message.
 
-What the page runs is ordinary SQL, and each domain holds the SQL it asks for:
+What the page runs is ordinary SQL, and the questions are the platform's own, in
+`packages/data`, so that the same question may be asked of another source and mean the same
+thing:
 
-- The catalog (`packages/ui/src/catalog/`), from PostgreSQL's privilege functions
+- The catalog (`packages/data/src/catalog/`), from PostgreSQL's privilege functions
   (`has_table_privilege`, `has_column_privilege`, `has_schema_privilege`, `pg_has_role`).
-- Roles and memberships (`packages/ui/src/access/`) through `platform.visible_roles()` and
+- Roles and memberships (`packages/data/src/access/`) through `platform.visible_roles()` and
   `platform.visible_memberships()`, which answer for the reader alone; row policies from
   `pg_policies`; grants from the ACLs through `aclexplode`; the revisions
-  (`packages/ui/src/activity/`) from `platform.activity`.
-- Records (`packages/ui/src/content/`) with filters, search, sort, `LIMIT`/`OFFSET` and a
+  (`packages/data/src/activity/`) from `platform.activity`.
+- Records (`packages/data/src/content/`) with filters, search, sort, `LIMIT`/`OFFSET` and a
   `count(*)` under the same predicate.
 - Inserts, updates and deletes without RETURNING: the right to write a column is not a right
   to read it back, so a write reports how many rows it touched. An update made from a record
@@ -121,7 +123,7 @@ What the page runs is ordinary SQL, and each domain holds the SQL it asks for:
   touches no row, the page reads the record again: a newer version means someone changed it
   since it was opened, otherwise a row policy refused the change or the row is gone, and the
   page says "PostgreSQL changed no row".
-- Metadata (`packages/ui/src/metadata/`) in `platform.item_metadata`.
+- Metadata (`packages/data/src/metadata/`) in `platform.item_metadata`.
 - DDL and DCL built by `packages/ui/src/model/` and `packages/ui/src/access/`: workspaces,
   collections, fields, grants, row policies, memberships and roles. The statements
   themselves are the platform's own, in `packages/sql`, so that the operator's tools and
@@ -282,6 +284,14 @@ The pages are static, so what they need to find the issuer and the database is a
 beside them, read once at start (`packages/ui/src/config.ts`). It is a file in the published site, so
 a deployment changes it without rebuilding the bundle.
 
+The file belongs to the site, not to the interface: the interface says nothing about where it
+runs. Three things say it, in this order — the platform's own defaults
+(`defaultRuntimeConfig` in `packages/ui/src/config.ts`), the site itself (a `config.json`
+beside its `platform.json`, as `examples/newsroom/config.json` has), and the environment the
+deployment runs in (`PLATFORM_ISSUER`, `PLATFORM_RELAY_URL`, `PLATFORM_CLIENT_ID`,
+`PLATFORM_CLAIM`, `PLATFORM_DATABASE_NAME`, `PLATFORM_STATEMENT_TIMEOUT_MS`). The build
+writes the result into the site, so a deployment changes it without rebuilding the bundle.
+
 | Field                | Example                       | Purpose                                                    |
 | -------------------- | ----------------------------- | ---------------------------------------------------------- |
 | `issuer`             | `https://sso.example.com/dex` | The one OpenID Connect issuer PostgreSQL trusts: your Dex  |
@@ -414,5 +424,5 @@ WebAssembly.
 
 `bun run examples:newsroom:dev --relay=HOST:PORT` serves the real build from `packages/ui/dist` instead and forwards
 `/pg` WebSockets to a PostgreSQL at HOST:PORT, byte for byte, as the deployment's relay does.
-Sign-in then goes through the issuer in `packages/ui/public/config.json`. Use it to work
+Sign-in then goes through the issuer in `examples/newsroom/config.json`. Use it to work
 against the local stack.
