@@ -97,7 +97,10 @@ the interface alike.
 - **Collection** — a table. Fields are columns; relations are foreign keys.
 - **User** — a `LOGIN` role. **Group** — a `NOLOGIN` role. Membership lives in `pg_auth_members`.
 - **Revision** — a trigger-logged row change, stored in `platform.activity`.
-- **platform** — the helper schema owned by `platform_core`.
+- **platform** — the helper schema owned by `platform_core`. It is the one **system workspace**:
+  its tables (`item_metadata`, `activity`, `installation`) are **system collections**, shown by
+  the interface like any other and read under their own row security. Its model is changed by
+  migrations, never from the interface.
 
 **Capabilities**
 

@@ -111,6 +111,13 @@ thing:
 
 - The catalog (`packages/data/src/catalog/`), from PostgreSQL's privilege functions
   (`has_table_privilege`, `has_column_privilege`, `has_schema_privilege`, `pg_has_role`).
+  The platform's own schema is in it, as a workspace of another kind (`kind: 'system'`): the
+  switcher lists it as **Platform**, after the installation's workspaces, and its tables —
+  `item_metadata`, `activity`, `installation` — are system collections, drawn by the same
+  records grid, record form and data model page as any other. PostgreSQL's row security
+  decides which rows reach the reader, and the catalog never says the reader may change its
+  model, whoever they are: that is the migrations' to do. Nobody lands in it; it is in view
+  when it is chosen.
 - Roles and memberships (`packages/data/src/access/`) through `platform.visible_roles()` and
   `platform.visible_memberships()`, which answer for the reader alone; row policies from
   `pg_policies`; grants from the ACLs through `aclexplode`; the revisions
@@ -155,13 +162,48 @@ a collection may say how it should be read, a field may say what it holds. It is
 `platform.item_metadata`, one row per key per item, and PostgreSQL decides who reaches it (see
 [access](access.md#metadata)). A reader is shown the keys they may see and nothing for the
 rest; a write by anyone but the owner is refused by PostgreSQL. A value is any JSON value. A
-change to a key the reader opened is guarded by its version, as a record is.
+change to a key the reader opened is guarded by its version, because it is a record.
 
 An item is a workspace (`schema`), a collection (`schema.table`) or a field of one
 (`schema.table.column`). A field's metadata is as private as the field: PostgreSQL returns the
 rows of the fields the reader holds a right on, and no others, so a reader who may not read a
 column never learns what it is called. The interface reads a collection's fields in one
 statement, and labels the fields it may read with their `display_name` when they have one.
+
+### Metadata is a collection
+
+`platform.item_metadata` is a system collection, and the interface has no second way of
+reading or changing it. What an item's page shows as its metadata is that collection,
+filtered to the item (`metadataFilter` in `packages/data/src/metadata/collection.ts`): read by
+the question every collection is read by, and drawn by the fields every collection is drawn
+by. A key is a link to its row, and **Add key** opens the ordinary record form with the names
+of the item filled in; a row is changed and removed there, by its `id` and its `version`, as
+every row is. **Open as a collection** shows the same rows in the records grid, under
+Platform.
+
+Three things about it are its own, and they are small:
+
+- **What a row is about.** The item is named — a scope and the names of a schema, a table
+  and a column — and not pointed at: the platform keeps no table of items, and metadata
+  outlives its item. So the item is composed from the names (`metadataTargetOf`), not drawn
+  as a relation.
+- **The value.** It is a JSON column, typed as it is meant: a sentence is kept as a string
+  and what reads as JSON as itself. That is a field type of that one column
+  (`packages/ui/src/metadata/value.tsx`), asked by the record form as any other is.
+- **The keys the interface reads for itself.** `display_name`, `icon`, `color`, `views` and
+  `renderers` have editors of their own, held in a registry that mirrors the field types'
+  (`packages/ui/src/metadata/registry.ts` → `registerMetadataKeyEditor`). An editor is shown
+  beside the item, and under its row in the record form; a key without one is just a row. An
+  installation that keeps a key of its own may register an editor for it in its extensions.
+
+An item carries a key once. That is the collection's one rule of its own, kept by a unique
+index, and the record form says so in words when PostgreSQL refuses a second row (`23505`).
+The reserved editors still write by the item's names — `INSERT … ON CONFLICT` — because they
+may be the ones that make the row.
+
+A new record may start from what the address says (`v.<field>=…`), and the record form goes
+back to where the reader came from (`from=`, a page of the interface and nowhere else). Both
+are the record form's own, for every collection.
 
 ### Presentation
 
@@ -388,12 +430,17 @@ balancer, a tunnel, or the relay itself with a certificate.
 under `packages/ui/src` — or under `examples/newsroom` — rebuilds the pages; reload to see it.
 
 The CLI reads `platform.json` from the directory it is pointed at. That file is how the
-example says what it is: the mode it is built in, the module that is the database, and where
-the site is written.
+example says what it is: the mode it is built in, the module that is the database, the module
+that holds its own field types and renderers, and where the site is written.
 
 ```json
-{ "mode": "development", "database": "database.ts", "out": ".dist" }
+{ "mode": "development", "database": "database.ts", "extensions": "extensions.tsx", "out": ".dist" }
 ```
+
+`extensions` is optional, and it is read in either mode: the build puts the module it names
+in the place of `packages/ui/src/extensions.ts`, which is empty, so what the site registers
+is in the prerendered pages and in the bundle. See [renderers](renderers.md) and
+[fields](fields.md).
 
 `bun run cli ui build` and `bun run cli ui dev` take the same file, in the working directory or
 in `--dir=DIR`. Without one, the interface is built as it is published: the real one, with the
@@ -415,8 +462,8 @@ The swap happens at build time: a Bun plugin replaces `packages/ui/src/pg/connec
 `examples/newsroom/database.ts`, so PGlite never reaches the production bundle. The example is a
 package of its own (`examples/newsroom/package.json`): it depends on `@platform/ui`, and it is the
 only thing that knows PostgreSQL runs in the page. What it holds is its configuration
-(`platform.json`): the mode it is built in, the module that is the database, and where the site
-is written. The people who sign in without an issuer come from the example too — the people, the
+(`platform.json`): the mode it is built in, the module that is the database, the module that
+holds its own renderers (`extensions.tsx`), and where the site is written. The people who sign in without an issuer come from the example too — the people, the
 words the sign-in page says, and the storage that keeps the choice between reloads. The
 interface asks the seam who may sign in and how, and the production seam has none. The
 dev-mode server's CSP adds `'wasm-unsafe-eval'` to `script-src`, there only, because PGlite is
