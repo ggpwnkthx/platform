@@ -12,7 +12,7 @@ import { Action, Button } from '../ui/button.tsx'
 import { Checkbox, Field, Input, Select } from '../ui/form.tsx'
 import { GrantIcon, iconFor, PlusIcon, TrashIcon, WorkspaceIcon } from '../ui/icons.tsx'
 import { Confirm, Drawer } from '../ui/overlay.tsx'
-import { MetadataPanel, PresentationPanel } from '../metadata/metadata.tsx'
+import { KeyEditorPanels, MetadataPanel } from '../metadata/metadata.tsx'
 import { useRunner } from '../access/runner.tsx'
 
 export function NewWorkspace() {
@@ -139,7 +139,7 @@ export function WorkspaceSettings() {
           {runner.problem.detail}
         </Notice>
       )}
-      <PresentationPanel target={workspaceTarget(ws)} owner={owner} />
+      <KeyEditorPanels target={workspaceTarget(ws)} owner={owner} />
       <MetadataPanel target={workspaceTarget(ws)} owner={owner} />
       <section class="panel">
         <header class="panel-head">

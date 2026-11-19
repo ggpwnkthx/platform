@@ -63,7 +63,7 @@ import {
   UuidIcon,
 } from '../ui/icons.tsx'
 import { Confirm, Drawer } from '../ui/overlay.tsx'
-import { FieldMetadataDrawer, MetadataPanel, PresentationPanel } from '../metadata/metadata.tsx'
+import { FieldMetadataDrawer, KeyEditorPanels, MetadataPanel } from '../metadata/metadata.tsx'
 import { Rights } from '../access/rights.tsx'
 import { useRunner } from '../access/runner.tsx'
 
@@ -609,7 +609,7 @@ export function CollectionModel() {
               </div>
             </div>
           </section>
-          <PresentationPanel target={collectionTarget(ws, table)} owner={owner} />
+          <KeyEditorPanels target={collectionTarget(ws, table)} owner={owner} />
           <MetadataPanel target={collectionTarget(ws, table)} owner={owner} />
         </>
       ) : (
