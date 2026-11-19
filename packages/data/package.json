@@ -12,6 +12,6 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@platform/sql": "workspace:*"
+    "@platform/vocabulary": "workspace:*"
   }
 }

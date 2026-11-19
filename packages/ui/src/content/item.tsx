@@ -14,7 +14,7 @@ import {
   tableOf,
   updateRecord,
 } from '@platform/data'
-import { ident, qualified, inRecord, isLocked } from '@platform/sql'
+import { ident, qualified, inRecord, isLocked } from '@platform/vocabulary'
 import { ago, display, shortType } from '../format.ts'
 import { describe, useLoad, useSession } from '../session.tsx'
 import { Page, SideGroup, useWorkspace } from '../shell.tsx'

@@ -11,7 +11,7 @@ real migrations and the real seed, but not against the server under test: the su
 it were not run here.
 
 The suites live with the packages they belong to — `packages/cli/test`, `packages/relay/test`,
-`packages/sql/test`, `packages/ui/test`, `examples/newsroom/test` — and the suites that cross
+`packages/vocabulary/test`, `packages/ui/test`, `examples/newsroom/test` — and the suites that cross
 the packages, and need PostgreSQL, are in `test/`.
 
 | Check                                 | Result                                                                                  |

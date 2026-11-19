@@ -1,11 +1,11 @@
-import type { Mode, Situation } from '@platform/sql'
+import type { Mode, Situation } from '@platform/vocabulary'
 
 /**
  * What the interface calls the situations a field appears in, the modes it may be told to
  * appear by, and how long a name may be.
  *
  * The saying itself — where a field appears, and how its values are drawn — is the
- * platform's own, and is written once in `@platform/sql`. What is left here is the wording
+ * platform's own, and is written once in `@platform/vocabulary`. What is left here is the wording
  * the interface shows: the names people read, the titles that say where a field is being
  * talked about, and the measure the interface keeps.
  */

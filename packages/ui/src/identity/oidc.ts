@@ -1,5 +1,5 @@
 import type { RuntimeConfig } from '../config.ts'
-import { claims, discoverIssuer, expiresAt, roleOf } from '@platform/sql'
+import { claims, discoverIssuer, expiresAt, roleOf } from '@platform/vocabulary'
 
 /**
  * Sign-in: authorization code with PKCE against the one issuer PostgreSQL trusts. The page

@@ -22,7 +22,7 @@ import {
   viewsEqual,
   viewsKey,
   viewsValue,
-} from '@platform/sql'
+} from '@platform/vocabulary'
 import { modeLabels, situationTitles } from '../labels.ts'
 import { SaveStatements, useDraft } from './draft.tsx'
 

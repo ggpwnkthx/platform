@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import type { Kind } from '@platform/data'
-import type { FieldRenderers, Situation } from '@platform/sql'
+import type { FieldRenderers, Situation } from '@platform/vocabulary'
 import { choiceTone, fill, grouped, numberOf, safeHref, textOf } from './text.ts'
 import type { Draw, Field, RenderValue } from './types.ts'
 

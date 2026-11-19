@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { metadataStatements } from '@platform/data'
-import { collectionTarget, fieldTarget, workspaceTarget } from '@platform/sql'
+import { collectionTarget, fieldTarget, workspaceTarget } from '@platform/vocabulary'
 import {
   familyOf,
   palette,

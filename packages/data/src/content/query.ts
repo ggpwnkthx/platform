@@ -1,4 +1,4 @@
-import { type DataSource, ident, qualified } from '@platform/sql'
+import { type DataSource, ident, qualified } from '@platform/vocabulary'
 import type { PolicyInfo } from '../access/types.ts'
 import { labelColumn, relationOf, tableOf } from '../catalog/catalog.ts'
 import type { Catalog } from '../catalog/types.ts'

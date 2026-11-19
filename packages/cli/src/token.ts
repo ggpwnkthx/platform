@@ -1,4 +1,4 @@
-import { discoverIssuer } from '@platform/sql'
+import { discoverIssuer } from '@platform/vocabulary'
 
 /**
  * Signs a person in from a terminal with the OAuth device flow (RFC 8628), the same flow psql 18

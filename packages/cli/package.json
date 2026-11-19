@@ -6,7 +6,7 @@
   "description": "The operator's tools: install, apply, harden, deploy, and build the interface.",
   "license": "MIT",
   "dependencies": {
-    "@platform/sql": "workspace:*",
+    "@platform/vocabulary": "workspace:*",
     "@platform/ui": "workspace:*",
     "pg": "8.23.1",
     "zod": "4.6.7"

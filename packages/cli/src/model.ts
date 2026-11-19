@@ -15,7 +15,7 @@ import {
   qualified,
   relationStatement,
   systemFields,
-} from '@platform/sql'
+} from '@platform/vocabulary'
 import { InputError, transaction } from './database/db.ts'
 import { requireInstalledVersion } from './version.ts'
 

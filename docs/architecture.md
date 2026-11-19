@@ -103,7 +103,7 @@ from `pg_policies`, grants from the ACLs through `aclexplode`; the revisions fro
 `platform.activity`; the records with filters, search, sort, paging and a row count, written
 without RETURNING, and guarded on update by the version the reader saw
 (`WHERE id = $n AND version = $m`). The DDL and the DCL — collections, fields, grants,
-policies, memberships and roles — are the vocabulary's own, in `packages/sql`, and the
+policies, memberships and roles — are the vocabulary's own, in `packages/vocabulary`, and the
 interface's pages (`packages/ui/src/model/`, `packages/ui/src/access/`) show them to the
 reader before they run. Every statement that changes the model or access is shown to the reader
 before it runs, then runs as them in one transaction.
@@ -158,7 +158,7 @@ Six packages and an example, each with its own dependencies and its own tests, a
 repository root that holds what belongs to the deployment as a whole: the migrations, the
 deployment files, the documentation and the integration tests that cross the packages.
 
-- `packages/sql` — the vocabulary the platform speaks, written once: the SQL it writes
+- `packages/vocabulary` — the vocabulary the platform speaks, written once: the SQL it writes
   (identifiers, literals, columns, the names a relation's constraint carries, and the access
   it grants) and the tokens and versions it reads. The operator's tools and the interface
   both build DDL and DCL, and they must build it the same way, so the rules live here rather
@@ -166,7 +166,7 @@ deployment files, the documentation and the integration tests that cross the pac
 - `packages/data` — the questions the platform asks PostgreSQL, and the answers it reads
   back: the catalog, the records, the metadata, the access, the revisions, the identity and
   the workspace. It holds no connection of its own: it asks through a source of statements
-  (`DataSource` in `packages/sql`), so the page may ask in the browser and a tool may ask
+  (`DataSource` in `packages/vocabulary`), so the page may ask in the browser and a tool may ask
   from Node, and the question means the same thing either way.
 - `packages/pg` — the PostgreSQL client the platform speaks with: the protocol itself
   (`wire.ts`), the browser's way of carrying it (`socket.ts`) and the logins a client keeps
@@ -189,7 +189,7 @@ deployment files, the documentation and the integration tests that cross the pac
   the roles, grants and row policies, `activity/` the revisions, `metadata/` what an item is
   and how it presents itself, `sql/` the reader's own statement, `workspace/` the schema and
   the rights on it, `identity/` who the reader is, and `fields/` what a column is drawn as.
-  The SQL these pages run is the platform's own, in `packages/data` and `packages/sql`; the
+  The SQL these pages run is the platform's own, in `packages/data` and `packages/vocabulary`; the
   protocol is the client's, in `packages/pg`. What is left here is the interface: its
   widgets (`ui/`), its shell, and the one seam (`pg/connect.ts`) that reaches the database.
   The root of `src` holds

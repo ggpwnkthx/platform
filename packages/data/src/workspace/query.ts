@@ -1,4 +1,4 @@
-import type { DataSource } from '@platform/sql'
+import type { DataSource } from '@platform/vocabulary'
 import type { SchemaGrantInfo } from './types.ts'
 
 /** The rights on the workspace's own schema: who may use it, and who may add to it. */

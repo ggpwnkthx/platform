@@ -22,7 +22,7 @@ import {
   presentationOf,
 } from '@platform/data'
 import { displayNameLimit } from '../labels.ts'
-import type { MetadataTarget } from '@platform/sql'
+import type { MetadataTarget } from '@platform/vocabulary'
 import { SaveStatements, useDraft } from './draft.tsx'
 
 /** Are two presentations the same: the same name, the same icon and the same colour? */

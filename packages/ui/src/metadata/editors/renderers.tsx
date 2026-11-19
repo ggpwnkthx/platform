@@ -17,7 +17,7 @@ import {
   type Situation,
   situations,
   viewsKey,
-} from '@platform/sql'
+} from '@platform/vocabulary'
 import { situationTitles } from '../labels.ts'
 import { SaveStatements, useDraft } from './draft.tsx'
 

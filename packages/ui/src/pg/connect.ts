@@ -1,5 +1,5 @@
 import { Connection, openSocket, type Login, type Result } from '@platform/pg'
-import type { DataSource } from '@platform/sql'
+import type { DataSource } from '@platform/vocabulary'
 import type { RuntimeConfig } from '../config.ts'
 
 /**

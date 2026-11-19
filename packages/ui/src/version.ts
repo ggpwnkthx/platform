@@ -1,4 +1,4 @@
-import { versionMismatch } from '@platform/sql'
+import { versionMismatch } from '@platform/vocabulary'
 
 /**
  * The version of the platform this interface was built for.

@@ -1,5 +1,5 @@
 import { useState } from 'preact/hooks'
-import { transaction } from '@platform/sql'
+import { transaction } from '@platform/vocabulary'
 import { describe, useSession } from '../session.tsx'
 
 /**

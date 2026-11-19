@@ -2,7 +2,7 @@ import clsx from 'clsx'
 import type { ComponentChildren } from 'preact'
 import { type ColumnInfo, type Kind, kindOf } from '@platform/data'
 import { count, display, moment } from '../format.ts'
-import type { FieldRenderers, RendererChoice, Situation } from '@platform/sql'
+import type { FieldRenderers, RendererChoice, Situation } from '@platform/vocabulary'
 import { CheckIcon, CloseIcon } from '../ui/icons.tsx'
 
 /**

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
-import { defaultViews, viewsKey } from '@platform/sql'
+import { defaultViews, viewsKey } from '@platform/vocabulary'
 
 /**
  * The seed is what the example manifest and the CRM model leave behind. It says where the

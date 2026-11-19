@@ -12,7 +12,7 @@ import {
   type PolicyDraft,
   policyStatement,
   tablePrivileges,
-} from '@platform/sql'
+} from '@platform/vocabulary'
 
 import {
   columnsOf,

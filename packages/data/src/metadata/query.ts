@@ -6,7 +6,7 @@ import {
   metadataRemoval,
   metadataStatement,
   presentationKeys,
-} from '@platform/sql'
+} from '@platform/vocabulary'
 
 /**
  * The metadata of an item: what a workspace, a collection or a field is, as opposed to what it

@@ -191,14 +191,14 @@ the values a choice may take, and the options the owner gave it.
 | -------------------------------- | ------------------------------------------------------------------------ |
 | The renderers the platform holds | `packages/ui/src/fields/renderers.tsx` → `registerRenderer`              |
 | The drawings of each field type  | `packages/ui/src/fields/builtin.tsx` → `draw`                            |
-| The saying of a field            | `packages/sql/src/metadata.ts` → `parseRenderers`                        |
+| The saying of a field            | `packages/vocabulary/src/metadata.ts` → `parseRenderers`                 |
 | The fields of a collection       | `packages/ui/src/fields/resolve.ts` → `resolveFields`                    |
 | The drawing of a value           | `packages/ui/src/fields/renderers.tsx` → `Value`                         |
 | The records grid                 | `packages/ui/src/content/records.tsx` → `Value`, with `situation="list"` |
 | The record form                  | `packages/ui/src/content/item.tsx` → `Value`, with `situation="record"`  |
 | The editor                       | `packages/ui/src/metadata/editors/renderers.tsx` → `RenderersEditor`     |
 | The marks in the field table     | `packages/ui/src/model/model.tsx` → the _Drawn as_ column                |
-| The key of the saying            | `packages/sql/src/core.ts` → `renderersKey`                              |
+| The key of the saying            | `packages/vocabulary/src/core.ts` → `renderersKey`                       |
 | An installation's own            | `packages/ui/src/extensions.ts`                                          |
 
 Every one of them reads the same saying, in the same way: the field's own metadata, read

@@ -1,4 +1,4 @@
-import type { DataSource } from '@platform/sql'
+import type { DataSource } from '@platform/vocabulary'
 import type { Identity } from './types.ts'
 
 /** Who the reader is, as PostgreSQL sees them on their own login. */

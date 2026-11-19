@@ -7,12 +7,12 @@ WORKDIR /app
 COPY package.json bun.lock tsconfig.json ./
 COPY packages/cli/package.json ./packages/cli/package.json
 COPY packages/relay/package.json ./packages/relay/package.json
-COPY packages/sql/package.json ./packages/sql/package.json
+COPY packages/vocabulary/package.json ./packages/vocabulary/package.json
 COPY packages/ui/package.json ./packages/ui/package.json
 RUN bun install --frozen-lockfile
 COPY packages/cli ./packages/cli
 COPY packages/ui ./packages/ui
-COPY packages/sql ./packages/sql
+COPY packages/vocabulary ./packages/vocabulary
 COPY migrations ./migrations
 RUN bun run build:ui
 
@@ -22,7 +22,7 @@ WORKDIR /app
 COPY package.json bun.lock ./
 COPY packages/cli/package.json ./packages/cli/package.json
 COPY packages/relay/package.json ./packages/relay/package.json
-COPY packages/sql/package.json ./packages/sql/package.json
+COPY packages/vocabulary/package.json ./packages/vocabulary/package.json
 COPY packages/ui/package.json ./packages/ui/package.json
 RUN bun install --frozen-lockfile --production
 
@@ -32,7 +32,7 @@ COPY --from=dependencies /app/packages/cli/node_modules ./packages/cli/node_modu
 # Owned by the user the tools run as, so that a checkout with private file modes still runs.
 COPY --chown=65532:65532 package.json ./
 COPY --chown=65532:65532 packages/cli ./packages/cli
-COPY --chown=65532:65532 packages/sql ./packages/sql
+COPY --chown=65532:65532 packages/vocabulary ./packages/vocabulary
 COPY --chown=65532:65532 migrations ./migrations
 USER 65532:65532
 ENTRYPOINT ["bun", "packages/cli/src/cli.ts"]

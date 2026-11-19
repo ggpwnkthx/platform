@@ -5,7 +5,7 @@
  * reader and the database. This package is that client — the protocol, the browser's way
  * of carrying it, and the logins a page keeps open — and nothing else. It knows nothing
  * about the interface, and nothing about what a statement means: that is the vocabulary's
- * business, in `@platform/sql`, and the questions' business, in `@platform/data`.
+ * business, in `@platform/vocabulary`, and the questions' business, in `@platform/data`.
  *
  * It has no dependencies and runs in the browser, in Bun and in Node.
  */

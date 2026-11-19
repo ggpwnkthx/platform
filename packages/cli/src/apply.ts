@@ -11,7 +11,7 @@ import {
   schemaPrivilegeNames,
   schemaStatement,
   tablePrivilegeNames,
-} from '@platform/sql'
+} from '@platform/vocabulary'
 import { applyCollections, collectionSchema, type Report, relationSchema } from './model.ts'
 
 const name = z.string().min(1)

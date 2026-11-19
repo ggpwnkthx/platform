@@ -15,7 +15,7 @@ import {
   tablePolicies,
   valueless,
 } from '@platform/data'
-import { qualified, inFilter, inList } from '@platform/sql'
+import { qualified, inFilter, inList } from '@platform/vocabulary'
 import { operatorLabels } from './labels.ts'
 import { count, plural } from '../format.ts'
 import { describe, useLoad, useSession } from '../session.tsx'

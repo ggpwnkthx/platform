@@ -1,4 +1,4 @@
-import type { DataSource } from '@platform/sql'
+import type { DataSource } from '@platform/vocabulary'
 import type { ActivityInfo } from './types.ts'
 
 /** The revisions the reader may read: row security shows a workspace's owners its full history. */

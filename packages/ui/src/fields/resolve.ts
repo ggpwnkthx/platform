@@ -19,7 +19,7 @@ import {
   parseViews,
   renderersKey,
   viewsKey,
-} from '@platform/sql'
+} from '@platform/vocabulary'
 import { fieldTypeFor } from './registry.ts'
 import type { Field } from './types.ts'
 

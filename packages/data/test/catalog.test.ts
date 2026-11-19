@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { DataSource, RowSet } from '@platform/sql'
+import type { DataSource, RowSet } from '@platform/vocabulary'
 import { catalog } from '../src/catalog/query.ts'
 import { records } from '../src/content/query.ts'
 

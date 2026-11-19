@@ -1,4 +1,4 @@
-import type { DataSource } from '@platform/sql'
+import type { DataSource } from '@platform/vocabulary'
 import type { GrantInfo, MembershipInfo, PolicyInfo, RoleInfo } from './types.ts'
 
 /**

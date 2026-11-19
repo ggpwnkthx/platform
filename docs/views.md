@@ -72,7 +72,7 @@ what they say.
 The default saying is written in one place:
 
 ```
-packages/sql/src/core.ts    defaultViews
+packages/vocabulary/src/core.ts    defaultViews
 ```
 
 ```ts
@@ -85,7 +85,7 @@ own is laid over it: the three situations are always there.
 
 ### Changing it
 
-1. Edit `defaultViews` in `packages/sql/src/core.ts`. Nothing else in the interface or the
+1. Edit `defaultViews` in `packages/vocabulary/src/core.ts`. Nothing else in the interface or the
    CLI has to change — both build their statements from it.
 2. The seed of the dev-mode build carries the same saying, written out in
    `examples/newsroom/seed.sql`. Update the rows there too: the test
@@ -181,10 +181,10 @@ places that hold one:
 
 | What                                          | Where                                                                             |
 | --------------------------------------------- | --------------------------------------------------------------------------------- |
-| The situations and the order they are offered | `packages/sql/src/metadata.ts` → `situations`                                     |
+| The situations and the order they are offered | `packages/vocabulary/src/metadata.ts` → `situations`                              |
 | What each situation is called                 | `packages/ui/src/metadata/labels.ts` → `situationLabels`                          |
 | What a situation may be told                  | `packages/ui/src/metadata/labels.ts` → `modeLabels`, and the rule in `parseViews` |
-| The default saying                            | `packages/sql/src/metadata.ts` → `defaultViews`                                   |
+| The default saying                            | `packages/vocabulary/src/metadata.ts` → `defaultViews`                            |
 | The editor                                    | `packages/ui/src/metadata/editors/views.tsx` → `ViewsEditor`                      |
 | The records grid                              | `packages/ui/src/content/records.tsx` → `inList`                                  |
 | The record form                               | `packages/ui/src/content/item.tsx` → `inRecord`, `isLocked`                       |

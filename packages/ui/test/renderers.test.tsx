@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { render } from 'preact-render-to-string'
 import type { ColumnInfo } from '@platform/data'
-import { type FieldRenderers, parseRenderers } from '@platform/sql'
+import { type FieldRenderers, parseRenderers } from '@platform/vocabulary'
 import {
   Value,
   appliesTo,

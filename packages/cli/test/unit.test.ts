@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { ident, literal } from '@platform/sql'
+import { ident, literal } from '@platform/vocabulary'
 import { bearer } from '../src/database/db.ts'
 import { loadConfig } from '../src/database/config.ts'
 import { fieldSchema, fieldSql } from '../src/model.ts'

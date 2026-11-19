@@ -1,4 +1,4 @@
-import { type MetadataRow, presentationKeys } from '@platform/sql'
+import { type MetadataRow, presentationKeys } from '@platform/vocabulary'
 
 /**
  * How a workspace or a collection presents itself: the name people read, the icon they
@@ -11,7 +11,7 @@ import { type MetadataRow, presentationKeys } from '@platform/sql'
  */
 
 export { presentationKeys }
-export type { PresentationKey } from '@platform/sql'
+export type { PresentationKey } from '@platform/vocabulary'
 
 export const displayNameKey = 'display_name'
 export const iconKey = 'icon'

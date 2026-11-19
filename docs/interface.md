@@ -126,7 +126,7 @@ thing:
 - Metadata (`packages/data/src/metadata/`) in `platform.item_metadata`.
 - DDL and DCL built by `packages/ui/src/model/` and `packages/ui/src/access/`: workspaces,
   collections, fields, grants, row policies, memberships and roles. The statements
-  themselves are the platform's own, in `packages/sql`, so that the operator's tools and
+  themselves are the platform's own, in `packages/vocabulary`, so that the operator's tools and
   the interface grant the same rights the same way.
 
 ## Shown before it runs

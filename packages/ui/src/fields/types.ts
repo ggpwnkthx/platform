@@ -1,6 +1,6 @@
 import type { ComponentChildren, FunctionComponent } from 'preact'
 import type { ColumnInfo, Kind, Operator, RelationInfo } from '@platform/data'
-import type { FieldRenderers, FieldViews, Situation } from '@platform/sql'
+import type { FieldRenderers, FieldViews, Situation } from '@platform/vocabulary'
 
 /**
  * What a field is, and everything the interface does with one.

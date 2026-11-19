@@ -1,5 +1,5 @@
 import pg from 'pg'
-import { roleOf, transaction } from '@platform/sql'
+import { roleOf, transaction } from '@platform/vocabulary'
 import type { Config } from './config.ts'
 
 /** The transaction the operator's tools run their statements in, written once. */

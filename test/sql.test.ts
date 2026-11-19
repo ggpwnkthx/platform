@@ -79,7 +79,7 @@ describe('the manifest and the interface make the same column', () => {
     const ui = JSON.parse(
       readFileSync(new URL('../packages/ui/package.json', import.meta.url), 'utf8')
     )
-    expect(cli.dependencies['@platform/sql']).toBe('workspace:*')
-    expect(ui.dependencies['@platform/sql']).toBe('workspace:*')
+    expect(cli.dependencies['@platform/vocabulary']).toBe('workspace:*')
+    expect(ui.dependencies['@platform/vocabulary']).toBe('workspace:*')
   })
 })

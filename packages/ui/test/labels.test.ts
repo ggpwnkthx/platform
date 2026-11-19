@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { operators } from '@platform/data'
 import { operatorLabels } from '../src/content/labels.ts'
 import { modeLabels } from '../src/metadata/labels.ts'
-import { customModes, situationModes, viewModes } from '@platform/sql'
+import { customModes, situationModes, viewModes } from '@platform/vocabulary'
 
 /**
  * What the interface calls things. The operators, the situations and the modes are the

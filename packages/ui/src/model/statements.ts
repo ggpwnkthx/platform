@@ -6,7 +6,7 @@ import {
   fieldStatements as buildFieldStatements,
   type FieldSpec,
   type OnDelete,
-} from '@platform/sql'
+} from '@platform/vocabulary'
 
 export type { OnDelete }
 

@@ -22,7 +22,7 @@ import {
   fieldsViewsStatement,
   rowSecurityStatement,
   situations,
-} from '@platform/sql'
+} from '@platform/vocabulary'
 import { useLoad, useSession } from '../session.tsx'
 import { Page, useWorkspace } from '../shell.tsx'
 import { shortType } from '../format.ts'
