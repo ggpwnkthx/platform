@@ -1,18 +1,15 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import pg from 'pg'
-import { ident } from '../packages/sql/src/index.ts'
 import { TokenClient, transaction } from '../packages/cli/src/database/db.ts'
+import { ident, collectionTarget, fieldTarget, workspaceTarget } from '../packages/sql/src/index.ts'
 import {
-  collectionTarget,
   fieldMetadata,
-  fieldTarget,
   metadata,
   presentations,
   removeMetadata,
   setMetadata,
-  workspaceTarget,
-} from '../packages/ui/src/metadata/query.ts'
+} from '../packages/data/src/metadata/query.ts'
 import type { Connection } from '../packages/ui/src/pg/wire.ts'
 import { startIssuer } from './issuer.ts'
 import { openPage, refusal } from './page.ts'

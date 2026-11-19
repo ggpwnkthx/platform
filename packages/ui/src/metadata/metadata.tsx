@@ -9,8 +9,8 @@ import { Drawer } from '../ui/overlay.tsx'
 import { PresentationEditor } from './editors/presentation.tsx'
 import { RenderersEditor } from './editors/renderers.tsx'
 import { ViewsEditor } from './editors/views.tsx'
-import { fieldTarget, type MetadataTarget, metadata, removeMetadata, setMetadata } from './query.ts'
-import { isReservedKey, type MetadataEntry } from './types.ts'
+import { metadata, removeMetadata, setMetadata } from '@platform/data'
+import { fieldTarget, type MetadataEntry, type MetadataTarget, isReservedKey } from '@platform/sql'
 
 /**
  * The metadata of an item, as panels and drawers: the keys it carries, the form that changes

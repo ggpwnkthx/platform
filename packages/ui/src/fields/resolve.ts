@@ -1,14 +1,25 @@
-import { choicesOf, columnsOf, kindOf, relationOf, systemColumns } from '../catalog/catalog.ts'
-import type { Catalog, ColumnInfo, RelationInfo } from '../catalog/types.ts'
-import { displayNameKey } from '../metadata/presentation.ts'
 import {
+  choicesOf,
+  columnsOf,
+  kindOf,
+  relationOf,
+  systemColumns,
+  type Catalog,
+  type ColumnInfo,
+  type RelationInfo,
+} from '@platform/data'
+import { displayNameKey } from '@platform/data'
+import {
+  everyView,
   type FieldRenderers,
+  type FieldViews,
+  type MetadataRow,
   noRenderers,
   parseRenderers,
+  parseViews,
   renderersKey,
-} from '../metadata/renderers.ts'
-import type { MetadataRow } from '../metadata/types.ts'
-import { everyView, type FieldViews, parseViews, viewsKey } from '../metadata/views.ts'
+  viewsKey,
+} from '@platform/sql'
 import { fieldTypeFor } from './registry.ts'
 import type { Field } from './types.ts'
 

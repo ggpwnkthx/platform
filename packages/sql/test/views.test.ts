@@ -12,7 +12,7 @@ import {
   viewsEqual,
   viewsOf,
   viewsValue,
-} from '../src/metadata/views.ts'
+} from '../src/index.ts'
 
 /**
  * Where a field appears. A field is a column in the records grid, an input in the record form

@@ -1,7 +1,6 @@
 import clsx from 'clsx'
-import type { Kind } from '../catalog/catalog.ts'
-import type { FieldRenderers } from '../metadata/renderers.ts'
-import type { Situation } from '../metadata/views.ts'
+import type { Kind } from '@platform/data'
+import type { FieldRenderers, Situation } from '@platform/sql'
 import { choiceTone, fill, grouped, numberOf, safeHref, textOf } from './text.ts'
 import type { Draw, Field, RenderValue } from './types.ts'
 

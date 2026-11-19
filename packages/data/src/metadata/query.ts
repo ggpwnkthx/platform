@@ -1,14 +1,12 @@
 import {
-  collectionTarget,
-  fieldTarget,
+  type DataSource,
+  type MetadataEntry,
+  type MetadataRow,
+  type MetadataTarget,
   metadataRemoval,
   metadataStatement,
-  type MetadataTarget,
-  workspaceTarget,
+  presentationKeys,
 } from '@platform/sql'
-import type { Db } from '../pg/connect.ts'
-import type { MetadataEntry, MetadataRow } from './types.ts'
-import { presentationKeys } from './types.ts'
 
 /**
  * The metadata of an item: what a workspace, a collection or a field is, as opposed to what it
@@ -20,11 +18,8 @@ import { presentationKeys } from './types.ts'
  * of an item may change it. Nothing here decides a right.
  */
 
-export { collectionTarget, fieldTarget, workspaceTarget }
-export type { MetadataTarget }
-
 /** The metadata of one item, as its owner and its readers may see it. */
-export async function metadata(db: Db, target: MetadataTarget) {
+export async function metadata(db: DataSource, target: MetadataTarget) {
   const result = await db.query<MetadataEntry>(
     `SELECT key, value, version::int AS version, updated_at::text AS updated_at, updated_by
        FROM platform.item_metadata
@@ -41,7 +36,7 @@ export async function metadata(db: Db, target: MetadataTarget) {
  * The metadata of every field of a collection, as one read. PostgreSQL returns the rows of the
  * fields the reader may reach and no others, so a field they may not read is not named here.
  */
-export async function fieldMetadata(db: Db, schema: string, table: string) {
+export async function fieldMetadata(db: DataSource, schema: string, table: string) {
   const result = await db.query<MetadataRow>(
     `SELECT scope, schema_name, table_name, column_name, key, value
        FROM platform.item_metadata
@@ -57,7 +52,7 @@ export async function fieldMetadata(db: Db, schema: string, table: string) {
  * each workspace, collection and field. Row security decides which of them come back, so this
  * is the reader's own answer and no more.
  */
-export async function presentations(db: Db): Promise<MetadataRow[]> {
+export async function presentations(db: DataSource): Promise<MetadataRow[]> {
   const result = await db.query<MetadataRow>(
     `SELECT scope, schema_name, table_name, column_name, key, value
        FROM platform.item_metadata
@@ -69,7 +64,7 @@ export async function presentations(db: Db): Promise<MetadataRow[]> {
 
 /** Sets one key; with a version, only if the key still carries it. */
 export async function setMetadata(
-  db: Db,
+  db: DataSource,
   target: MetadataTarget,
   key: string,
   value: unknown,
@@ -98,7 +93,7 @@ export async function setMetadata(
   return (await db.query(sql, params)).affected ?? 0
 }
 
-export async function removeMetadata(db: Db, target: MetadataTarget, key: string) {
+export async function removeMetadata(db: DataSource, target: MetadataTarget, key: string) {
   const result = await db.query(
     `DELETE FROM platform.item_metadata
       WHERE scope = $1 AND schema_name = $2

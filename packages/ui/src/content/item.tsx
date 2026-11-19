@@ -1,21 +1,29 @@
 import { Fragment } from 'preact'
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
-import { activity } from '../activity/query.ts'
-import { deleteRecord, insertRecord, record, relationLabels, updateRecord } from './query.ts'
-import { ident, qualified } from '@platform/sql'
+import {
+  activity,
+  columnsOf,
+  deleteRecord,
+  fieldMetadata,
+  insertRecord,
+  labelColumn,
+  record,
+  relationLabels,
+  systemColumns,
+  tableOf,
+  updateRecord,
+} from '@platform/data'
+import { ident, qualified, inRecord, isLocked } from '@platform/sql'
 import { ago, display, shortType } from '../format.ts'
 import { describe, useLoad, useSession } from '../session.tsx'
 import { Page, SideGroup, useWorkspace } from '../shell.tsx'
-import { columnsOf, labelColumn, systemColumns, tableOf } from '../catalog/catalog.ts'
 import { fieldText, fieldValue, isWide } from '../fields/edit.ts'
 import { Value } from '../fields/renderers.tsx'
 import { resolveFields } from '../fields/resolve.ts'
 import { defaultText } from '../fields/text.ts'
 import type { Field as FieldInfo } from '../fields/types.ts'
-import { fieldMetadata } from '../metadata/query.ts'
-import { presentationOf } from '../metadata/presentation.ts'
-import { inRecord, isLocked } from '../metadata/views.ts'
+import { presentationOf } from '@platform/data'
 import { href } from '../url.ts'
 import { Badge, Loading, Notice, Statement } from '../ui/bits.tsx'
 import { Action } from '../ui/button.tsx'

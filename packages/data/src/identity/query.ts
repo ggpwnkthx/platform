@@ -1,8 +1,8 @@
-import type { Db } from '../pg/connect.ts'
+import type { DataSource } from '@platform/sql'
 import type { Identity } from './types.ts'
 
 /** Who the reader is, as PostgreSQL sees them on their own login. */
-export async function identity(db: Db): Promise<Identity> {
+export async function identity(db: DataSource): Promise<Identity> {
   const result = await db.query<Identity>(`
     SELECT session_user::text AS username, current_user::text AS effective_role,
            current_database()::text AS database,

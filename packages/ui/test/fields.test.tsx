@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { render } from 'preact-render-to-string'
-import type { Catalog, ColumnInfo } from '../src/catalog/types.ts'
+import type { Catalog, ColumnInfo } from '@platform/data'
 import { fieldText, fieldValue, filterStart, filterValue, isWide } from '../src/fields/edit.ts'
 import { fieldTypeFor, fieldTypeNamed, registerFieldType } from '../src/fields/registry.ts'
 import { Value } from '../src/fields/renderers.tsx'

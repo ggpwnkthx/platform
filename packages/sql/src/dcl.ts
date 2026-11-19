@@ -1,4 +1,4 @@
-import { ident, qualified, role } from './core.ts'
+import { ident, qualified, role, schemaStatement } from './core.ts'
 import { InvalidName } from './errors.ts'
 
 /**
@@ -148,9 +148,18 @@ export const policyChecks = (command: PolicyCommand): boolean =>
  * A row policy. PostgreSQL decides which clause a policy may carry: one for INSERT has only
  * a WITH CHECK, one for SELECT or DELETE has only a USING, and one for UPDATE or ALL has
  * both. A policy with neither covers every row, which is what PostgreSQL writes by default.
+ *
+ * A policy a reader writes must say something about the rows it reaches: `requireExpression`
+ * refuses a policy that has neither a USING nor a WITH CHECK. The operator's tools may write
+ * one that only says who it is for, so they do not ask for it.
  */
-export function policyStatement(draft: PolicyDraft): string {
+export function policyStatement(
+  draft: PolicyDraft,
+  options?: { requireExpression?: boolean }
+): string {
   if (!draft.name.trim()) throw new InvalidName('Name the policy')
+  if (options?.requireExpression && !draft.using.trim() && !draft.check.trim())
+    throw new InvalidName('A policy needs a USING or a WITH CHECK expression')
   const roles = draft.roles.length ? draft.roles.map(grantee).join(', ') : 'PUBLIC'
   const lines = [
     `CREATE POLICY ${ident(draft.name.trim())} ON ${qualified(draft.schema, draft.table)}`,
@@ -170,6 +179,26 @@ export function policyStatement(draft: PolicyDraft): string {
   if (checks && draft.check.trim()) lines.push(`  WITH CHECK (${draft.check.trim()})`)
   return `${lines.join('\n')};`
 }
+
+/**
+ * The workspace, written as the statements PostgreSQL runs: the schema itself and the
+ * rights on it. They are shown to the reader before they run, and then run as the reader.
+ */
+export const workspaceStatements = (name: string, owner: string | null): string[] => [
+  schemaStatement(name, owner),
+]
+
+/** The rights on the workspace's own schema. */
+export const schemaGrantStatement = (
+  schema: string,
+  privileges: string[],
+  grantee: string,
+  revoke = false
+): string =>
+  grantStatement(
+    { schema, table: null, privileges, columns: [], grantee, withGrantOption: false },
+    revoke
+  )
 
 /** The statement that removes a row policy. */
 export function dropPolicyStatement(schema: string, table: string, name: string): string {

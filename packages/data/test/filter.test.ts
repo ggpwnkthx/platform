@@ -1,12 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import {
-  conditionClause,
-  likePattern,
-  operatorLabels,
-  operators,
-  parseFilter,
-} from '../src/content/filter.ts'
-import { predicate } from '../src/content/query.ts'
+import { conditionClause, likePattern, parseFilter, predicate } from '../src/index.ts'
 
 describe('The filter of a record query', () => {
   test('a plain value is an equality', () => {
@@ -23,10 +16,6 @@ describe('The filter of a record query', () => {
     expect(() => parseFilter({ status: { op: 'like', value: 'x' } })).toThrow(
       'Unknown filter operator: like'
     )
-  })
-
-  test('every operator has a way to be read', () => {
-    for (const op of operators) expect(operatorLabels[op]).toBeTruthy()
   })
 })
 

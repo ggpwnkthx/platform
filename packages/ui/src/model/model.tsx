@@ -15,16 +15,29 @@ import {
   type OnDelete,
   typeLabel,
 } from './statements.ts'
-import { fieldsViewsStatement, fieldTarget, rowSecurityStatement } from '@platform/sql'
-import { fieldMetadata } from '../metadata/query.ts'
+import {
+  collectionTarget,
+  customViews,
+  fieldTarget,
+  fieldsViewsStatement,
+  rowSecurityStatement,
+  situations,
+} from '@platform/sql'
 import { useLoad, useSession } from '../session.tsx'
 import { Page, useWorkspace } from '../shell.tsx'
 import { shortType } from '../format.ts'
-import { choicesOf, columnsOf, systemColumns, tableOf, tablesIn } from '../catalog/catalog.ts'
+import {
+  choicesOf,
+  columnsOf,
+  fieldMetadata,
+  systemColumns,
+  tableOf,
+  tablesIn,
+} from '@platform/data'
 import { rendererNamed } from '../fields/renderers.tsx'
 import { resolveFields } from '../fields/resolve.ts'
-import { presentationOf } from '../metadata/presentation.ts'
-import { customViews, situationLabels, situations } from '../metadata/views.ts'
+import { presentationOf } from '@platform/data'
+import { situationLabels } from '../metadata/labels.ts'
 import { href } from '../url.ts'
 import { Badge, Empty, Notice, Statement } from '../ui/bits.tsx'
 import { Action, Button } from '../ui/button.tsx'
@@ -50,7 +63,6 @@ import {
   UuidIcon,
 } from '../ui/icons.tsx'
 import { Confirm, Drawer } from '../ui/overlay.tsx'
-import { collectionTarget } from '../metadata/query.ts'
 import { FieldMetadataDrawer, MetadataPanel, PresentationPanel } from '../metadata/metadata.tsx'
 import { Rights } from '../access/rights.tsx'
 import { useRunner } from '../access/runner.tsx'

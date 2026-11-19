@@ -15,12 +15,14 @@ import {
 import {
   colorKey,
   displayNameKey,
-  displayNameLimit,
   iconKey,
+  type MetadataChange,
+  metadataStatements,
   type Presentation,
   presentationOf,
-} from '../presentation.ts'
-import { type MetadataChange, type MetadataTarget, metadataStatements } from '../query.ts'
+} from '@platform/data'
+import { displayNameLimit } from '../labels.ts'
+import type { MetadataTarget } from '@platform/sql'
 import { SaveStatements, useDraft } from './draft.tsx'
 
 /** Are two presentations the same: the same name, the same icon and the same colour? */

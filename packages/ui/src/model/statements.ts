@@ -1,26 +1,25 @@
 import {
-  columnSql as columnDefinition,
-  constraintName,
-  defaultLiteral,
-  fieldsViewsStatement,
-  fieldTarget,
-  fieldViewsStatement,
-  ident,
-  InvalidName,
-  literal,
+  collectionStatements as buildCollectionStatements,
+  commentCollectionStatement,
+  dropCollectionStatement,
+  dropFieldStatement,
+  fieldStatements as buildFieldStatements,
+  type FieldSpec,
   type OnDelete,
-  onDeleteAction,
-  qualified,
-  storageType,
-  systemFields,
 } from '@platform/sql'
 
 export type { OnDelete }
 
 /**
- * The model, written as the statements PostgreSQL runs. A builder in the interface produces
- * a draft; the draft becomes these statements, which are shown before they run and are run,
- * as the reader, exactly as shown. PostgreSQL decides whether the reader may.
+ * The model, as the interface drafts it.
+ *
+ * A builder in the interface produces a draft; the draft becomes the statements PostgreSQL
+ * runs, which are shown before they run and are run, as the reader, exactly as shown.
+ * PostgreSQL decides whether the reader may.
+ *
+ * The statements themselves are the platform's own, written once for the operator's tools
+ * and the interface alike: what is left here is the shape the interface's form holds, and
+ * the words it offers.
  */
 
 /**
@@ -54,24 +53,18 @@ export const typeLabel = (type: string): string => fieldTypeLabels[type] ?? type
 /** The types a number may be written in. */
 export const numericTypes = ['integer', 'bigint', 'decimal', 'float']
 
-export interface FieldDraft {
-  name: string
-  type: FieldType
-  /** The type's own modifiers: `Point, 4326` for a geometry. */
-  modifiers?: string[]
+/**
+ * A field as the interface drafts it: the platform's own field, with every answer filled
+ * in, because a form holds a value for every one of them.
+ */
+export interface FieldDraft extends FieldSpec {
   required: boolean
   unique: boolean
   indexed: boolean
   /** A default value, as typed; empty for none. */
   default: string
+  /** What the column is called, in a comment. */
   note: string
-  maxLength?: number
-  choices?: string[]
-  min?: number
-  max?: number
-  /** The collection a relation points at, in the same workspace. */
-  relation?: string
-  onDelete?: OnDelete
 }
 
 export function emptyField(): FieldDraft {
@@ -86,49 +79,21 @@ export function emptyField(): FieldDraft {
   }
 }
 
-/** The column type a field of this type is stored as: a relation is a uuid. */
-const columnType = (type: FieldType) => storageType(type)
-
-/** The column definition: type, default, NOT NULL, UNIQUE and the CHECKs its options ask for. */
-function columnSql(field: FieldDraft): string {
-  if (systemFields.includes(field.name))
-    throw new InvalidName(`${field.name} is made with every collection`)
-  const type = columnType(field.type)
-  return columnDefinition({
-    name: field.name,
-    type,
-    modifiers: field.modifiers,
-    required: field.required,
-    unique: field.unique,
-    default: defaultLiteral(type, field.default.trim(), field.name),
-    maxLength: field.maxLength,
-    choices: field.choices,
-    min: field.min,
-    max: field.max,
-  })
+/**
+ * The draft as the platform's own field: the same field, with the default value as it was
+ * typed and the note as it was written.
+ */
+function spec(draft: FieldDraft): FieldSpec {
+  return { ...draft, default: draft.default.trim(), note: draft.note.trim() }
 }
 
 /** The statements that add one field to a collection. */
 export async function fieldStatements(
   schema: string,
   table: string,
-  field: FieldDraft
+  draft: FieldDraft
 ): Promise<string[]> {
-  const target = qualified(schema, table)
-  const out = [`ALTER TABLE ${target} ADD COLUMN ${columnSql(field)};`]
-  if (field.indexed && !field.unique) out.push(`CREATE INDEX ON ${target} (${ident(field.name)});`)
-  if (field.type === 'relation') {
-    if (!field.relation) throw new InvalidName(`${field.name}: choose the collection it points at`)
-    out.push(
-      `ALTER TABLE ${target} ADD CONSTRAINT ${ident(await constraintName(table, field.name))}
-  FOREIGN KEY (${ident(field.name)}) REFERENCES ${qualified(schema, field.relation)} (id) ON DELETE ${onDeleteAction(field.onDelete ?? 'restrict')};`
-    )
-  }
-  if (field.note.trim())
-    out.push(`COMMENT ON COLUMN ${target}.${ident(field.name)} IS ${literal(field.note.trim())};`)
-  // Every field carries its own views: where it appears is said of the field itself.
-  out.push(fieldViewsStatement(fieldTarget(schema, table, field.name)))
-  return out
+  return buildFieldStatements(schema, table, spec(draft))
 }
 
 /** The statements that make a collection: the platform's table, then each field. */
@@ -136,27 +101,13 @@ export async function collectionStatements(
   schema: string,
   name: string,
   note: string,
-  fields: FieldDraft[]
+  drafts: readonly FieldDraft[]
 ): Promise<string[]> {
-  qualified(schema, name)
-  const out = [`SELECT platform.create_collection(${literal(schema)}, ${literal(name)});`]
-  // Every field carries its own views: the ones the platform makes, and the ones the
-  // reader adds below.
-  out.push(fieldsViewsStatement(systemFields.map((column) => fieldTarget(schema, name, column))))
-  for (const field of fields) out.push(...(await fieldStatements(schema, name, field)))
-  if (note.trim())
-    out.push(`COMMENT ON TABLE ${qualified(schema, name)} IS ${literal(note.trim())};`)
-  return out
+  return buildCollectionStatements(schema, name, note, drafts.map(spec))
 }
 
-export function dropFieldStatement(schema: string, table: string, field: string): string {
-  return `ALTER TABLE ${qualified(schema, table)} DROP COLUMN ${ident(field)};`
-}
-
-export function dropCollectionStatement(schema: string, table: string): string {
-  return `DROP TABLE ${qualified(schema, table)};`
-}
-
-export function commentStatement(schema: string, table: string, note: string): string {
-  return `COMMENT ON TABLE ${qualified(schema, table)} IS ${note.trim() ? literal(note.trim()) : 'NULL'};`
+export {
+  commentCollectionStatement as commentStatement,
+  dropCollectionStatement,
+  dropFieldStatement,
 }

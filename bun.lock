@@ -36,6 +36,13 @@
         "@types/pg": "8.23.1",
       },
     },
+    "packages/data": {
+      "name": "@platform/data",
+      "version": "2.2.0",
+      "dependencies": {
+        "@platform/sql": "workspace:*",
+      },
+    },
     "packages/relay": {
       "name": "@platform/relay",
       "version": "2.2.0",
@@ -48,6 +55,7 @@
       "name": "@platform/ui",
       "version": "2.2.0",
       "dependencies": {
+        "@platform/data": "workspace:*",
         "@platform/sql": "workspace:*",
         "clsx": "2.1.1",
         "lucide-preact": "1.75.0",
@@ -87,6 +95,8 @@
     "@fontsource/jetbrains-mono": ["@fontsource/jetbrains-mono@5.2.8", "", {}, "sha512-6w8/SG4kqvIMu7xd7wt6x3idn1Qux3p9N62s6G3rfldOUYHpWcc2FKrqf+Vo44jRvqWj2oAtTHrZXEP23oSKwQ=="],
 
     "@platform/cli": ["@platform/cli@workspace:packages/cli"],
+
+    "@platform/data": ["@platform/data@workspace:packages/data"],
 
     "@platform/example-newsroom": ["@platform/example-newsroom@workspace:examples/newsroom"],
 

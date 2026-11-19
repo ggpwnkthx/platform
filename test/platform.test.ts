@@ -18,11 +18,11 @@ import {
   type FieldDraft,
   fieldStatements,
 } from '../packages/ui/src/model/statements.ts'
-import * as pageAccess from '../packages/ui/src/access/query.ts'
-import * as pageActivity from '../packages/ui/src/activity/query.ts'
-import * as pageCatalog from '../packages/ui/src/catalog/query.ts'
-import * as pageContent from '../packages/ui/src/content/query.ts'
-import * as pageIdentity from '../packages/ui/src/identity/query.ts'
+import * as pageAccess from '../packages/data/src/access/query.ts'
+import * as pageActivity from '../packages/data/src/activity/query.ts'
+import * as pageCatalog from '../packages/data/src/catalog/query.ts'
+import * as pageContent from '../packages/data/src/content/query.ts'
+import * as pageIdentity from '../packages/data/src/identity/query.ts'
 import { transaction as pageTransaction } from '../packages/ui/src/pg/transaction.ts'
 import * as pageSql from '../packages/ui/src/sql/query.ts'
 import type { Connection } from '../packages/ui/src/pg/wire.ts'

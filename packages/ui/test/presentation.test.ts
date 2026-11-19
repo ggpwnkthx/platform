@@ -1,10 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import {
-  collectionTarget,
-  fieldTarget,
-  metadataStatements,
-  workspaceTarget,
-} from '../src/metadata/query.ts'
+import { metadataStatements } from '@platform/data'
+import { collectionTarget, fieldTarget, workspaceTarget } from '@platform/sql'
 import {
   familyOf,
   palette,
@@ -12,7 +8,7 @@ import {
   reservedFamilies,
   toneClass,
 } from '../src/metadata/color.ts'
-import { indexPresentations, presentationOf } from '../src/metadata/presentation.ts'
+import { indexPresentations, presentationOf } from '@platform/data'
 import { itemIcons, iconFor } from '../src/ui/icons.tsx'
 
 describe('The colour of an item', () => {

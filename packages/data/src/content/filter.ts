@@ -30,23 +30,6 @@ export const operators = [
 
 export type Operator = (typeof operators)[number]
 
-/** How an operator reads in the interface. */
-export const operatorLabels: Record<Operator, string> = {
-  eq: 'equals',
-  neq: 'does not equal',
-  contains: 'contains',
-  starts_with: 'starts with',
-  ends_with: 'ends with',
-  gt: 'is greater than',
-  gte: 'is at least',
-  lt: 'is less than',
-  lte: 'is at most',
-  in: 'is one of',
-  not_in: 'is none of',
-  is_null: 'is empty',
-  not_null: 'is not empty',
-}
-
 /** Operators that take no value. */
 export const valueless: readonly Operator[] = ['is_null', 'not_null']
 

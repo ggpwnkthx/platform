@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import type { LucideIcon } from 'lucide-preact'
 import { toneClass } from '../metadata/color.ts'
-import type { Presentation } from '../metadata/presentation.ts'
+import type { Presentation } from '@platform/data'
 import { iconFor } from './icons.tsx'
 
 /**

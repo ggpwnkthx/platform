@@ -1,9 +1,6 @@
 import type { ComponentChildren, FunctionComponent } from 'preact'
-import type { Kind } from '../catalog/catalog.ts'
-import type { ColumnInfo, RelationInfo } from '../catalog/types.ts'
-import type { Operator } from '../content/filter.ts'
-import type { FieldRenderers } from '../metadata/renderers.ts'
-import type { FieldViews, Situation } from '../metadata/views.ts'
+import type { ColumnInfo, Kind, Operator, RelationInfo } from '@platform/data'
+import type { FieldRenderers, FieldViews, Situation } from '@platform/sql'
 
 /**
  * What a field is, and everything the interface does with one.

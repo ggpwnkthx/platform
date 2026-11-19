@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import type { ColumnInfo, TableInfo } from '../catalog/types.ts'
+import type { ColumnInfo, TableInfo } from '@platform/data'
 
 /** The privileges a reader holds on a collection, in PostgreSQL's own names. */
 const privileges = [

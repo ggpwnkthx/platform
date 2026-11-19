@@ -1,8 +1,7 @@
-import { ident, qualified } from '@platform/sql'
+import { type DataSource, ident, qualified } from '@platform/sql'
 import type { PolicyInfo } from '../access/types.ts'
 import { labelColumn, relationOf, tableOf } from '../catalog/catalog.ts'
 import type { Catalog } from '../catalog/types.ts'
-import type { Db } from '../pg/connect.ts'
 import { conditionClause, type Filter } from './filter.ts'
 
 /**
@@ -63,7 +62,7 @@ export function predicate(
 }
 
 /** One page of rows, and the number of rows the predicate allows under row security. */
-export async function records(db: Db, query: RecordQuery) {
+export async function records(db: DataSource, query: RecordQuery) {
   const target = qualified(query.schema, query.table)
   const where = predicate(query.filter, query.search, query.searchable)
   const order = query.sort.map(
@@ -80,11 +79,17 @@ export async function records(db: Db, query: RecordQuery) {
     `SELECT count(*)::int AS total FROM ${target} ${where.sql}`,
     where.values
   )
-  return { rows: rows.rows, fields: rows.fields, total: counted.rows[0]?.total ?? 0 }
+  return { rows: rows.rows, total: counted.rows[0]?.total ?? 0 }
 }
 
 /** One row, by id, with the columns the reader may read. */
-export async function record(db: Db, schema: string, table: string, columns: string[], id: string) {
+export async function record(
+  db: DataSource,
+  schema: string,
+  table: string,
+  columns: string[],
+  id: string
+) {
   const result = await db.query(
     `SELECT ${columns.map(ident).join(', ')} FROM ${qualified(schema, table)} WHERE id = $1`,
     [id]
@@ -97,7 +102,7 @@ export async function record(db: Db, schema: string, table: string, columns: str
  * it back, so a write reports how many rows it touched and nothing else.
  */
 export async function insertRecord(
-  db: Db,
+  db: DataSource,
   schema: string,
   table: string,
   values: Record<string, unknown>
@@ -119,7 +124,7 @@ export async function insertRecord(
 
 /** Changes a row, only if it still carries the version the reader saw. */
 export async function updateRecord(
-  db: Db,
+  db: DataSource,
   schema: string,
   table: string,
   id: string,
@@ -141,7 +146,7 @@ export async function updateRecord(
 }
 
 export async function deleteRecord(
-  db: Db,
+  db: DataSource,
   schema: string,
   table: string,
   id: string,
@@ -158,7 +163,7 @@ export async function deleteRecord(
 
 /** The options a relation offers: rows of the target, labelled by their first text column. */
 export async function relationOptions(
-  db: Db,
+  db: DataSource,
   schema: string,
   table: string,
   label: string | null,
@@ -176,7 +181,7 @@ export async function relationOptions(
 
 /** The labels of the rows a relation column points at, read in one statement per target. */
 export async function relationLabels(
-  db: Db,
+  db: DataSource,
   catalog: Catalog,
   schema: string,
   table: string,
@@ -208,7 +213,7 @@ export async function relationLabels(
 }
 
 /** The row policies on a collection, and whether each one speaks for the reader. */
-export async function tablePolicies(db: Db, schema: string, table: string) {
+export async function tablePolicies(db: DataSource, schema: string, table: string) {
   const result = await db.query<PolicyInfo & { applies: boolean }>(
     `SELECT schemaname::text AS schema, tablename::text AS table, policyname::text AS name, permissive,
             roles::text[] AS roles, cmd AS command, qual AS using, with_check AS check,

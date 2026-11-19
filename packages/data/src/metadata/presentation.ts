@@ -1,4 +1,4 @@
-import { type MetadataRow, presentationKeys } from './types.ts'
+import { type MetadataRow, presentationKeys } from '@platform/sql'
 
 /**
  * How a workspace or a collection presents itself: the name people read, the icon they
@@ -11,14 +11,11 @@ import { type MetadataRow, presentationKeys } from './types.ts'
  */
 
 export { presentationKeys }
-export type { PresentationKey } from './types.ts'
+export type { PresentationKey } from '@platform/sql'
 
 export const displayNameKey = 'display_name'
 export const iconKey = 'icon'
 export const colorKey = 'color'
-
-/** The longest display name the interface shows without truncating it in the navigation pane. */
-export const displayNameLimit = 80
 
 export interface Presentation {
   /** The name people read: "Newsroom" rather than `newsroom`. */

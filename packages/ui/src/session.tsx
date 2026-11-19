@@ -5,13 +5,15 @@ import { beginSignIn, completeSignIn, expiresAt, roleOf } from './identity/oidc.
 import { type RuntimeConfig, runtimeConfig } from './config.ts'
 import { connect, type Credentials, type Db, type Person, withoutIssuer } from './pg/connect.ts'
 import { KeptSession } from './pg/kept.ts'
-import { catalog as readCatalog } from './catalog/query.ts'
-import { identity as readIdentity } from './identity/query.ts'
-import { presentations as readPresentations } from './metadata/query.ts'
-import type { Catalog } from './catalog/types.ts'
-import type { Identity } from './identity/types.ts'
+import {
+  catalog as readCatalog,
+  type Catalog,
+  identity as readIdentity,
+  type Identity,
+  presentations as readPresentations,
+} from '@platform/data'
 import { ConnectionError, PgError } from './pg/wire.ts'
-import { indexPresentations, type PresentationIndex } from './metadata/presentation.ts'
+import { indexPresentations, type PresentationIndex } from '@platform/data'
 import { versionProblem } from './version.ts'
 
 export type Phase = 'starting' | 'signed-out' | 'signing-in' | 'ready'

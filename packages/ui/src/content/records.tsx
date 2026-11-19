@@ -2,21 +2,30 @@ import clsx from 'clsx'
 import type { ComponentChildren } from 'preact'
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
-import { type Condition, type Filter, type Operator, operatorLabels, valueless } from './filter.ts'
-import { deleteRecord, records, relationLabels, tablePolicies } from './query.ts'
-import { fieldMetadata } from '../metadata/query.ts'
-import { inFilter, inList } from '../metadata/views.ts'
-import { qualified } from '@platform/sql'
+import {
+  type Condition,
+  type Filter,
+  type Operator,
+  columnsOf,
+  deleteRecord,
+  fieldMetadata,
+  records,
+  relationLabels,
+  tableOf,
+  tablePolicies,
+  valueless,
+} from '@platform/data'
+import { qualified, inFilter, inList } from '@platform/sql'
+import { operatorLabels } from './labels.ts'
 import { count, plural } from '../format.ts'
 import { describe, useLoad, useSession } from '../session.tsx'
 import { Page, SideGroup, useWorkspace } from '../shell.tsx'
-import { columnsOf, tableOf } from '../catalog/catalog.ts'
 import { filterStart, filterValue } from '../fields/edit.ts'
 import { FilterLine } from '../fields/inputs.tsx'
 import { Value } from '../fields/renderers.tsx'
 import { resolveFields } from '../fields/resolve.ts'
 import type { Field } from '../fields/types.ts'
-import { presentationOf } from '../metadata/presentation.ts'
+import { presentationOf } from '@platform/data'
 import { href } from '../url.ts'
 import { Badge, Empty, Loading, Notice } from '../ui/bits.tsx'
 import { Action, Button } from '../ui/button.tsx'

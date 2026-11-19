@@ -10,14 +10,22 @@ import {
   membershipStatement,
   type PolicyCommand,
   type PolicyDraft,
+  policyStatement,
   tablePrivileges,
 } from '@platform/sql'
-import { policyStatement } from './statements.ts'
-import { grants as readGrants, policies as readPolicies, roles as readRoles } from './query.ts'
-import type { GrantInfo, RoleInfo } from './types.ts'
+
+import {
+  columnsOf,
+  grants as readGrants,
+  policies as readPolicies,
+  roles as readRoles,
+  tableOf,
+  tablesIn,
+  type GrantInfo,
+  type RoleInfo,
+} from '@platform/data'
 import { describe, useLoad, useSession } from '../session.tsx'
 import { Page, useWorkspace, WorkspaceSelect } from '../shell.tsx'
-import { columnsOf, tableOf, tablesIn } from '../catalog/catalog.ts'
 import { href } from '../url.ts'
 import { Badge, Empty, Loading, Notice, Statement } from '../ui/bits.tsx'
 import { Action, Button } from '../ui/button.tsx'
@@ -685,7 +693,7 @@ export function Policies() {
   let statement = ''
   let invalid: string | null = null
   try {
-    statement = draft ? policyStatement(draft) : ''
+    statement = draft ? policyStatement(draft, { requireExpression: true }) : ''
   } catch (error) {
     invalid = error instanceof Error ? error.message : String(error)
   }

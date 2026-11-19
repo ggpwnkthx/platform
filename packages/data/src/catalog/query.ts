@@ -1,4 +1,4 @@
-import type { Db } from '../pg/connect.ts'
+import type { DataSource } from '@platform/sql'
 import type { Catalog } from './types.ts'
 
 /**
@@ -9,7 +9,7 @@ import type { Catalog } from './types.ts'
 
 const notPlatform = `n.nspname NOT LIKE 'pg\\_%' ESCAPE '\\' AND n.nspname NOT IN ('information_schema','platform','public')`
 
-export async function catalog(db: Db): Promise<Catalog> {
+export async function catalog(db: DataSource): Promise<Catalog> {
   const schemas = await db.query(`
     SELECT n.nspname::text AS name, pg_get_userbyid(n.nspowner)::text AS owner,
            has_schema_privilege(n.oid, 'CREATE') AS can_create,

@@ -1,8 +1,8 @@
-import type { Db } from '../pg/connect.ts'
+import type { DataSource } from '@platform/sql'
 import type { SchemaGrantInfo } from './types.ts'
 
 /** The rights on the workspace's own schema: who may use it, and who may add to it. */
-export async function schemaGrants(db: Db, schema: string): Promise<SchemaGrantInfo[]> {
+export async function schemaGrants(db: DataSource, schema: string): Promise<SchemaGrantInfo[]> {
   const result = await db.query<SchemaGrantInfo>(
     `
     SELECT n.nspname::text AS schema,

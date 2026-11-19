@@ -1,4 +1,4 @@
-import type { Db } from '../pg/connect.ts'
+import type { DataSource } from '@platform/sql'
 import type { ActivityInfo } from './types.ts'
 
 /** The revisions the reader may read: row security shows a workspace's owners its full history. */
@@ -11,7 +11,7 @@ export interface ActivityQuery {
   limit?: number
 }
 
-export async function activity(db: Db, query: ActivityQuery): Promise<ActivityInfo[]> {
+export async function activity(db: DataSource, query: ActivityQuery): Promise<ActivityInfo[]> {
   const values: unknown[] = [query.schema]
   const where = ['schema_name = $1']
   if (query.table) {

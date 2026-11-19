@@ -1,25 +1,24 @@
 import { useId } from 'preact/hooks'
-import { columnOf, kindOf } from '../../catalog/catalog.ts'
+import { columnOf, kindOf } from '@platform/data'
 import { type Renderer, rendererNamed, renderersFor } from '../../fields/renderers.tsx'
 import { useSession } from '../../session.tsx'
 import { Field, Input, Select } from '../../ui/form.tsx'
-import { type MetadataChange, type MetadataTarget, metadataStatements } from '../query.ts'
+import { type MetadataChange, metadataStatements } from '@platform/data'
 import {
+  customViews,
   type FieldRenderers,
+  type MetadataEntry,
   parseRenderers,
+  parseViews,
   renderersEqual,
   renderersKey,
   renderersValue,
-} from '../renderers.ts'
-import type { MetadataEntry } from '../types.ts'
-import {
-  customViews,
-  parseViews,
+  type MetadataTarget,
   type Situation,
   situations,
-  situationTitles,
   viewsKey,
-} from '../views.ts'
+} from '@platform/sql'
+import { situationTitles } from '../labels.ts'
 import { SaveStatements, useDraft } from './draft.tsx'
 
 /** What each situation is, where a field is told how its values are drawn in it. */

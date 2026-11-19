@@ -1,4 +1,4 @@
-import { type Operator, valueless } from '../content/filter.ts'
+import { type Operator, valueless } from '@platform/data'
 import { textOf, readsLong } from './text.ts'
 import type { Field, Parsed } from './types.ts'
 

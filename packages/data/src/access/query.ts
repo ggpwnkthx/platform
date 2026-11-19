@@ -1,4 +1,4 @@
-import type { Db } from '../pg/connect.ts'
+import type { DataSource } from '@platform/sql'
 import type { GrantInfo, MembershipInfo, PolicyInfo, RoleInfo } from './types.ts'
 
 /**
@@ -8,7 +8,9 @@ import type { GrantInfo, MembershipInfo, PolicyInfo, RoleInfo } from './types.ts
  */
 
 /** The roles and memberships the reader may see, through the platform's own functions. */
-export async function roles(db: Db): Promise<{ roles: RoleInfo[]; memberships: MembershipInfo[] }> {
+export async function roles(
+  db: DataSource
+): Promise<{ roles: RoleInfo[]; memberships: MembershipInfo[] }> {
   const found = await db.query<RoleInfo>(`
     SELECT r.*,
       (platform.is_operator()
@@ -21,7 +23,7 @@ export async function roles(db: Db): Promise<{ roles: RoleInfo[]; memberships: M
   return { roles: found.rows, memberships: memberships.rows }
 }
 
-export async function policies(db: Db): Promise<PolicyInfo[]> {
+export async function policies(db: DataSource): Promise<PolicyInfo[]> {
   const result = await db.query<PolicyInfo>(`
     SELECT schemaname::text AS schema, tablename::text AS table, policyname::text AS name,
            permissive, roles::text[] AS roles, cmd AS command, qual AS using, with_check AS check
@@ -32,7 +34,7 @@ export async function policies(db: Db): Promise<PolicyInfo[]> {
 }
 
 /** The grants on the tables and columns of one workspace, read from their ACLs. */
-export async function grants(db: Db, schema: string): Promise<GrantInfo[]> {
+export async function grants(db: DataSource, schema: string): Promise<GrantInfo[]> {
   const result = await db.query<GrantInfo>(
     `
     SELECT n.nspname::text AS schema, c.relname::text AS table, NULL::text AS column,

@@ -1,10 +1,8 @@
 import clsx from 'clsx'
 import type { ComponentChildren } from 'preact'
-import type { ColumnInfo } from '../catalog/types.ts'
-import { type Kind, kindOf } from '../catalog/catalog.ts'
+import { type ColumnInfo, type Kind, kindOf } from '@platform/data'
 import { count, display, moment } from '../format.ts'
-import type { FieldRenderers, RendererChoice } from '../metadata/renderers.ts'
-import type { Situation } from '../metadata/views.ts'
+import type { FieldRenderers, RendererChoice, Situation } from '@platform/sql'
 import { CheckIcon, CloseIcon } from '../ui/icons.tsx'
 
 /**

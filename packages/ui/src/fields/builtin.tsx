@@ -1,6 +1,5 @@
 import clsx from 'clsx'
-import type { Kind } from '../catalog/catalog.ts'
-import type { Operator } from '../content/filter.ts'
+import type { Kind, Operator } from '@platform/data'
 import { moment } from '../format.ts'
 import { TextArea } from '../ui/form.tsx'
 import { CheckIcon, CloseIcon } from '../ui/icons.tsx'

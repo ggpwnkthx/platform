@@ -1,29 +1,29 @@
 import { useId, useState } from 'preact/hooks'
-import { columnOf } from '../../catalog/catalog.ts'
+import { columnOf } from '@platform/data'
 import { useSession } from '../../session.tsx'
 import { Notice } from '../../ui/bits.tsx'
 import { Button } from '../../ui/button.tsx'
 import { Field, Input, Select } from '../../ui/form.tsx'
 import { PlusIcon, TrashIcon } from '../../ui/icons.tsx'
-import { type MetadataChange, type MetadataTarget, metadataStatements } from '../query.ts'
-import type { MetadataEntry } from '../types.ts'
+import { type MetadataChange, metadataStatements } from '@platform/data'
 import {
   customModes,
   customViews,
   type FieldViews,
   isCustomView,
+  type MetadataEntry,
+  type MetadataTarget,
   type Mode,
-  modeLabels,
   parseViews,
   type Situation,
   situationModes,
   situations,
-  situationTitles,
   validViewName,
   viewsEqual,
   viewsKey,
   viewsValue,
-} from '../views.ts'
+} from '@platform/sql'
+import { modeLabels, situationTitles } from '../labels.ts'
 import { SaveStatements, useDraft } from './draft.tsx'
 
 /** What each situation is, where a field is told whether it appears in it. */

@@ -6,7 +6,13 @@
  * none of them do. The wrapper takes anything that can run a statement, so both use it.
  */
 
-/** Anything that can run a statement: a PostgreSQL client, or the interface's own. */
+/**
+ * Anything that can run a statement: a PostgreSQL client, or the interface's own.
+ *
+ * A transaction needs nothing back from the statements it runs, so this is the weaker of
+ * the two contracts: a `DataSource` answers with rows, and a client in Node answers with
+ * its own result, but either will do here.
+ */
 export interface Queryable {
   query(text: string, params?: unknown[]): Promise<unknown>
 }
