@@ -28,7 +28,7 @@ network and the browser assets accordingly.
 | Audit integrity       | Normal users cannot write/delete/truncate audit records or disable table triggers                                        |
 | SQL construction      | Quoted identifiers; bound data values; escaped DDL literals                                                              |
 | Protocol              | The page's wire client logs in by OAUTHBEARER and runs one bound statement per query, directly and through the relay     |
-| State leakage         | One authenticated login per page; the reader's own statements run on a login of their own    |
+| State leakage         | One authenticated login per page; the reader's own statements run on a login of their own                                |
 
 The only SECURITY DEFINER helper that acts on the database appends real trigger records to
 platform.activity. Its owner is platform_core, with no login or role-administration

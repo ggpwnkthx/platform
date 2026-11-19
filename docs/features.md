@@ -53,6 +53,17 @@ their own beside the three the interface draws — an export, a print sheet — 
 the field appears in them. The platform keeps what it is told and hands it back; the drawing
 of a custom view is the deployment's business.
 
+A field may also say how its values are drawn, in the reserved key `renderers` of that same
+metadata: a value in the records grid and a value in the record form may be drawn differently,
+by the kind of value they are. The owner chooses the renderer for each place, from the ones
+the platform holds and the ones the installation added; the saying narrows nothing and grants
+nothing, and a renderer the platform does not hold draws nothing at all. See
+[renderers](renderers.md).
+
+What a field is in the interface — its cell, its value, its input and its filter — is its
+field type's to say, and the type follows from what PostgreSQL says of the column. An
+installation may add types of its own. See [fields](fields.md).
+
 Data modeling is available at runtime. Constraints, indexes, relations, renames and drops use
 native SQL when not covered by typed collection/field builders. Descriptive text is stored
 as native COMMENTs where the builders support it. Use views for reusable projections.

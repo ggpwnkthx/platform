@@ -167,7 +167,8 @@ part of the path that answers on the network.
 | RELAY_UPSTREAM                 | 127.0.0.1:5432            | host:port of PostgreSQL, for the relay                        |
 | RELAY_PORT                     | 8081                      | The port the relay listens on                                 |
 | RELAY_ORIGINS                  | any                       | Comma-separated origins allowed to open a session             |
-| RELAY_SESSIONS_PER_ADDRESS     | 20                        | Open database sessions one client address may hold            |
+| RELAY_SESSIONS_PER_ADDRESS     | 20                        | Logins one client address may have signing in at once         |
+| RELAY_SESSIONS_PER_ROLE        | 20                        | Open database sessions one role may hold                      |
 | RELAY_TLS_CERT / RELAY_TLS_KEY | none                      | The certificate the relay serves TLS with                     |
 
 `bun run build:ui` writes `config.json` and the `_headers` file from these; see

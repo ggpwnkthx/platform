@@ -214,7 +214,9 @@ interface or the relay. Tests use `TEST_ADMIN_URL`; see [operations](docs/operat
 | [Architecture](docs/architecture.md) | Connection identity and database layout                         |
 | [Access](docs/access.md)             | Roles, grants, RLS, delegation and revocation                   |
 | [Interface](docs/interface.md)       | Pages, the relay, configuration and the browser surface         |
+| [Fields](docs/fields.md)             | What a field is: its type, its cell, its input and its filter   |
 | [Views](docs/views.md)               | Where a field appears: the defaults, your own views, the saying |
+| [Renderers](docs/renderers.md)       | How a field's values are drawn, in each place it appears        |
 | [Publishing](deploy/cdn/README.md)   | The static site on a CDN: config.json, headers, the relay       |
 | [Security](docs/security.md)         | Boundaries and practical limitations                            |
 | [Operations](docs/operations.md)     | Deploying, PostgreSQL 18, Dex, TLS and testing                  |

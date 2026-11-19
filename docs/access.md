@@ -134,6 +134,10 @@ who holds a right on the column reads it, and only the owner of the collection c
 is presentation, not access: a field kept out of the interface is still the reader's to read
 and to write in psql, and the interface grants nothing by it.
 
+A fifth says how the field's values are drawn — `renderers` (see
+[interface](interface.md#how-a-field-is-drawn)). The same two rules hold for it: a renderer
+is told which values to draw and never decides who may read them.
+
 A COMMENT is not metadata. PostgreSQL's comments are catalog text that every connected user
 reads, and only an owner may change them; they suit a label, not anything that should follow
 the item's rights.

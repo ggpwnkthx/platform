@@ -244,6 +244,38 @@ record is `readonly`, and says which fields the owner keeps out of it. The filte
 offers the fields whose filter is `show`. The search still reads every readable column: a
 search is a question to the database, not a view of it.
 
+### How a Field is Drawn
+
+Where a field appears is one half of the saying; how its values are drawn is the other. A
+value is not one thing drawn one way: the same column is a cell in the records grid, a value
+in the record form and a value in the filter builder, and each of those may want a different
+drawing. A uuid is eight characters in a cell and thirty-six in a record. A JSON document is
+a clipped line in a cell and a document in a record.
+
+The owner of a collection may say so, in the reserved key `renderers` of the field's own
+metadata:
+
+```json
+{ "list": "truncate", "record": { "renderer": "template", "options": { "template": "» {value}" } } }
+```
+
+Each entry names a renderer — one the platform holds, or one the installation added — and,
+where it takes any, the options it is given.
+
+The platform's own default already draws a value differently in each place: a text is clipped
+in the grid and wrapped in the record, a number is written in digits in the grid and with its
+thousands marked in the record, a moment is shortened to the minute in the grid and whole in
+the record, a uuid is eight characters in the grid and whole in the record, a JSON document is
+a line in the grid and a document in the record. The saying is for what the default does not
+answer.
+
+A renderer the field names that the platform does not hold, or that does not fit the kind of
+value, draws nothing: the value is drawn as the platform draws it. A renderer draws and
+nothing else — it never decides who may read a value and never changes one.
+
+How the renderers are named, which ones the platform holds, and how one of the installation's
+own is added is told in full in [renderers](renderers.md).
+
 ## config.json
 
 The pages are static, so what they need to find the issuer and the database is a file served
