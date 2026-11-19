@@ -3,6 +3,7 @@ import {
   columnSql,
   constraintName,
   defaultLiteral,
+  fieldRenderersStatement,
   fieldTarget,
   fieldsViewsStatement,
   fieldViewsStatement,
@@ -111,6 +112,20 @@ describe('the SQL the platform writes', () => {
     ])
     expect(statement.split('\n').filter((line) => line.trim().startsWith('('))).toHaveLength(2)
     expect(statement).toContain('ON CONFLICT')
+  })
+  test('a field may say how its values are drawn', () => {
+    const statement = fieldRenderersStatement(fieldTarget('newsroom', 'articles', 'title'), {
+      list: 'truncate',
+      record: { renderer: 'template', options: { template: '» {value}' } },
+    })
+    expect(statement).toContain(`'renderers'`)
+    expect(statement).toContain('"list":"truncate"')
+    expect(statement).toContain('"record":{"renderer":"template"')
+  })
+  test('a field that says nothing of its drawing is drawn as the platform draws it', () => {
+    const statement = fieldRenderersStatement(fieldTarget('newsroom', 'articles', 'title'))
+    expect(statement).toContain(`'renderers'`)
+    expect(statement).toContain('{}')
   })
   test('the columns every collection is made with are named once', () => {
     expect(systemFields).toContain('created_by')

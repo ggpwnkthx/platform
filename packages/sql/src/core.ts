@@ -235,6 +235,9 @@ export const defaultViews = { list: 'show', record: 'show', filter: 'show' } as 
 /** The ways a field may be said to appear: shown, hidden, or shown and locked. */
 export const viewModes = ['show', 'hide', 'readonly'] as const
 
+/** The reserved key of a field's own metadata that says how its values are drawn. */
+export const renderersKey = 'renderers'
+
 export type ViewMode = (typeof viewModes)[number]
 
 /**
@@ -251,6 +254,22 @@ export function fieldViewsStatement(
     if (!viewModes.includes(mode as ViewMode))
       throw new InvalidName(`${name}: a view is shown, hidden or shown and locked`)
   return metadataStatement(target, viewsKey, { ...defaultViews, ...views })
+}
+
+/**
+ * The statement that gives a field its own value renderers: how its values are drawn in each
+ * situation, where the situation is a place the field is drawn — the records grid, the record
+ * form, the filter builder — or a view of the owner's own.
+ *
+ * The renderer of a situation is either the name of a renderer or an object naming one and
+ * the options it takes. A saying the platform cannot read is kept as it was written: the
+ * platform draws a value it cannot name as it draws every value.
+ */
+export function fieldRenderersStatement(
+  target: MetadataTarget,
+  renderers?: Record<string, unknown>
+): string {
+  return metadataStatement(target, renderersKey, renderers ?? {})
 }
 
 /**
