@@ -350,8 +350,8 @@ tokens, a token used for another role, role passwords not being a login, the ser
 authentication rules, NOLOGIN, impersonation, row and column enforcement, predicates/sorts, live
 revocation, role delegation, write-only insert, DDL ownership, atomic modeling, CRM import,
 version-guarded updates, trigger metadata, audit privacy/integrity, rollback and TRUNCATE.
-`test/filter.test.ts` covers the record filters, `test/unit.test.ts` the smaller pieces and
-`test/deploy.test.ts` the deployment CLI. Deployment tests exercise sequencing, failures,
+`packages/ui/test/filter.test.ts` covers the record filters, `packages/cli/test/unit.test.ts`
+the smaller pieces and `packages/cli/test/deploy.test.ts` the deployment CLI. Deployment tests exercise sequencing, failures,
 renderer output and CLI dispatch using controlled tool substitutes; they do not provision real
 infrastructure. Integration tests fail rather than silently skip when PostgreSQL is unavailable.
 

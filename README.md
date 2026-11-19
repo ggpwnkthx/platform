@@ -35,11 +35,11 @@ bun run cli deploy local up
 bun run cli apply local examples/newsroom.json
 ```
 
-The interface is a static site, not a container: build it and open the files.
+The interface is a static site, not a container: build it, or serve it against the stack.
 
 ```bash
-bun run cli deploy local ui
-bun run dev:ui --relay=127.0.0.1:5432
+bun run cli deploy local ui                     # build it into packages/ui/dist
+bun run examples:newsroom:dev --relay=127.0.0.1:5432   # or serve it on http://localhost:5173/
 ```
 
 Choose Sign in. Dex asks for an email and password: use
@@ -76,28 +76,30 @@ list every role and read who belongs to which group. `bun run cli harden local` 
 superuser) hides them: ordinary sessions keep their own rights and the interface keeps working,
 while the graph stays with the operators. See [operations](docs/operations.md).
 
-## The interface in development
+## The interface in dev mode
 
 The interface is a static site in `packages/ui/`: the pages are generated at build time and the client
-speaks to PostgreSQL itself. To work on it without a server, an issuer or a relay, run it on
-its own:
+speaks to PostgreSQL itself. To work on it without a server, an issuer or a relay, run it in
+dev mode:
 
 ```bash
-bun run dev:ui     # http://localhost:5173/
+bun run examples:newsroom:dev     # http://localhost:5173/
 ```
 
-The development build runs **PostgreSQL 18 inside the page** (PGlite), installed with the real
-`migrations/*.sql` and seeded by `packages/ui/src/dev/seed.sql`: the newsroom workspace with its
+The dev mode is the example: `examples/newsroom/platform.json` says how it is built — the
+mode, the module that is the database, and where the site is written — and the CLI reads it.
+The dev mode runs **PostgreSQL 18 inside the page** (PGlite), installed with the real
+`migrations/*.sql` and seeded by `examples/newsroom/seed.sql`: the newsroom workspace with its
 sections, articles and corrections, the crm workspace owned by the group `sales` with its
 accounts, contacts and deals, and their grants, policies, revisions and metadata. The sign-in
 page offers the three example people, admin, alice and bob; choosing one logs that role in,
 and every grant, row policy and trigger applies to them as it would on a server. The database
-is kept in the browser's IndexedDB across reloads. `PORT=8080 bun run dev:ui` chooses the port.
+is kept in the browser's IndexedDB across reloads. `PORT=8080 bun run examples:newsroom:dev` chooses the port.
 
-Editing anything under `packages/ui/src` rebuilds the pages and the page picks it up on the next
+Editing anything under `packages/ui/src` — or under `examples/newsroom` — rebuilds the pages and the page picks it up on the next
 reload. The in-page database is swapped in when the bundle is built, so it never reaches a
 production bundle: `bun run build:ui` writes the real interface, which signs in through the
-issuer and reaches PostgreSQL through the relay. `bun run dev:ui --relay=HOST:PORT` serves that
+issuer and reaches PostgreSQL through the relay. `bun run examples:newsroom:dev --relay=HOST:PORT` serves that
 real build and forwards its WebSockets to a real PostgreSQL. See [interface](docs/interface.md).
 
 ## What is included
@@ -150,32 +152,39 @@ See [access control](docs/access.md) for concrete policies and delegation.
 
 ## The packages
 
-| Package          | What it is                                                                               |
-| ---------------- | ---------------------------------------------------------------------------------------- |
-| `packages/sql`   | The vocabulary the platform speaks: the SQL it writes, the tokens and versions it reads. |
-| `packages/cli`   | The operator's tools: install, apply, harden, deploy. Depends on `pg`, `zod`.            |
-| `packages/relay` | The WebSocket in front of PostgreSQL's port. No dependencies, no credentials.            |
-| `packages/ui`    | The interface: a Preact application, its static build and its headers.                   |
+| Package             | What it is                                                                               |
+| ------------------- | ---------------------------------------------------------------------------------------- |
+| `packages/sql`      | The vocabulary the platform speaks: the SQL it writes, the tokens and versions it reads. |
+| `packages/cli`      | The operator's tools: install, apply, harden, deploy, and build the interface.           |
+| `packages/relay`    | The WebSocket in front of PostgreSQL's port. No dependencies, no credentials.            |
+| `packages/ui`       | The interface: a Preact application, and the pages it renders itself into.               |
+| `examples/newsroom` | The newsroom example, running: the dev mode, its in-page PostgreSQL and its people.      |
 
 Each package declares its own dependencies and owns its unit tests; the root holds the
 migrations, the deployment files and the integration tests that cross the packages. The
-repository root is a Bun workspace, so `bun install` installs all of them.
+repository root is a Bun workspace — `packages/*` and `examples/*` — so `bun install` installs
+all of them.
 
 The interface's own source is laid out by domain: `content/`, `model/`, `access/`,
 `activity/`, `metadata/`, `sql/`, `workspace/` and `identity/` each hold their page, the SQL
-they run and the types they speak in. Three folders are shared by all of them — `pg/` speaks
-PostgreSQL's protocol, `ui/` holds the interface's own widgets, `dev/` is the PostgreSQL that
-runs inside the page in development — and the root of `packages/ui/src` holds the shell of the
+they run and the types they speak in. Two folders are shared by all of them — `pg/` speaks
+PostgreSQL's protocol, `ui/` holds the interface's own widgets — and the root of
+`packages/ui/src` holds the shell of the
 application: the router, the session, the layout, the routes, the configuration, the address
-and the formatting.
+and the formatting. The PostgreSQL that runs inside the page in dev mode is an example, not
+a part of the interface: it is the package `examples/newsroom`, which depends on the interface
+through its published entry points and owns the seed it installs and the people who sign in.
 
 ## Commands
 
 ```bash
-bun run check          # build the interface, typecheck, lint, format, PostgreSQL integration tests
-bun run build:ui       # generate the static interface into packages/ui/dist
-bun run dev:ui         # the interface on http://localhost:5173/ with PostgreSQL in the page
-bun run dev:ui --relay=127.0.0.1:5432  # the real interface against a real PostgreSQL
+bun run check                       # build the interface, typecheck, lint, format, PostgreSQL integration tests
+bun run build:ui                    # generate the static interface into packages/ui/dist
+bun run examples:newsroom:build     # generate the dev-mode interface into examples/newsroom/.dist
+bun run examples:newsroom:dev       # dev mode: the interface on http://localhost:5173/, PostgreSQL in the page
+bun run examples:newsroom:dev --relay=127.0.0.1:5432  # the real interface against a real PostgreSQL
+bun run cli ui build                # the published interface: no configuration, the relay and the issuer
+bun run cli ui dev --dir=examples/newsroom  # the same server, named by the example's configuration
 bun test               # needs the test server and relay: see docs/operations.md, Testing
 bun run cli deploy help
 bun run cli deploy local up

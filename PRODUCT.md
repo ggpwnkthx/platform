@@ -78,9 +78,9 @@ the interface alike.
 - The relay reaches PostgreSQL in plain TCP, so it runs next to PostgreSQL or on a private
   network the operator trusts; PostgreSQL takes only tokens from the relay's addresses
   (`PLATFORM_TOKEN_ONLY_FROM`).
-- Development: `bun run dev:ui` serves the interface on http://localhost:5173 with PostgreSQL 18
+- Development: `bun run examples:newsroom:dev` serves the interface on http://localhost:5173 with PostgreSQL 18
   running inside the page (PGlite), installed with the real migrations and seeded with the
-  example workspaces and people; `bun run dev:ui --relay=HOST:PORT` serves the real build against
+  example workspaces and people; `bun run examples:newsroom:dev --relay=HOST:PORT` serves the real build against
   a real PostgreSQL. `bun run check` builds the interface, typechecks, lints, formats and runs
   the tests. `bun test` needs the test server and relay described in `docs/operations.md`.
 - Integration tests and CI run against PostgreSQL 18 with real token logins.
@@ -148,7 +148,7 @@ the interface alike.
 **Constraints**
 
 - Nothing between the page and PostgreSQL connects as a service login, and nothing uses
-  `SET ROLE` or `SET SESSION AUTHORIZATION` to manufacture user identity. (The development
+  `SET ROLE` or `SET SESSION AUTHORIZATION` to manufacture user identity. (The dev-mode
   build's in-page PostgreSQL uses `SET SESSION AUTHORIZATION` to stand in for a token login; it
   never reaches a production bundle.)
 - `platform_core` is `NOLOGIN` without `CREATEROLE`, `CREATEDB`, `SUPERUSER` or `BYPASSRLS`, and
@@ -195,8 +195,8 @@ not of how it feels — which future work may keep or replace.
 
 ## Evidence on Hand
 
-- Real content: `examples/newsroom.json`, `deploy/models/crm.json`, the development seed
-  `packages/ui/src/dev/seed.sql`, the product documents in `docs/`, and the generated interface pages in
+- Real content: `examples/newsroom.json`, `deploy/models/crm.json`, the dev-mode seed
+  `examples/newsroom/seed.sql`, the product documents in `docs/`, and the generated interface pages in
   `packages/ui/dist`.
 - Real demonstrations: the local stack with its three example accounts; integration tests and CI
   against PostgreSQL 18 with real token logins; the CLI's `doctor`, `token`, `apply --dry-run`,

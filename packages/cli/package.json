@@ -3,20 +3,23 @@
   "version": "2.2.0",
   "private": true,
   "type": "module",
-  "description": "The operator's tools for a PostgreSQL-native platform: install, apply, harden, deploy.",
+  "description": "The operator's tools: install, apply, harden, deploy, and build the interface.",
   "license": "MIT",
   "dependencies": {
     "@platform/sql": "workspace:*",
+    "@platform/ui": "workspace:*",
     "pg": "8.23.1",
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@fontsource-variable/inter": "5.2.8",
+    "@fontsource/jetbrains-mono": "5.2.8",
     "@types/pg": "8.23.1"
-  },
-  "engines": {
-    "bun": ">=1.4.3"
   },
   "exports": {
     ".": "./src/cli.ts"
+  },
+  "engines": {
+    "bun": ">=1.4.3"
   }
 }

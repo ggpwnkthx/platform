@@ -3,7 +3,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'p
 import { useLocation } from 'preact-iso'
 import { beginSignIn, completeSignIn, expiresAt, roleOf } from './identity/oidc.ts'
 import { type RuntimeConfig, runtimeConfig } from './config.ts'
-import { connect, type Credentials, type Db, inPageDatabase } from './pg/connect.ts'
+import { connect, type Credentials, type Db, type Person, withoutIssuer } from './pg/connect.ts'
 import { KeptSession } from './pg/kept.ts'
 import { catalog as readCatalog } from './catalog/query.ts'
 import { identity as readIdentity } from './identity/query.ts'
@@ -46,7 +46,7 @@ export interface Session {
   /** Reads the catalog again: after a change to the model or to a right. */
   refresh: () => Promise<void>
   signIn: (returnTo?: string) => Promise<void>
-  /** In the development build: signs in as one of the example people. */
+  /** Signs in as one of the people who may sign in without an issuer. */
   signInAs: (role: string) => Promise<void>
   signOut: (notice?: string) => void
   toasts: Toast[]
@@ -64,6 +64,12 @@ const emptyCatalog: Catalog = {
   relations: [],
   constraints: [],
   types: [],
+}
+
+/** The person chosen for this page, when this build lets people in without an issuer. */
+function personChosen(): Person | undefined {
+  const chosen = withoutIssuer.chosen()
+  return chosen ? withoutIssuer.people.find((person) => person.role === chosen) : undefined
 }
 
 export const SessionContext = createContext<Session | null>(null)
@@ -129,7 +135,7 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
       setPresentations({})
       setNotice(reason ?? null)
       setPhase('signed-out')
-      if (inPageDatabase) sessionStorage.removeItem('platform.dev.as')
+      withoutIssuer.forget()
       location.route('/')
     },
     [location]
@@ -232,11 +238,11 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
         const cfg = await runtimeConfig()
         if (!live) return
         setConfig(cfg)
-        if (inPageDatabase) {
-          const as = sessionStorage.getItem('platform.dev.as')
-          if (as) {
+        if (withoutIssuer.people.length > 0) {
+          const person = personChosen()
+          if (person) {
             setPhase('signing-in')
-            await load({ role: as, token: 'in-page' }, cfg)
+            await load({ role: person.role, token: person.token }, cfg)
             return
           }
           setPhase('signed-out')
@@ -307,10 +313,12 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
   const signInAs = useCallback(
     async (role: string) => {
       if (!config) return
-      sessionStorage.setItem('platform.dev.as', role)
+      const person = withoutIssuer.people.find((one) => one.role === role)
+      if (!person) return
+      withoutIssuer.choose(person.role)
       setPhase('signing-in')
       try {
-        await load({ role, token: 'in-page' }, config)
+        await load({ role: person.role, token: person.token }, config)
       } catch (error) {
         setNotice(describe(error).title)
         setPhase('signed-out')

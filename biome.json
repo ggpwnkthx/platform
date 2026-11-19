@@ -9,7 +9,7 @@
       "!**/deploy/tofu/**/.terraform",
       "!DESIGN.md",
       "!packages/ui/dist",
-      "!packages/ui/dist-dev",
+      "!examples/newsroom/.dist",
       "!**/.impeccable"
     ]
   },

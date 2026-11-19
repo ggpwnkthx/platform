@@ -1,17 +1,10 @@
 import { useLocation } from 'preact-iso'
-import { inPageDatabase } from '../pg/connect.ts'
+import { withoutIssuer } from '../pg/connect.ts'
 import { useSession } from '../session.tsx'
 import { Notice } from '../ui/bits.tsx'
 import { Button } from '../ui/button.tsx'
 import { SignInIcon, SpinnerIcon } from '../ui/icons.tsx'
 import { Initials } from '../ui/bits.tsx'
-
-/** The example people of the development build, who sign in without an issuer. */
-const people = [
-  { role: 'admin@example.com', note: 'Owns newsroom; administers roles' },
-  { role: 'alice@example.com', note: 'Writes and reads in newsroom' },
-  { role: 'bob@example.com', note: 'Writes in newsroom; member of sales, which owns crm' },
-]
 
 export function SignIn() {
   const { phase, notice, signIn, signInAs, config } = useSession()
@@ -51,13 +44,10 @@ export function SignIn() {
             and change here is exactly what you can in psql.
           </p>
           {notice && <Notice tone="danger" title={notice} />}
-          {inPageDatabase ? (
+          {withoutIssuer.people.length > 0 ? (
             <div class="signin-people">
-              <p class="signin-dev">
-                Development build: PostgreSQL runs inside this page, seeded with the example
-                workspaces. Choose who to be.
-              </p>
-              {people.map((person) => (
+              <p class="signin-dev">{withoutIssuer.notice}</p>
+              {withoutIssuer.people.map((person) => (
                 <button
                   key={person.role}
                   type="button"
@@ -74,8 +64,7 @@ export function SignIn() {
               ))}
               {busy && (
                 <p class="signin-wait">
-                  <SpinnerIcon class="spin" size={16} aria-hidden="true" /> Starting PostgreSQL in
-                  the page
+                  <SpinnerIcon class="spin" size={16} aria-hidden="true" /> {withoutIssuer.starting}
                 </p>
               )}
             </div>

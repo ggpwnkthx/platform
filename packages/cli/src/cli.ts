@@ -139,6 +139,12 @@ async function main() {
     await harden(process.argv.slice(3))
     return
   }
+  if (command === 'ui') {
+    // Loaded here, so that the operator's commands do not carry the interface with them.
+    const { ui } = await import('./ui/index.ts')
+    process.exitCode = await ui(process.argv.slice(3))
+    return
+  }
   if (command === '--version' || command === 'version') {
     console.log(VERSION)
     return
@@ -174,6 +180,8 @@ async function main() {
   token             Sign in through OIDC_ISSUER in a browser and print a token for PGTOKEN,
                     psql or an Authorization: Bearer header.
   deploy            Deploy locally with Docker/Podman or to Kubernetes. Run deploy help.
+  ui                Build the interface as a static site, and serve it while it is worked on.
+                    Run ui help.
   --version         Print the package version.
 Database commands use DATABASE_HOST/PORT/NAME/SSL and act as the person whose token is in
 PGTOKEN[_FILE], or as the installer's administrator in PGUSER/PGPASSWORD[_FILE]: the only

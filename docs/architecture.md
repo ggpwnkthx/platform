@@ -73,7 +73,7 @@ same transaction. Failed and rolled-back changes leave no committed revision.
 ## Interface
 
 The interface is a static site in `packages/ui/`, generated at build time. `packages/ui/src` is a TypeScript
-Preact application; `packages/ui/scripts/build.tsx` renders every page to HTML with `preact-iso`'s
+Preact application; `packages/cli` renders every page to HTML with the interface's own
 prerenderer and bundles the client with Bun's bundler into `packages/ui/dist`: one file per page, one
 client bundle (`app.js`), `styles.css`, the self-hosted Inter and JetBrains Mono fonts and
 `config.json`. A web server hands out those files; nothing renders a page at request time,
@@ -117,11 +117,14 @@ fields it withholds (hidden from you, write-only, read-only), and shows a refusa
 SQLSTATE.
 
 The interface reaches the database through one seam, `packages/ui/src/pg/connect.ts`. A production
-build leaves it alone, and the page opens a WebSocket to the relay. A development build
-(`bun run dev:ui`) resolves the same seam to `packages/ui/src/dev/database.ts`, PostgreSQL 18 running
+build leaves it alone, and the page opens a WebSocket to the relay. A dev-mode build
+(`bun run examples:newsroom:dev`) resolves the same seam to the module the example's
+configuration names — `examples/newsroom/database.ts` — PostgreSQL 18 running
 inside the page (PGlite) and installed with the real migrations, so the interface can be built
 without a server, an issuer or a relay. The swap happens while the bundle is built, so PGlite
-never reaches a production bundle.
+never reaches a production bundle. The seam carries more than the connection: it says who may
+sign in without an issuer, what they are told, and how their choice is kept. A production
+seam has none of that — there is an issuer — and the dev-mode seam is the example's own.
 
 Sign-in is authorization code with PKCE against the one configured issuer, done by the page
 itself (`packages/ui/src/identity/oidc.ts`): the token kept in memory, the PKCE verifier held in
@@ -149,9 +152,9 @@ what it is (its metadata) and who may use it (the rights on the schema).
 
 ## Repository
 
-Four packages, each with its own dependencies and its own tests, and a repository root that
-holds what belongs to the deployment as a whole: the migrations, the deployment files, the
-documentation and the integration tests that cross the packages.
+Four packages and an example, each with its own dependencies and its own tests, and a
+repository root that holds what belongs to the deployment as a whole: the migrations, the
+deployment files, the documentation and the integration tests that cross the packages.
 
 - `packages/sql` — the vocabulary the platform speaks, written once: the SQL it writes
   (identifiers, literals, columns, the names a relation's constraint carries, and the access
@@ -164,7 +167,8 @@ documentation and the integration tests that cross the packages.
   builds typed DDL for the model importer; `cli.ts` runs the operator tasks; `apply.ts`
   converges a database on a JSON manifest; `harden.ts` hides the role catalogs;
   `deployment/` runs the deployments, split into the local stack, Kubernetes, the help text
-  and the runtime they share.
+  and the runtime they share; `ui/` builds the interface as a static site and serves it
+  while it is worked on, reading `platform.json` for what to build.
 - `packages/relay` — the WebSocket in front of PostgreSQL's port: `relay.ts`, and nothing else.
   It holds no credentials, and it reads one setting: the role PostgreSQL reports, so that it
   can keep one role from taking the database's connections for itself.
@@ -174,15 +178,21 @@ documentation and the integration tests that cross the packages.
   fields, `access/` the roles, grants and row policies, `activity/` the revisions,
   `metadata/` what an item is and how it presents itself, `sql/` the reader's own statement,
   `workspace/` the schema and the rights on it, `identity/` who the reader is, and
-  `catalog/` PostgreSQL's own picture of the database. Three folders are shared by all of
-  them: `pg/` speaks PostgreSQL's protocol, `ui/` holds the interface's own widgets, and
-  `dev/` is the PostgreSQL that runs inside the page in development. The root of `src` holds
+  `catalog/` PostgreSQL's own picture of the database. Two folders are shared by all of
+  them: `pg/` speaks PostgreSQL's protocol and `ui/` holds the interface's own widgets. The root of `src` holds
   the shell of the application: `app.tsx` routes, `session.tsx` holds the token and the
   catalog, `shell.tsx` draws the layout, `routes.ts` names the pages, `config.ts` reads
   `config.json`, `url.ts` carries the context in the address and `format.ts` the words.
-  `scripts/build.tsx` generates the static pages, `scripts/headers.ts` holds the headers the
-  site is served with, and `scripts/dev.ts` serves it in development.
+  `src/prerender.tsx` renders the pages, `src/headers.ts` holds the headers the site is
+  served with, and `src/paths.ts` says where the interface lives. There is no build script
+  here: the interface is source, and the packages that need a site build one. The dev-mode
+  server is not here either: it belongs to the example, which is where the PostgreSQL that
+  runs inside the page lives too.
+- `examples/newsroom` — the newsroom example, running. It imports the interface and the
+  builder, and it is the only thing that knows PostgreSQL runs inside the page: the in-page
+  database, the seed it installs, the people who sign in without an issuer, the dev-mode
+  build and the server that serves it.
 
-`migrations/` holds the installation scripts the CLI applies and the development build
+`migrations/` holds the installation scripts the CLI applies and the dev-mode build
 installs into its in-page PostgreSQL. `deploy/cdn` explains how the site is published. There
 is no access-policy compiler or authorization service.

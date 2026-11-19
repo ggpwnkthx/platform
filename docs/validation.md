@@ -11,8 +11,8 @@ real migrations and the real seed, but not against the server under test: the su
 it were not run here.
 
 The suites live with the packages they belong to — `packages/cli/test`, `packages/relay/test`,
-`packages/sql/test`, `packages/ui/test` — and the suites that cross the packages, and need
-PostgreSQL, are in `test/`.
+`packages/sql/test`, `packages/ui/test`, `examples/newsroom/test` — and the suites that cross
+the packages, and need PostgreSQL, are in `test/`.
 
 | Check                                 | Result                                                                                  |
 | ------------------------------------- | --------------------------------------------------------------------------------------- |
@@ -55,7 +55,7 @@ Not verified here:
 
 - The interface in a real browser: rendering, the sign-in redirect round trip, the WebSocket
   through the relay, the Origin check, the session cap and browser-enforced CSP were not
-  observed in this run. The development build's in-page PostgreSQL was not exercised by the tests.
+  observed in this run. The dev-mode build's in-page PostgreSQL was not exercised by the tests.
 - The PostgreSQL-backed suites after the packages were split: `bun test` needs the test
   server of [operations](operations.md#testing), and it was not available where the split was
   made.

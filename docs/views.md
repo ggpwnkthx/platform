@@ -84,9 +84,9 @@ own is laid over it: the three situations are always there.
 
 1. Edit `defaultViews` in `packages/sql/src/core.ts`. Nothing else in the interface or the
    CLI has to change — both build their statements from it.
-2. The seed of the development build carries the same saying, written out in
-   `packages/ui/src/dev/seed.sql`. Update the rows there too: the test
-   `packages/ui/test/seed.test.ts` holds the seed to the default and fails until you do.
+2. The seed of the dev-mode build carries the same saying, written out in
+   `examples/newsroom/seed.sql`. Update the rows there too: the test
+   `examples/newsroom/test/seed.test.ts` holds the seed to the default and fails until you do.
 3. Fields that already carry a saying keep it. The default is what a field is _given_, not
    what it is _held to_.
 
@@ -218,9 +218,9 @@ A new situation is a place, and a place is a component and a page. To draw one:
    export const inPrint = (views: FieldViews): boolean => views.print !== 'hide'
    ```
 
-3. **The saying**, read the way every other place reads it — `indexViews` over the field's
-   metadata, and `viewsOf` for one field — so the fields the new view names are the ones the
-   reader may reach, by PostgreSQL's own row security.
+3. **The saying**, read the way every other place reads it — `resolveFields` over the
+   catalog and the fields' metadata, and `field.views` for one field — so the fields the new
+   view names are the ones the reader may reach, by PostgreSQL's own row security.
 4. **The editor**, so the owner may say where a field belongs in it: a choice in
    `ViewsEditor`, with the modes the view takes.
 5. **A route**, if the view is a page of its own: `packages/ui/src/routes.ts` names the pages

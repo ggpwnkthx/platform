@@ -8,7 +8,7 @@ and any other client.
 
 ## Pages
 
-`bun run build:ui` prerenders every page with `preact-iso` into `packages/ui/dist`, beside one client
+`bun run build:ui` (packages/cli) prerenders every page with the interface's own prerenderer into `packages/ui/dist`, beside one client
 bundle (`app.js`), `styles.css`, the self-hosted Inter and JetBrains Mono fonts and
 `config.json`. Each page is its own file, so a bookmark, a new tab and a reload all land on a
 real page; inside the app, links move between pages without a reload, which is what keeps the
@@ -314,7 +314,7 @@ balancer, a tunnel, or the relay itself with a certificate.
   form-action 'self'`, with `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
   and HSTS. There is no inline script and no third-party asset: the fonts are bundled. Pages
   are sent with `Cache-Control: no-cache` and `config.json` with `no-store`. The headers are
-  written by `packages/ui/scripts/headers.ts`, in the `_headers` file a CDN reads.
+  written by `packages/ui/src/headers.ts`, in the `_headers` file a CDN reads.
 - **Origin check.** The relay refuses a handshake whose Origin is not one of
   `RELAY_ORIGINS`, so another site's page cannot open a database session through a visitor's
   browser. A handshake with no Origin at all is refused too when the list is not empty.
@@ -339,14 +339,27 @@ balancer, a tunnel, or the relay itself with a certificate.
   administrator's password rule. Set it to the relay's addresses, so that nobody, the
   administrator included, logs in with a password through the relay.
 
-## Development
+## Dev mode
 
-`bun run dev:ui` (packages/ui/scripts/dev.ts) builds the development interface into `packages/ui/dist-dev` and
-serves it on http://localhost:5173 (PORT to change). Every change under `packages/ui/src` rebuilds the
-pages; reload to see it.
+`bun run examples:newsroom:dev` (packages/cli) builds the dev-mode interface into
+`examples/newsroom/.dist` and serves it on http://localhost:5173 (PORT to change). Every change
+under `packages/ui/src` — or under `examples/newsroom` — rebuilds the pages; reload to see it.
 
-In it, PostgreSQL 18 runs inside the page: PGlite (`@electric-sql/pglite`, a devDependency),
-installed with the real `migrations/*.sql` and seeded by `packages/ui/src/dev/seed.sql`. The seed is
+The CLI reads `platform.json` from the directory it is pointed at. That file is how the
+example says what it is: the mode it is built in, the module that is the database, and where
+the site is written.
+
+```json
+{ "mode": "development", "database": "database.ts", "out": ".dist" }
+```
+
+`bun run cli ui build` and `bun run cli ui dev` take the same file, in the working directory or
+in `--dir=DIR`. Without one, the interface is built as it is published: the real one, with the
+relay and the issuer.
+
+In it, PostgreSQL 18 runs inside the page: PGlite (`@electric-sql/pglite`, a dependency of the
+example package),
+installed with the real `migrations/*.sql` and seeded by `examples/newsroom/seed.sql`. The seed is
 what the example manifest and the CRM model would leave behind, with rows: the newsroom
 workspace with sections, articles and corrections and its grants and policies; the crm
 workspace, owned by the group `sales`, with accounts, contacts and deals and real foreign
@@ -357,11 +370,17 @@ page, and the database is kept in IndexedDB across reloads. Clearing the site's 
 forgets it: the next load starts from the seed again.
 
 The swap happens at build time: a Bun plugin replaces `packages/ui/src/pg/connect.ts` with
-`packages/ui/src/dev/database.ts`, so PGlite never reaches the production bundle. The development
-server's CSP adds `'wasm-unsafe-eval'` to `script-src`, there only, because PGlite is
+`examples/newsroom/database.ts`, so PGlite never reaches the production bundle. The example is a
+package of its own (`examples/newsroom/package.json`): it depends on `@platform/ui`, and it is the
+only thing that knows PostgreSQL runs in the page. What it holds is its configuration
+(`platform.json`): the mode it is built in, the module that is the database, and where the site
+is written. The people who sign in without an issuer come from the example too — the people, the
+words the sign-in page says, and the storage that keeps the choice between reloads. The
+interface asks the seam who may sign in and how, and the production seam has none. The
+dev-mode server's CSP adds `'wasm-unsafe-eval'` to `script-src`, there only, because PGlite is
 WebAssembly.
 
-`bun run dev:ui --relay=HOST:PORT` serves the real build from `packages/ui/dist` instead and forwards
+`bun run examples:newsroom:dev --relay=HOST:PORT` serves the real build from `packages/ui/dist` instead and forwards
 `/pg` WebSockets to a PostgreSQL at HOST:PORT, byte for byte, as the deployment's relay does.
-Sign-in then goes through the issuer in `ui/public/config.json`. Use it to work against the
-local stack.
+Sign-in then goes through the issuer in `packages/ui/public/config.json`. Use it to work
+against the local stack.

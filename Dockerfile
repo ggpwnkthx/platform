@@ -10,6 +10,7 @@ COPY packages/relay/package.json ./packages/relay/package.json
 COPY packages/sql/package.json ./packages/sql/package.json
 COPY packages/ui/package.json ./packages/ui/package.json
 RUN bun install --frozen-lockfile
+COPY packages/cli ./packages/cli
 COPY packages/ui ./packages/ui
 COPY packages/sql ./packages/sql
 COPY migrations ./migrations

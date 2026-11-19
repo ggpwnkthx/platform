@@ -6,11 +6,13 @@
   "description": "PostgreSQL-native identity, modeling, grants and row security, with a static interface that speaks to PostgreSQL itself.",
   "license": "MIT",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "examples/*"
   ],
   "scripts": {
-    "build:ui": "bun packages/ui/scripts/build.tsx",
-    "dev:ui": "bun packages/ui/scripts/dev.ts",
+    "build:ui": "bun packages/cli/src/cli.ts ui build",
+    "examples:newsroom:build": "bun packages/cli/src/cli.ts ui build --dir=examples/newsroom",
+    "examples:newsroom:dev": "bun packages/cli/src/cli.ts ui dev --dir=examples/newsroom",
     "cli": "bun packages/cli/src/cli.ts",
     "relay": "bun packages/relay/src/relay.ts",
     "migrate": "bun packages/cli/src/cli.ts migrate",
@@ -20,7 +22,7 @@
     "lint": "biome lint .",
     "format": "biome format --write .",
     "format:check": "biome format .",
-    "check": "bun run build:ui && bun run typecheck && bun run lint && bun run format:check && bun test"
+    "check": "bun run build:ui && bun run examples:newsroom:build && bun run typecheck && bun run lint && bun run format:check && bun test"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.8",

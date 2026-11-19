@@ -7,9 +7,9 @@ import { defaultViews, viewsKey } from '@platform/sql'
  * fields of the seeded collections appear, and it must say what the platform says by
  * default: the default is written in one place, and the seed follows it.
  */
-const seed = readFileSync(new URL('../src/dev/seed.sql', import.meta.url), 'utf8')
+const seed = readFileSync(new URL('../seed.sql', import.meta.url), 'utf8')
 
-describe('the seed of the development build', () => {
+describe('the seed of the dev-mode build', () => {
   test('every field of the seed carries the platform’s default views', () => {
     const rows = seed.split('\n').filter((line) => line.includes(`'${viewsKey}'`))
     expect(rows.length).toBeGreaterThan(0)

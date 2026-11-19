@@ -12,15 +12,27 @@
         "typescript": "7.0.2",
       },
     },
+    "examples/newsroom": {
+      "name": "@platform/example-newsroom",
+      "version": "2.2.0",
+      "devDependencies": {
+        "@electric-sql/pglite": "0.5.16",
+        "@platform/sql": "workspace:*",
+        "@platform/ui": "workspace:*",
+      },
+    },
     "packages/cli": {
       "name": "@platform/cli",
       "version": "2.2.0",
       "dependencies": {
         "@platform/sql": "workspace:*",
+        "@platform/ui": "workspace:*",
         "pg": "8.23.1",
         "zod": "4.6.7",
       },
       "devDependencies": {
+        "@fontsource-variable/inter": "5.2.8",
+        "@fontsource/jetbrains-mono": "5.2.8",
         "@types/pg": "8.23.1",
       },
     },
@@ -42,11 +54,6 @@
         "preact": "10.27.2",
         "preact-iso": "2.12.2",
         "preact-render-to-string": "6.6.4",
-      },
-      "devDependencies": {
-        "@electric-sql/pglite": "0.5.16",
-        "@fontsource-variable/inter": "5.2.8",
-        "@fontsource/jetbrains-mono": "5.2.8",
       },
     },
   },
@@ -80,6 +87,8 @@
     "@fontsource/jetbrains-mono": ["@fontsource/jetbrains-mono@5.2.8", "", {}, "sha512-6w8/SG4kqvIMu7xd7wt6x3idn1Qux3p9N62s6G3rfldOUYHpWcc2FKrqf+Vo44jRvqWj2oAtTHrZXEP23oSKwQ=="],
 
     "@platform/cli": ["@platform/cli@workspace:packages/cli"],
+
+    "@platform/example-newsroom": ["@platform/example-newsroom@workspace:examples/newsroom"],
 
     "@platform/relay": ["@platform/relay@workspace:packages/relay"],
 

@@ -1,0 +1,20 @@
+{
+  "name": "@platform/example-newsroom",
+  "version": "2.2.0",
+  "private": true,
+  "type": "module",
+  "description": "The newsroom example, running: PostgreSQL in the page, and no issuer to sign in with.",
+  "license": "MIT",
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.16",
+    "@platform/sql": "workspace:*",
+    "@platform/ui": "workspace:*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "engines": {
+    "bun": ">=1.4.3"
+  }
+}

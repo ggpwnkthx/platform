@@ -1,4 +1,4 @@
--- The development database: what `bun run cli apply local examples/newsroom.json` and the CRM
+-- The dev-mode database: what `bun run cli apply local examples/newsroom.json` and the CRM
 -- model would leave behind, with rows in them. Run once, as the superuser of the in-page
 -- PostgreSQL, after the migrations.
 

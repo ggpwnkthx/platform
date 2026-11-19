@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { contentSecurityPolicy, headersFile, securityHeaders } from '../scripts/headers.ts'
+import { contentSecurityPolicy, headersFile, securityHeaders } from '../src/headers.ts'
 
 const origins = {
   public: 'https://platform.example.com',

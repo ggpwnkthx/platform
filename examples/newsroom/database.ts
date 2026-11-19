@@ -1,15 +1,15 @@
 import { PGlite } from '@electric-sql/pglite'
-import type { RuntimeConfig } from '../config.ts'
-import type { Credentials, Db } from '../pg/connect.ts'
-import { type Field, PgError, parseValue, type Result, serialize } from '../pg/wire.ts'
-import migration1 from '../../../../migrations/0001_native.sql' with { type: 'text' }
-import migration2 from '../../../../migrations/0002_harden_catalogs.sql' with { type: 'text' }
-import migration3 from '../../../../migrations/0003_metadata.sql' with { type: 'text' }
-import migration4 from '../../../../migrations/0004_field_metadata.sql' with { type: 'text' }
+import type { RuntimeConfig } from '@platform/ui/config.ts'
+import type { Credentials, Db, WithoutIssuer } from '@platform/ui/pg/connect.ts'
+import { type Field, PgError, parseValue, type Result, serialize } from '@platform/ui/pg/wire.ts'
+import migration1 from '../../migrations/0001_native.sql' with { type: 'text' }
+import migration2 from '../../migrations/0002_harden_catalogs.sql' with { type: 'text' }
+import migration3 from '../../migrations/0003_metadata.sql' with { type: 'text' }
+import migration4 from '../../migrations/0004_field_metadata.sql' with { type: 'text' }
 import seed from './seed.sql' with { type: 'text' }
 
 /**
- * The development build's database: PostgreSQL 18, compiled to WebAssembly, running inside the
+ * The dev mode's database: PostgreSQL 18, compiled to WebAssembly, running inside the
  * page. It is installed with the platform's own migrations and seeded with the example
  * workspaces, so every statement the interface writes runs against the real thing: grants,
  * row policies, triggers and revisions included.
@@ -18,19 +18,36 @@ import seed from './seed.sql' with { type: 'text' }
  * reloads the page: this PostgreSQL logs one person in per page, exactly as it would log in
  * one token. It never reaches a production build: the build swaps it in for the relay.
  */
-export const inPageDatabase = true
 
+/** Where the in-page database is kept, between reloads. */
 const storageKey = 'platform-dev-v2'
 
-/** The people of the example manifest, who can sign in to the development build. */
-export const people = [
-  {
-    role: 'admin@example.com',
-    note: 'Owns the newsroom workspace, administers roles',
-  },
-  { role: 'alice@example.com', note: 'Newsroom reader and writer' },
-  { role: 'bob@example.com', note: 'Newsroom writer and member of sales, which owns crm' },
-]
+/**
+ * Signing in without an issuer: the example people, who choose themselves in the page.
+ *
+ * The choice is kept in the page's own storage, so that a reload is the same person, and it
+ * is the example that says so: the interface only asks who may sign in, and how.
+ */
+export const withoutIssuer: WithoutIssuer = {
+  people: [
+    {
+      role: 'admin@example.com',
+      note: 'Owns the newsroom workspace, administers roles',
+      token: 'in-page',
+    },
+    { role: 'alice@example.com', note: 'Newsroom reader and writer', token: 'in-page' },
+    {
+      role: 'bob@example.com',
+      note: 'Newsroom writer and member of sales, which owns crm',
+      token: 'in-page',
+    },
+  ],
+  notice: 'PostgreSQL runs inside this page, seeded with the example workspaces. Choose who to be.',
+  starting: 'Starting PostgreSQL in the page',
+  chosen: () => sessionStorage.getItem('platform.dev.as'),
+  choose: (role) => sessionStorage.setItem('platform.dev.as', role),
+  forget: () => sessionStorage.removeItem('platform.dev.as'),
+}
 
 let booted: { role: string; db: Promise<PGlite> } | null = null
 
@@ -107,7 +124,7 @@ function asPgError(error: unknown): Error {
 export async function connect(_config: RuntimeConfig, who: Credentials): Promise<Db> {
   if (booted && booted.role !== who.role) {
     // One person per page: becoming somebody else is a new page.
-    sessionStorage.setItem('platform.dev.as', who.role)
+    withoutIssuer.choose(who.role)
     location.reload()
     await new Promise(() => undefined)
   }

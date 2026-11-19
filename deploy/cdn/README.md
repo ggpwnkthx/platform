@@ -34,7 +34,7 @@ the relay and the issuer. Cloudflare Pages and Netlify read this file as it is; 
 need the same headers set by their own means (CloudFront's response headers policy, Fastly's
 `set_headers`, Fastly's or Cloudflare's edge rules).
 
-The values in both files come from one source, `packages/ui/scripts/headers.ts`, so the site a CDN
+The values in both files come from one source, `packages/ui/src/headers.ts`, so the site a CDN
 serves, the development server and the tests cannot drift apart. `bun run build:ui` writes
 them from the environment:
 
