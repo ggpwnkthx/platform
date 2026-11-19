@@ -75,16 +75,12 @@ export class TokenClient extends pg.Client {
 for (const hook of ['_handleAuthSASL', '_handleAuthSASLContinue'])
   if (typeof (pg.Client.prototype as unknown as Record<string, unknown>)[hook] !== 'function')
     throw new Error(`node-postgres no longer has ${hook}: token logins need porting`)
-export function clientConfig(
-  config: Config,
-  who: { username: string; password?: string }
-): pg.ClientConfig {
+export function clientConfig(config: Config, who: { username: string }): pg.ClientConfig {
   return {
     host: config.databaseHost,
     port: config.databasePort,
     database: config.databaseName,
     user: who.username,
-    password: who.password,
     ssl:
       config.databaseSsl === 'require'
         ? { rejectUnauthorized: true, ca: config.databaseCa }

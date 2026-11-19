@@ -78,8 +78,8 @@ describe('version and CLI entry points', () => {
   })
 })
 describe('local deployment orchestration', () => {
-  test('up installs with a one-off credential-bearing process before starting the relay', async () => {
-    const f = fake({ POSTGRES_PASSWORD: 'private-secret', RELAY_PORT: '8087' })
+  test('up installs through a one-off process beside PostgreSQL before starting the relay', async () => {
+    const f = fake({ RELAY_PORT: '8087' })
     expect(await deploy(['local', 'up'], f.r)).toBe(0)
     const cmds = f.calls.map((c) => c.argv)
     expect(cmds[1]!.slice(-4)).toEqual(['build', 'postgres', 'relay', 'migrate'])
@@ -100,8 +100,13 @@ describe('local deployment orchestration', () => {
     ])
     expect(init.argv).toContain('--profile')
     expect(init.argv.some((a) => a.includes('='))).toBe(false)
-    expect(init.options?.env?.POSTGRES_PASSWORD).toBe('private-secret')
-    expect(JSON.stringify(cmds)).not.toContain('private-secret')
+    // Nothing is handed to the installer: PostgreSQL has no password to hand.
+    expect(
+      Object.keys(init.options?.env ?? {}).filter((name) => /^(POSTGRES|PG)/.test(name))
+    ).toEqual([])
+    // The roles of the people this stack's Dex knows are made the same way, straight after.
+    const example = f.calls[f.calls.indexOf(init) + 1]!
+    expect(example.argv.slice(-5)).toEqual(['-T', 'migrate', 'apply', 'k8s', '--example'])
     expect(cmds.at(-1)!.slice(-3)).toEqual(['up', '-d', 'relay'])
     // Dex answers before the installer runs; the relay is checked last.
     expect(f.urls).toEqual([
@@ -113,19 +118,22 @@ describe('local deployment orchestration', () => {
       'utf8'
     )
     const services = (Bun.YAML.parse(stack) as any).services
-    // Only the installer is given a password: the relay holds none.
-    expect(JSON.stringify(services.relay)).not.toContain('PASS')
+    // No service is given a password: PostgreSQL has none, and the installer shares its socket.
+    expect(stack).not.toMatch(/PASSWORD|scram/)
+    expect(services.migrate.environment.DATABASE_HOST).toBe('/var/run/postgresql')
+    expect(services.migrate.volumes).toEqual(['socket:/var/run/postgresql'])
+    expect(services.postgres.volumes).toContain('socket:/var/run/postgresql')
     // The interface is a static site, published to a CDN: it is not a container.
     expect(services.ui).toBeUndefined()
     expect(Object.keys(services).sort()).toEqual(['dex', 'migrate', 'postgres', 'relay'])
-    // From the relay's network, PostgreSQL takes tokens and nothing else.
+    // The relay's network is named to PostgreSQL, which keeps an administrator out of it.
     expect(services.postgres.environment.PLATFORM_TOKEN_ONLY_FROM).toBe(
       (Bun.YAML.parse(stack) as any).networks.relay.ipam.config[0].subnet
     )
     expect(stack).not.toContain('postgres:16')
   })
   test('Dex is given hashes of the example people’s passwords, never the passwords', async () => {
-    const f = fake({ POSTGRES_PASSWORD: 'secret', ALICE_PASSWORD: 'chosen-by-alice' })
+    const f = fake({ ALICE_PASSWORD: 'chosen-by-alice' })
     writeFileSync(f.envFile, 'BOB_PASSWORD=saved-for-bob\n')
     expect(await deploy(['local', 'up'], f.r)).toBe(0)
     const saved = readFileSync(f.envFile, 'utf8')
@@ -147,7 +155,7 @@ describe('local deployment orchestration', () => {
     expect(dex).not.toContain('PASSWORD')
   })
   test('installer failure propagates its exit code and prevents the interface starting', async () => {
-    const f = fake({ POSTGRES_PASSWORD: 'private-secret' })
+    const f = fake()
     const original = f.r.run
     f.r.run = async (argv, options) => {
       await original(argv, options)
@@ -157,14 +165,15 @@ describe('local deployment orchestration', () => {
     expect(f.calls.some((c) => c.argv.slice(-3).join(' ') === 'up -d relay')).toBe(false)
   })
   test('build failure prevents database startup', async () => {
-    const f = fake({ POSTGRES_PASSWORD: 'secret' })
+    const f = fake()
     f.r.run = async (argv) => (argv.includes('build') ? 5 : 0)
     expect(await deploy(['local', 'up'], f.r)).toBe(5)
   })
   test('init runs only the installer and never starts the interface', async () => {
-    const f = fake({ POSTGRES_PASSWORD: 'secret' })
+    const f = fake()
     expect(await deploy(['local', 'init'], f.r)).toBe(0)
-    expect(f.calls.at(-1)!.argv.slice(-2)).toEqual(['-T', 'migrate'])
+    expect(f.calls.at(-2)!.argv.slice(-2)).toEqual(['-T', 'migrate'])
+    expect(f.calls.at(-1)!.argv.slice(-4)).toEqual(['migrate', 'apply', 'k8s', '--example'])
     expect(f.urls).toEqual(['http://localhost:5556/dex/.well-known/openid-configuration'])
   })
   test('Podman is selected when Docker Compose is unavailable', async () => {
@@ -183,44 +192,49 @@ describe('local deployment orchestration', () => {
     await deploy(['local', 'logs', '-f', 'relay'], f.r)
     expect(f.calls.at(-1)!.argv.slice(-3)).toEqual(['logs', '-f', 'relay'])
   })
-  test('a missing administrator password is generated once, saved privately and reused', async () => {
+  test('no password is made for PostgreSQL, and what Dex asks the example people for is saved once', async () => {
     const f = fake()
     writeFileSync(f.envFile, 'APP_ENV=development')
     expect(await deploy(['local', 'up'], f.r)).toBe(0)
-    const password = f.calls.find((c) => c.argv.includes('migrate'))!.options!.env!
-      .POSTGRES_PASSWORD!
-    expect(password).toMatch(/^[A-Za-z0-9_-]{32}$/)
-    expect(readFileSync(f.envFile, 'utf8')).toStartWith(
-      `APP_ENV=development\nPOSTGRES_PASSWORD=${password}\nPLATFORM_ADMIN_PASSWORD=`
-    )
-    expect(f.output[0]).toContain('Generated POSTGRES_PASSWORD')
-    expect(JSON.stringify([f.output, f.calls.map((c) => c.argv)])).not.toContain(password)
+    const saved = readFileSync(f.envFile, 'utf8')
+    expect(saved).toStartWith('APP_ENV=development\nPLATFORM_ADMIN_PASSWORD=')
+    expect(saved).not.toContain('POSTGRES')
+    for (const call of f.calls)
+      expect(
+        Object.keys(call.options?.env ?? {}).filter((name) => /^(POSTGRES|PG)/.test(name))
+      ).toEqual([])
+    expect(f.output[0]).toContain('Generated PLATFORM_ADMIN_PASSWORD')
     f.calls.length = 0
     f.output.length = 0
     expect(await deploy(['local', 'init'], f.r)).toBe(0)
-    expect(f.calls.at(-1)!.options!.env!.POSTGRES_PASSWORD).toBe(password)
-    expect(readFileSync(f.envFile, 'utf8').match(/POSTGRES_PASSWORD/g)).toHaveLength(1)
+    expect(readFileSync(f.envFile, 'utf8')).toBe(saved)
     expect(f.output).toEqual([])
     const fresh = fake()
     expect(await deploy(['local', 'validate'], fresh.r)).toBe(0)
     expect(statSync(fresh.envFile).mode & 0o777).toBe(0o600)
-  })
-  test('a supplied password or password file is used and nothing is generated', async () => {
-    const f = fake({ POSTGRES_PASSWORD: 'from-environment' })
-    writeFileSync(f.envFile, 'POSTGRES_PASSWORD="from-file"\n')
-    await deploy(['local', 'init'], f.r)
-    expect(f.calls.at(-1)!.options!.env!.POSTGRES_PASSWORD).toBe('from-environment')
-    const g = fake()
-    writeFileSync(join(g.envFile, '..', 'secret'), 'from-secret-file\n')
-    writeFileSync(g.envFile, `POSTGRES_PASSWORD_FILE=${join(g.envFile, '..', 'secret')}\n`)
-    await deploy(['local', 'init'], g.r)
-    expect(g.calls.at(-1)!.options!.env!.POSTGRES_PASSWORD).toBe('from-secret-file')
-    expect(readFileSync(g.envFile, 'utf8')).not.toMatch(/^POSTGRES_PASSWORD=/m)
     for (const action of ['status', 'logs', 'down']) {
       const h = fake()
       await deploy(['local', action], h.r)
       expect(existsSync(h.envFile)).toBe(false)
     }
+  })
+  test('admin runs an operator command beside PostgreSQL, and holds nothing to do it', async () => {
+    const f = fake()
+    expect(await deploy(['local', 'admin', 'harden', 'k8s', '--keep-names'], f.r)).toBe(0)
+    const call = f.calls.at(-1)!
+    expect(call.argv.slice(-8)).toEqual([
+      'run',
+      '--rm',
+      '--no-deps',
+      '-T',
+      'migrate',
+      'harden',
+      'k8s',
+      '--keep-names',
+    ])
+    expect(call.argv).toContain('--profile')
+    expect(existsSync(f.envFile)).toBe(false)
+    await expect(deploy(['local', 'admin'], fake().r)).rejects.toThrow('needs a command')
   })
   test('options are validated before any process starts or value is generated', async () => {
     const f = fake()
@@ -234,12 +248,9 @@ describe('local deployment orchestration', () => {
     await expect(deploy(['local', 'up'], fake({ DEX_PORT: '0' }).r)).rejects.toThrow('DEX_PORT')
     expect(f.calls).toEqual([])
     expect(existsSync(f.envFile)).toBe(false)
-    const bad = fake({ POSTGRES_PASSWORD: 'secret', RELAY_PORT: 'no' })
-    await expect(deploy(['local', 'up'], bad.r)).rejects.toThrow('RELAY_PORT')
-    expect(bad.calls).toEqual([])
   })
   test('failed relay readiness times out instead of reporting success', async () => {
-    const f = fake({ POSTGRES_PASSWORD: 'secret' })
+    const f = fake()
     f.r.healthy = async (url) => url.includes('/dex/')
     await expect(deploy(['local', 'up', '--timeout=2'], f.r)).rejects.toThrow(
       'The relay did not become ready'

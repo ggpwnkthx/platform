@@ -31,11 +31,15 @@ const secret = (name: string) => {
 const given = (name: string) => !!(process.env[name] || process.env[`${name}_FILE`])
 /**
  * The database of a deployment, connected as the operator this command acts as: a person, with
- * the token in PGTOKEN[_FILE]; or the installer's administrator, the one login with a password.
+ * the token in PGTOKEN[_FILE]. No login has a password, the operator's included.
+ *
+ * The one connection without a token is the server's own socket: DATABASE_HOST names the
+ * directory it is in, which only something running beside the server can reach. PostgreSQL
+ * lets its own superuser in there, and that is how a server is installed before anybody has
+ * a role to sign in as.
  */
 function connection(target?: string): pg.Client {
   let config = loadConfig()
-  let administrator: { username: string; password?: string } | undefined
   if (target === 'local') {
     const db = localDatabase()
     config = loadConfig({
@@ -45,23 +49,25 @@ function connection(target?: string): pg.Client {
       DATABASE_NAME: db.name,
       DATABASE_SSL: 'disable',
     })
-    // The stack's own administrator unless the operator names another login.
-    administrator = db
   } else if (target !== undefined && target !== 'k8s' && target !== 'kubernetes')
     throw new Error(`Unknown deployment: ${target}. Supported deployments: local, k8s.`)
+  for (const name of ['PGPASSWORD', 'PGPASSWORD_FILE'])
+    if (process.env[name])
+      throw new Error(`${name} is not used: no login has a password. Sign in with a token.`)
   if (given('PGTOKEN')) {
     const who = bearer(`Bearer ${secret('PGTOKEN')}`, config.oidcClaim)
     return new TokenClient(clientConfig(config, who), who.token)
   }
-  if (given('PGUSER') || !administrator)
-    return new pg.Client(
-      clientConfig(config, { username: secret('PGUSER'), password: secret('PGPASSWORD') })
-    )
-  if (!administrator.password)
-    throw new Error(
-      'The local deployment has no saved administrator password. Run deploy local up, or set PGTOKEN[_FILE], or PGUSER and PGPASSWORD[_FILE].'
-    )
-  return new pg.Client(clientConfig(config, administrator))
+  if (config.databaseHost.startsWith('/'))
+    return new pg.Client({
+      ...clientConfig(config, { username: process.env.PGUSER || 'postgres' }),
+      ssl: false,
+    })
+  throw new Error(
+    target === 'local'
+      ? 'PGTOKEN or PGTOKEN_FILE is required: sign in with `bun run cli token` and pass what it prints. The local stack itself is administered with `bun run cli deploy local admin <command>`.'
+      : 'PGTOKEN or PGTOKEN_FILE is required: sign in with `bun run cli token` and pass what it prints.'
+  )
 }
 async function apply(q: pg.Client, args: string[]) {
   const dry = args.includes('--dry-run')
@@ -173,7 +179,7 @@ async function main() {
   ) {
     console.log(`platform <command>
   migrate           Install or upgrade Platform ${VERSION} in a dedicated PostgreSQL 18 database.
-                    Needs PGUSER/PGPASSWORD[_FILE] of its administrator.
+                    Needs the token of its administrator.
   harden <local|k8s> [--keep-names|--restore]
                     Hide the role catalogs from ordinary connections, so that psql no longer
                     reads who belongs to which group. Needs the cluster superuser. --keep-names
@@ -182,8 +188,8 @@ async function main() {
                     Apply JSON manifests of users, groups, workspaces, collections, grants and
                     policies to a deployment, in one transaction. --example applies the example
                     manifest the tools carry: the roles, workspace, grants and policy the example
-                    sign-ins need. local signs in as the local stack's administrator unless PGTOKEN
-                    or PGUSER is set; k8s uses the settings below.
+                    sign-ins need. local is the local stack's published port; k8s uses the
+                    settings below. Both need a token.
   model:apply FILE  Apply an additive JSON model using the caller's own DDL rights.
   sql FILE          Run a SQL file using the caller's own rights. Use BEGIN/COMMIT for atomic scripts.
   doctor            Check the server version, how it lets people in, and the installation.
@@ -194,8 +200,8 @@ async function main() {
                     Run ui help.
   --version         Print the package version.
 Database commands use DATABASE_HOST/PORT/NAME/SSL and act as the person whose token is in
-PGTOKEN[_FILE], or as the installer's administrator in PGUSER/PGPASSWORD[_FILE]: the only
-login that has a password. The HTTP server never loads any of them.`)
+PGTOKEN[_FILE]: \`platform token\` prints one. No login has a password. A DATABASE_HOST that is a
+directory is the server's own socket, for a command that runs beside the server.`)
     return
   }
   const q = connection(command === 'apply' ? (process.argv[3] ?? '') : undefined)

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { connect as tcp } from 'node:net'
-import pg from 'pg'
+import type pg from 'pg'
 import {
   Connection,
   PgError,
@@ -8,14 +8,13 @@ import {
   serialize,
   type Transport,
 } from '../packages/pg-client/src/wire.ts'
+import { administrator, adminUrl } from './administrator.ts'
 import { startIssuer } from './issuer.ts'
 
 /**
  * The page's own PostgreSQL client, logging in with a token over a plain socket: the same
  * bytes the relay forwards from a browser.
  */
-const adminUrl =
-  process.env.TEST_ADMIN_URL ?? 'postgres://postgres:test-admin-password@127.0.0.1:54329/postgres'
 const url = new URL(adminUrl)
 const prefix = `w${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
 const database = `${prefix}_db`
@@ -43,7 +42,7 @@ const login = async (token = issuer.mint(person), user = person) =>
   Connection.open(await socket(), { user, database, token })
 
 beforeAll(async () => {
-  root = new pg.Client(adminUrl)
+  root = administrator(issuer)
   await root.connect()
   await root.query(`CREATE DATABASE "${database}"`)
   await root.query(`CREATE ROLE "${person}" LOGIN`)

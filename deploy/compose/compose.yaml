@@ -1,14 +1,12 @@
 services:
-  # PostgreSQL 18 with the token validator. Its only password login is the administrator's, and
-  # not from the relay's network: from there, a token is the only way in.
+  # PostgreSQL 18 with the token validator. No login has a password: over the network a token
+  # is the only way in, and the server's own superuser is reached through its socket alone.
   postgres:
     build: ../postgres
     image: platform-postgres:local
     environment:
       POSTGRES_DB: platform
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD for local development}
-      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
       PLATFORM_OIDC_ISSUER: http://localhost:${DEX_PORT:-5556}/dex
       PLATFORM_TOKEN_ONLY_FROM: 10.89.71.0/24
     networks: [default, relay]
@@ -19,6 +17,8 @@ services:
     volumes:
       # Not the volume a PostgreSQL 16 stack used: that one is left as it was.
       - data18:/var/lib/postgresql
+      # The server's own socket, shared with the installer and with nothing else.
+      - socket:/var/run/postgresql
     healthcheck:
       test: [CMD-SHELL, "pg_isready -U postgres -d platform"]
       interval: 3s
@@ -48,8 +48,9 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
-  # The installer: the only container that is given the administrator's credentials. It runs once,
-  # through `compose --profile install run`, and is never part of `up`.
+  # The installer: the operator's tools, beside PostgreSQL. It is given no credentials, because
+  # there are none: it shares the server's socket, where PostgreSQL lets its own superuser in.
+  # It runs through `compose --profile install run`, and is never part of `up`.
   migrate:
     profiles: [install]
     build:
@@ -58,11 +59,15 @@ services:
     image: platform-cli:local
     command: [migrate]
     environment:
-      DATABASE_HOST: postgres
+      # A directory, not a name: the socket in it is the way in.
+      DATABASE_HOST: /var/run/postgresql
       DATABASE_NAME: platform
       DATABASE_SSL: disable
       PGUSER: postgres
-      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD for local development}
+    volumes:
+      - socket:/var/run/postgresql
+    # The socket is on a volume, not on a network: the installer needs none.
+    network_mode: none
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -90,11 +95,12 @@ services:
     security_opt: [no-new-privileges:true]
 networks:
   default: {}
-  # PostgreSQL and the relay. Its address range is the one PostgreSQL takes only tokens from.
+  # PostgreSQL and the relay. Its address range is the one PostgreSQL lets no administrator in from.
   relay:
     ipam:
       config:
         - subnet: 10.89.71.0/24
 volumes:
   data18:
+  socket:
   dex:

@@ -26,5 +26,7 @@ RUN apt-get -o APT::Sandbox::User=root update \
  && install -d -o postgres -g postgres -m 0700 /etc/platform
 COPY --from=validator /out/usr/lib/postgresql/ /usr/lib/postgresql/
 COPY --chmod=0755 entrypoint.sh /usr/local/bin/platform-postgres
+# Not executable, so the image's entrypoint reads it into its own shell when it makes a cluster.
+COPY --chmod=0644 init.sh /docker-entrypoint-initdb.d/00-platform.sh
 ENTRYPOINT ["platform-postgres"]
 CMD ["postgres"]

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
-import pg from 'pg'
+import type pg from 'pg'
 import { TokenClient, transaction } from '../packages/cli/src/database/db.ts'
 import {
   ident,
@@ -16,6 +16,7 @@ import {
   setMetadata,
 } from '../packages/data/src/metadata/query.ts'
 import type { Connection } from '../packages/pg-client/src/wire.ts'
+import { administrator, adminUrl } from './administrator.ts'
 import { startIssuer } from './issuer.ts'
 import { openPage, refusal } from './page.ts'
 
@@ -26,8 +27,6 @@ import { openPage, refusal } from './page.ts'
  * signs in to the page's own client with a token, and row security decides.
  */
 
-const adminUrl =
-  process.env.TEST_ADMIN_URL ?? 'postgres://postgres:test-admin-password@127.0.0.1:54329/postgres'
 const url = new URL(adminUrl)
 const prefix = `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
 const dbName = `${prefix}_db`
@@ -68,13 +67,11 @@ const field = (db: Connection, column: string) =>
 const keys = (entries: { key: string }[]) => entries.map((one) => one.key)
 
 beforeAll(async () => {
-  root = new pg.Client({ connectionString: adminUrl })
+  root = administrator(issuer)
   await root.connect()
   await root.query(`CREATE DATABASE ${ident(dbName)}`)
   started = true
-  const dbUrl = new URL(adminUrl)
-  dbUrl.pathname = `/${dbName}`
-  admin = new pg.Client({ connectionString: dbUrl.toString() })
+  admin = administrator(issuer, dbName)
   await admin.connect()
   await transaction(admin, async () => {
     await admin.query(

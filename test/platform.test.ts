@@ -26,11 +26,10 @@ import * as pageIdentity from '../packages/data/src/identity/query.ts'
 import { transaction as pageTransaction } from '../packages/vocabulary/src/index.ts'
 import * as pageSql from '../packages/ui/src/sql/query.ts'
 import type { Connection } from '../packages/pg-client/src/wire.ts'
+import { administrator, adminRole, adminUrl, serverSuperuser } from './administrator.ts'
 import { startIssuer } from './issuer.ts'
 import { openPage, refusal } from './page.ts'
 
-const adminUrl =
-  process.env.TEST_ADMIN_URL ?? 'postgres://postgres:test-admin-password@127.0.0.1:54329/postgres'
 const url = new URL(adminUrl)
 const prefix = `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
 const dbName = `${prefix}_db`
@@ -127,17 +126,16 @@ async function deny(q: pg.Client, text: string, code = '42501') {
   }
 }
 beforeAll(async () => {
-  root = new pg.Client({ connectionString: adminUrl })
+  root = administrator(issuer)
   await root.connect()
   await root.query(`CREATE DATABASE ${ident(dbName)}`)
   started = true
-  const dbUrl = new URL(adminUrl)
-  dbUrl.pathname = `/${dbName}`
-  admin = new pg.Client({ connectionString: dbUrl.toString() })
+  admin = administrator(issuer, dbName)
   await admin.connect()
   await transaction(admin, async () => {
-    for (const file of ['0001_native.sql', '0002_harden_catalogs.sql', '0003_metadata.sql'])
-      await admin.query(readFileSync(new URL(`../migrations/${file}`, import.meta.url), 'utf8'))
+    await admin.query(
+      readFileSync(new URL('../migrations/0001_platform.sql', import.meta.url), 'utf8')
+    )
   })
   for (const n of roles) {
     await admin.query(
@@ -217,11 +215,12 @@ describe('native identity', () => {
       code: '28000',
     })
     expect(await refusal(signIn('bob', issuer.mint(role('alice'))))).toBe('28000')
-    // The administrator's password rule is not a way in for a token, nor for anyone else.
+    // The server's own superuser is no login over the network: a token that names it is
+    // refused like any other way in.
     await expect(
       new TokenClient(
-        { ...endpoint, user: decodeURIComponent(url.username) },
-        issuer.mint(decodeURIComponent(url.username))
+        { ...endpoint, user: serverSuperuser },
+        issuer.mint(serverSuperuser)
       ).connect()
     ).rejects.toMatchObject({ code: '28000' })
   })
@@ -736,7 +735,7 @@ describe('additional database boundaries', () => {
     try {
       await deny(
         admin,
-        readFileSync(new URL('../migrations/0001_native.sql', import.meta.url), 'utf8'),
+        readFileSync(new URL('../migrations/0001_platform.sql', import.meta.url), 'utf8'),
         'P0001'
       )
     } finally {
@@ -888,10 +887,7 @@ describe('declarative apply', () => {
         env: {
           PATH: process.env.PATH,
           ...cliEnv,
-          ...(operator ?? {
-            PGUSER: decodeURIComponent(url.username),
-            PGPASSWORD: decodeURIComponent(url.password),
-          }),
+          ...(operator ?? { PGTOKEN: issuer.mint(adminRole) }),
         },
         stdout: 'pipe',
         stderr: 'pipe',
@@ -944,8 +940,8 @@ test('CLI installs a new database at 2.2.0 and safely repeats the installation',
           DATABASE_PORT: url.port || '5432',
           DATABASE_NAME: name,
           DATABASE_SSL: cliEnv.DATABASE_SSL,
-          PGUSER: decodeURIComponent(url.username),
-          PGPASSWORD: decodeURIComponent(url.password),
+          OIDC_ISSUER: issuerUrl,
+          PGTOKEN: issuer.mint(adminRole),
         },
         stdout: 'pipe',
         stderr: 'pipe',

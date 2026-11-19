@@ -9,10 +9,9 @@ export async function requirePostgres18(q: pg.Client) {
     )
 }
 /**
- * What is wrong with how this server lets people in over the network. Tokens are the rule:
- * a password may remain only on a rule that names its logins, such as the installer's
- * administrator. Reading the rules needs a superuser or pg_read_all_settings; without that
- * the answer is `unchecked`.
+ * What is wrong with how this server lets people in over the network. A token is the only
+ * way in: a rule that accepts anything else, for anyone, is a problem. Reading the rules needs
+ * a superuser or pg_read_all_settings; without that the answer is `unchecked`.
  */
 export async function authenticationProblems(q: pg.Client): Promise<string[] | 'unchecked'> {
   let rules: {
@@ -39,9 +38,7 @@ export async function authenticationProblems(q: pg.Client): Promise<string[] | '
   for (const r of rules) {
     const where = `pg_hba.conf rule ${r.rule_number}`
     if (r.error) problems.push(`${where}: ${r.error}`)
-    else if (['oauth', 'reject'].includes(r.auth_method)) continue
-    // A group (+name), a regular expression or all would open a second way in for ordinary users.
-    else if (r.auth_method !== 'scram-sha-256' || r.user_name.some((u) => /^(all$|\+|\/)/.test(u)))
+    else if (!['oauth', 'reject'].includes(r.auth_method))
       problems.push(
         `${where}: ${r.type} ${r.user_name.join(',')} ${r.auth_method} lets logins in without a token`
       )

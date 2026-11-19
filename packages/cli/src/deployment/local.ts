@@ -1,5 +1,5 @@
 /** The local stack: Docker Compose or Podman Compose, with PostgreSQL, Dex and the relay. */
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   type DeployRuntime,
@@ -19,26 +19,12 @@ const LOCAL_PEOPLE = {
   DEX_ALICE_HASH: 'ALICE_PASSWORD',
   DEX_BOB_HASH: 'BOB_PASSWORD',
 }
-/** The local stack's administrator password, if one was supplied or generated earlier. */
-function administratorPassword(r: DeployRuntime): string | undefined {
-  // The environment wins over the saved file; within either, a password file wins over a value.
-  const passwordFile =
-    r.env.POSTGRES_PASSWORD_FILE ??
-    (r.env.POSTGRES_PASSWORD ? undefined : saved(r.envFile, 'POSTGRES_PASSWORD_FILE'))
-  const password = passwordFile
-    ? readFileSync(passwordFile, 'utf8').trimEnd()
-    : r.env.POSTGRES_PASSWORD || saved(r.envFile, 'POSTGRES_PASSWORD')
-  if (passwordFile && !password) throw new Error(`${passwordFile} is empty`)
-  return password
-}
-/** Where the local stack publishes PostgreSQL, for commands that manage what is inside it. */
+/** Where the local stack publishes PostgreSQL, for commands that sign in to it with a token. */
 export function localDatabase(r: DeployRuntime = runtime) {
   return {
     host: '127.0.0.1',
     port: r.env.POSTGRES_PORT ?? saved(r.envFile, 'POSTGRES_PORT') ?? '5432',
     name: 'platform',
-    username: 'postgres',
-    password: administratorPassword(r),
   }
 }
 async function compose(engine: string, r: DeployRuntime): Promise<string[]> {
@@ -73,12 +59,13 @@ async function wait(
 export async function local(action: string, args: string[], r: DeployRuntime): Promise<number> {
   const engine = option(args, 'engine') ?? 'auto'
   const timeout = seconds(option(args, 'timeout'))
-  if (!['up', 'init', 'ui', 'validate', 'build', 'status', 'logs', 'down'].includes(action))
+  if (
+    !['up', 'init', 'ui', 'validate', 'build', 'status', 'logs', 'down', 'admin'].includes(action)
+  )
     throw new Error(`Unknown local action: ${action}`)
-  if (!['logs', 'down'].includes(action)) noExtra(args)
+  if (!['logs', 'down', 'admin'].includes(action)) noExtra(args)
   // The interface is a static site: building it needs no container, only the toolchain.
   if (action === 'ui') return buildInterface(r)
-  let password = administratorPassword(r)
   const setting = (name: string, fallback: string) => {
     const value = r.env[name] ?? saved(r.envFile, name) ?? fallback
     if (!/^\d+$/.test(value) || Number(value) < 1 || Number(value) > 65535)
@@ -99,13 +86,12 @@ export async function local(action: string, args: string[], r: DeployRuntime): P
     '-f',
     join(ROOT, 'deploy/compose/compose.yaml'),
   ]
-  // Generated only once the options are valid and a Compose tool is found. Down/status/logs
-  // must work without a secret; Compose still interpolates this required variable.
+  // PostgreSQL is given no password, and neither is anything else: the only values generated
+  // are the example people's, which Dex asks for in place of a real sign-in system. They are
+  // generated only once the options are valid and a Compose tool is found.
   const prepares = ['up', 'init', 'build', 'validate'].includes(action)
-  if (!password && prepares) password = generate('POSTGRES_PASSWORD', r)
   const env: Record<string, string | undefined> = {
     ...r.env,
-    POSTGRES_PASSWORD: password ?? 'unused-for-inspection',
     DEX_PORT: dexPort,
     RELAY_PORT: relayPort,
     // The only origin the relay allows: the address the site is served from.
@@ -121,6 +107,31 @@ export async function local(action: string, args: string[], r: DeployRuntime): P
   if (action === 'status') return run(['ps'])
   if (action === 'logs') return run(['logs', ...args])
   if (action === 'down') return run(['down', ...args])
+  /**
+   * The operator's tools, run beside PostgreSQL and connected through its own socket: the
+   * way the stack is installed, and the way it is administered by whoever runs it. Nothing is
+   * handed over, because there is nothing to hand: the socket is the credential.
+   */
+  const beside = (command: string[]) =>
+    r.run(
+      [
+        ...cmd.slice(0, base),
+        '--profile',
+        'install',
+        ...cmd.slice(base),
+        'run',
+        '--rm',
+        '--no-deps',
+        '-T',
+        'migrate',
+        ...command,
+      ],
+      { env }
+    )
+  if (action === 'admin') {
+    if (!args.length) throw new Error('admin needs a command, such as doctor or harden k8s')
+    return beside(args)
+  }
   // The installer's image is built with the rest: its service sits behind the install profile.
   const built = await r.run(
     [
@@ -150,22 +161,10 @@ export async function local(action: string, args: string[], r: DeployRuntime): P
   )
   const issuer = `http://localhost:${dexPort}/dex`
   await wait(() => r.healthy(`${issuer}/.well-known/openid-configuration`), timeout, r, 'Dex')
-  // The credentials reach the installer through the Compose file's interpolation, not through
-  // `run -e NAME`, which podman-compose cannot parse, nor `-e NAME=value`, which would show them.
-  const installed = await r.run(
-    [
-      ...cmd.slice(0, base),
-      '--profile',
-      'install',
-      ...cmd.slice(base),
-      'run',
-      '--rm',
-      '--no-deps',
-      '-T',
-      'migrate',
-    ],
-    { env }
-  )
+  // The installer runs beside PostgreSQL and is let in by its socket. It installs the platform,
+  // then the roles of the three people this stack's Dex knows, so that there is somebody to
+  // sign in as.
+  const installed = (await beside([])) || (await beside(['apply', 'k8s', '--example']))
   if (installed || action === 'init') return installed
   const served = await run(['up', '-d', 'relay'])
   if (served) return served
@@ -175,9 +174,10 @@ export async function local(action: string, args: string[], r: DeployRuntime): P
     `PostgreSQL, Dex and the relay are running. The relay answers at ${relayUrl}.
 The interface is a static site: build it with \`bun run cli deploy local ui\` and publish the
 files in packages/ui/dist to a CDN, with config.json pointing at ${relayUrl}.
-People sign in through Dex at ${issuer}.
-Create the example roles: bun run cli apply local --example
-Then sign in as admin@example.com, alice@example.com or bob@example.com with the passwords saved in ${r.envFile}.`
+People sign in through Dex at ${issuer}: admin@example.com, alice@example.com or
+bob@example.com, with what Dex asks for saved in ${r.envFile}. PostgreSQL itself has no
+password: sign in to it with a token (\`bun run cli token\`), and administer the stack's own
+server with \`bun run cli deploy local admin <command>\`.`
   )
   return 0
 }
