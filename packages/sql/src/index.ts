@@ -83,10 +83,53 @@ export const columnTypes = {
 
 export type ColumnType = keyof typeof columnTypes
 
+/**
+ * A type a field may have: one of the platform's own, or any type the database holds —
+ * `geometry` and `geography` where PostGIS is installed, an enum or a domain of the
+ * installation's own. A type outside the platform's list is named with the schema it lives
+ * in, so that it means the same thing wherever the statement runs.
+ */
+export type TypeName = ColumnType | (string & {})
+
+/** The platform's own type, or nothing: a type of any other name is the database's. */
+const builtIn = (type: string): string | null =>
+  Object.hasOwn(columnTypes, type) ? columnTypes[type as ColumnType] : null
+
+/**
+ * A type as a statement writes it. The platform's own types are written as PostgreSQL knows
+ * them; any other type is written as a quoted name, qualified with the schema it lives in
+ * when it is named that way.
+ */
+export function typeSql(type: string, modifiers: readonly string[] = []): string {
+  const name = builtIn(type) ?? qualifiedType(type)
+  if (!modifiers.length) return name
+  return `${name}(${modifiers.map(modifierSql).join(', ')})`
+}
+
+/** A type name: a bare name, or a name qualified with the schema it lives in. */
+function qualifiedType(type: string): string {
+  const parts = type.split('.')
+  if (parts.length > 2 || parts.some((part) => !part.trim()))
+    throw new InvalidName(`${type} is not a type name`)
+  return parts.map((part) => ident(part.trim())).join('.')
+}
+
+/**
+ * A type modifier: a count as PostgreSQL counts it, or a name as PostgreSQL knows it.
+ * `Point` and `4326` are the modifiers of a geometry.
+ */
+function modifierSql(modifier: string): string {
+  const text = modifier.trim()
+  if (/^\d+$/.test(text)) return text
+  return ident(text)
+}
+
 /** A column, as the interface and the manifests describe it. */
 export interface ColumnSpec {
   name: string
-  type: ColumnType
+  type: TypeName
+  /** The type's own modifiers: `Point, 4326` for a geometry. */
+  modifiers?: string[]
   required?: boolean
   unique?: boolean
   /** A default, as its type would read it. */
@@ -101,7 +144,7 @@ export interface ColumnSpec {
  * A default value as the column's type would read it. A number or a boolean is written as
  * it is; anything else is a literal.
  */
-export function defaultLiteral(type: ColumnType, value: unknown, name = ''): string {
+export function defaultLiteral(type: TypeName, value: unknown, name = ''): string {
   if (value === null || value === undefined || value === '') return ''
   if (['integer', 'bigint', 'decimal', 'float'].includes(type)) {
     if (typeof value === 'number') return String(value)
@@ -123,7 +166,7 @@ export function defaultLiteral(type: ColumnType, value: unknown, name = ''): str
  */
 export function columnSql(spec: ColumnSpec): string {
   const name = ident(spec.name)
-  let sql = `${name} ${columnTypes[spec.type]}`
+  let sql = `${name} ${typeSql(spec.type, spec.modifiers)}`
   if (spec.default) sql += ` DEFAULT ${spec.default}`
   if (spec.required) sql += ' NOT NULL'
   if (spec.unique) sql += ' UNIQUE'

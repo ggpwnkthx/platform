@@ -52,6 +52,7 @@ const emptyCatalog: Catalog = {
   columns: [],
   relations: [],
   constraints: [],
+  types: [],
 }
 
 export const SessionContext = createContext<Session | null>(null)

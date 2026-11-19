@@ -8,34 +8,34 @@ import {
   literal,
   qualified,
   systemFields,
-  type ColumnType,
+  type TypeName,
 } from '@platform/sql'
 import { InputError, transaction } from './database/db.ts'
 
-const types = {
-  string: 'text',
-  text: 'text',
-  integer: 'integer',
-  bigint: 'bigint',
-  decimal: 'numeric',
-  float: 'double precision',
-  boolean: 'boolean',
-  uuid: 'uuid',
-  date: 'date',
-  time: 'time',
-  timestamp: 'timestamptz',
-  json: 'jsonb',
-  m2o: 'uuid',
-} as const
-/** The column type each field type is stored as: a relation is a uuid. */
-const columnType = (type: keyof typeof types): ColumnType => {
+/**
+ * The types a manifest may name. The platform's own are here; any other name is a type of
+ * the database — `geometry` and `geography` where PostGIS is installed, an enum or a domain
+ * of the installation's own — and is written as it is, qualified with the schema it lives in.
+ * Two names are the platform's own under another name: `string` is a text and `m2o` is a
+ * relation, which is a uuid.
+ */
+const columnType = (type: string): TypeName => {
   if (type === 'm2o') return 'uuid'
   if (type === 'string') return 'text'
   return type
 }
+/** A type name: one of the platform's own, or a name of the database's, qualified or not. */
+const typeName = z
+  .string()
+  .min(1)
+  .refine((name) => /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/.test(name), {
+    message: 'A type is a name, or a name qualified with the schema it lives in.',
+  })
 export const fieldSchema = z.object({
   name: z.string().min(1),
-  type: z.enum(Object.keys(types) as [keyof typeof types, ...Array<keyof typeof types>]),
+  type: typeName,
+  /** The type's own modifiers: `Point, 4326` for a geometry. */
+  modifiers: z.array(z.string().min(1)).default([]),
   required: z.boolean().default(false),
   unique: z.boolean().default(false),
   indexed: z.boolean().default(false),
@@ -70,6 +70,7 @@ export function fieldSql(field: Field): string {
   return columnSql({
     name: field.name,
     type,
+    modifiers: field.modifiers,
     required: field.required,
     unique: field.unique,
     default: defaultLiteral(type, field.default, field.name),

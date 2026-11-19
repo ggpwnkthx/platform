@@ -37,6 +37,7 @@ export async function catalog(db: Db): Promise<Catalog> {
            a.attnum::int AS position, format_type(a.atttypid, a.atttypmod) AS type,
            a.attnotnull AS required, pg_get_expr(d.adbin, d.adrelid) AS "default",
            col_description(c.oid, a.attnum) AS comment,
+           a.attgenerated::text AS generated, a.attidentity::text AS identity,
            has_column_privilege(c.oid, a.attnum, 'SELECT') AS can_select,
            has_column_privilege(c.oid, a.attnum, 'INSERT') AS can_insert,
            has_column_privilege(c.oid, a.attnum, 'UPDATE') AS can_update
@@ -65,6 +66,19 @@ export async function catalog(db: Db): Promise<Catalog> {
       JOIN pg_class c ON c.oid = con.conrelid JOIN pg_namespace n ON n.oid = c.relnamespace
      WHERE ${notPlatform} AND has_schema_privilege(n.oid, 'USAGE') AND con.contype IN ('c','u','p','f','x')
      ORDER BY 1, 2, 3`)
+  // The types the installation holds outside PostgreSQL's own: an extension's, or its own.
+  // A table's own row type is not one of them: typrelid names the table it belongs to.
+  const types = await db.query(`
+    SELECT n.nspname::text AS schema, t.typname::text AS bare,
+           n.nspname || '.' || t.typname AS name, t.typtype::text AS kind,
+           format_type(t.oid, NULL) AS label
+      FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+     WHERE t.typtype IN ('b','c','d','e','r','m')
+       AND t.typrelid = 0
+       AND n.nspname NOT IN ('pg_catalog','information_schema','pg_toast')
+       AND has_schema_privilege(n.oid, 'USAGE')
+       AND NOT EXISTS (SELECT 1 FROM pg_type e WHERE e.oid = t.typelem AND e.typarray = t.oid)
+     ORDER BY 1, 2`)
   const visible = new Set(tables.rows.map((t) => `${t.schema}.${t.name}`))
   const inView = <T extends { schema: unknown; table: unknown }>(rows: T[]) =>
     rows.filter((row) => visible.has(`${row.schema}.${row.table}`))
@@ -74,5 +88,6 @@ export async function catalog(db: Db): Promise<Catalog> {
     columns: inView(columns.rows as never) as Catalog['columns'],
     relations: inView(relations.rows as never) as Catalog['relations'],
     constraints: inView(constraints.rows as never) as Catalog['constraints'],
+    types: types.rows as unknown as Catalog['types'],
   }
 }

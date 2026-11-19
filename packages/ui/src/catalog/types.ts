@@ -37,6 +37,10 @@ export interface ColumnInfo {
   required: boolean
   default: string | null
   comment: string | null
+  /** 's' when PostgreSQL computes the column itself: a generated column. */
+  generated: string | null
+  /** 'a' or 'd' when PostgreSQL numbers the column itself: an identity column. */
+  identity: string | null
   can_select: boolean
   can_insert: boolean
   can_update: boolean
@@ -69,4 +73,24 @@ export interface Catalog {
   columns: ColumnInfo[]
   relations: RelationInfo[]
   constraints: ConstraintInfo[]
+  /** The types the database holds, outside PostgreSQL's own: an extension's, or the installation's. */
+  types: TypeInfo[]
+}
+
+/**
+ * A type the database holds. The platform knows a dozen of its own — text, a number, a
+ * moment — and the rest are the installation's: `geometry` and `geography` where PostGIS is
+ * installed, an enum or a domain of its own. A field may have any of them.
+ */
+export interface TypeInfo {
+  /** The type's name, qualified with the schema it lives in: `public.geometry`. */
+  name: string
+  /** The schema the type lives in. */
+  schema: string
+  /** The type's own name, without the schema: `geometry`. */
+  bare: string
+  /** The type as PostgreSQL writes it. */
+  label: string
+  /** b base, d domain, e enum, c composite, r range, m multirange. */
+  kind: string
 }

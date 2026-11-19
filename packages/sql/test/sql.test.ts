@@ -9,6 +9,7 @@ import {
   qualified,
   role,
   systemFields,
+  typeSql,
 } from '../src/index.ts'
 
 describe('the SQL the platform writes', () => {
@@ -59,6 +60,26 @@ describe('the SQL the platform writes', () => {
   })
   test('a relation’s column is a uuid', () => {
     expect(columnSql({ name: 'author', type: 'uuid' })).toBe('"author" uuid')
+  })
+  test('a type of the database is written as a name, qualified with its schema', () => {
+    expect(typeSql('text')).toBe('text')
+    expect(typeSql('public.geometry')).toBe('"public"."geometry"')
+    expect(typeSql('geometry')).toBe('"geometry"')
+    expect(columnSql({ name: 'shape', type: 'public.geometry' })).toBe(
+      '"shape" "public"."geometry"'
+    )
+  })
+  test('a type carries the modifiers it takes', () => {
+    expect(typeSql('public.geometry', ['Point', '4326'])).toBe('"public"."geometry"("Point", 4326)')
+    expect(
+      columnSql({ name: 'shape', type: 'public.geometry', modifiers: ['Point', '4326'] })
+    ).toBe('"shape" "public"."geometry"("Point", 4326)')
+    expect(columnSql({ name: 'name', type: 'character varying', modifiers: ['255'] })).toBe(
+      '"name" "character varying"(255)'
+    )
+  })
+  test('a type of the database is given a default as a literal', () => {
+    expect(defaultLiteral('public.geometry', 'POINT(0 0)', 'shape')).toBe("E'POINT(0 0)'")
   })
   test('the columns every collection is made with are named once', () => {
     expect(systemFields).toContain('created_by')

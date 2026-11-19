@@ -208,36 +208,44 @@ export function Item() {
   const info = tableOf(catalog, ws, table)
   const columns = columnsOf(catalog, ws, table)
   const readable = columns.filter((c) => c.can_select)
+  // The record is read only when there is a column to read it with.
+  const wanted = !creating && Boolean(info) && readable.length > 0
+  const loaded = useLoad(
+    // One connection, two questions: the record itself, and what its fields are called and
+    // where they appear. A field this reader may not reach is not in the second answer:
+    // PostgreSQL did not return its metadata.
+    info
+      ? async (db) => ({
+          record: wanted
+            ? await record(
+                db,
+                ws,
+                table,
+                readable.map((c) => c.name),
+                id
+              )
+            : null,
+          described: await fieldMetadata(db, ws, table),
+        })
+      : null,
+    [ws, table, id, catalog, creating, wanted]
+  )
+  const original = loaded.data?.record ?? null
+  const described = loaded.data?.described ?? []
+  const names = new Map<string, string>()
+  for (const row of described) {
+    if (row.key === 'display_name' && typeof row.value === 'string' && row.value.trim())
+      names.set(row.column_name ?? '', row.value.trim())
+  }
   const fields = columns.filter(
     (c) =>
-      !systemColumns.includes(c.name) && (creating ? c.can_insert : c.can_select || c.can_update)
+      !systemColumns.includes(c.name) &&
+      (creating ? c.can_insert : c.can_select || c.can_update)
   )
   const unreachable = columns.filter(
     (c) =>
       !systemColumns.includes(c.name) && !(creating ? c.can_insert : c.can_select || c.can_update)
   )
-  const loaded = useLoad(
-    !creating && info && readable.length
-      ? (db) =>
-          record(
-            db,
-            ws,
-            table,
-            readable.map((c) => c.name),
-            id
-          )
-      : null,
-    [ws, table, id, catalog]
-  )
-  const original = loaded.data ?? null
-  // The name each field is read by, when its owner gave it one. A field this reader may not
-  // reach is not in the list: PostgreSQL did not return its metadata.
-  const described = useLoad(info ? (db) => fieldMetadata(db, ws, table) : null, [ws, table])
-  const names = new Map<string, string>()
-  for (const row of described.data ?? []) {
-    if (row.key === 'display_name' && typeof row.value === 'string' && row.value.trim())
-      names.set(row.column_name ?? '', row.value.trim())
-  }
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [confirming, setConfirming] = useState(false)
@@ -456,13 +464,13 @@ export function Item() {
           {problem.detail}
         </Notice>
       )}
-      {!creating && loaded.error ? (
+      {loaded.error ? (
         <Notice tone="danger" title={describe(loaded.error).title}>
           {describe(loaded.error).detail ?? 'PostgreSQL could not read this record.'}
         </Notice>
-      ) : !creating && loaded.loading && !original ? (
+      ) : !loaded.data ? (
         <Loading />
-      ) : !creating && loaded.data === null ? (
+      ) : !creating && wanted && original === null ? (
         <Notice tone="warning" title="No such record reaches you">
           It does not exist, or a row policy keeps it from your role.
         </Notice>
@@ -470,7 +478,15 @@ export function Item() {
         <form ref={formRef} class="form" onSubmit={save}>
           {fields.map((c) => {
             const fieldId = `field-${c.name}`
-            const writable = creating ? c.can_insert : c.can_update
+            // PostgreSQL computes some columns itself, and the owner of a collection may lock
+            // a field: either way it is shown, and never offered as an input.
+            const computed = Boolean(c.generated || c.identity)
+            const writable = !computed && (creating ? c.can_insert : c.can_update)
+            const reason = computed
+              ? c.generated
+                ? 'PostgreSQL computes this column: a generated column is never written.'
+                : 'PostgreSQL numbers this column itself: an identity column is never written.'
+              : 'PostgreSQL gives you no UPDATE on this field.'
             const choices = choicesOf(catalog, ws, table, c.name)
             const relation = relationOf(catalog, ws, table, c.name)
             const kind = kindOf(c.type)
@@ -489,7 +505,7 @@ export function Item() {
                   </Badge>
                 )}
                 {!writable && (
-                  <Badge title="PostgreSQL gives you no UPDATE on this field">
+                  <Badge title={reason}>
                     <LockIcon size={12} aria-hidden="true" /> read-only
                   </Badge>
                 )}

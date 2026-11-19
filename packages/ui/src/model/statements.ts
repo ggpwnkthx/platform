@@ -7,7 +7,7 @@ import {
   literal,
   qualified,
   systemFields,
-  type ColumnType,
+  type TypeName,
 } from '@platform/sql'
 
 /**
@@ -16,24 +16,14 @@ import {
  * as the reader, exactly as shown. PostgreSQL decides whether the reader may.
  */
 
-export type FieldType =
-  | 'text'
-  | 'integer'
-  | 'bigint'
-  | 'decimal'
-  | 'float'
-  | 'boolean'
-  | 'date'
-  | 'time'
-  | 'timestamp'
-  | 'uuid'
-  | 'json'
-  | 'relation'
+/**
+ * A field's type: one of the platform's own, `relation` — which is a foreign key, not a
+ * column type — or any type the database holds, named with the schema it lives in.
+ */
+export type FieldType = string
 
-/** The column type a field of this type is stored as: a relation is a uuid. */
-const columnType = (type: FieldType): ColumnType => (type === 'relation' ? 'uuid' : type)
-
-export const fieldTypeLabels: Record<FieldType, string> = {
+/** The types the platform offers itself, and what they are called. */
+export const fieldTypeLabels: Record<string, string> = {
   text: 'Text',
   integer: 'Whole number',
   bigint: 'Large whole number',
@@ -48,11 +38,22 @@ export const fieldTypeLabels: Record<FieldType, string> = {
   relation: 'Relation to another collection',
 }
 
+/** The types the platform offers itself, in the order they are offered. */
+export const builtInTypes = Object.keys(fieldTypeLabels)
+
+/** The name a type is shown under: the platform's own label, or the type's own name. */
+export const typeLabel = (type: string): string => fieldTypeLabels[type] ?? type
+
+/** The types a number may be written in. */
+export const numericTypes = ['integer', 'bigint', 'decimal', 'float']
+
 export type OnDelete = 'restrict' | 'cascade' | 'set_null'
 
 export interface FieldDraft {
   name: string
   type: FieldType
+  /** The type's own modifiers: `Point, 4326` for a geometry. */
+  modifiers?: string[]
   required: boolean
   unique: boolean
   indexed: boolean
@@ -80,6 +81,9 @@ export function emptyField(): FieldDraft {
   }
 }
 
+/** The column type a field of this type is stored as: a relation is a uuid. */
+const columnType = (type: FieldType): TypeName => (type === 'relation' ? 'uuid' : type)
+
 /** The column definition: type, default, NOT NULL, UNIQUE and the CHECKs its options ask for. */
 function columnSql(field: FieldDraft): string {
   if (systemFields.includes(field.name))
@@ -88,6 +92,7 @@ function columnSql(field: FieldDraft): string {
   return columnDefinition({
     name: field.name,
     type,
+    modifiers: field.modifiers,
     required: field.required,
     unique: field.unique,
     default: defaultLiteral(type, field.default.trim(), field.name),

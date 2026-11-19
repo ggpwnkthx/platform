@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import { useEffect, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import {
+  builtInTypes,
   collectionStatements,
   commentStatement,
   dropCollectionStatement,
@@ -9,9 +10,10 @@ import {
   emptyField,
   type FieldDraft,
   fieldStatements,
-  type FieldType,
   fieldTypeLabels,
+  numericTypes,
   type OnDelete,
+  typeLabel,
 } from './statements.ts'
 import { rowSecurityStatement } from '../access/statements.ts'
 import { fieldMetadata } from '../metadata/query.ts'
@@ -57,7 +59,7 @@ import { FieldMetadataDrawer, MetadataPanel, PresentationPanel } from '../metada
 import { Rights } from '../access/rights.tsx'
 import { useRunner } from '../access/runner.tsx'
 
-const typeIcons: Record<FieldType, typeof TextIcon> = {
+const typeIcons: Record<string, typeof TextIcon> = {
   text: TextIcon,
   integer: IntegerIcon,
   bigint: IntegerIcon,
@@ -72,6 +74,9 @@ const typeIcons: Record<FieldType, typeof TextIcon> = {
   relation: RelationIcon,
 }
 
+/** The mark a type is drawn with: its own, or the mark of a type nobody has drawn. */
+const iconOfType = (type: string): typeof TextIcon => typeIcons[type] ?? TagIcon
+
 /** Builds one field: its type, its name and the constraints PostgreSQL will hold it to. */
 export function FieldEditor({
   field,
@@ -84,31 +89,63 @@ export function FieldEditor({
   collections: string[]
   prefix: string
 }) {
+  const { catalog } = useSession()
   const set = (changes: Partial<FieldDraft>) => onChange({ ...field, ...changes })
-  const numeric = ['integer', 'bigint', 'decimal', 'float'].includes(field.type)
+  const numeric = numericTypes.includes(field.type)
+  // The types the installation holds besides the platform's own: an extension's, or its own.
+  const others = catalog.types
+  const own = builtInTypes.includes(field.type)
+  const choice = (type: string, label: string, Icon: typeof TextIcon) => (
+    <label key={type} class={clsx('type-option', field.type === type && 'is-chosen')}>
+      <input
+        type="radio"
+        name={`${prefix}-type`}
+        value={type}
+        checked={field.type === type}
+        onChange={() => set({ type, modifiers: undefined })}
+      />
+      <Icon size={18} aria-hidden="true" />
+      <span>{label}</span>
+    </label>
+  )
   return (
     <div class="form">
       <fieldset class="field field-wide types">
         <legend class="field-label">Type</legend>
         <div class="type-grid">
-          {(Object.keys(fieldTypeLabels) as FieldType[]).map((type) => {
-            const Icon = typeIcons[type]
-            return (
-              <label key={type} class={clsx('type-option', field.type === type && 'is-chosen')}>
-                <input
-                  type="radio"
-                  name={`${prefix}-type`}
-                  value={type}
-                  checked={field.type === type}
-                  onChange={() => set({ type })}
-                />
-                <Icon size={18} aria-hidden="true" />
-                <span>{fieldTypeLabels[type]}</span>
-              </label>
-            )
-          })}
+          {builtInTypes.map((type) => choice(type, fieldTypeLabels[type]!, iconOfType(type)))}
         </div>
       </fieldset>
+      {others.length > 0 && (
+        <fieldset class="field field-wide types">
+          <legend class="field-label">Types in this database</legend>
+          <div class="type-grid">
+            {others.map((type) => choice(type.name, type.label, iconOfType(type.name)))}
+          </div>
+        </fieldset>
+      )}
+      {!own && (
+        <Field
+          label="Modifier"
+          id={`${prefix}-mod`}
+          hint="What the type itself takes: Point, 4326 for a geometry. Empty for the plain type."
+        >
+          <Input
+            id={`${prefix}-mod`}
+            mono
+            value={(field.modifiers ?? []).join(', ')}
+            onInput={(e) =>
+              set({
+                modifiers: e.currentTarget.value
+                  .split(',')
+                  .map((part) => part.trim())
+                  .filter(Boolean),
+              })
+            }
+            placeholder="Point, 4326"
+          />
+        </Field>
+      )}
       <Field
         label="Name"
         id={`${prefix}-name`}
@@ -567,109 +604,116 @@ export function CollectionModel() {
           <MetadataPanel target={collectionTarget(ws, table)} owner={owner} />
         </>
       ) : (
-        <div class="grid-wrap">
-          <table class="grid">
-            <thead>
-              <tr>
-                <th>Field</th>
-                <th>Type</th>
-                <th>Required</th>
-                <th>Default</th>
-                <th>Constraints</th>
-                <th>You lack</th>
-                <th>Note</th>
-                <th class="grid-actions">
-                  <span class="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {columns.map((c) => {
-                const relation = relationOf(catalog, ws, table, c.name)
-                const system = systemColumns.includes(c.name)
-                return (
-                  <tr key={c.name} class={clsx(system && 'is-system')}>
-                    <td>
-                      <span class="mono strong">{c.name}</span>
-                      {names.has(c.name) && <span class="field-alias">{names.get(c.name)}</span>}
-                      {system && <Badge tone="outline">system</Badge>}
-                    </td>
-                    <td class="mono">
-                      {relation ? (
-                        <span>
-                          <RelationIcon size={13} aria-hidden="true" /> {relation.target_table}
-                        </span>
-                      ) : (
-                        shortType(c.type)
-                      )}
-                    </td>
-                    <td>{c.required ? 'yes' : ''}</td>
-                    <td class="mono cell-muted">
-                      <span class="clip clip-narrow" title={c.default ?? undefined}>
-                        {c.default}
-                      </span>
-                    </td>
-                    <td>
-                      {constraintsOf(c.name).map((k) => (
-                        <code key={k.name} class="constraint" title={k.definition}>
-                          {describeConstraint(c.name, k)}
-                        </code>
-                      ))}
-                    </td>
-                    <td>
-                      {(() => {
-                        // Only what the reader lacks on this field is worth a word.
-                        const missing = [
-                          !c.can_select && 'SELECT',
-                          !c.can_insert && 'INSERT',
-                          !c.can_update && 'UPDATE',
-                        ].filter(Boolean)
-                        return missing.length ? (
-                          <span class="col-missing mono">no {missing.join(', ')}</span>
+        <>
+          <div class="grid-wrap">
+            <table class="grid">
+              <thead>
+                <tr>
+                  <th>Field</th>
+                  <th>Type</th>
+                  <th>Views</th>
+                  <th>Required</th>
+                  <th>Default</th>
+                  <th>Constraints</th>
+                  <th>You lack</th>
+                  <th>Note</th>
+                  <th class="grid-actions">
+                    <span class="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {columns.map((c) => {
+                  const relation = relationOf(catalog, ws, table, c.name)
+                  const system = systemColumns.includes(c.name)
+                  return (
+                    <tr key={c.name} class={clsx(system && 'is-system')}>
+                      <td>
+                        <span class="mono strong">{c.name}</span>
+                        {names.has(c.name) && <span class="field-alias">{names.get(c.name)}</span>}
+                        {system && <Badge tone="outline">system</Badge>}
+                      </td>
+                      <td class="mono">
+                        {relation ? (
+                          <span>
+                            <RelationIcon size={13} aria-hidden="true" /> {relation.target_table}
+                          </span>
                         ) : (
-                          <span class="cell-muted">nothing</span>
-                        )
-                      })()}
-                    </td>
-                    <td class="cell-muted">
-                      <span class="clip clip-narrow" title={c.comment ?? undefined}>
-                        {c.comment}
-                      </span>
-                    </td>
-                    <td class="grid-actions">
-                      <button
-                        type="button"
-                        class="icon-button"
-                        aria-label={`Metadata of ${c.name}`}
-                        title="Metadata"
-                        onClick={() => setDescribed(c.name)}
-                      >
-                        <TagIcon size={16} />
-                      </button>
-                      {owner && !system && info.kind !== 'v' && (
+                          <span>
+                            {shortType(c.type)}
+                            {c.generated && <Badge tone="outline">generated</Badge>}
+                            {c.identity && <Badge tone="outline">identity</Badge>}
+                          </span>
+                        )}
+                      </td>
+                      <td>{c.required ? 'yes' : ''}</td>
+                      <td class="mono cell-muted">
+                        <span class="clip clip-narrow" title={c.default ?? undefined}>
+                          {c.default}
+                        </span>
+                      </td>
+                      <td>
+                        {constraintsOf(c.name).map((k) => (
+                          <code key={k.name} class="constraint" title={k.definition}>
+                            {describeConstraint(c.name, k)}
+                          </code>
+                        ))}
+                      </td>
+                      <td>
+                        {(() => {
+                          // Only what the reader lacks on this field is worth a word.
+                          const missing = [
+                            !c.can_select && 'SELECT',
+                            !c.can_insert && 'INSERT',
+                            !c.can_update && 'UPDATE',
+                          ].filter(Boolean)
+                          return missing.length ? (
+                            <span class="col-missing mono">no {missing.join(', ')}</span>
+                          ) : (
+                            <span class="cell-muted">nothing</span>
+                          )
+                        })()}
+                      </td>
+                      <td class="cell-muted">
+                        <span class="clip clip-narrow" title={c.comment ?? undefined}>
+                          {c.comment}
+                        </span>
+                      </td>
+                      <td class="grid-actions">
                         <button
                           type="button"
                           class="icon-button"
-                          aria-label={`Drop ${c.name}`}
-                          title="Drop field"
-                          onClick={() => setDropping(c.name)}
+                          aria-label={`Metadata of ${c.name}`}
+                          title="Metadata"
+                          onClick={() => setDescribed(c.name)}
                         >
-                          <TrashIcon size={16} />
+                          <TagIcon size={16} />
                         </button>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-          {!owner && (
-            <p class="grid-note">
-              <LockIcon size={14} aria-hidden="true" /> PostgreSQL gives ALTER TABLE to the owner,{' '}
-              {info.owner}, and its members.
-            </p>
-          )}
-        </div>
+                        {owner && !system && info.kind !== 'v' && (
+                          <button
+                            type="button"
+                            class="icon-button"
+                            aria-label={`Drop ${c.name}`}
+                            title="Drop field"
+                            onClick={() => setDropping(c.name)}
+                          >
+                            <TrashIcon size={16} />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            {!owner && (
+              <p class="grid-note">
+                <LockIcon size={14} aria-hidden="true" /> PostgreSQL gives ALTER TABLE to the owner,{' '}
+                {info.owner}, and its members.
+              </p>
+            )}
+          </div>
+        </>
       )}
       <FieldMetadataDrawer
         schema={ws}
@@ -851,7 +895,7 @@ export function NewCollection() {
           <header class="panel-head">
             <div>
               <h2>{field.name || `Field ${index + 1}`}</h2>
-              <p>{fieldTypeLabels[field.type]}</p>
+              <p>{typeLabel(field.type)}</p>
             </div>
             <Button
               tone="ghost"

@@ -36,6 +36,28 @@ describe('the manifest and the interface make the same column', () => {
     const manifest = fieldSchema.parse({ name: 'status', type: 'text', default: 'draft' })
     expect(fieldSql(manifest)).toContain(`DEFAULT E'draft'`)
   })
+  test('a type of the database is the same column in both', async () => {
+    const manifest = fieldSchema.parse({
+      name: 'shape',
+      type: 'public.geometry',
+      modifiers: ['Point', '4326'],
+    })
+    const draft = {
+      name: 'shape',
+      type: 'public.geometry',
+      modifiers: ['Point', '4326'],
+      required: false,
+      unique: false,
+      indexed: false,
+      default: '',
+      note: '',
+    }
+    const fromDraft = (await fieldStatements('newsroom', 'articles', draft))[0]!
+      .replace('ALTER TABLE "newsroom"."articles" ADD COLUMN ', '')
+      .replace(/;$/, '')
+    expect(fromDraft).toBe(fieldSql(manifest))
+    expect(fromDraft).toBe('"shape" "public"."geometry"("Point", 4326)')
+  })
   test('both build their SQL through the shared package', () => {
     const cli = JSON.parse(
       readFileSync(new URL('../packages/cli/package.json', import.meta.url), 'utf8')
