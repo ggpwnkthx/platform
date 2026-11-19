@@ -179,7 +179,7 @@ describe('The statements that write a presentation', () => {
     const [remove] = metadataStatements(collectionTarget('newsroom', 'articles'), [
       { key: 'icon', value: null },
     ])
-    expect(remove).toContain('DELETE FROM platform.item_metadata')
+    expect(remove).toContain('DELETE FROM "newsroom"."item_metadata"')
     expect(remove).toContain("'icon'")
   })
 

@@ -4,7 +4,7 @@ import { type MetadataRow, presentationKeys } from '@platform/vocabulary'
  * How a workspace or a collection presents itself: the name people read, the icon they
  * recognise and the colour that marks it.
  *
- * These are three reserved keys of the item's own metadata, stored in `platform.item_metadata`
+ * These are three reserved keys of the item's own metadata, stored in the workspace's own metadata collection
  * beside every other key and read under the same rules: a reader sees the presentation of the
  * items they may reach, and only the owner of an item may change it. Nothing here is a
  * privilege of its own — the presentation is metadata, and PostgreSQL judges it as metadata.

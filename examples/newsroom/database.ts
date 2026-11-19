@@ -13,7 +13,7 @@ import seed from './seed.sql' with { type: 'text' }
 
 /**
  * The dev mode's database: PostgreSQL 18, compiled to WebAssembly, running inside the
- * page. It is installed with the platform's own migrations and seeded with the example
+ * page. It is installed with the platform's own installation script and seeded with the example
  * workspaces, so every statement the interface writes runs against the real thing: grants,
  * row policies, triggers and revisions included.
  *
@@ -23,7 +23,7 @@ import seed from './seed.sql' with { type: 'text' }
  */
 
 /** Where the in-page database is kept, between reloads. */
-const storageKey = 'platform-dev-v2'
+const storageKey = 'platform-dev-v4'
 
 /**
  * Signing in without an issuer: the example people, who choose themselves in the page.

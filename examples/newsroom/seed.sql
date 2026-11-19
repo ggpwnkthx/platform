@@ -232,7 +232,13 @@ ALTER TABLE crm.accounts ENABLE TRIGGER USER;
 ALTER TABLE crm.contacts ENABLE TRIGGER USER;
 ALTER TABLE crm.deals ENABLE TRIGGER USER;
 
-INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value, created_by, updated_by) VALUES
+-- What the workspaces say of themselves, their collections and their fields. It is gathered
+-- here first, and then written into each workspace's own metadata collection below.
+CREATE TEMP TABLE seed_metadata (
+  scope text, schema_name text, table_name text, column_name text,
+  key text, value jsonb, created_by text, updated_by text
+);
+INSERT INTO seed_metadata (scope, schema_name, table_name, column_name, key, value, created_by, updated_by) VALUES
   ('workspace', 'newsroom', NULL, NULL, 'purpose', '"The newsroom''s stories, desks and corrections."', 'admin@example.com', 'admin@example.com'),
   ('workspace', 'newsroom', NULL, NULL, 'contact', '"desk@example.com"', 'admin@example.com', 'admin@example.com'),
   ('workspace', 'newsroom', NULL, NULL, 'display_name', '"Newsroom"', 'admin@example.com', 'admin@example.com'),
@@ -261,12 +267,12 @@ INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name,
 
 -- Renderers of the newsroom's own (extensions.tsx): a word count as the time it takes to read,
 -- and a section's name with the icon and the colour its owner picked.
-INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value, created_by, updated_by) VALUES
+INSERT INTO seed_metadata (scope, schema_name, table_name, column_name, key, value, created_by, updated_by) VALUES
   ('field', 'newsroom', 'articles', 'word_count', 'renderers', '{"list":"reading-time"}', 'admin@example.com', 'admin@example.com'),
   ('field', 'newsroom', 'sections', 'name', 'renderers', '{"list":{"renderer":"marked","options":{"icon":"newspaper","colour":"steel"}}}', 'admin@example.com', 'admin@example.com');
 
 -- Every field carries its own views: where it appears is said of the field itself.
-INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value, created_by, updated_by) VALUES
+INSERT INTO seed_metadata (scope, schema_name, table_name, column_name, key, value, created_by, updated_by) VALUES
   ('field', 'newsroom', 'sections', 'id', 'views', '{"list":"show","record":"show","filter":"show"}', 'admin@example.com', 'admin@example.com'),
   ('field', 'newsroom', 'sections', 'created_at', 'views', '{"list":"show","record":"show","filter":"show"}', 'admin@example.com', 'admin@example.com'),
   ('field', 'newsroom', 'sections', 'updated_at', 'views', '{"list":"show","record":"show","filter":"show"}', 'admin@example.com', 'admin@example.com'),
@@ -330,3 +336,20 @@ INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name,
   ('field', 'crm', 'deals', 'amount', 'views', '{"list":"show","record":"show","filter":"show"}', 'bob@example.com', 'bob@example.com'),
   ('field', 'crm', 'deals', 'close_date', 'views', '{"list":"show","record":"show","filter":"show"}', 'bob@example.com', 'bob@example.com'),
   ('field', 'crm', 'deals', 'details', 'views', '{"list":"show","record":"show","filter":"show"}', 'bob@example.com', 'bob@example.com');
+
+-- Every workspace keeps its own metadata: a collection of its own, in its own schema, owned
+-- by its owner. The stamp is set aside while the seed writes, as it is for the rows above,
+-- so that each row is its owner's and not the installer's.
+SELECT platform.create_metadata('newsroom');
+SELECT platform.create_metadata('crm');
+ALTER TABLE newsroom.item_metadata DISABLE TRIGGER USER;
+ALTER TABLE crm.item_metadata DISABLE TRIGGER USER;
+INSERT INTO newsroom.item_metadata (scope, table_name, column_name, key, value, created_by, updated_by)
+SELECT scope, table_name, column_name, key, value, created_by, updated_by
+  FROM seed_metadata WHERE schema_name = 'newsroom';
+INSERT INTO crm.item_metadata (scope, table_name, column_name, key, value, created_by, updated_by)
+SELECT scope, table_name, column_name, key, value, created_by, updated_by
+  FROM seed_metadata WHERE schema_name = 'crm';
+ALTER TABLE newsroom.item_metadata ENABLE TRIGGER USER;
+ALTER TABLE crm.item_metadata ENABLE TRIGGER USER;
+DROP TABLE seed_metadata;

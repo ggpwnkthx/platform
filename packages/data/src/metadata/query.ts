@@ -3,6 +3,9 @@ import {
   type MetadataEntry,
   type MetadataRow,
   type MetadataTarget,
+  literal,
+  metadataConflict,
+  metadataOf,
   metadataRemoval,
   metadataStatement,
   presentationKeys,
@@ -18,18 +21,38 @@ import {
  * of an item may change it. Nothing here decides a right.
  */
 
+/**
+ * A workspace that keeps no metadata the reader may reach has none to read: it was made
+ * before workspaces kept their own and its owner has not given it its collection, or the
+ * reader may not use the workspace at all. Either way the answer is nothing, as it is for a
+ * row that row security withholds — not an error.
+ */
+async function none<T>(reading: Promise<T[]>): Promise<T[]> {
+  try {
+    return await reading
+  } catch (error) {
+    const code = (error as { code?: unknown } | null)?.code
+    // No such table, no such schema, no right on either.
+    if (code === '42P01' || code === '3F000' || code === '42501') return []
+    throw error
+  }
+}
+
 /** The metadata of one item, as its owner and its readers may see it. */
 export async function metadata(db: DataSource, target: MetadataTarget) {
-  const result = await db.query<MetadataEntry>(
-    `SELECT key, value, version::int AS version, updated_at::text AS updated_at, updated_by
-       FROM platform.item_metadata
-      WHERE scope = $1 AND schema_name = $2
-        AND table_name IS NOT DISTINCT FROM $3::text
-        AND column_name IS NOT DISTINCT FROM $4::text
-      ORDER BY key`,
-    [target.scope, target.schema, target.table, target.column]
+  return none(
+    db
+      .query<MetadataEntry>(
+        `SELECT key, value, version::int AS version, updated_at::text AS updated_at, updated_by
+           FROM ${metadataOf(target.schema)}
+          WHERE scope = $1
+            AND table_name IS NOT DISTINCT FROM $2::text
+            AND column_name IS NOT DISTINCT FROM $3::text
+          ORDER BY key`,
+        [target.scope, target.table, target.column]
+      )
+      .then((result) => result.rows)
   )
-  return result.rows
 }
 
 /**
@@ -37,28 +60,37 @@ export async function metadata(db: DataSource, target: MetadataTarget) {
  * fields the reader may reach and no others, so a field they may not read is not named here.
  */
 export async function fieldMetadata(db: DataSource, schema: string, table: string) {
-  const result = await db.query<MetadataRow>(
-    `SELECT scope, schema_name, table_name, column_name, key, value
-       FROM platform.item_metadata
-      WHERE scope = 'field' AND schema_name = $1 AND table_name = $2
-      ORDER BY column_name, key`,
-    [schema, table]
+  return none(
+    db
+      .query<MetadataRow>(
+        `SELECT scope, $1::text AS schema_name, table_name, column_name, key, value
+           FROM ${metadataOf(schema)}
+          WHERE scope = 'field' AND table_name = $2
+          ORDER BY column_name, key`,
+        [schema, table]
+      )
+      .then((result) => result.rows)
   )
-  return result.rows
 }
 
 /**
  * The presentation of every item the reader may reach: the name, the icon and the colour of
- * each workspace, collection and field. Row security decides which of them come back, so this
- * is the reader's own answer and no more.
+ * each workspace, collection and field. Every workspace keeps its own, so the question is
+ * asked of each workspace that keeps metadata the reader may reach — the catalog says which —
+ * in one statement. Row security decides which rows come back, so this is the reader's own
+ * answer and no more.
  */
-export async function presentations(db: DataSource): Promise<MetadataRow[]> {
-  const result = await db.query<MetadataRow>(
-    `SELECT scope, schema_name, table_name, column_name, key, value
-       FROM platform.item_metadata
-      WHERE key = ANY($1::text[])`,
-    [[...presentationKeys]]
+export async function presentations(
+  db: DataSource,
+  schemas: readonly string[]
+): Promise<MetadataRow[]> {
+  if (!schemas.length) return []
+  const parts = schemas.map(
+    (schema) =>
+      `SELECT scope, ${literal(schema)}::text AS schema_name, table_name, column_name, key, value
+         FROM ${metadataOf(schema)} WHERE key = ANY($1::text[])`
   )
+  const result = await db.query<MetadataRow>(parts.join('\n UNION ALL\n'), [[...presentationKeys]])
   return result.rows
 }
 
@@ -72,7 +104,6 @@ export async function setMetadata(
 ) {
   const params: unknown[] = [
     target.scope,
-    target.schema,
     target.table,
     target.column,
     key,
@@ -80,26 +111,26 @@ export async function setMetadata(
   ]
   const sql =
     version === undefined
-      ? `INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value)
-         VALUES ($1, $2, $3, $4, $5, $6::jsonb)
-         ON CONFLICT (scope, schema_name, coalesce(table_name, ''), coalesce(column_name, ''), key)
+      ? `INSERT INTO ${metadataOf(target.schema)} (scope, table_name, column_name, key, value)
+         VALUES ($1, $2, $3, $4, $5::jsonb)
+         ON CONFLICT ${metadataConflict}
          DO UPDATE SET value = EXCLUDED.value`
-      : `UPDATE platform.item_metadata SET value = $6::jsonb
-          WHERE scope = $1 AND schema_name = $2
-            AND table_name IS NOT DISTINCT FROM $3::text
-            AND column_name IS NOT DISTINCT FROM $4::text
-            AND key = $5 AND version = $7`
+      : `UPDATE ${metadataOf(target.schema)} SET value = $5::jsonb
+          WHERE scope = $1
+            AND table_name IS NOT DISTINCT FROM $2::text
+            AND column_name IS NOT DISTINCT FROM $3::text
+            AND key = $4 AND version = $6`
   if (version !== undefined) params.push(version)
   return (await db.query(sql, params)).affected ?? 0
 }
 
 export async function removeMetadata(db: DataSource, target: MetadataTarget, key: string) {
   const result = await db.query(
-    `DELETE FROM platform.item_metadata
-      WHERE scope = $1 AND schema_name = $2
-        AND table_name IS NOT DISTINCT FROM $3::text
-        AND column_name IS NOT DISTINCT FROM $4::text AND key = $5`,
-    [target.scope, target.schema, target.table, target.column, key]
+    `DELETE FROM ${metadataOf(target.schema)}
+      WHERE scope = $1
+        AND table_name IS NOT DISTINCT FROM $2::text
+        AND column_name IS NOT DISTINCT FROM $3::text AND key = $4`,
+    [target.scope, target.table, target.column, key]
   )
   return result.affected ?? 0
 }

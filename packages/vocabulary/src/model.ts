@@ -29,6 +29,7 @@ import {
   fieldsViewsStatement,
   fieldTarget,
   fieldViewsStatement,
+  metadataSetupStatement,
 } from './metadata.ts'
 
 /**
@@ -162,6 +163,9 @@ export async function collectionStatements(
   fields: readonly FieldSpec[]
 ): Promise<string[]> {
   const out = [`SELECT platform.create_collection(${literal(schema)}, ${literal(name)});`]
+  // The fields say where they appear in the workspace's own metadata: a workspace made
+  // before it kept its own is given its collection here, and one that has it is left as it is.
+  out.push(metadataSetupStatement(schema))
   // Every field carries its own views: the ones the platform makes, and the ones the
   // reader adds below.
   out.push(fieldsViewsStatement(systemFields.map((column) => fieldTarget(schema, name, column))))

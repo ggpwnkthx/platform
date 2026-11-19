@@ -25,7 +25,7 @@ import {
  * the keys the interface reads for itself.
  */
 const column = (table: string, name: string, type: string): ColumnInfo => ({
-  schema: 'platform',
+  schema: 'newsroom',
   table,
   name,
   position: 1,
@@ -42,9 +42,9 @@ const column = (table: string, name: string, type: string): ColumnInfo => ({
 
 describe('The item a row of metadata is about', () => {
   test('the rows of an item are the ones a filter on its names lets through', () => {
+    // A row does not name its workspace: it is in it.
     expect(metadataFilter(workspaceTarget('newsroom'))).toEqual({
       scope: { op: 'eq', value: 'workspace' },
-      schema_name: { op: 'eq', value: 'newsroom' },
       table_name: { op: 'is_null', value: null },
       column_name: { op: 'is_null', value: null },
     })
@@ -55,35 +55,30 @@ describe('The item a row of metadata is about', () => {
   })
 
   test('a new row about an item starts with the names of the item', () => {
-    expect(metadataStart(workspaceTarget('newsroom'))).toEqual({
-      scope: 'workspace',
-      schema_name: 'newsroom',
-    })
+    expect(metadataStart(workspaceTarget('newsroom'))).toEqual({ scope: 'workspace' })
     expect(metadataStart(fieldTarget('newsroom', 'articles', 'title'))).toEqual({
       scope: 'field',
-      schema_name: 'newsroom',
       table_name: 'articles',
       column_name: 'title',
     })
   })
 
-  test('the item is composed from the names a row carries', () => {
-    const target = collectionTarget('newsroom', 'articles')
+  test('the item is the workspace a row was read in, and the names the row carries', () => {
+    expect(metadataTargetOf('newsroom', { scope: 'collection', table_name: 'articles' })).toEqual(
+      collectionTarget('newsroom', 'articles')
+    )
     expect(
-      metadataTargetOf({ scope: 'collection', schema_name: 'newsroom', table_name: 'articles' })
-    ).toEqual(target)
-    expect(
-      metadataTargetOf({ ...metadataStart(fieldTarget('newsroom', 'articles', 'title')) })
+      metadataTargetOf('newsroom', metadataStart(fieldTarget('newsroom', 'articles', 'title')))
     ).toEqual(fieldTarget('newsroom', 'articles', 'title'))
+    expect(metadataTargetOf('crm', { scope: 'workspace' })).toEqual(workspaceTarget('crm'))
   })
 
   test('a row that names no item the platform knows is about nothing', () => {
-    expect(metadataTargetOf(null)).toBeNull()
-    expect(metadataTargetOf({ scope: 'galaxy', schema_name: 'newsroom' })).toBeNull()
-    expect(metadataTargetOf({ scope: 'collection', schema_name: 'newsroom' })).toBeNull()
-    expect(
-      metadataTargetOf({ scope: 'workspace', schema_name: 'newsroom', table_name: 'articles' })
-    ).toBeNull()
+    expect(metadataTargetOf('newsroom', null)).toBeNull()
+    expect(metadataTargetOf('', { scope: 'workspace' })).toBeNull()
+    expect(metadataTargetOf('newsroom', { scope: 'galaxy' })).toBeNull()
+    expect(metadataTargetOf('newsroom', { scope: 'collection' })).toBeNull()
+    expect(metadataTargetOf('newsroom', { scope: 'workspace', table_name: 'articles' })).toBeNull()
   })
 })
 
@@ -92,10 +87,9 @@ describe('The value of a piece of metadata', () => {
 
   test('is a field type of its own, of that one column', () => {
     expect(value.type.name).toBe('metadata-value')
-    expect(describeField(column('activity', 'after_row', 'jsonb')).type.name).toBe('json')
-    expect(
-      describeField({ ...column('item_metadata', 'value', 'jsonb'), schema: 'newsroom' }).type.name
-    ).toBe('json')
+    // Another JSON column, of the same collection or of another, is a JSON column.
+    expect(describeField(column('item_metadata', 'other', 'jsonb')).type.name).toBe('json')
+    expect(describeField(column('articles', 'value', 'jsonb')).type.name).toBe('json')
   })
 
   test('a sentence is kept as a string, and JSON as itself', () => {

@@ -11,6 +11,7 @@ import {
   schemaPrivilegeNames,
   schemaStatement,
   tablePrivilegeNames,
+  metadataSetupStatement,
 } from '@platform/vocabulary'
 import { applyCollections, collectionSchema, type Report, relationSchema } from './model.ts'
 
@@ -262,6 +263,8 @@ class Run implements Report {
     }
     // Everything inside is made as the owner, so that it owns it and its grants are its own.
     if (w.owner) await q.query(`SET LOCAL ROLE ${ident(w.owner)}`)
+    // A workspace keeps its own metadata: the collection is made with it, or left as it is.
+    await q.query(metadataSetupStatement(w.slug))
     await applyCollections(q, w.slug, w.collections, w.relations, this)
     for (const grant of w.grants) await this.grant(w.slug, grant)
     for (const policy of w.policies) await this.policy(w.slug, policy)
