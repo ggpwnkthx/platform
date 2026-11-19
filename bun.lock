@@ -14,7 +14,7 @@
     },
     "examples/newsroom": {
       "name": "@platform/example-newsroom",
-      "version": "2.2.0",
+      "version": "2.3.0",
       "devDependencies": {
         "@electric-sql/pglite": "0.5.16",
         "@platform/data": "workspace:*",
@@ -26,7 +26,7 @@
     },
     "packages/cli": {
       "name": "@platform/cli",
-      "version": "2.2.0",
+      "version": "2.3.0",
       "dependencies": {
         "@platform/ui": "workspace:*",
         "@platform/vocabulary": "workspace:*",
@@ -41,22 +41,22 @@
     },
     "packages/data": {
       "name": "@platform/data",
-      "version": "2.2.0",
+      "version": "2.3.0",
       "dependencies": {
         "@platform/vocabulary": "workspace:*",
       },
     },
     "packages/pg-client": {
       "name": "@platform/pg-client",
-      "version": "2.2.0",
+      "version": "2.3.0",
     },
     "packages/relay": {
       "name": "@platform/relay",
-      "version": "2.2.0",
+      "version": "2.3.0",
     },
     "packages/ui": {
       "name": "@platform/ui",
-      "version": "2.2.0",
+      "version": "2.3.0",
       "dependencies": {
         "@platform/data": "workspace:*",
         "@platform/pg-client": "workspace:*",
@@ -70,7 +70,7 @@
     },
     "packages/vocabulary": {
       "name": "@platform/vocabulary",
-      "version": "2.2.0",
+      "version": "2.3.0",
     },
   },
   "packages": {

@@ -22,7 +22,7 @@ spec:
         # Forwards each WebSocket to PostgreSQL's port, byte for byte. No credentials, no SQL:
         # the reader's token travels inside the stream and PostgreSQL checks it.
         - name: relay
-          image: YOUR_REGISTRY/platform-relay:2.2.0
+          image: YOUR_REGISTRY/platform-relay:2.3.0
           ports: [{ containerPort: 8081 }]
           env:
             - { name: RELAY_UPSTREAM, value: "postgres.example.com:5432" }

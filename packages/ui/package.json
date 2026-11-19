@@ -1,6 +1,6 @@
 {
   "name": "@platform/ui",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "private": true,
   "type": "module",
   "description": "The interface: a static site whose pages speak PostgreSQL's protocol themselves.",

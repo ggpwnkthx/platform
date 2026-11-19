@@ -1,6 +1,6 @@
 {
   "name": "@platform/data",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "private": true,
   "type": "module",
   "description": "The data the platform reads and writes: the catalog, the records, the metadata and the access, asked of PostgreSQL and read back.",

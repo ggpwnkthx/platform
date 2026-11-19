@@ -1,6 +1,6 @@
 {
   "name": "@platform/cli",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "private": true,
   "type": "module",
   "description": "The operator's tools: install, apply, harden, deploy, and build the interface.",

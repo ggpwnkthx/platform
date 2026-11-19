@@ -1,6 +1,6 @@
 {
   "name": "@platform/example-newsroom",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "private": true,
   "type": "module",
   "description": "The newsroom example, running: PostgreSQL in the page, and no issuer to sign in with.",

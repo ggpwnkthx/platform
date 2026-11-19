@@ -1,6 +1,6 @@
 {
   "name": "@platform/vocabulary",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "private": true,
   "type": "module",
   "description": "The vocabulary the platform speaks: the SQL it writes, the metadata it reads and writes, the tokens and versions it reads, written once.",

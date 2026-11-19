@@ -1,6 +1,6 @@
 {
   "name": "@platform/pg-client",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "private": true,
   "type": "module",
   "description": "The PostgreSQL client the platform speaks with: the protocol itself, the browser's way to it, and the logins it keeps.",
