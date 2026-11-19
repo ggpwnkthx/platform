@@ -8,14 +8,23 @@ import { ident, literal } from '../packages/sql/src/index.ts'
 import { TokenClient, transaction } from '../packages/cli/src/database/db.ts'
 import { hardenSql } from '../packages/cli/src/harden.ts'
 import { applyModel } from '../packages/cli/src/model.ts'
-import { authenticationProblems, requirePostgres18 } from '../packages/cli/src/database/requirements.ts'
+import {
+  authenticationProblems,
+  requirePostgres18,
+} from '../packages/cli/src/database/requirements.ts'
 import {
   collectionStatements,
   emptyField,
   type FieldDraft,
   fieldStatements,
-} from '../packages/ui/src/db/model.ts'
-import * as page from '../packages/ui/src/db/platform.ts'
+} from '../packages/ui/src/model/statements.ts'
+import * as pageAccess from '../packages/ui/src/access/query.ts'
+import * as pageActivity from '../packages/ui/src/activity/query.ts'
+import * as pageCatalog from '../packages/ui/src/catalog/query.ts'
+import * as pageContent from '../packages/ui/src/content/query.ts'
+import * as pageIdentity from '../packages/ui/src/identity/query.ts'
+import { transaction as pageTransaction } from '../packages/ui/src/pg/transaction.ts'
+import * as pageSql from '../packages/ui/src/sql/query.ts'
 import type { Connection } from '../packages/ui/src/pg/wire.ts'
 import { startIssuer } from './issuer.ts'
 import { openPage, refusal } from './page.ts'
@@ -81,14 +90,14 @@ async function as<T>(name: string, work: (db: Connection) => Promise<T>): Promis
 }
 /** The columns of a collection this reader may read, as the catalog reports them. */
 async function readable(db: Connection, schema: string, table: string) {
-  const { columns } = await page.catalog(db)
+  const { columns } = await pageCatalog.catalog(db)
   return columns
     .filter((c) => c.schema === schema && c.table === table && c.can_select)
     .map((c) => c.name)
 }
 /** One page of records, as the records screen asks for it. */
-const records = (db: Connection, table: string, query: Partial<page.RecordQuery> = {}) =>
-  page.records(db, {
+const records = (db: Connection, table: string, query: Partial<pageContent.RecordQuery> = {}) =>
+  pageContent.records(db, {
     schema: 'newsroom',
     table,
     columns: ['id'],
@@ -102,7 +111,7 @@ const records = (db: Connection, table: string, query: Partial<page.RecordQuery>
   })
 /** Runs the statements the model screen shows, in one transaction, as the page does. */
 const runAll = (db: Connection, statements: string[]) =>
-  page.transaction(db, async () => {
+  pageTransaction(db, async () => {
     for (const statement of statements) await db.query(statement)
   })
 const field = (draft: Partial<FieldDraft> & Pick<FieldDraft, 'name'>): FieldDraft => ({
@@ -179,7 +188,7 @@ afterAll(async () => {
 
 describe('native identity', () => {
   test('in the page’s client, session_user and current_user are the authenticated login', async () => {
-    const me = await as('alice', page.identity)
+    const me = await as('alice', pageIdentity.identity)
     expect(me).toMatchObject({
       username: role('alice'),
       effective_role: role('alice'),
@@ -189,7 +198,7 @@ describe('native identity', () => {
   })
   test('forged, expired, foreign and NOLOGIN sign-ins are refused at login', async () => {
     const tokenFor = (claims: Record<string, unknown> = {}) => issuer.mint(role('alice'), claims)
-    const me = await as('alice', page.identity)
+    const me = await as('alice', pageIdentity.identity)
     expect(me.username).toBe(role('alice'))
     for (const token of [
       issuer.mint(role('alice'), {}, issuer.strangerKey()),
@@ -218,10 +227,10 @@ describe('native identity', () => {
   })
   test('SET ROLE, session authorization and application identity cannot impersonate another user', async () => {
     await as('alice', async (db) => {
-      expect(await refusal(page.run(db, `SET ROLE ${ident(role('owner'))}`))).toBe('42501')
-      expect(await refusal(page.run(db, `SET SESSION AUTHORIZATION ${ident(role('owner'))}`))).toBe(
-        '42501'
-      )
+      expect(await refusal(pageSql.run(db, `SET ROLE ${ident(role('owner'))}`))).toBe('42501')
+      expect(
+        await refusal(pageSql.run(db, `SET SESSION AUTHORIZATION ${ident(role('owner'))}`))
+      ).toBe('42501')
     })
     await alice.query(`SET app.user_id=${literal(role('bob'))}`)
     expect((await alice.query('SELECT id FROM newsroom.articles')).rows.map((r) => r.id)).toEqual([
@@ -277,19 +286,23 @@ describe('native access control', () => {
         expect(await refusal(records(db, 'articles', query))).toBe('42501')
       await deny(alice, "UPDATE newsroom.articles SET secret='stolen'")
       expect(
-        await refusal(page.updateRecord(db, 'newsroom', 'articles', aliceId, { secret: 'stolen' }))
+        await refusal(
+          pageContent.updateRecord(db, 'newsroom', 'articles', aliceId, { secret: 'stolen' })
+        )
       ).toBe('42501')
       expect(
-        await refusal(page.insertRecord(db, 'newsroom', 'articles', { title: 'x', secret: 'x' }))
+        await refusal(
+          pageContent.insertRecord(db, 'newsroom', 'articles', { title: 'x', secret: 'x' })
+        )
       ).toBe('42501')
     })
   })
   test('RLS prevents modifying another login’s rows', async () => {
     await as('alice', async (db) => {
-      expect(await page.updateRecord(db, 'newsroom', 'articles', bobId, { title: 'Hacked' })).toBe(
-        0
-      )
-      expect(await page.deleteRecord(db, 'newsroom', 'articles', bobId)).toBe(0)
+      expect(
+        await pageContent.updateRecord(db, 'newsroom', 'articles', bobId, { title: 'Hacked' })
+      ).toBe(0)
+      expect(await pageContent.deleteRecord(db, 'newsroom', 'articles', bobId)).toBe(0)
     })
     expect((await bob.query('SELECT title FROM newsroom.articles')).rows[0].title).toBe('Bob draft')
   })
@@ -326,15 +339,15 @@ describe('native access control', () => {
         'ALTER TABLE newsroom.articles ADD COLUMN stolen text',
         'CREATE SCHEMA unauthorized',
       ])
-        expect(await refusal(page.run(db, s))).toBe('42501')
+        expect(await refusal(pageSql.run(db, s))).toBe('42501')
     })
   })
   test('PostgreSQL ADMIN OPTION controls role delegation', async () => {
     const grant = `GRANT ${ident(role('reader'))} TO ${ident(role('outsider'))}`
-    expect(await as('alice', (db) => refusal(page.run(db, grant)))).toBe('42501')
+    expect(await as('alice', (db) => refusal(pageSql.run(db, grant)))).toBe('42501')
     await admin.query(`GRANT ${ident(role('reader'))} TO ${ident(role('alice'))} WITH ADMIN OPTION`)
     try {
-      expect((await as('alice', (db) => page.run(db, grant))).command).toBe('GRANT ROLE')
+      expect((await as('alice', (db) => pageSql.run(db, grant))).command).toBe('GRANT ROLE')
     } finally {
       await admin.query(
         `REVOKE ADMIN OPTION FOR ${ident(role('reader'))} FROM ${ident(role('alice'))} CASCADE`
@@ -344,7 +357,7 @@ describe('native access control', () => {
   })
   test('SQL GRANT immediately opens a projection in the page’s client', async () => {
     await as('owner', (db) =>
-      page.run(db, `GRANT SELECT(secret) ON newsroom.articles TO ${ident(role('reader'))}`)
+      pageSql.run(db, `GRANT SELECT(secret) ON newsroom.articles TO ${ident(role('reader'))}`)
     )
     try {
       const shown = await as('alice', (db) => records(db, 'articles', { columns: ['secret'] }))
@@ -359,7 +372,9 @@ describe('native access control', () => {
       `CREATE POLICY insert_only ON newsroom.articles FOR INSERT TO ${ident(role('insert_only'))} WITH CHECK(true)`
     )
     await as('insert_only', async (db) => {
-      expect(await page.insertRecord(db, 'newsroom', 'articles', { title: 'Write only' })).toBe(1)
+      expect(
+        await pageContent.insertRecord(db, 'newsroom', 'articles', { title: 'Write only' })
+      ).toBe(1)
       expect(await readable(db, 'newsroom', 'articles')).toEqual([])
       expect(await refusal(records(db, 'articles', { columns: ['id', 'title'] }))).toBe('42501')
     })
@@ -367,7 +382,7 @@ describe('native access control', () => {
 })
 describe('role catalogs', () => {
   test('a caller sees their own roles and memberships, and nobody else’s', async () => {
-    const data = await as('alice', page.roles)
+    const data = await as('alice', pageAccess.roles)
     const names = data.roles.map((r) => r.name)
     expect(names).toContain(role('alice'))
     expect(names).toContain(role('writer'))
@@ -376,14 +391,14 @@ describe('role catalogs', () => {
     expect(data.memberships.length).toBeGreaterThan(0)
     expect(data.memberships.every((m) => m.member === role('alice'))).toBe(true)
     expect(data.memberships.some((m) => m.role === role('reader'))).toBe(true)
-    const bobs = await as('bob', page.roles)
+    const bobs = await as('bob', pageAccess.roles)
     expect(bobs.memberships.every((m) => m.member === role('bob'))).toBe(true)
     expect(bobs.roles.map((r) => r.name)).not.toContain(role('alice'))
   })
   test('an operator sees every membership, because it administers roles', async () => {
     await admin.query(`GRANT platform_admins TO ${ident(role('owner'))}`)
     try {
-      const data = await as('owner', page.roles)
+      const data = await as('owner', pageAccess.roles)
       expect(data.roles.map((r) => r.name)).toContain(role('bob'))
       expect(data.memberships.some((m) => m.member === role('bob'))).toBe(true)
     } finally {
@@ -417,7 +432,7 @@ describe('role catalogs', () => {
         (await alice.query('SELECT * FROM information_schema.applicable_roles')).rows.length
       ).toBeGreaterThan(0)
       // The page answers the same question, from the platform's own filtered view.
-      const data = await as('alice', page.roles)
+      const data = await as('alice', pageAccess.roles)
       expect(data.roles.map((r) => r.name)).toContain(role('alice'))
       expect(data.memberships.every((m) => m.member === role('alice'))).toBe(true)
       // An operator keeps the catalog.
@@ -453,7 +468,9 @@ describe('modeling and integrity', () => {
     )
     expect(
       await as('owner', (db) =>
-        refusal(page.insertRecord(db, 'newsroom', 'tasks', { title: 'x', status: 'invalid' }))
+        refusal(
+          pageContent.insertRecord(db, 'newsroom', 'tasks', { title: 'x', status: 'invalid' })
+        )
       )
     ).toBe('23514')
   })
@@ -474,7 +491,7 @@ describe('modeling and integrity', () => {
     expect(await as('alice', (db) => refusal(runAll(db, oops)))).toBe('42501')
   })
   test('catalog reports database column rights', async () => {
-    const catalog = await as('alice', page.catalog)
+    const catalog = await as('alice', pageCatalog.catalog)
     const fields = catalog.columns.filter((f) => f.schema === 'newsroom' && f.table === 'articles')
     expect(fields.some((f) => f.name === 'title' && f.can_select)).toBe(true)
     // A column without a right is listed, and PostgreSQL's answer says it may not be read.
@@ -489,8 +506,8 @@ describe('modeling and integrity', () => {
     expect(catalog.schemas.some((s) => s.name === 'public')).toBe(false)
   })
   test('the catalog answers who owns what, as PostgreSQL does', async () => {
-    const ownerCatalog = await as('owner', page.catalog)
-    const aliceCatalog = await as('alice', page.catalog)
+    const ownerCatalog = await as('owner', pageCatalog.catalog)
+    const aliceCatalog = await as('alice', pageCatalog.catalog)
     const owned = (catalog: typeof ownerCatalog) =>
       catalog.tables.find((t) => t.schema === 'newsroom' && t.name === 'articles')
     // The owner of the collection may alter it, grant on it and write its policies.
@@ -500,26 +517,26 @@ describe('modeling and integrity', () => {
     expect(ownerCatalog.schemas.find((s) => s.name === 'newsroom')?.can_alter).toBe(true)
   })
   test('the identity answers what the reader may make and administer', async () => {
-    const me = await as('owner', page.identity)
+    const me = await as('owner', pageIdentity.identity)
     expect(me.can_create_workspace).toBe(true)
     expect(me.is_operator).toBe(false)
     // An operator may administer every role: the platform's own answer.
     await admin.query(`GRANT platform_admins TO ${ident(role('owner'))}`)
     try {
-      expect((await as('owner', page.identity)).is_operator).toBe(true)
+      expect((await as('owner', pageIdentity.identity)).is_operator).toBe(true)
     } finally {
       await admin.query(`REVOKE platform_admins FROM ${ident(role('owner'))}`)
     }
   })
   test('the roles answer who may admit others to them', async () => {
-    const roles = await as('alice', page.roles)
+    const roles = await as('alice', pageAccess.roles)
     expect(roles.roles.every((r) => r.admits !== undefined)).toBe(true)
     // Alice belongs to the writers, but holds no admin option on them.
     expect(roles.roles.find((r) => r.name === role('writer'))?.admits).toBe(false)
     // PostgreSQL's ADMIN OPTION is what lets her admit others.
     await admin.query(`GRANT ${ident(role('writer'))} TO ${ident(role('alice'))} WITH ADMIN OPTION`)
     try {
-      const withOption = await as('alice', page.roles)
+      const withOption = await as('alice', pageAccess.roles)
       expect(withOption.roles.find((r) => r.name === role('writer'))?.admits).toBe(true)
     } finally {
       await admin.query(
@@ -529,7 +546,7 @@ describe('modeling and integrity', () => {
     // An operator may administer every role.
     await admin.query(`GRANT platform_admins TO ${ident(role('owner'))}`)
     try {
-      const operator = await as('owner', page.roles)
+      const operator = await as('owner', pageAccess.roles)
       expect(operator.roles.every((r) => r.admits)).toBe(true)
     } finally {
       await admin.query(`REVOKE platform_admins FROM ${ident(role('owner'))}`)
@@ -557,7 +574,7 @@ describe('modeling and integrity', () => {
     )
     await as('alice', async (db) => {
       const update = (title: string) =>
-        page.updateRecord(db, 'newsroom', 'articles', aliceId, { title }, v)
+        pageContent.updateRecord(db, 'newsroom', 'articles', aliceId, { title }, v)
       expect(await update('Revised')).toBe(1)
       // The row now carries the next version: the same guard touches nothing.
       expect(await update('Lost update')).toBe(0)
@@ -573,7 +590,7 @@ describe('audit and the page’s client', () => {
     await alice.query("INSERT INTO newsroom.articles(title) VALUES ('Direct audit')")
     expect(
       await as('alice', (db) =>
-        page.insertRecord(db, 'newsroom', 'articles', { title: 'Page audit' })
+        pageContent.insertRecord(db, 'newsroom', 'articles', { title: 'Page audit' })
       )
     ).toBe(1)
     const rows = (
@@ -585,7 +602,7 @@ describe('audit and the page’s client', () => {
     expect(
       rows.every((r) => r.actor === role('alice') && r.after_row.created_by === role('alice'))
     ).toBe(true)
-    const history = await as('owner', (db) => page.activity(db, { schema: 'newsroom' }))
+    const history = await as('owner', (db) => pageActivity.activity(db, { schema: 'newsroom' }))
     expect(history.length).toBeGreaterThan(0)
   })
   test('broad INSERT grants cannot forge system metadata', async () => {
@@ -612,7 +629,7 @@ describe('audit and the page’s client', () => {
   })
   test('readers cannot read full revisions, forge logs or disable audit triggers', async () => {
     expect((await alice.query('SELECT * FROM platform.activity')).rows).toEqual([])
-    expect(await as('alice', (db) => page.activity(db, { schema: 'newsroom' }))).toEqual([])
+    expect(await as('alice', (db) => pageActivity.activity(db, { schema: 'newsroom' }))).toEqual([])
     for (const s of [
       'DELETE FROM platform.activity',
       'TRUNCATE platform.activity',
@@ -645,17 +662,17 @@ describe('audit and the page’s client', () => {
   })
   test('SQL accepts one statement and binds values safely', async () => {
     await as('alice', async (db) => {
-      expect(await refusal(page.run(db, 'SELECT 1; SELECT 2'))).toBe('42601')
+      expect(await refusal(pageSql.run(db, 'SELECT 1; SELECT 2'))).toBe('42601')
       const r = await db.query('SELECT $1::text AS v', ["'; DROP TABLE newsroom.articles;--"])
       expect(r.rows[0]?.v).toContain('DROP TABLE')
     })
   })
   test('the state of one session never leaks into another', async () => {
     await as('alice', async (db) => {
-      await page.run(db, `SET ROLE ${ident(role('reader'))}`)
-      expect((await page.identity(db)).effective_role).toBe(role('reader'))
+      await pageSql.run(db, `SET ROLE ${ident(role('reader'))}`)
+      expect((await pageIdentity.identity(db)).effective_role).toBe(role('reader'))
     })
-    expect((await as('alice', page.identity)).effective_role).toBe(role('alice'))
+    expect((await as('alice', pageIdentity.identity)).effective_role).toBe(role('alice'))
   })
 })
 
@@ -667,11 +684,15 @@ describe('additional database boundaries', () => {
       await deny(alice, "INSERT INTO newsroom.articles(title) VALUES ('Denied SQL')")
       await as('alice', async (db) => {
         expect(
-          await refusal(page.insertRecord(db, 'newsroom', 'articles', { title: 'Denied page' }))
+          await refusal(
+            pageContent.insertRecord(db, 'newsroom', 'articles', { title: 'Denied page' })
+          )
         ).toBe('42501')
         expect(
           await refusal(
-            page.updateRecord(db, 'newsroom', 'articles', aliceId, { title: 'Denied update' })
+            pageContent.updateRecord(db, 'newsroom', 'articles', aliceId, {
+              title: 'Denied update',
+            })
           )
         ).toBe('42501')
       })
@@ -690,7 +711,7 @@ describe('additional database boundaries', () => {
       await deny(q, "INSERT INTO newsroom.articles(title) VALUES ('No policy')")
       expect(
         await as('blind', (db) =>
-          refusal(page.insertRecord(db, 'newsroom', 'articles', { title: 'No policy' }))
+          refusal(pageContent.insertRecord(db, 'newsroom', 'articles', { title: 'No policy' }))
         )
       ).toBe('42501')
     } finally {
@@ -704,7 +725,9 @@ describe('additional database boundaries', () => {
     await as('owner', (db) => runAll(db, children))
     expect(
       await as('owner', (db) =>
-        refusal(page.insertRecord(db, 'newsroom', 'children', { parent: crypto.randomUUID() }))
+        refusal(
+          pageContent.insertRecord(db, 'newsroom', 'children', { parent: crypto.randomUUID() })
+        )
       )
     ).toBe('23503')
   })
@@ -736,9 +759,9 @@ describe('additional database boundaries', () => {
     for (const name of ['owner', 'alice'])
       await as(name, async (db) => {
         for (const schema of ['retired_workspace', 'newsroom'])
-          expect(Array.isArray(await page.activity(db, { schema }))).toBe(true)
+          expect(Array.isArray(await pageActivity.activity(db, { schema }))).toBe(true)
         // The whole history the reader may see is still readable, with its row security.
-        await page.run(db, 'SELECT * FROM platform.activity')
+        await pageSql.run(db, 'SELECT * FROM platform.activity')
       })
   })
 })

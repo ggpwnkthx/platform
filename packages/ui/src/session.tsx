@@ -1,14 +1,16 @@
 import { createContext, type ComponentChildren } from 'preact'
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
-import { beginSignIn, completeSignIn, expiresAt, roleOf } from './auth/oidc.ts'
+import { beginSignIn, completeSignIn, expiresAt, roleOf } from './identity/oidc.ts'
 import { type RuntimeConfig, runtimeConfig } from './config.ts'
-import { connect, type Credentials, type Db, inPageDatabase } from './db/connect.ts'
-import { catalog as readCatalog, identity as readIdentity } from './db/platform.ts'
-import { presentations as readPresentations } from './db/metadata.ts'
-import type { Catalog, Identity } from './db/types.ts'
+import { connect, type Credentials, type Db, inPageDatabase } from './pg/connect.ts'
+import { catalog as readCatalog } from './catalog/query.ts'
+import { identity as readIdentity } from './identity/query.ts'
+import { presentations as readPresentations } from './metadata/query.ts'
+import type { Catalog } from './catalog/types.ts'
+import type { Identity } from './identity/types.ts'
 import { ConnectionError, PgError } from './pg/wire.ts'
-import { indexPresentations, type PresentationIndex } from './state/presentation.ts'
+import { indexPresentations, type PresentationIndex } from './metadata/presentation.ts'
 
 export type Phase = 'starting' | 'signed-out' | 'signing-in' | 'ready'
 
@@ -147,6 +149,8 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
     credentials.current = who
     const db = await connect(cfg, who)
     try {
+      // The identity first: it says which version the installation is, and the rest of the
+      // platform's schema is that version's.
       const [me, found, shown] = [
         await readIdentity(db),
         await readCatalog(db),

@@ -4,9 +4,15 @@ import {
   fieldTarget,
   metadataStatements,
   workspaceTarget,
-} from '../src/db/metadata.ts'
-import { familyOf, palette, parseColor, reservedFamilies, toneClass } from '../src/state/color.ts'
-import { indexPresentations, presentationOf } from '../src/state/presentation.ts'
+} from '../src/metadata/query.ts'
+import {
+  familyOf,
+  palette,
+  parseColor,
+  reservedFamilies,
+  toneClass,
+} from '../src/metadata/color.ts'
+import { indexPresentations, presentationOf } from '../src/metadata/presentation.ts'
 import { itemIcons, iconFor } from '../src/ui/icons.tsx'
 
 describe('The colour of an item', () => {

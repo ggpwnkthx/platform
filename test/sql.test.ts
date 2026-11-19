@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { fieldSchema, fieldSql } from '../packages/cli/src/model.ts'
-import { fieldStatements } from '../packages/ui/src/db/model.ts'
+import { fieldStatements } from '../packages/ui/src/model/statements.ts'
 
 /**
  * The operator's tools and the interface build the model in their own way — a manifest

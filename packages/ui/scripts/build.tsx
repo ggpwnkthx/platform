@@ -23,7 +23,7 @@ function inPageDatabase(): Bun.BunPlugin {
   return {
     name: 'in-page-database',
     setup(build) {
-      build.onResolve({ filter: /\/db\/connect\.ts$/ }, (args) =>
+      build.onResolve({ filter: /\/pg\/connect\.ts$/ }, (args) =>
         args.importer.endsWith('dev/database.ts') ? undefined : { path: replacement }
       )
     },
