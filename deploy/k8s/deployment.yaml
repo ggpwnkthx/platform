@@ -29,6 +29,13 @@ spec:
             - { name: RELAY_PORT, value: "8081" }
             # The only origin allowed to open a session: the address of the site on the CDN.
             - { name: RELAY_ORIGINS, value: "https://platform.example.com" }
+            # Behind an ingress every reader arrives from the ingress controller's address.
+            # Name its addresses here and the relay counts logins against the client it
+            # reports in X-Forwarded-For; from any other address the header is ignored.
+            # - { name: RELAY_TRUSTED_PROXIES, value: "10.0.0.0/8" }
+            # Reach PostgreSQL in TLS, and check its certificate, where the network between
+            # the pods and the database is not one you would trust with a token.
+            # - { name: RELAY_UPSTREAM_TLS, value: "verify" }
           resources:
             requests: { cpu: 50m, memory: 32Mi }
             limits: { cpu: 500m, memory: 128Mi }
