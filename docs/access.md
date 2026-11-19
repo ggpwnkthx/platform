@@ -56,8 +56,9 @@ hidden fields.
 For a shared model-owner group, an administrator may create a NOLOGIN role, grant it
 platform_users membership and schema ownership, then grant it only to trusted model operators.
 Create objects under SET ROLE to that owner group in a direct SQL transaction so future grants
-and ownership remain consistent. The interface opens one connection per action, so it does not
-retain SET ROLE.
+and ownership remain consistent. The interface never issues SET ROLE itself: its statements run
+on one login for the page and carry no role of their own, and the reader's own statements run
+on a login of their own, so a SET ROLE there does not reach the platform's work.
 
 Use native `WITH GRANT OPTION` to delegate object privileges and `WITH ADMIN OPTION` to
 delegate role membership. Creating logins requires native CREATEROLE and PostgreSQL's role

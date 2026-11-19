@@ -4,6 +4,7 @@ import { useLocation } from 'preact-iso'
 import { beginSignIn, completeSignIn, expiresAt, roleOf } from './identity/oidc.ts'
 import { type RuntimeConfig, runtimeConfig } from './config.ts'
 import { connect, type Credentials, type Db, inPageDatabase } from './pg/connect.ts'
+import { KeptSession } from './pg/kept.ts'
 import { catalog as readCatalog } from './catalog/query.ts'
 import { identity as readIdentity } from './identity/query.ts'
 import { presentations as readPresentations } from './metadata/query.ts'
@@ -31,8 +32,17 @@ export interface Session {
   catalog: Catalog
   /** How each item presents itself: its display name, its icon and its colour. */
   presentations: PresentationIndex
-  /** Opens a login as the reader, runs the work, and closes it: one connection per action. */
+  /**
+   * Runs the work as the reader, on a login the page keeps open: one for the whole page,
+   * not one for every action.
+   */
   withDb: <T>(work: (db: Db) => Promise<T>) => Promise<T>
+  /**
+   * Runs the reader's own statement as them, on a login of their own that is closed again
+   * afterwards: their SQL never shares a login with the platform's, so a transaction they
+   * leave open cannot reach the platform's work.
+   */
+  withReaderDb: <T>(work: (db: Db) => Promise<T>) => Promise<T>
   /** Reads the catalog again: after a change to the model or to a right. */
   refresh: () => Promise<void>
   signIn: (returnTo?: string) => Promise<void>
@@ -94,6 +104,8 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
   const [lastWorkspace, setLastWorkspace] = useState<string | null>(null)
   // The token lives here and nowhere else: not a cookie, not storage.
   const credentials = useRef<Credentials | null>(null)
+  // The logins the page keeps open while the reader is signed in.
+  const keeper = useRef<KeptSession | null>(null)
   const counter = useRef(0)
 
   const notify = useCallback((toast: Omit<Toast, 'id'>) => {
@@ -110,6 +122,8 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
   const signOut = useCallback(
     (reason?: string) => {
       credentials.current = null
+      keeper.current?.close()
+      keeper.current = null
       setIdentity(null)
       setCatalog(emptyCatalog)
       setPresentations({})
@@ -130,14 +144,29 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
         signOut('Your sign-in expired. Sign in again to continue.')
         throw new Error('Your sign-in expired.')
       }
-      let db: Db
+      const kept = keeper.current
+      if (!kept) throw new Error('Sign in first.')
       try {
-        db = await connect(config, who)
+        return await kept.run(work)
       } catch (error) {
         if (loginRefused(error))
           signOut(`PostgreSQL refused the sign-in: ${(error as PgError).message}`)
         throw error
       }
+    },
+    [config, signOut]
+  )
+
+  const withReaderDb = useCallback(
+    async <T,>(work: (db: Db) => Promise<T>): Promise<T> => {
+      const who = credentials.current
+      if (!who || !config) throw new Error('Sign in first.')
+      const expiry = expiresAt(who.token)
+      if (expiry !== null && expiry <= Date.now()) {
+        signOut('Your sign-in expired. Sign in again to continue.')
+        throw new Error('Your sign-in expired.')
+      }
+      const db = await connect(config, who)
       try {
         return await work(db)
       } finally {
@@ -149,22 +178,33 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
 
   const load = useCallback(async (who: Credentials, cfg: RuntimeConfig) => {
     credentials.current = who
-    const db = await connect(cfg, who)
+    // The login the page keeps: opened once, and shared by every action that follows.
+    keeper.current?.close()
+    const kept = new KeptSession({
+      open: () => connect(cfg, who),
+      expiresAt: () => expiresAt(who.token),
+    })
+    keeper.current = kept
     try {
-      // The identity first: it says which version the installation is, and the rest of the
-      // platform's schema is that version's.
-      const me = await readIdentity(db)
-      const wrong = versionProblem(me.platform_version)
-      if (wrong) throw new Error(wrong)
-      const found = await readCatalog(db)
-      const shown = await readPresentations(db)
-      setIdentity(me)
-      setCatalog(found)
-      setPresentations(indexPresentations(shown))
+      const found = await kept.run(async (db) => {
+        // The identity first: it says which version the installation is, and the rest of the
+        // platform's schema is that version's.
+        const me = await readIdentity(db)
+        const wrong = versionProblem(me.platform_version)
+        if (wrong) throw new Error(wrong)
+        const found = await readCatalog(db)
+        const shown = await readPresentations(db)
+        return { identity: me, catalog: found, presentations: indexPresentations(shown) }
+      })
+      setIdentity(found.identity)
+      setCatalog(found.catalog)
+      setPresentations(found.presentations)
       setPhase('ready')
       setNotice(null)
-    } finally {
-      db.close()
+    } catch (error) {
+      kept.close()
+      keeper.current = null
+      throw error
     }
   }, [])
 
@@ -288,6 +328,7 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
       catalog,
       presentations,
       withDb,
+      withReaderDb,
       refresh,
       signIn,
       signInAs,
@@ -306,6 +347,7 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
       catalog,
       presentations,
       withDb,
+      withReaderDb,
       refresh,
       signIn,
       signInAs,

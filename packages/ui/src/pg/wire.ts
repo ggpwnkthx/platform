@@ -307,6 +307,11 @@ export class Connection {
     transport.onclose = (reason) => this.end(reason)
   }
 
+  /** Whether the session is over: the stream ended, or the session was closed. */
+  get isClosed(): boolean {
+    return this.closed !== null
+  }
+
   /** Opens a session on a transport that is already connected, and logs in. */
   static async open(transport: Transport, options: LoginOptions): Promise<Connection> {
     const connection = new Connection(transport, options)

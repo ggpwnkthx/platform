@@ -6,6 +6,8 @@ import type { RuntimeConfig } from '../config.ts'
 export interface Db {
   query<Row = Record<string, unknown>>(text: string, params?: unknown[]): Promise<Result<Row>>
   close(): void
+  /** Whether the session is over: the stream ended, or the session was closed. */
+  readonly isClosed: boolean
 }
 
 /** Who is signed in: the role PostgreSQL will log in, and the token that proves it. */
@@ -24,6 +26,7 @@ export interface Credentials {
  * questions ask PostgreSQL's privilege functions, and every write is judged by PostgreSQL when
  * it runs.
  */
+
 export const inPageDatabase = false
 
 export async function connect(config: RuntimeConfig, who: Credentials): Promise<Db> {

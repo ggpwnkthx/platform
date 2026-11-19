@@ -89,8 +89,10 @@ The page speaks PostgreSQL's protocol version 3 itself (`packages/ui/src/pg/wire
 (RFC 7628) login with the reader's token, the extended query protocol with exactly one
 statement per query and every value bound as a parameter, and text-format results. In a
 browser the bytes go over a WebSocket (`packages/ui/src/pg/socket.ts`) to the relay, which forwards
-them to PostgreSQL's port and understands none of them. Each action opens one login and closes
-it (`withDb` in `packages/ui/src/session.tsx`).
+them to PostgreSQL's port and understands none of them. The page opens one login when the
+reader signs in and keeps it open while they work (`packages/ui/src/pg/kept.ts`,
+`withDb` in `packages/ui/src/session.tsx`); the reader's own statements run on a login of
+their own, so that what they type cannot reach the platform's work.
 
 What the page does is ordinary SQL, and it belongs to the domain that asks for it. The catalog
 (`packages/ui/src/catalog/`) is read with PostgreSQL's privilege functions; the roles and
@@ -164,7 +166,8 @@ documentation and the integration tests that cross the packages.
   `deployment/` runs the deployments, split into the local stack, Kubernetes, the help text
   and the runtime they share.
 - `packages/relay` — the WebSocket in front of PostgreSQL's port: `relay.ts`, and nothing else.
-  It holds no credentials and reads nothing it carries.
+  It holds no credentials, and it reads one setting: the role PostgreSQL reports, so that it
+  can keep one role from taking the database's connections for itself.
 - `packages/ui` — the interface. `src` is the Preact application, and it is laid out by
   domain: each domain holds its page, the SQL it runs and the types it speaks in.
   `content/` reads and writes the records of a collection, `model/` the collections and their

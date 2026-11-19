@@ -90,14 +90,20 @@ allow, and PostgreSQL refuses a write to such a column.
 In a browser, the protocol travels over a WebSocket (`packages/ui/src/pg/socket.ts`) to the relay, at
 the address `config.json` names (`wss://relay.example.com`). The relay (`packages/relay/src/relay.ts`, the
 `relay` image) hands the bytes to PostgreSQL's port and understands none of them. It holds no
-credentials and reads nothing it carries: the reader's token travels inside the PostgreSQL
-startup packet, and PostgreSQL alone checks it.
+credentials: the reader's token travels inside the PostgreSQL startup packet, and PostgreSQL
+alone checks it. The one thing the relay reads is the setting PostgreSQL reports for the role
+it has signed the session in as, so that it can keep one role from taking the database's
+connections for itself.
 
-Each action opens one login and closes it (`withDb` in `packages/ui/src/session.tsx`): loading a page's
-data, saving a record, running a statement. One connection per action, always closed. Session
-state such as SET ROLE or an open transaction does not survive into the next action. A token
-that has expired signs the reader out before a connection is attempted; a login PostgreSQL
-refuses signs them out with PostgreSQL's message.
+The page keeps its login open (`packages/ui/src/pg/kept.ts`): one login when the reader signs
+in, closed when the sign-in ends or the token expires. Every action the platform runs — loading
+a page's data, saving a record, running a statement — runs on it, and a second action running
+at the same time gets a login of its own rather than waiting. A login the server has closed is
+opened again the next time; a login whose session has been broken is thrown away. The reader's
+own statements (`packages/ui/src/sql/`) run on a login of their own that is closed again
+afterwards, so a transaction or a SET ROLE they leave open cannot reach the platform's work. A
+token that has expired signs the reader out before a connection is attempted; a login
+PostgreSQL refuses signs them out with PostgreSQL's message.
 
 What the page runs is ordinary SQL, and each domain holds the SQL it asks for:
 
@@ -281,14 +287,15 @@ build serves every deployment. The build reads them from the environment:
 The `relay` image (Dockerfile target `relay`, based on `oven/bun`) is the only part of the
 interface's path that answers on the network. It is configured from the environment:
 
-| Variable                   | Default        | Purpose                                           |
-| -------------------------- | -------------- | ------------------------------------------------- |
-| RELAY_UPSTREAM             | 127.0.0.1:5432 | host:port of PostgreSQL                           |
-| RELAY_PORT                 | 8081           | The port the relay listens on                     |
-| RELAY_ORIGINS              | any            | Comma-separated origins allowed to open a session |
-| RELAY_SESSIONS_PER_ADDRESS | 20             | Open sessions one client address may hold         |
-| RELAY_TLS_CERT             | none           | The certificate the relay serves TLS with         |
-| RELAY_TLS_KEY              | none           | Its key                                           |
+| Variable                   | Default        | Purpose                                               |
+| -------------------------- | -------------- | ----------------------------------------------------- |
+| RELAY_UPSTREAM             | 127.0.0.1:5432 | host:port of PostgreSQL                               |
+| RELAY_PORT                 | 8081           | The port the relay listens on                         |
+| RELAY_ORIGINS              | any            | Comma-separated origins allowed to open a session     |
+| RELAY_SESSIONS_PER_ADDRESS | 20             | Logins one client address may have signing in at once |
+| RELAY_SESSIONS_PER_ROLE    | 20             | Open sessions one role may hold                       |
+| RELAY_TLS_CERT             | none           | The certificate the relay serves TLS with             |
+| RELAY_TLS_KEY              | none           | Its key                                               |
 
 `/health` answers `ok` without touching the database. The image holds no database
 credentials and no OAuth client secret. Put it behind TLS: an ingress controller, a load
@@ -311,9 +318,11 @@ balancer, a tunnel, or the relay itself with a certificate.
 - **Origin check.** The relay refuses a handshake whose Origin is not one of
   `RELAY_ORIGINS`, so another site's page cannot open a database session through a visitor's
   browser. A handshake with no Origin at all is refused too when the list is not empty.
-- **Session cap.** One open WebSocket is one database session. The relay caps how many one
-  client address may hold at once (RELAY_SESSIONS_PER_ADDRESS); behind a proxy, every client
-  shares the proxy's address. Size PostgreSQL's `max_connections` and per-role connection
+- **Session cap.** One open WebSocket is one database session. The relay caps how many open
+  sessions one role may hold (RELAY_SESSIONS_PER_ROLE), and how many logins one client address
+  may have signing in at once (RELAY_SESSIONS_PER_ADDRESS); behind a proxy, every client shares
+  the proxy's address. The role is the one PostgreSQL reports, so a client cannot claim a role it
+  has not been signed in as. Size PostgreSQL's `max_connections` and per-role connection
   limits accordingly.
 - **statement_timeout.** Each login asks for STATEMENT_TIMEOUT_MS. It is a session setting the
   reader may change with SET on their own connection, not a resource boundary; set role or

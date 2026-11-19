@@ -8,9 +8,10 @@ object/column grants and row security policies. They apply equally through the i
 `psql`, reporting tools and any other database client.
 
 There is no application server. The interface is a static site whose pages speak PostgreSQL's
-own wire protocol: each action opens a login to PostgreSQL with the reader's own token, runs
-ordinary SQL and closes it. In a browser the bytes travel over a WebSocket to a relay, a stock
-WebSocket-to-TCP forwarder that holds no credentials and reads nothing it carries. Nothing
+own wire protocol: the page opens a login to PostgreSQL with the reader's own token, keeps it
+open while the reader works, and runs ordinary SQL on it. In a browser the bytes travel over a
+WebSocket to a relay, a stock WebSocket-to-TCP forwarder that holds no credentials and reads
+nothing but the role PostgreSQL reports. Nothing
 between the page and PostgreSQL holds a **database service account, administrator password,
 user table, password hashes, session tokens, policy cache or privileged schema connection**.
 `session_user` is the actual authenticated login. No role has a password except the

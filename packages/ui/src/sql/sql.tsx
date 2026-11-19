@@ -40,7 +40,7 @@ function Caret({ sql, position }: { sql: string; position: number }) {
 }
 
 export function Sql() {
-  const { withDb, refresh } = useSession()
+  const { withReaderDb, refresh } = useSession()
   const { query } = useLocation()
   const [sql, setSql] = useState(
     query.q ?? history[0]?.sql ?? 'SELECT session_user, current_user, now();'
@@ -61,7 +61,7 @@ export function Sql() {
     const started = performance.now()
     const entry: Ran = { sql: text, at: Date.now(), ms: 0 }
     try {
-      entry.result = await withDb((db) => run(db, text))
+      entry.result = await withReaderDb((db) => run(db, text))
       // A statement may have changed the model or a right: read the catalog again.
       if (!/^\s*(select|with|show|explain|table|values)\b/i.test(text))
         await refresh().catch(() => undefined)
@@ -84,7 +84,7 @@ export function Sql() {
     <Page
       title="SQL"
       icon={<SqlIcon size={22} />}
-      subtitle="One statement, run as your own role on a fresh connection."
+      subtitle="One statement, run as your own role on a login of your own."
       actions={
         <Action
           label="Run (Ctrl+Enter)"

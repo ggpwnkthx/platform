@@ -28,7 +28,7 @@ network and the browser assets accordingly.
 | Audit integrity       | Normal users cannot write/delete/truncate audit records or disable table triggers                                        |
 | SQL construction      | Quoted identifiers; bound data values; escaped DDL literals                                                              |
 | Protocol              | The page's wire client logs in by OAUTHBEARER and runs one bound statement per query, directly and through the relay     |
-| State leakage         | A fresh authenticated connection per action, always closed                                                               |
+| State leakage         | One authenticated login per page; the reader's own statements run on a login of their own    |
 
 The only SECURITY DEFINER helper that acts on the database appends real trigger records to
 platform.activity. Its owner is platform_core, with no login or role-administration
@@ -127,7 +127,11 @@ asks no third party for anything at runtime.
 
 A WebSocket from any Origin but the site's own is refused with 403, so another site's page
 cannot open a database session through a visitor's browser. Each open WebSocket is one database
-session; the relay caps how many one client address may hold (RELAY_SESSIONS_PER_ADDRESS, 20).
+session; the relay caps how many open sessions one role may hold (RELAY_SESSIONS_PER_ROLE, 20)
+and how many logins one client address may have signing in at once (RELAY_SESSIONS_PER_ADDRESS,
+20).
+The role is the one PostgreSQL reports, so a client cannot claim a role it has not been signed
+in as, and a session that never signs in counts against nobody's role.
 Each login asks for STATEMENT_TIMEOUT_MS as `statement_timeout`,
 which a reader may change on their own session. See [interface](interface.md) for the whole
 browser surface.

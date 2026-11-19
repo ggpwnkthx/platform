@@ -174,13 +174,16 @@ part of the path that answers on the network.
 [interface](interface.md) for `config.json`, the headers and the browser surface, and
 `deploy/cdn/README.md` for publishing the site.
 
-Each action opens a fresh connection intentionally. Reusing a shared service pool would lose
-real authentication and session_user semantics; retaining per-user sessions would delay
-expiry/NOLOGIN rechecks. Every open WebSocket is one PostgreSQL connection: size PostgreSQL's
+The page keeps one login open while the reader works, and opens another when two actions run
+at the same time. It is not a shared service pool: the login is the reader's own, PostgreSQL
+checks the token when it is opened, and `session_user` is the reader's role. The reader's own
+statements run on a login of their own, so a transaction or a SET ROLE they leave open cannot
+reach the platform's work. Every open WebSocket is one PostgreSQL connection: size PostgreSQL's
 `max_connections` and per-role connection limits for the people who use the interface at once.
-The relay caps the sessions per client address (RELAY_SESSIONS_PER_ADDRESS); behind a proxy
-all users share its address, so set the cap for that or limit at the edge. Neither the relay
-nor PostgreSQL trusts X-Forwarded-For for identity.
+The relay caps the open sessions per role (RELAY_SESSIONS_PER_ROLE) and the logins signing in
+per client address (RELAY_SESSIONS_PER_ADDRESS); behind a proxy all users share its address, so
+set that cap for that or limit at the edge. Neither the relay nor PostgreSQL trusts X-Forwarded-For for
+identity.
 
 The relay connects to PostgreSQL in plain TCP: the browser cannot negotiate PostgreSQL's TLS
 inside the stream. Run it next to PostgreSQL or on a private network you trust: the same host,

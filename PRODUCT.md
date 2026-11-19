@@ -35,8 +35,8 @@ There is no web process. The interface is a static site whose pages speak Postgr
 protocol themselves, through a relay that forwards bytes and understands none of them. Nothing
 between the page and PostgreSQL holds a database service account, an administrator password, a
 user table, password hashes, session tokens, a policy cache or a privileged schema connection.
-Each action opens a new PostgreSQL login with the reader's own token and closes it when the
-action is finished.
+The page opens one PostgreSQL login with the reader's own token when they sign in, keeps it
+open while they work, and closes it when the sign-in ends.
 
 Success means one identity and one set of rules: what a person may do in the interface is
 exactly what they may do in psql and in any other database client. Native roles,
@@ -172,8 +172,9 @@ the interface alike.
 - Writes return counts rather than `RETURNING *`.
 - The browser surface: a strict CSP (`default-src 'self'`, `script-src 'self'`, `style-src 'self'`,
   `connect-src` limited to the site, the relay's origin and the issuer, `frame-ancestors 'none'`,
-  `base-uri 'none'`), a WebSocket refused with 403 from any Origin but the site's own, and a
-  cap on the database sessions one client address may hold (RELAY_SESSIONS_PER_ADDRESS).
+  `base-uri 'none'`), a WebSocket refused with 403 from any Origin but the site's own, a cap
+  on the open sessions one role may hold (RELAY_SESSIONS_PER_ROLE), and a cap on the logins
+  one client address may have signing in at once (RELAY_SESSIONS_PER_ADDRESS).
 - The relay to PostgreSQL leg is plain TCP and must stay on a network the operator trusts.
 
 **Open decisions** (explicitly undecided; do not invent them):

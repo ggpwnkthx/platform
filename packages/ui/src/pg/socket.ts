@@ -42,13 +42,25 @@ export function openSocket(url: string, timeoutMs = 10000): Promise<Transport> {
         reject(new ConnectionError('The database relay could not be reached'))
       }
     }
-    socket.onclose = () => {
+    socket.onclose = (event) => {
+      // The relay closes a session it refuses with 1008, and says why.
+      const refused = event.code === 1008 ? event.reason : ''
       if (!open) {
         clearTimeout(timer)
-        reject(new ConnectionError('The database relay could not be reached'))
+        reject(
+          new ConnectionError(
+            refused
+              ? `The database relay refused the session: ${refused}`
+              : 'The database relay could not be reached'
+          )
+        )
         return
       }
-      transport.onclose?.(null)
+      transport.onclose?.(
+        refused
+          ? new ConnectionError(`The database relay refused the session: ${refused}`)
+          : new ConnectionError('The connection to the database closed')
+      )
     }
   })
 }

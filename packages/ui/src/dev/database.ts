@@ -146,5 +146,6 @@ export async function connect(_config: RuntimeConfig, who: Credentials): Promise
     close() {
       // The in-page database outlives a request; the next one logs in as the same person.
     },
+    isClosed: false,
   }
 }
