@@ -52,9 +52,11 @@ call; PostgreSQL timeouts are defaults, not an unchangeable resource sandbox. Re
 extension/function grants, connection limits and infrastructure resources as appropriate.
 
 Row triggers log INSERT/UPDATE/DELETE and a TRUNCATE event, not SELECT, failed attempts,
-DDL/DCL, authentication events or deleted rows' contents during TRUNCATE. Use PostgreSQL
-logging/pgAudit and an external protected log destination when those events or tamper-resistant
-retention are required. Tables created manually need the audit/stamp triggers installed by
+DDL/DCL, authentication events or deleted rows' contents during TRUNCATE. The platform's
+PostgreSQL image writes connections and DDL/DCL statements to the server's log
+(`log_connections`, `log_statement=ddl`); that log is the server's, and whoever administers
+the server can change what it holds. Use pgAudit and an external protected log destination
+when more of those events or tamper-resistant retention are required. Tables created manually need the audit/stamp triggers installed by
 an owner; the project does not install a superuser event trigger to intercept all DDL.
 
 PostgreSQL metadata normally exposes role and policy names/expressions to connected users.
@@ -85,9 +87,16 @@ trust boundary:
   likes; a careless or hostile upstream provider can therefore log in as any role, including
   an administrator. Add only providers you would trust with that, and keep email verification
   on.
-- The installer's administrator is the one login with a password, kept for installation and for
-  when Dex is unavailable. Guard it accordingly and keep it out of the interface and the relay.
-  From the relay's network (PLATFORM_TOKEN_ONLY_FROM) it is not accepted at all.
+- No login has a password, the administrator's included. The administrator is the role the
+  server names in PLATFORM_ADMIN, a superuser who signs in with a token like anyone else: so
+  whoever can make Dex issue a token for that address administers the server. From the relay's
+  network (PLATFORM_TOKEN_ONLY_FROM) that login is refused outright, so a token that names it
+  is not a way in through the interface. The server's own superuser (`postgres`) has no login
+  over the network at all.
+- The one way in without a token is the server's own socket, inside its container: it makes
+  the cluster, and it is what remains when Dex is unavailable. It needs a shell beside the
+  server, which is the host's trust and not a credential. Guard that access as you would have
+  guarded a password.
 - Tokens are verified by PostgreSQL, not by the page. The page decodes a token only to learn
   which role to ask for and when it expires; a forged claim gets as far as PostgreSQL and fails
   there.
@@ -95,17 +104,19 @@ trust boundary:
 
 ## Credentials and network
 
-Use only the authentication rules in [operations](operations.md): tokens for the network, a
-password for the named administrator alone, never trust, and from the relay's network tokens
-only. `bun run cli doctor` checks that no network rule admits a login without a token. Require
+Use only the authentication rules in [operations](operations.md): tokens for the network and
+nothing else, never a password and never trust, and from the relay's network no
+administrator. `bun run cli doctor` checks that no network rule admits a login without a token. Require
 HTTPS for the interface and for Dex, and expose the interface only through an HTTPS reverse
 proxy or ingress; PUBLIC_URL itself does not enable an HTTPS listener. Do not log WebSocket
 payloads or proxy request bodies: the `/pg` stream carries tokens, statements and rows.
 
-The relay connects to PostgreSQL in plain TCP. The browser cannot negotiate PostgreSQL's TLS
-inside the stream, so DATABASE_SSL does not apply to the interface's connections. Run the relay
-next to PostgreSQL or on a private network you trust: the same host, the same pod network, a
-service mesh with mTLS, or a tunnel. The encryption between the browser and the relay is the
+The relay connects to PostgreSQL in plain TCP unless RELAY_UPSTREAM_TLS=verify, with which it
+opens that connection in TLS from its first byte and checks PostgreSQL's certificate. The
+browser cannot negotiate PostgreSQL's TLS inside the stream, so DATABASE_SSL does not apply to
+the interface's connections: the relay's own setting does. Without it, run the relay next to
+PostgreSQL or on a private network you trust: the same host, the same pod network, a service
+mesh with mTLS, or a tunnel. The encryption between the browser and the relay is the
 deployment's WSS. CLI connections are unaffected and still require verified PostgreSQL TLS in
 production.
 
@@ -129,13 +140,17 @@ A WebSocket from any Origin but the site's own is refused with 403, so another s
 cannot open a database session through a visitor's browser. Each open WebSocket is one database
 session; the relay caps how many open sessions one role may hold (RELAY_SESSIONS_PER_ROLE, 20)
 and how many logins one client address may have signing in at once (RELAY_SESSIONS_PER_ADDRESS,
-20).
+20), and all addresses together (RELAY_SESSIONS_LOGGING_IN, 64). A session that has sent
+nothing has no PostgreSQL connection, and one that does not log in within RELAY_LOGIN_SECONDS
+(30) is closed. Behind a proxy the client's address is the one a proxy named in
+RELAY_TRUSTED_PROXIES reports; from anyone else X-Forwarded-For is ignored. The counts are each
+relay's own, not the fleet's.
 The role is the one PostgreSQL reports, so a client cannot claim a role it has not been signed
 in as, and a session that never signs in counts against nobody's role.
 Each login asks for STATEMENT_TIMEOUT_MS as `statement_timeout`,
 which a reader may change on their own session. See [interface](interface.md) for the whole
 browser surface.
 
-The relay never reads PGTOKEN, PGUSER/PGPASSWORD or an administrator URL, and
+The relay never reads PGTOKEN or an administrator URL, and
 hold no database credentials and no OAuth client secret. Keep CLI secrets out of their
 environment and manifests. Neither talks to Dex: the page does, from the browser.

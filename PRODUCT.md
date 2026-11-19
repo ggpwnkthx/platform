@@ -58,14 +58,14 @@ the interface alike.
   dedicated PostgreSQL database with Dex beside it.
 - The local stack (`bun run cli deploy local up`) builds the images under `deploy/postgres` and
   runs Dex next to them. Docker Compose and Podman Compose are detected automatically;
-  `--engine=podman` chooses. First use generates the administrator's and three example people's
-  passwords into `.env`.
-- `bun run cli apply local --example` creates the example roles, workspace, grants and policy.
+  `--engine=podman` chooses. It installs the database and the example roles, workspace, grants
+  and policy through PostgreSQL's own socket: PostgreSQL has no password, for anyone.
+- `bun run cli apply <deployment> FILE` applies a manifest as the person whose token it is given.
   `deploy/models/crm.json` is a second manifest, an additive CRM model with real foreign keys
   and role names in its owner fields.
 - The local Dex holds three example accounts — `admin@example.com`, `alice@example.com`,
-  `bob@example.com` — with passwords in `.env` (`PLATFORM_ADMIN_PASSWORD`, `ALICE_PASSWORD`,
-  `BOB_PASSWORD`). They stand in for a real sign-in system; a deployment adds providers to Dex
+  `bob@example.com` — and what it asks each of them for is generated into `.env`
+  (`PLATFORM_ADMIN_PASSWORD`, `ALICE_PASSWORD`, `BOB_PASSWORD`). They stand in for a real sign-in system; a deployment adds providers to Dex
   as connectors (`deploy/dex/config.yaml.tmpl`). A person can log in when a PostgreSQL role named
   after their email exists.
 - psql 18 signs in through Dex itself: it prints an address and a code. `PGOAUTHDEBUG=UNSAFE` is
@@ -85,7 +85,7 @@ the interface alike.
   the tests. `bun test` needs the test server and relay described in `docs/operations.md`.
 - Integration tests and CI run against PostgreSQL 18 with real token logins.
 - Deployment is Docker Compose, Podman Compose or Kubernetes (`deploy/compose`, `deploy/k8s`).
-  `bun run cli migrate` installs or upgrades the database; `bun run cli harden local` hides the
+  `bun run cli migrate` installs or upgrades the database; `bun run cli harden k8s` hides the
   role catalogs from ordinary connections (cluster superuser).
 - Versioned through the CLI (`bun run cli --version`); MIT licensed.
 
@@ -98,7 +98,7 @@ the interface alike.
 - **User** — a `LOGIN` role. **Group** — a `NOLOGIN` role. Membership lives in `pg_auth_members`.
 - **Revision** — a trigger-logged row change, stored in `platform.activity`.
 - **platform** — the helper schema owned by `platform_core`. It is the one **system workspace**:
-  its tables (`item_metadata`, `activity`, `installation`) are **system collections**, shown by
+  its tables (`activity`, `installation`) are **system collections**, shown by
   the interface like any other and read under their own row security. Its model is changed by
   migrations, never from the interface.
 
@@ -170,6 +170,9 @@ the interface alike.
   sessions while the interface keeps working.
 - The audit table is append-only for ordinary roles, not tamper-proof against database owners,
   `platform_core` members or superusers. RLS is not a substitute for withholding table ownership.
+- Every workspace keeps its metadata in its own `item_metadata` collection, under forced row
+  security, made with the workspace. A schema made by hand has none until its owner runs
+  `platform.create_metadata`.
 - Metadata is not audited in `platform.activity`; its rows carry their own `created_by`,
   `updated_by` and `version`, and a dropped collection leaves its metadata behind, unread.
 - Writes return counts rather than `RETURNING *`.

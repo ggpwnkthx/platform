@@ -1,7 +1,7 @@
 # Importing existing data
 
 Install Platform into a dedicated database. Its installation marker identifies version
-2.2.0. The installer is idempotent for that version and refuses an existing reserved `sys`
+2.3.0. The installer is idempotent for that version and refuses an existing reserved `sys`
 schema or an unsupported installation version rather than modifying unrelated structures.
 
 Back up your source database before importing. Create the target workspace schemas and

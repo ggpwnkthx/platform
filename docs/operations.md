@@ -12,21 +12,26 @@ The platform_core and platform_users roles are cluster-wide and can be reused ac
 installation databases. Do not precreate them with elevated attributes or grant untrusted
 memberships. Never add ordinary users or model administrators to platform_core. Its owner
 privileges exist to install/maintain the audit infrastructure, not serve the interface.
-platform_admins, installed with 2.0.1, holds the administrators who administer roles; its
+platform_admins holds the administrators who administer roles; its
 members keep reading the raw role catalogs, and nobody else does.
 
 `bun run cli migrate` installs what is missing and upgrades an installation that is behind,
 in one transaction, under an advisory lock. An installation at an unknown version is refused
 rather than modified.
 
+There is one installation script, `migrations/0001_platform.sql`, and it installs 2.3.0 in
+an empty database. The platform has not been released, so nothing earlier is brought
+forward: a database that holds a development version from before 2.3.0 is refused, and is
+made again. The next change to the schema is the next file in `migrations/`.
+
 The interface and the installation are one version. The interface reads the platform's
-schema, and a schema of another version is not one it knows — a field's metadata, for
-instance, is a column the platform added in 2.2.0. So an interface built for 2.2.0 against
-an installation at 2.1.0 refuses to go further and says so:
+schema, and a schema of another version is not one it knows — a workspace's own metadata
+collection, for instance, is one the platform added in 2.3.0. So an interface built for
+2.3.0 against an installation at 2.2.0 refuses to go further and says so:
 
 ```
-This installation is at version 2.1.0 and the interface at 2.2.0.
-Run `bun run cli migrate` to install 2.2.0.
+This installation is at version 2.2.0 and the interface at 2.3.0.
+Run `bun run cli migrate` to install 2.3.0.
 ```
 
 The local stack installs and upgrades the database itself: `bun run cli deploy local up`
@@ -41,8 +46,8 @@ for itself where it can, but the catalogs themselves belong to the cluster super
 hiding them is an explicit step:
 
 ```bash
-bun run cli harden local     # the local stack, whose administrator is the superuser
-bun run cli harden k8s       # a deployment: needs PGUSER/PGPASSWORD of the cluster superuser
+bun run cli deploy local admin harden k8s   # the local stack, beside its own server
+bun run cli harden k8s       # a deployment: needs the token of a cluster superuser
 ```
 
 The command revokes the public read of `pg_auth_members`, `pg_roles` and `pg_user`, and
@@ -71,8 +76,10 @@ Bun CLI configuration: DATABASE_HOST/PORT/NAME/SSL, optional DATABASE_CA_FILE,
 STATEMENT_TIMEOUT_MS, OIDC_ISSUER (the issuer `cli token` signs in through), OIDC_CLAIM (the
 claim that names the role a token logs in as) and who to act as. PGTOKEN or PGTOKEN_FILE holds a
 person's token (`bun run cli token` prints one after a browser sign-in through OIDC_ISSUER);
-PGUSER with PGPASSWORD or PGPASSWORD_FILE is the installer's administrator, the only login that
-has a password. The CLI can apply models and SQL scripts as any caller with the corresponding
+there is no other way to say who: no login has a password, and PGPASSWORD is refused. A
+DATABASE_HOST that is a directory is the server's own socket, which only a command running
+beside the server can reach; PostgreSQL lets its own superuser in there, and that is how the
+local stack installs itself. The CLI can apply models and SQL scripts as any caller with the corresponding
 native privileges. SQL files may contain explicit BEGIN/COMMIT. A file passed to `cli sql` is
 not a psql script.
 
@@ -96,22 +103,39 @@ The database server needs three things, all of which deploy/postgres provides as
 
    ```
    local   all  all                trust      # the container's own socket, as upstream ships it
-   host    all  all  10.89.71.0/24 oauth issuer="https://sso.example.com/dex" scope=""
-   host    all  "postgres"    all  scram-sha-256   # the installer's administrator
+   host    all  "postgres"    all  reject     # the server's own superuser: the socket alone
+   host    all  "admin@example.com"  10.89.71.0/24  reject   # the administrator, never from the relay
    host    all  all           all  oauth issuer="https://sso.example.com/dex" scope=""
    ```
+
+   No login has a password. The image refuses POSTGRES_PASSWORD, and a new cluster's own
+   superuser is left without one. PLATFORM_ADMIN names the administrator as the token's claim
+   does (`admin@example.com`): a new cluster is given that role, a superuser, and that person
+   installs and administers the server with a token from `bun run cli token`, like anyone
+   else. An existing cluster is given one over the socket:
+   `docker exec <container> psql -U postgres -c 'CREATE ROLE "admin@example.com" LOGIN SUPERUSER'`.
+   The socket is also the way in when Dex is not: it needs a shell in the container, which is
+   the server's own trust and nobody's credential. Whoever can make Dex issue a token for the
+   administrator's address is the administrator, so add only connectors you would trust with
+   that.
 
    Set PLATFORM_OIDC_ISSUER (required), PLATFORM_HBA_HOST=hostssl wherever TLS is configured,
    and PLATFORM_OIDC_CLAIM to match on a claim other than email. `scope=""` is deliberate:
    Dex puts no scope claim in its tokens, so there is none to require.
-   PLATFORM_TOKEN_ONLY_FROM (comma-separated CIDR blocks, the second line above) names the
-   relay's network: its token-only lines come before the administrator's password line, and
-   the first matching rule decides, so from there nobody, not even the administrator, logs in
-   with a password. The local stack sets it to the relay network's 10.89.71.0/24.
+   PLATFORM_TOKEN_ONLY_FROM (comma-separated CIDR blocks, the third line above) names the
+   relay's network: its lines come before the rule that lets everyone in, and the first
+   matching rule decides, so from there the administrator does not log in at all. A token
+   that names the administrator is not a way in through the interface. The local stack sets
+   it to the relay network's 10.89.71.0/24.
+
+   The image also starts PostgreSQL with `log_connections=on` and `log_statement=ddl`, so the
+   server's log says who connected and as whom, and holds every statement that changes a
+   role, a grant, a policy or a table: what the revisions do not record. Both are given
+   before your own settings, so `-c log_statement=...` of yours decides. Send that log
+   somewhere the database's own administrators cannot rewrite it.
 
 `bun run cli doctor`, run as a superuser, reads the live rules and fails if any network rule
-lets a login in without a token: only `oauth`, `reject`, and `scram-sha-256` for explicitly
-named logins pass.
+lets a login in without a token: only `oauth` and `reject` pass.
 
 A role and its sign-in are matched by name: the token's `email` claim must equal the role name
 exactly, so alice@example.com logs in as the role `"alice@example.com"`. Nothing is mapped or
@@ -169,6 +193,11 @@ part of the path that answers on the network.
 | RELAY_ORIGINS                  | any                       | Comma-separated origins allowed to open a session             |
 | RELAY_SESSIONS_PER_ADDRESS     | 20                        | Logins one client address may have signing in at once         |
 | RELAY_SESSIONS_PER_ROLE        | 20                        | Open database sessions one role may hold                      |
+| RELAY_SESSIONS_LOGGING_IN      | 64                        | Logins every address together may have signing in at once     |
+| RELAY_LOGIN_SECONDS            | 30                        | How long a session has to log in before it is closed          |
+| RELAY_TRUSTED_PROXIES          | none                      | Addresses or CIDR blocks whose X-Forwarded-For names a client |
+| RELAY_UPSTREAM_TLS             | off                       | `verify` reaches PostgreSQL in TLS and checks its certificate |
+| RELAY_UPSTREAM_CA              | the system's              | The authority that certificate must come from, as a PEM file  |
 | RELAY_TLS_CERT / RELAY_TLS_KEY | none                      | The certificate the relay serves TLS with                     |
 
 `bun run build:ui` writes `config.json` and the `_headers` file from these; see
@@ -181,17 +210,29 @@ checks the token when it is opened, and `session_user` is the reader's role. The
 statements run on a login of their own, so a transaction or a SET ROLE they leave open cannot
 reach the platform's work. Every open WebSocket is one PostgreSQL connection: size PostgreSQL's
 `max_connections` and per-role connection limits for the people who use the interface at once.
-The relay caps the open sessions per role (RELAY_SESSIONS_PER_ROLE) and the logins signing in
-per client address (RELAY_SESSIONS_PER_ADDRESS); behind a proxy all users share its address, so
-set that cap for that or limit at the edge. Neither the relay nor PostgreSQL trusts X-Forwarded-For for
-identity.
+The relay caps the open sessions per role (RELAY_SESSIONS_PER_ROLE) and the logins signing in,
+per client address (RELAY_SESSIONS_PER_ADDRESS) and in all (RELAY_SESSIONS_LOGGING_IN). A
+session that has sent nothing has no PostgreSQL connection, and one that has not logged in
+within RELAY_LOGIN_SECONDS is closed, so clients that never sign in cannot hold the database's
+connections. The caps are each relay's own: with two replicas, each counts for itself.
 
-The relay connects to PostgreSQL in plain TCP: the browser cannot negotiate PostgreSQL's TLS
-inside the stream. Run it next to PostgreSQL or on a private network you trust: the same host,
-the same pod network, a service mesh with mTLS, or a tunnel. DATABASE_SSL and
-DATABASE_CA_FILE apply to the CLI's connections, not to the interface's. Restrict PostgreSQL's
-rules to tokens only from the relay's addresses (PLATFORM_TOKEN_ONLY_FROM or your own pg_hba
-rule).
+Behind a proxy every client arrives from the proxy's address, and shares one budget of logins.
+Name the proxy in RELAY_TRUSTED_PROXIES (the ingress controller's pods, a load balancer's
+range) and the relay counts a session against the client the proxy names in X-Forwarded-For
+instead. Only a named proxy is believed, and only for this count: the header is never an
+identity, and from any other address it is ignored.
+
+The relay connects to PostgreSQL in plain TCP unless RELAY_UPSTREAM_TLS=verify. With it the
+relay opens that connection in TLS from its first byte, the way PostgreSQL 17 and later accept
+it (libpq's `sslnegotiation=direct`), checks the server's certificate against
+RELAY_UPSTREAM_CA or the system's authorities, and checks that it names the host in
+RELAY_UPSTREAM. PostgreSQL needs `ssl=on` and a certificate for that name; set
+PLATFORM_HBA_HOST=hostssl beside it, so that nothing reaches the server in the clear. Without
+it, run the relay next to PostgreSQL or on a private network you trust: the same host, the same
+pod network, a service mesh with mTLS, or a tunnel. DATABASE_SSL and DATABASE_CA_FILE apply to
+the CLI's connections, not to the interface's. Name the relay's addresses to PostgreSQL
+(PLATFORM_TOKEN_ONLY_FROM or your own pg_hba rule), so that the administrator has no login
+through the relay.
 
 Connect directly to PostgreSQL for this design's authentication semantics. Do not put it
 behind a pooler using a forced backend user: that changes session_user and breaks identity
@@ -220,39 +261,41 @@ bun run cli deploy local down
 
 `up` builds the PostgreSQL, relay and installer images, starts PostgreSQL 18 and Dex, waits
 for both, runs the idempotent database installer in a one-off container (`migrate`, image
-`platform-cli:local`, Dockerfile target `cli`), then starts the relay and waits for
-http://localhost:8081/health. The installer receives the operator password only in
-its own environment and is removed when it exits. The relay has no
-PostgreSQL credentials. PostgreSQL and the relay share the network `relay` (10.89.71.0/24),
-from which PostgreSQL takes tokens and nothing else. A build or install failure returns that
+`platform-cli:local`, Dockerfile target `cli`), applies the example manifest the same way, then
+starts the relay and waits for http://localhost:8081/health. The installer is given no
+credentials, because there are none: it shares the volume PostgreSQL's socket is on, where
+PostgreSQL lets its own superuser in, has no network, and is removed when it exits.
+`bun run cli deploy local admin <command>` runs any other operator command the same way
+(`admin doctor`, `admin harden k8s`); it reads no file of yours, so apply your own manifests
+with a token. The relay has no PostgreSQL credentials. PostgreSQL and the relay share the
+network `relay` (10.89.71.0/24). A build or install failure returns that
 tool's exit status and stops the sequence before the relay starts. `init` runs the
 database/build portion without starting the relay; `build` builds the images only. `ui`
 builds the static interface into `packages/ui/dist` and says what to publish; the interface is
 files on a CDN, not a container.
 
 Dex is published at http://localhost:5556/dex (DEX_PORT) and keeps three example people,
-admin@example.com, alice@example.com and bob@example.com. Their passwords are
-PLATFORM_ADMIN_PASSWORD, ALICE_PASSWORD and BOB_PASSWORD, generated into .env like the
-administrator's; Dex is given only their bcrypt hashes. An issuer has one URL that both the
+admin@example.com, alice@example.com and bob@example.com. It stands in for a real sign-in
+system, so it asks them for something: PLATFORM_ADMIN_PASSWORD, ALICE_PASSWORD and
+BOB_PASSWORD, generated into .env (created with mode 0600, ignored by git and by the image
+build) and never printed; Dex is given only their bcrypt hashes. They are Dex's, not
+PostgreSQL's: PostgreSQL sees the token Dex issues and nothing else. An issuer has one URL that both the
 browser and PostgreSQL must open, and on a developer's machine that is localhost, so the
 stack's Dex shares PostgreSQL's network namespace. The stack's data volume is `data18`: a
 volume left by an earlier PostgreSQL 16 stack is not touched or upgraded. Move its contents
 with pg_dump and pg_restore, and recreate roles under the names people sign in with.
 
 Choose `--engine=docker` or `--engine=podman`, or use automatic detection. Standalone
-`docker-compose`/`podman-compose` tools are supported when present. Set POSTGRES_PASSWORD_FILE
-instead of POSTGRES_PASSWORD for a mounted/local secret file. When neither is set in the
-environment or in .env, `up`, `init`, `build` and `validate` generate a random administrator
-password and append it to .env (created with mode 0600, ignored by git and by the image build),
-so later runs reuse it; the value is never printed. The same administrator password
-must match an existing PostgreSQL volume: changing the variable does not reset existing
-PostgreSQL credentials. Provision users with `bun run cli apply local FILE` (see
-[applying changes](apply.md)) or with psql and the example scripts.
+`docker-compose`/`podman-compose` tools are supported when present. A POSTGRES_PASSWORD left
+in .env by an earlier version is no longer read, and a volume made with one keeps a verifier
+that no rule accepts. Provision users with
+`PGTOKEN=$(bun run --silent cli token) bun run cli apply local FILE`, signed in as
+admin@example.com (see [applying changes](apply.md)), or with psql and the example scripts.
 
 The Compose project name is consistently `platform`. The default relay/SQL host ports are
 8081/5432, and Dex's is 5556; override RELAY_PORT/POSTGRES_PORT/DEX_PORT to avoid
 conflicts. `--timeout=120` sets the readiness allowance per component. `status`, `logs`, and
-`down` work without a password. `down` preserves data; explicitly passing `--volumes` removes
+`down` generate nothing. `down` preserves data; explicitly passing `--volumes` removes
 the volume and its data. The supplied stack binds both published ports to loopback and is for
 local development.
 
@@ -266,7 +309,7 @@ native users/grants. Then configure a pre-existing namespace, HTTPS ingress and 
 policies.
 
 ```bash
-export PLATFORM_IMAGE=your-registry/platform-relay:2.2.0
+export PLATFORM_IMAGE=your-registry/platform-relay:2.3.0
 export PUBLIC_URL=https://platform.example.com
 export OIDC_ISSUER=https://sso.example.com/dex
 export DATABASE_HOST=your-postgres.example.com
@@ -296,10 +339,12 @@ address, and the only origin the relay allows; it is not an HTTPS listener. Supp
 HTTPS ingress or tunnel: deploy/k8s/ingress.yaml is an example of one, and the address it
 names is the one the site's `config.json` must carry (PLATFORM_RELAY_URL).
 
-The relay reaches PostgreSQL in plain TCP, so the pods must reach it over a network you trust:
-the same cluster network with network policies, a service mesh with mTLS, or a tunnel. Restrict
-PostgreSQL's rules to the pods' address range with PLATFORM_TOKEN_ONLY_FROM or your own pg_hba
-rule, so that from there PostgreSQL accepts tokens and nothing else. For Azure or another
+The relay reaches PostgreSQL in plain TCP unless you set RELAY_UPSTREAM_TLS=verify on the
+Deployment, so without it the pods must reach it over a network you trust: the same cluster
+network with network policies, a service mesh with mTLS, or a tunnel. Behind an ingress, set
+RELAY_TRUSTED_PROXIES to the ingress controller's addresses, or every reader shares one budget
+of logins. Name the pods' address range to PostgreSQL with PLATFORM_TOKEN_ONLY_FROM or your
+own pg_hba rule, so that the administrator has no login through the relay. For Azure or another
 hosting platform, provision the same endpoint and separate operator installation through that
 platform's normal infrastructure tooling.
 
@@ -319,28 +364,30 @@ way a browser's WebSocket does, at TEST_RELAY_URL (default ws://127.0.0.1:54331)
 ```bash
 docker build -t platform-postgres:test deploy/postgres
 docker run -d --name platform-test-pg --network host -e PGPORT=54329 \
-  -e POSTGRES_PASSWORD=test-admin-password -e POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 \
+  -e PLATFORM_ADMIN=installer@example.com \
   -e PLATFORM_OIDC_ISSUER=http://127.0.0.1:54330 \
   platform-postgres:test postgres -c listen_addresses=127.0.0.1
 RELAY_UPSTREAM=127.0.0.1:54329 RELAY_PORT=54331 bun run relay &
 bun run check
 ```
 
-Use a disposable cluster: bootstrap group roles remain cluster-wide. The default test URL is
-`postgres://postgres:test-admin-password@127.0.0.1:54329/postgres`. Override TEST_ADMIN_URL for
-your test instance; TEST_DATABASE_SSL=require enables verified TLS for per-user connections
-and the administrator URL should also specify its TLS settings. CI builds the same image and
+Use a disposable cluster: bootstrap group roles remain cluster-wide. The tests' administrator
+is the role the server was started with in PLATFORM_ADMIN, and signs in with a token the
+tests' issuer mints for it: the default test URL is
+`postgres://installer%40example.com@127.0.0.1:54329/postgres`, and it carries no password.
+Override TEST_ADMIN_URL for your test instance; TEST_DATABASE_SSL=require enables verified TLS
+for every connection. CI builds the same image and
 starts the same relay. Dex itself is not part of the automated tests. `bun run check` builds the
 interface, typechecks, lints, checks formatting and runs `bun test`.
 
 The server under test must be PostgreSQL 18 with the OAuth validator, and it must trust the
 issuer the tests run in-process: the image above is one way to get that. Any PostgreSQL 18 with
-`oauth_validator_libraries=pg_oidc_validator` will do, reached through TEST_ADMIN_URL, with its
-`pg_hba.conf` allowing the administrator's password and nothing else but a token:
+`oauth_validator_libraries=pg_oidc_validator` will do, reached through TEST_ADMIN_URL, with a
+superuser role of that URL's name and a `pg_hba.conf` allowing nothing but a token:
 
 ```
 local   all  all                trust
-host   all  "postgres"      all  scram-sha-256
+host   all  "postgres"      all  reject
 host   all  all           all  oauth issuer="http://127.0.0.1:54330" scope=""
 ```
 
@@ -358,6 +405,6 @@ infrastructure. Integration tests fail rather than silently skip when PostgreSQL
 
 Back up database data/schema plus cluster roles (`pg_dumpall --roles-only`) using protected
 storage. Restore ownership, memberships, ACLs, RLS policies, functions and triggers along with
-data. Verify direct SQL and interface access as low-privilege accounts after restoring. The
-administrator's password verifier in a role backup is sensitive. Back up Dex's storage as
+data. Verify direct SQL and interface access as low-privilege accounts after restoring. A
+role backup holds no password verifiers, because no role has a password. Back up Dex's storage as
 well if you rely on its refresh tokens or signing keys surviving a restore.

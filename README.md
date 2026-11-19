@@ -1,4 +1,4 @@
-# Platform 2.2.0
+# Platform 2.3.0
 
 PostgreSQL is the identity and authorization system. A user is a PostgreSQL `LOGIN` role.
 People prove who they are to [Dex](https://dexidp.io), which fronts whatever sign-in systems you
@@ -14,8 +14,8 @@ WebSocket to a relay, a stock WebSocket-to-TCP forwarder that holds no credentia
 nothing but the role PostgreSQL reports. Nothing
 between the page and PostgreSQL holds a **database service account, administrator password,
 user table, password hashes, session tokens, policy cache or privileged schema connection**.
-`session_user` is the actual authenticated login. No role has a password except the
-installer's administrator.
+`session_user` is the actual authenticated login. No role has a password, the administrator's
+included: a token from Dex is the only way in over the network.
 
 Install into a dedicated PostgreSQL database. Native roles, grants and policies are the single
 source of access control. See [importing data](docs/import.md) when bringing in existing records.
@@ -28,11 +28,9 @@ both into one image (deploy/postgres) and runs Dex beside it.
 ```bash
 bun install --frozen-lockfile
 cp .env.example .env
-# Generates the administrator's and three example people's passwords into .env on first use.
+# Installs the database and the example roles, workspace, grants and policy. PostgreSQL is
+# given no password; what Dex asks the three example people for is generated into .env.
 bun run cli deploy local up
-
-# Create the example roles, workspace, grants and policy.
-bun run cli apply local --example
 ```
 
 The interface is a static site, not a container: build it, or serve it against the stack.
@@ -72,8 +70,8 @@ SELECT internal_notes FROM newsroom.articles;
 ```
 
 PostgreSQL publishes its role catalogs to every connection, so by default a psql session can
-list every role and read who belongs to which group. `bun run cli harden local` (the cluster
-superuser) hides them: ordinary sessions keep their own rights and the interface keeps working,
+list every role and read who belongs to which group. `bun run cli harden k8s` (as the cluster
+superuser; `bun run cli deploy local admin harden k8s` on the local stack) hides them: ordinary sessions keep their own rights and the interface keeps working,
 while the graph stays with the operators. See [operations](docs/operations.md).
 
 ## The interface in dev mode
@@ -198,9 +196,10 @@ bun run cli deploy local logs -f relay
 bun run cli deploy local down  # keeps the database volume
 bun run cli deploy local ui   # build the static interface into packages/ui/dist, for a CDN
 bun run relay                # the WebSocket relay in front of PostgreSQL's port
-bun run cli --version  # 2.2.0
-bun run cli migrate    # installs what is missing, upgrades what is behind; CLI credentials required
-bun run cli harden local  # hide the role catalogs from ordinary connections; cluster superuser
+bun run cli --version  # 2.3.0
+bun run cli migrate    # installs what is missing, upgrades what is behind; needs a token
+bun run cli deploy local admin harden k8s  # hide the role catalogs from ordinary connections
+bun run cli deploy local admin doctor      # the same checks, as the stack's own superuser
 bun run cli doctor     # server version, authentication rules, installation
 bun run cli token      # sign in through Dex from a terminal; prints a token
 bun run cli apply local --example --dry-run  # users, groups, workspaces, grants
@@ -209,10 +208,12 @@ bun run cli model:apply deploy/models/crm.json
 bun run cli sql model.sql
 ```
 
-Database CLI commands act as a person, with the token in `PGTOKEN` or `PGTOKEN_FILE`, or as the
-installer's administrator, with `PGUSER` and `PGPASSWORD` or `PGPASSWORD_FILE`, plus the database
-endpoint configuration. These secrets belong in operator sessions and migration jobs, never the
-interface or the relay. Tests use `TEST_ADMIN_URL`; see [operations](docs/operations.md).
+Database CLI commands act as a person, with the token in `PGTOKEN` or `PGTOKEN_FILE`
+(`PGTOKEN=$(bun run --silent cli token)`), plus the database endpoint configuration. There is
+no password to give them: the administrator signs in with a token like everyone else. Tokens
+belong in operator sessions and migration jobs, never the interface or the relay. The local
+stack's own server is administered beside it, through its socket: `bun run cli deploy local
+admin <command>`. Tests use `TEST_ADMIN_URL`; see [operations](docs/operations.md).
 
 | Document                             | Contents                                                        |
 | ------------------------------------ | --------------------------------------------------------------- |

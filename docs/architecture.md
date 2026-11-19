@@ -46,9 +46,10 @@ still authorizes every explicit projection, predicate, sort, relation and write.
   can also be queried from the SQL page or any client if their native grants permit it.
 - User: LOGIN role; group: NOLOGIN role. Membership lives in pg_auth_members.
 - Table/column permissions: native ACLs. Row policies: CREATE POLICY and ALTER TABLE RLS.
-- `platform`: helper functions, installation marker, transactional row audit/revisions, and
-  `item_metadata`: what a workspace, a collection or a field is, read and written under row
-  security that asks PostgreSQL's own privilege functions. A field's metadata carries the
+- `platform`: helper functions, installation marker and transactional row audit/revisions.
+- `<workspace>.item_metadata`: what the workspace, a collection or a field is. Every
+  workspace keeps its own, read and written under forced row security that asks PostgreSQL's
+  own privilege functions. A field's metadata carries the
   views it appears in, and the default is written in one place; see [views](views.md).
 
 `platform_core` owns the platform schema. It is NOLOGIN and has no CREATEROLE, CREATEDB,

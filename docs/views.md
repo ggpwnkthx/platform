@@ -36,7 +36,7 @@ Any other name in the object is a view of the owner's own — an export, a print
 screen of your own making. The platform keeps it and hands it back; it draws only the three
 situations above. See [adding a view](#adding-a-view).
 
-The saying is stored in `platform.item_metadata`, one row per field, under the key `views`:
+The saying is stored in the workspace's own metadata collection (`<workspace>.item_metadata`), one row per field, under the key `views`:
 
 ```
 scope      = 'field'
@@ -101,9 +101,9 @@ reach them. To put the new default on every field of a collection, write it your
 owner of the collection:
 
 ```sql
-UPDATE platform.item_metadata
+UPDATE newsroom.item_metadata
    SET value = '{"list":"show","record":"show","filter":"show"}'::jsonb
- WHERE scope = 'field' AND schema_name = 'newsroom' AND table_name = 'articles'
+ WHERE scope = 'field' AND table_name = 'articles'
    AND key = 'views';
 ```
 
@@ -134,10 +134,10 @@ added to them.
 In SQL, as the owner of the collection:
 
 ```sql
-INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value)
-VALUES ('field', 'newsroom', 'articles', 'title', 'views',
+INSERT INTO newsroom.item_metadata (scope, table_name, column_name, key, value)
+VALUES ('field', 'articles', 'title', 'views',
         '{"list":"show","record":"show","filter":"show","export":"hide"}'::jsonb)
-ON CONFLICT (scope, schema_name, coalesce(table_name, ''), coalesce(column_name, ''), key)
+ON CONFLICT (scope, coalesce(table_name, ''), coalesce(column_name, ''), key)
 DO UPDATE SET value = EXCLUDED.value;
 ```
 
@@ -268,10 +268,10 @@ As the owner of the collection, with the reader's own rights and PostgreSQL's ow
 judgement:
 
 ```sql
-INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value)
-VALUES ('field', 'newsroom', 'articles', 'internal_notes', 'views',
+INSERT INTO newsroom.item_metadata (scope, table_name, column_name, key, value)
+VALUES ('field', 'articles', 'internal_notes', 'views',
         '{"list":"hide","record":"show","filter":"hide"}'::jsonb)
-ON CONFLICT (scope, schema_name, coalesce(table_name, ''), coalesce(column_name, ''), key)
+ON CONFLICT (scope, coalesce(table_name, ''), coalesce(column_name, ''), key)
 DO UPDATE SET value = EXCLUDED.value;
 ```
 
@@ -279,8 +279,8 @@ To change a saying that is already there, guarded by the version it carried — 
 change made elsewhere is not silently overwritten:
 
 ```sql
-UPDATE platform.item_metadata SET value = $1::jsonb
- WHERE scope = 'field' AND schema_name = 'newsroom' AND table_name = 'articles'
+UPDATE newsroom.item_metadata SET value = $1::jsonb
+ WHERE scope = 'field' AND table_name = 'articles'
    AND column_name = 'internal_notes' AND key = 'views' AND version = $2;
 ```
 

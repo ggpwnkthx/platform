@@ -38,7 +38,7 @@ Each entry is a situation — `list`, `record`, `filter`, or a view of the owner
 drawing of the values in it. The drawing is either the name of a renderer, or the name of one
 and the options it takes.
 
-The saying is stored in `platform.item_metadata`, one row per field, under the key
+The saying is stored in the workspace's own metadata collection (`<workspace>.item_metadata`), one row per field, under the key
 `renderers`:
 
 ```
@@ -146,10 +146,10 @@ The manifest is applied in one transaction with everything else it says.
 As the owner of the collection, with the reader's own rights and PostgreSQL's own judgement:
 
 ```sql
-INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value)
-VALUES ('field', 'newsroom', 'articles', 'title', 'renderers',
+INSERT INTO newsroom.item_metadata (scope, table_name, column_name, key, value)
+VALUES ('field', 'articles', 'title', 'renderers',
         '{"list":"truncate"}'::jsonb)
-ON CONFLICT (scope, schema_name, coalesce(table_name, ''), coalesce(column_name, ''), key)
+ON CONFLICT (scope, coalesce(table_name, ''), coalesce(column_name, ''), key)
 DO UPDATE SET value = EXCLUDED.value;
 ```
 

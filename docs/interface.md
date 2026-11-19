@@ -113,7 +113,7 @@ thing:
   (`has_table_privilege`, `has_column_privilege`, `has_schema_privilege`, `pg_has_role`).
   The platform's own schema is in it, as a workspace of another kind (`kind: 'system'`): the
   switcher lists it as **Platform**, after the installation's workspaces, and its tables —
-  `item_metadata`, `activity`, `installation` — are system collections, drawn by the same
+  `activity` and `installation` — are system collections, drawn by the same
   records grid, record form and data model page as any other. PostgreSQL's row security
   decides which rows reach the reader, and the catalog never says the reader may change its
   model, whoever they are: that is the migrations' to do. Nobody lands in it; it is in view
@@ -130,7 +130,7 @@ thing:
   touches no row, the page reads the record again: a newer version means someone changed it
   since it was opened, otherwise a row policy refused the change or the row is gone, and the
   page says "PostgreSQL changed no row".
-- Metadata (`packages/data/src/metadata/`) in `platform.item_metadata`.
+- Metadata (`packages/data/src/metadata/`) in each workspace's own `item_metadata`.
 - DDL and DCL built by `packages/ui/src/model/` and `packages/ui/src/access/`: workspaces,
   collections, fields, grants, row policies, memberships and roles. The statements
   themselves are the platform's own, in `packages/vocabulary`, so that the operator's tools and
@@ -159,7 +159,8 @@ interactive transactions and scripts.
 
 Metadata is what an item is, as opposed to what it holds: a workspace may say what it is for,
 a collection may say how it should be read, a field may say what it holds. It is stored in
-`platform.item_metadata`, one row per key per item, and PostgreSQL decides who reaches it (see
+the workspace's own metadata collection — `item_metadata`, in the workspace's schema — one
+row per key per item, and PostgreSQL decides who reaches it (see
 [access](access.md#metadata)). A reader is shown the keys they may see and nothing for the
 rest; a write by anyone but the owner is refused by PostgreSQL. A value is any JSON value. A
 change to a key the reader opened is guarded by its version, because it is a record.
@@ -172,19 +173,27 @@ statement, and labels the fields it may read with their `display_name` when they
 
 ### Metadata is a collection
 
-`platform.item_metadata` is a system collection, and the interface has no second way of
-reading or changing it. What an item's page shows as its metadata is that collection,
+Every workspace keeps its metadata in a collection of its own: `item_metadata`, in the
+workspace's schema, owned by the workspace's owner and made by `platform.create_metadata`
+when the workspace is. It is listed among the workspace's collections, and the interface has
+no second way of reading or changing it. Its model is the platform's — the catalog marks it
+as a system collection, so the interface offers no change to its fields — and its rows are
+their owners'. What an item's page shows as its metadata is that collection,
 filtered to the item (`metadataFilter` in `packages/data/src/metadata/collection.ts`): read by
 the question every collection is read by, and drawn by the fields every collection is drawn
 by. A key is a link to its row, and **Add key** opens the ordinary record form with the names
 of the item filled in; a row is changed and removed there, by its `id` and its `version`, as
-every row is. **Open as a collection** shows the same rows in the records grid, under
-Platform.
+every row is. **Open as a collection** shows the same rows in the records grid.
+
+A workspace whose schema was made by hand, and not by the statements the platform makes a
+workspace with, has no collection until its owner gives it one. The interface says so where
+the workspace's metadata would be, and offers its owner the statement:
+`SELECT platform.create_metadata('<workspace>');`.
 
 Three things about it are its own, and they are small:
 
-- **What a row is about.** The item is named — a scope and the names of a schema, a table
-  and a column — and not pointed at: the platform keeps no table of items, and metadata
+- **What a row is about.** The item is named — a scope and the names of a table and a
+  column, in the workspace the row is in — and not pointed at: the platform keeps no table of items, and metadata
   outlives its item. So the item is composed from the names (`metadataTargetOf`), not drawn
   as a relation.
 - **The value.** It is a JSON column, typed as it is meant: a sentence is kept as a string
@@ -223,9 +232,9 @@ the items they may reach, and only the owner of an item may change it. The inter
 them as ordinary statements, shown before they run:
 
 ```sql
-INSERT INTO platform.item_metadata (scope, schema_name, table_name, key, value)
-VALUES ('workspace', 'newsroom', NULL, 'display_name', '"Newsroom"'::jsonb)
-ON CONFLICT (scope, schema_name, coalesce(table_name, ''), key)
+INSERT INTO newsroom.item_metadata (scope, table_name, key, value)
+VALUES ('workspace', NULL, 'display_name', '"Newsroom"'::jsonb)
+ON CONFLICT (scope, coalesce(table_name, ''), coalesce(column_name, ''), key)
 DO UPDATE SET value = EXCLUDED.value;
 ```
 
@@ -378,6 +387,11 @@ interface's path that answers on the network. It is configured from the environm
 | RELAY_ORIGINS              | any            | Comma-separated origins allowed to open a session     |
 | RELAY_SESSIONS_PER_ADDRESS | 20             | Logins one client address may have signing in at once |
 | RELAY_SESSIONS_PER_ROLE    | 20             | Open sessions one role may hold                       |
+| RELAY_SESSIONS_LOGGING_IN  | 64             | Logins all addresses may have signing in at once      |
+| RELAY_LOGIN_SECONDS        | 30             | How long a session has to log in                      |
+| RELAY_TRUSTED_PROXIES      | none           | Proxies whose X-Forwarded-For names the client        |
+| RELAY_UPSTREAM_TLS         | off            | `verify` reaches PostgreSQL in TLS                    |
+| RELAY_UPSTREAM_CA          | the system's   | The authority PostgreSQL's certificate must come from |
 | RELAY_TLS_CERT             | none           | The certificate the relay serves TLS with             |
 | RELAY_TLS_KEY              | none           | Its key                                               |
 
@@ -404,24 +418,33 @@ balancer, a tunnel, or the relay itself with a certificate.
   browser. A handshake with no Origin at all is refused too when the list is not empty.
 - **Session cap.** One open WebSocket is one database session. The relay caps how many open
   sessions one role may hold (RELAY_SESSIONS_PER_ROLE), and how many logins one client address
-  may have signing in at once (RELAY_SESSIONS_PER_ADDRESS); behind a proxy, every client shares
-  the proxy's address. The role is the one PostgreSQL reports, so a client cannot claim a role it
-  has not been signed in as. Size PostgreSQL's `max_connections` and per-role connection
-  limits accordingly.
+  may have signing in at once (RELAY_SESSIONS_PER_ADDRESS), and all addresses together
+  (RELAY_SESSIONS_LOGGING_IN). Behind a proxy, every client shares the proxy's address unless
+  the proxy is named in RELAY_TRUSTED_PROXIES: then a session counts against the client the
+  proxy names in X-Forwarded-For. The role is the one PostgreSQL reports, so a client cannot
+  claim a role it has not been signed in as. Size PostgreSQL's `max_connections` and per-role
+  connection limits accordingly.
+- **Logins that do not finish.** A session that has sent nothing has no connection to
+  PostgreSQL. One that has not logged in within RELAY_LOGIN_SECONDS is closed, and so is one
+  that sends more than a login takes before it has logged in.
+- **A side that falls behind.** When the browser reads slowly the relay stops reading
+  PostgreSQL, and when PostgreSQL reads slowly it stops reading the browser, so a large result
+  or a large write waits in the sender instead of filling the relay's memory.
 - **statement_timeout.** Each login asks for STATEMENT_TIMEOUT_MS. It is a session setting the
   reader may change with SET on their own connection, not a resource boundary; set role or
   database defaults and connection limits in PostgreSQL where it matters.
 - **What the relay can see.** The relay carries the whole protocol stream: the token in
   the login, every statement and every row. Between the browser and the relay the stream is
-  inside the deployment's WSS. Between the relay and PostgreSQL it is plain TCP: the browser
-  cannot negotiate PostgreSQL's TLS inside the stream. The relay must therefore run next to
-  PostgreSQL or on a private network you trust: the same host, the same pod network, a service
-  mesh with mTLS, or a tunnel. Whoever controls the relay or that network can read tokens in
-  flight and use them until they expire.
-- **Only tokens from the relay's network.** PostgreSQL's image takes PLATFORM_TOKEN_ONLY_FROM, a
-  list of CIDR blocks from which a login is by token or not at all, written before the
-  administrator's password rule. Set it to the relay's addresses, so that nobody, the
-  administrator included, logs in with a password through the relay.
+  inside the deployment's WSS. Between the relay and PostgreSQL it is plain TCP unless
+  RELAY_UPSTREAM_TLS=verify, with which the relay opens that connection in TLS and checks
+  PostgreSQL's certificate. Without it the relay must run next to PostgreSQL or on a private
+  network you trust: the same host, the same pod network, a service mesh with mTLS, or a
+  tunnel. Whoever controls the relay, or that network when it is in the clear, can read tokens
+  in flight and use them until they expire.
+- **No administrator through the relay.** PostgreSQL's image takes PLATFORM_TOKEN_ONLY_FROM, a
+  list of CIDR blocks from which the administrator (PLATFORM_ADMIN) is refused outright. Set
+  it to the relay's addresses, so that a token that names the administrator is not a way in
+  through the relay. Nobody logs in with a password from anywhere: no login has one.
 
 ## Dev mode
 
