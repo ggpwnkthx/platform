@@ -41,9 +41,32 @@ import {
 import { Confirm } from '../ui/overlay.tsx'
 import { CollectionSidebar } from './records.tsx'
 import { RevisionList } from '../activity/activity.tsx'
+import { MetadataRowEditor, metadataRefusal } from '../metadata/metadata.tsx'
+
+/** The start of the names the address gives a new record's fields by: `v.title=…`. */
+const startPrefix = 'v.'
+
+/**
+ * What a new record starts with, as the address says it: a page that sends the reader here
+ * to make a row about something names that something, so the form opens with it filled in.
+ * It is a start and no more — every value is still the reader's to change, and PostgreSQL's
+ * to refuse.
+ */
+function startOf(query: Record<string, string>): Record<string, string> {
+  const start: Record<string, string> = {}
+  for (const [name, value] of Object.entries(query))
+    if (name.startsWith(startPrefix) && name.length > startPrefix.length)
+      start[name.slice(startPrefix.length)] = value
+  return start
+}
+
+/** Where the reader came from, when it is a page of this interface and nowhere else. */
+function cameFrom(from: string | undefined): string | null {
+  return from && /^\/(?!\/)/.test(from) && !from.includes('\\') ? from : null
+}
 
 export function Item() {
-  const { catalog, withDb, notify, presentations } = useSession()
+  const { catalog, withDb, notify, presentations, refresh } = useSession()
   const location = useLocation()
   const ws = useWorkspace()
   const table = location.query.c ?? ''
@@ -51,6 +74,9 @@ export function Item() {
   const collection = presentationOf(presentations, ws, table)
   const id = location.query.id ?? '+'
   const creating = id === '+'
+  const from = cameFrom(location.query.from)
+  // What the address says a new record starts with, as one text: it changes when the address does.
+  const startText = creating ? JSON.stringify(startOf(location.query)) : '{}'
   const info = tableOf(catalog, ws, table)
   const columns = columnsOf(catalog, ws, table)
   const readable = columns.filter((c) => c.can_select)
@@ -115,9 +141,9 @@ export function Item() {
   const [problem, setProblem] = useState<{ title: string; detail?: string } | null>(null)
   const formRef = useRef<HTMLFormElement>(null)
   useEffect(() => {
-    setDraft({})
+    setDraft(JSON.parse(startText) as Record<string, string>)
     setProblem(null)
-  }, [ws, table, id])
+  }, [ws, table, id, startText])
 
   /** What the form held for a field when it opened: the stored value, as text. */
   const storedText = (field: FieldInfo) =>
@@ -155,7 +181,9 @@ export function Item() {
           tone: 'success',
           title: affected ? 'Record created' : 'PostgreSQL created no record',
         })
-        location.route(href('/content/records', { ws, c: table }))
+        // A row of the platform's own may be something the interface itself reads.
+        if (info?.system) await refresh().catch(() => undefined)
+        location.route(from ?? href('/content/records', { ws, c: table }))
         return
       }
       // The write, and then the record as it stands: when PostgreSQL changed no row, what
@@ -176,6 +204,7 @@ export function Item() {
       if (outcome.affected) {
         notify({ tone: 'success', title: 'Saved' })
         setDraft({})
+        if (info?.system) await refresh().catch(() => undefined)
         loaded.reload()
       } else if (outcome.now && version !== undefined && outcome.now.version !== version) {
         setProblem({
@@ -190,7 +219,7 @@ export function Item() {
         })
       }
     } catch (error) {
-      setProblem(describe(error))
+      setProblem(metadataRefusal(ws, table, error) ?? describe(error))
     } finally {
       setSaving(false)
     }
@@ -203,7 +232,8 @@ export function Item() {
       setConfirming(false)
       if (affected) {
         notify({ tone: 'success', title: 'Record deleted' })
-        location.route(href('/content/records', { ws, c: table }))
+        if (info?.system) await refresh().catch(() => undefined)
+        location.route(from ?? href('/content/records', { ws, c: table }))
       } else
         setProblem({
           title: 'PostgreSQL deleted no row',
@@ -229,7 +259,7 @@ export function Item() {
     return () => document.removeEventListener('keydown', key)
   })
 
-  const back = href('/content/records', { ws, c: table })
+  const back = from ?? href('/content/records', { ws, c: table })
   if (!info)
     return (
       <Page title="Record" icon={<CollectionIcon size={22} />}>
@@ -250,13 +280,16 @@ export function Item() {
     <Page
       title={title}
       icon={
-        <a href={back} class="header-back" aria-label={`Back to ${table}`}>
+        <a href={back} class="header-back" aria-label={from ? 'Back' : `Back to ${table}`}>
           <BackIcon size={20} />
         </a>
       }
       crumbs={[
         { label: workspace.displayName ?? ws, href: href('/content', { ws }) },
-        { label: collection.displayName ?? table, href: back },
+        {
+          label: collection.displayName ?? table,
+          href: href('/content/records', { ws, c: table }),
+        },
       ]}
       actions={
         <>
@@ -384,6 +417,9 @@ export function Item() {
           )}
           <button type="submit" hidden />
         </form>
+      )}
+      {!creating && original && (
+        <MetadataRowEditor schema={ws} table={table} row={original} onSaved={loaded.reload} />
       )}
       <Confirm
         open={confirming}
