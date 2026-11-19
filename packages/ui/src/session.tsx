@@ -4,7 +4,7 @@ import { useLocation } from 'preact-iso'
 import { beginSignIn, completeSignIn, expiresAt, roleOf } from './identity/oidc.ts'
 import { type RuntimeConfig, runtimeConfig } from './config.ts'
 import { connect, type Credentials, type Db, type Person, withoutIssuer } from './pg/connect.ts'
-import { KeptSession } from './pg/kept.ts'
+import { KeptSession } from '@platform/pg'
 import {
   catalog as readCatalog,
   type Catalog,
@@ -12,7 +12,7 @@ import {
   type Identity,
   presentations as readPresentations,
 } from '@platform/data'
-import { ConnectionError, PgError } from './pg/wire.ts'
+import { ConnectionError, PgError } from '@platform/pg'
 import { indexPresentations, type PresentationIndex } from '@platform/data'
 import { versionProblem } from './version.ts'
 

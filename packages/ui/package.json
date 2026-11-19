@@ -10,11 +10,11 @@
     "./headers.ts": "./src/headers.ts",
     "./paths.ts": "./src/paths.ts",
     "./prerender.tsx": "./src/prerender.tsx",
-    "./pg/connect.ts": "./src/pg/connect.ts",
-    "./pg/wire.ts": "./src/pg/wire.ts"
+    "./pg/connect.ts": "./src/pg/connect.ts"
   },
   "dependencies": {
     "@platform/data": "workspace:*",
+    "@platform/pg": "workspace:*",
     "@platform/sql": "workspace:*",
     "clsx": "2.1.1",
     "lucide-preact": "1.75.0",

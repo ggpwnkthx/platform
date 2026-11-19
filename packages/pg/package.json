@@ -1,0 +1,17 @@
+{
+  "name": "@platform/pg",
+  "version": "2.2.0",
+  "private": true,
+  "type": "module",
+  "description": "The PostgreSQL client the platform speaks with: the protocol itself, the browser's way to it, and the logins it keeps.",
+  "license": "MIT",
+  "engines": {
+    "bun": ">=1.4.3"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./wire.ts": "./src/wire.ts",
+    "./socket.ts": "./src/socket.ts",
+    "./kept.ts": "./src/kept.ts"
+  }
+}

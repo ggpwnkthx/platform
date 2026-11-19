@@ -7,7 +7,7 @@ import {
   parseArray,
   serialize,
   type Transport,
-} from '../packages/ui/src/pg/wire.ts'
+} from '../packages/pg/src/wire.ts'
 import { startIssuer } from './issuer.ts'
 
 /**
@@ -128,7 +128,7 @@ describe('through the relay', () => {
   // A stock WebSocket-to-TCP relay in front of the test server: docs/operations.md.
   const relay = process.env.TEST_RELAY_URL ?? 'ws://127.0.0.1:54331'
   test('the browser transport logs in and runs a statement', async () => {
-    const { openSocket } = await import('../packages/ui/src/pg/socket.ts')
+    const { openSocket } = await import('../packages/pg/src/socket.ts')
     const q = await Connection.open(await openSocket(relay), {
       user: person,
       database,

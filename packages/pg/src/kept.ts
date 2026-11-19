@@ -1,13 +1,12 @@
-import type { Db } from './connect.ts'
-import { ConnectionError, PgError } from './wire.ts'
+import { ConnectionError, type Login, PgError } from './wire.ts'
 
 /**
- * The login kept open: one session to PostgreSQL that lasts as long as the page does.
+ * The logins kept open: a few sessions to PostgreSQL that last as long as the client does.
  *
- * The interface used to open a login for every action and close it again, so every save,
- * every read and every page load cost a fork on the server and another check of the
- * reader's token. Here the login is opened once and kept: the actions share it, and the
- * page opens another one only when this one has died or the sign-in has expired.
+ * A client used to open a login for every action and close it again, so every save, every
+ * read and every page load cost a fork on the server and another check of the reader's
+ * token. Here the login is opened once and kept: the actions share it, and another one is
+ * opened only when this one has died or the sign-in has expired.
  *
  * It is a pool of a few logins rather than one, so that two actions running at the same
  * time do not wait for each other. An action holds one of them for as long as it runs, so
@@ -16,22 +15,22 @@ import { ConnectionError, PgError } from './wire.ts'
 export type KeptSessionOptions = {
   /** How many logins the page may hold open at once. */
   size?: number
-  /** Opens a login: the page's own way in. */
-  open: () => Promise<Db>
+  /** Opens a login: the client's own way in. */
+  open: () => Promise<Login>
   /** When the sign-in expires, in milliseconds since the epoch; null when it does not. */
   expiresAt: () => number | null
 }
 
 export class KeptSession {
   private readonly size: number
-  private readonly open: () => Promise<Db>
+  private readonly open: () => Promise<Login>
   private readonly expiryOf: () => number | null
   /** Logins nobody is using. */
-  private free: Db[] = []
+  private free: Login[] = []
   /** Logins an action is using. */
-  private busy = new Set<Db>()
+  private busy = new Set<Login>()
   /** Actions waiting for a login. */
-  private waiting: { resolve: (db: Db) => void; reject: (error: unknown) => void }[] = []
+  private waiting: { resolve: (db: Login) => void; reject: (error: unknown) => void }[] = []
   /** Logins on their way. */
   private opening = 0
   private timer: ReturnType<typeof setTimeout> | null = null
@@ -47,7 +46,7 @@ export class KeptSession {
    * Runs the work on a login of its own, and gives the login back afterwards. A login the
    * work has broken is thrown away rather than given back.
    */
-  async run<T>(work: (db: Db) => Promise<T>): Promise<T> {
+  async run<T>(work: (db: Login) => Promise<T>): Promise<T> {
     const db = await this.acquire()
     try {
       return await work(db)
@@ -60,7 +59,7 @@ export class KeptSession {
   }
 
   /** A login to work on: one that is free, or a new one, or a wait for one to come back. */
-  async acquire(): Promise<Db> {
+  async acquire(): Promise<Login> {
     if (this.closed) throw new Error('The sign-in has ended.')
     this.pump()
     const free = this.free.pop()
@@ -69,11 +68,11 @@ export class KeptSession {
       return free
     }
     if (this.live < this.size) return this.newLogin()
-    return new Promise<Db>((resolve, reject) => this.waiting.push({ resolve, reject }))
+    return new Promise<Login>((resolve, reject) => this.waiting.push({ resolve, reject }))
   }
 
   /** Gives a login back. */
-  release(db: Db): void {
+  release(db: Login): void {
     this.busy.delete(db)
     if (this.closed || db.isClosed) this.drop(db)
     else this.free.push(db)
@@ -81,7 +80,7 @@ export class KeptSession {
   }
 
   /** Throws a login away: it cannot be used again. */
-  drop(db: Db): void {
+  drop(db: Login): void {
     this.busy.delete(db)
     this.free = this.free.filter((other) => other !== db)
     try {
@@ -110,7 +109,7 @@ export class KeptSession {
   }
 
   /** Opens a login and hands it to the action that asked for one. */
-  private async newLogin(): Promise<Db> {
+  private async newLogin(): Promise<Login> {
     this.opening++
     try {
       const db = await this.open()

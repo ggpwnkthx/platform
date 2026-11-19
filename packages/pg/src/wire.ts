@@ -52,6 +52,20 @@ export interface Result<Row = Record<string, unknown>> {
   affected: number | null
 }
 
+/**
+ * A login to PostgreSQL: it runs statements, and it may be closed.
+ *
+ * A login is what a client holds while it works: the page keeps a few of them open, and a
+ * script opens one, runs what it has to say and closes it again. What a login answers is
+ * PostgreSQL's own.
+ */
+export interface Login {
+  query<Row = Record<string, unknown>>(text: string, params?: unknown[]): Promise<Result<Row>>
+  close(): void
+  /** Whether the login is over: the stream ended, or the login was closed. */
+  readonly isClosed: boolean
+}
+
 /** What PostgreSQL said when it refused. The fields are the ErrorResponse's own. */
 export class PgError extends Error {
   readonly code: string

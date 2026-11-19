@@ -1,13 +1,16 @@
-import { openSocket } from './socket.ts'
-import { Connection, type Result } from './wire.ts'
+import { Connection, openSocket, type Login, type Result } from '@platform/pg'
+import type { DataSource } from '@platform/sql'
 import type { RuntimeConfig } from '../config.ts'
 
-/** A logged-in session with PostgreSQL. */
-export interface Db {
+/**
+ * A logged-in session with PostgreSQL.
+ *
+ * A session is a source of statements: it runs them and hands back what PostgreSQL
+ * answered. The questions the platform asks are asked of any source, so the same question
+ * may be asked here and of a client in Node, and mean the same thing.
+ */
+export interface Db extends Login, DataSource {
   query<Row = Record<string, unknown>>(text: string, params?: unknown[]): Promise<Result<Row>>
-  close(): void
-  /** Whether the session is over: the stream ended, or the session was closed. */
-  readonly isClosed: boolean
 }
 
 /** Who is signed in: the role PostgreSQL will log in, and the token that proves it. */

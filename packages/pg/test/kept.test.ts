@@ -1,12 +1,11 @@
 import { describe, expect, test } from 'bun:test'
-import type { Db } from '../src/pg/connect.ts'
-import { KeptSession } from '../src/pg/kept.ts'
-import { ConnectionError } from '../src/pg/wire.ts'
+import { KeptSession } from '../src/kept.ts'
+import { ConnectionError, type Login } from '../src/wire.ts'
 
 /**
- * The login the page keeps: one for the whole page, not one for every action.
+ * The logins a client keeps: one for the whole of its work, not one for every action.
  */
-function fakeDb(): Db & { closed: boolean } {
+function fakeDb(): Login & { closed: boolean } {
   const db = {
     async query() {
       return { fields: [], rows: [], command: '', affected: null }
@@ -23,7 +22,7 @@ function fakeDb(): Db & { closed: boolean } {
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-describe('the login the page keeps', () => {
+describe('the logins a client keeps', () => {
   test('one login serves every action', async () => {
     let opened = 0
     const kept = new KeptSession({
