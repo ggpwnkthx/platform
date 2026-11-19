@@ -14,6 +14,7 @@ import {
   type TypeName,
 } from '@platform/sql'
 import { InputError, transaction } from './database/db.ts'
+import { VERSION } from './version.ts'
 
 /**
  * The types a manifest may name. The platform's own are here; any other name is a type of
@@ -130,6 +131,13 @@ export async function applyModel(q: pg.Client, raw: unknown) {
     .parse(raw)
   const schema = model.workspace.slug
   ident(schema)
+  // Every field carries its own views, and a field's metadata is what holds them: an
+  // installation older than that has no place to write them.
+  const installed = await q.query('SELECT version FROM platform.installation')
+  if (installed.rows[0]?.version !== VERSION)
+    throw new InputError(
+      `This installation is at version ${installed.rows[0]?.version ?? 'none'}. Run \`bun run cli migrate\` first.`
+    )
   return transaction(q, async () => {
     await q.query(`CREATE SCHEMA IF NOT EXISTS ${ident(schema)}`)
     await applyCollections(q, schema, model.collections, model.relations)

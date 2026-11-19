@@ -17,6 +17,16 @@ import { headersFile, type Origins } from './headers.ts'
 const project = join(import.meta.dir, '..')
 const sources = join(project, 'src')
 
+/**
+ * The version of the platform this interface is built for. The installation must be the
+ * same version: the interface reads the platform's schema, and a schema of another version
+ * is not one it knows.
+ */
+async function platformVersion(): Promise<string> {
+  const manifest = JSON.parse(await readFile(join(project, '..', '..', 'package.json'), 'utf8'))
+  return manifest.version as string
+}
+
 /** The seam between the interface and its database, and what the development build puts there. */
 function inPageDatabase(): Bun.BunPlugin {
   const replacement = join(sources, 'dev/database.ts')
@@ -52,6 +62,9 @@ function page(body: string, title: string, dev: boolean): string {
 
 export async function buildUi(dev: boolean, out: string): Promise<number> {
   if (dev) Bun.plugin(inPageDatabase())
+  const version = await platformVersion()
+  // The pages are rendered in this process, so the version is here as well as in the bundle.
+  process.env.PLATFORM_VERSION = version
   // Imported after the seam is in place, so the prerender reads the same database as the bundle.
   const { prerender } = await import('preact-iso')
   const { locationStub } = await import('preact-iso/prerender')
@@ -66,7 +79,10 @@ export async function buildUi(dev: boolean, out: string): Promise<number> {
     format: 'esm',
     minify: !dev,
     sourcemap: dev ? 'linked' : 'none',
-    define: { 'process.env.NODE_ENV': dev ? '"development"' : '"production"' },
+    define: {
+      'process.env.NODE_ENV': dev ? '"development"' : '"production"',
+      'process.env.PLATFORM_VERSION': JSON.stringify(version),
+    },
     plugins: dev ? [inPageDatabase()] : [],
     naming: 'app.[ext]',
     outdir: out,

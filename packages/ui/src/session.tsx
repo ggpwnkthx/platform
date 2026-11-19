@@ -11,6 +11,7 @@ import type { Catalog } from './catalog/types.ts'
 import type { Identity } from './identity/types.ts'
 import { ConnectionError, PgError } from './pg/wire.ts'
 import { indexPresentations, type PresentationIndex } from './metadata/presentation.ts'
+import { versionProblem } from './version.ts'
 
 export type Phase = 'starting' | 'signed-out' | 'signing-in' | 'ready'
 
@@ -152,11 +153,11 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
     try {
       // The identity first: it says which version the installation is, and the rest of the
       // platform's schema is that version's.
-      const [me, found, shown] = [
-        await readIdentity(db),
-        await readCatalog(db),
-        await readPresentations(db),
-      ]
+      const me = await readIdentity(db)
+      const wrong = versionProblem(me.platform_version)
+      if (wrong) throw new Error(wrong)
+      const found = await readCatalog(db)
+      const shown = await readPresentations(db)
       setIdentity(me)
       setCatalog(found)
       setPresentations(indexPresentations(shown))
@@ -168,11 +169,16 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
   }, [])
 
   const refresh = useCallback(async () => {
-    const found = await withDb(async (db) => ({
-      identity: await readIdentity(db),
-      catalog: await readCatalog(db),
-      presentations: await readPresentations(db),
-    }))
+    const found = await withDb(async (db) => {
+      const me = await readIdentity(db)
+      const wrong = versionProblem(me.platform_version)
+      if (wrong) throw new Error(wrong)
+      return {
+        identity: me,
+        catalog: await readCatalog(db),
+        presentations: await readPresentations(db),
+      }
+    })
     setIdentity(found.identity)
     setCatalog(found.catalog)
     setPresentations(indexPresentations(found.presentations))
