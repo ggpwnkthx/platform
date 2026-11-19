@@ -10,7 +10,7 @@ import {
   systemFields,
   type ColumnType,
 } from '@platform/sql'
-import { InputError, transaction } from './db.ts'
+import { InputError, transaction } from './database/db.ts'
 
 const types = {
   string: 'text',

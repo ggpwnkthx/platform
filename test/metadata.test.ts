@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import pg from 'pg'
 import { ident } from '../packages/sql/src/index.ts'
-import { TokenClient, transaction } from '../packages/cli/src/db.ts'
+import { TokenClient, transaction } from '../packages/cli/src/database/db.ts'
 import {
   collectionTarget,
   fieldMetadata,

@@ -5,10 +5,10 @@ import { join } from 'node:path'
 import pg from 'pg'
 import { applyManifest, parseManifest } from '../packages/cli/src/apply.ts'
 import { ident, literal } from '../packages/sql/src/index.ts'
-import { TokenClient, transaction } from '../packages/cli/src/db.ts'
+import { TokenClient, transaction } from '../packages/cli/src/database/db.ts'
 import { hardenSql } from '../packages/cli/src/harden.ts'
 import { applyModel } from '../packages/cli/src/model.ts'
-import { authenticationProblems, requirePostgres18 } from '../packages/cli/src/requirements.ts'
+import { authenticationProblems, requirePostgres18 } from '../packages/cli/src/database/requirements.ts'
 import {
   collectionStatements,
   emptyField,
