@@ -2,7 +2,7 @@
 import { join } from 'node:path'
 import { root } from '@platform/ui/paths.ts'
 import { buildSite, inPageAssets, seamPlugin } from './build.ts'
-import { databaseModule, findConfig, type InterfaceConfig } from './config.ts'
+import { databaseModule, findConfig, findSiteConfig, type InterfaceConfig } from './config.ts'
 import { serveInterface } from './dev.ts'
 import { UI_HELP } from './help.ts'
 
@@ -56,6 +56,7 @@ export async function ui(args: string[]): Promise<number> {
     environment: site.environment,
     title: site.title,
     relay: process.env.PLATFORM_RELAY_URL,
+    config: findSiteConfig(dir),
     plugins: development ? [seamPlugin(databaseModule(config!))] : [],
     assets: development ? inPageAssets(config!.dir) : [],
   })

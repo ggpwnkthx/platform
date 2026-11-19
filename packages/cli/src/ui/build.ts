@@ -11,8 +11,9 @@
  */
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
+import { defaultRuntimeConfig } from '@platform/ui/config.ts'
 import { headersFile, type Origins } from '@platform/ui/headers.ts'
-import { publicFiles, root, sources } from '@platform/ui/paths.ts'
+import { root, sources } from '@platform/ui/paths.ts'
 
 /** How a site is built: where it goes, what it is called, and what shapes it. */
 export type SiteBuild = {
@@ -28,6 +29,8 @@ export type SiteBuild = {
   plugins?: Bun.BunPlugin[]
   /** Files copied into the site, beside the pages. */
   assets?: { from: string; to: string }[]
+  /** What the site says about itself: the issuer, the relay and the database. */
+  config?: Record<string, unknown> | null
 }
 
 /**
@@ -93,8 +96,10 @@ export async function buildSite(build: SiteBuild): Promise<number> {
 
   await cp(join(sources, 'styles.css'), join(out, 'styles.css'))
   await cp(join(sources, 'favicon.svg'), join(out, 'favicon.svg'))
-  await cp(publicFiles, out, { recursive: true })
-  await writeFile(join(out, 'config.json'), JSON.stringify(await siteConfig(build.relay), null, 2))
+  await writeFile(
+    join(out, 'config.json'),
+    JSON.stringify(siteConfig(build.config, build.relay), null, 2)
+  )
   await writeFile(join(out, '_headers'), headersFile(siteOrigins()))
   await mkdir(join(out, 'fonts'), { recursive: true })
   const fonts = {
@@ -138,11 +143,16 @@ export function siteOrigins(env: Record<string, string | undefined> = process.en
 /**
  * The file the pages read to find the issuer, the relay and the database. It is served
  * beside the pages, so a deployment changes it without rebuilding the bundle.
+ *
+ * Three say it, in this order: the platform's own defaults, the site itself (the file
+ * beside its `platform.json`), and the environment the deployment runs in.
  */
-async function siteConfig(relay: string | undefined): Promise<Record<string, unknown>> {
+export function siteConfig(
+  site: Record<string, unknown> | null | undefined,
+  relay: string | undefined
+): Record<string, unknown> {
   const env = process.env
-  const file = await readFile(join(publicFiles, 'config.json'), 'utf8')
-  const base = JSON.parse(file) as Record<string, unknown>
+  const base = { ...defaultRuntimeConfig, ...(site ?? {}) }
   return {
     ...base,
     issuer: env.PLATFORM_ISSUER ?? env.OIDC_ISSUER ?? base.issuer,

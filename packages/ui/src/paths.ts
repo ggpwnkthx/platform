@@ -9,6 +9,3 @@ export const root = join(import.meta.dir, '..')
 
 /** The interface's source: the application, its pages and its styles. */
 export const sources = join(root, 'src')
-
-/** The files served beside the pages: the configuration the pages read. */
-export const publicFiles = join(root, 'public')

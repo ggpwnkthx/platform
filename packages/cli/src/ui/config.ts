@@ -11,6 +11,9 @@ import { join, resolve } from 'node:path'
 /** The name of the file a directory's configuration is written in. */
 export const CONFIG_FILE = 'platform.json'
 
+/** The name of the file a directory's site says its name in. */
+export const SITE_CONFIG_FILE = 'config.json'
+
 /** What a directory says about the interface it holds. */
 export interface InterfaceConfig {
   /** The directory the configuration was found in. */
@@ -53,4 +56,22 @@ export function databaseModule(config: InterfaceConfig): string {
   if (!config.database)
     throw new Error('A development build needs the module that is the database.')
   return resolve(config.dir, config.database)
+}
+
+/**
+ * What a site says about itself: the issuer it signs in against, the relay it reaches
+ * PostgreSQL through, and the database it is installed in.
+ *
+ * It is the file the page reads at runtime, and it belongs to the site rather than to the
+ * interface: a deployment names its own issuer and relay, an example names the local stack
+ * it works against, and the interface itself says nothing — it takes what it is given.
+ */
+export function findSiteConfig(dir: string): Record<string, unknown> | null {
+  const file = join(dir, SITE_CONFIG_FILE)
+  if (!existsSync(file)) return null
+  try {
+    return JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>
+  } catch (error) {
+    throw new Error(`${file} is not valid JSON: ${(error as Error).message}`)
+  }
 }

@@ -16,7 +16,11 @@ export interface RuntimeConfig {
   statementTimeoutMs: number
 }
 
-const defaults: RuntimeConfig = {
+/**
+ * The platform's own defaults: what a site says when it says nothing. A deployment names
+ * its own issuer, relay and database, and the builder starts from these.
+ */
+export const defaultRuntimeConfig: RuntimeConfig = {
   issuer: 'http://localhost:5556/dex',
   clientId: 'platform-console',
   claim: 'email',
@@ -45,7 +49,7 @@ export function runtimeConfig(): Promise<RuntimeConfig> {
       return response.json()
     })
     .then((found: Partial<RuntimeConfig>) => {
-      const config = { ...defaults, ...found }
+      const config = { ...defaultRuntimeConfig, ...found }
       config.issuer = config.issuer.replace(/\/+$/, '')
       config.relay = relayUrl(config.relay, new URL(location.href))
       return config

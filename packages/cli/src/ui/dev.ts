@@ -8,7 +8,7 @@ import { existsSync, readFileSync, statSync, watch } from 'node:fs'
 import { connect } from 'node:net'
 import { join } from 'node:path'
 import { securityHeaders } from '@platform/ui/headers.ts'
-import { publicFiles, root, sources } from '@platform/ui/paths.ts'
+import { root, sources } from '@platform/ui/paths.ts'
 import type { InterfaceConfig } from './config.ts'
 
 const types: Record<string, string> = {
@@ -32,11 +32,9 @@ export async function serveInterface(
   // With a relay, the real interface is served: the pages sign in through the issuer and
   // reach PostgreSQL through the relay. Without one, the configuration says how it runs.
   const development = !relay && config?.mode === 'development'
-  const dist = config?.out
-    ? join(config.dir, config.out)
-    : development
-      ? join(config!.dir, '.dist')
-      : join(root, 'dist')
+  // The site the server serves is the site it builds: the example's own in development,
+  // the published one when a relay is in front of PostgreSQL.
+  const dist = development ? join(config?.dir ?? root, config?.out ?? '.dist') : join(root, 'dist')
   const port = options.port
 
   async function build(): Promise<boolean> {
@@ -54,11 +52,18 @@ export async function serveInterface(
     return existsSync(candidate) && statSync(candidate).isFile() ? candidate : null
   }
 
+  if (!(await build())) process.exit(1)
+
+  // The site the build wrote: what it says about the issuer and the relay. The
+  // development server is the relay, so it says so itself.
+  const site: Record<string, unknown> = {
+    ...(JSON.parse(readFileSync(join(dist, 'config.json'), 'utf8')) as Record<string, unknown>),
+    relay: '/pg',
+  }
   // The same headers a CDN serves the built site with, from the same source.
-  const issuer = JSON.parse(readFileSync(join(publicFiles, 'config.json'), 'utf8')).issuer as string
   const headers = securityHeaders({
     public: `http://localhost:${port}`,
-    issuer,
+    issuer: String(site.issuer ?? ''),
     relay: `ws://localhost:${port}`,
   })
   // WebAssembly is allowed only here, in development, where PostgreSQL itself runs in the page.
@@ -67,8 +72,6 @@ export async function serveInterface(
       "script-src 'self'",
       "script-src 'self' 'wasm-unsafe-eval'"
     )
-
-  if (!(await build())) process.exit(1)
 
   const [relayHost, relayPort] = relay ? relay.split(':') : []
   type Pipe = { socket: ReturnType<typeof connect> | null }
@@ -84,11 +87,9 @@ export async function serveInterface(
       const file = fileFor(url.pathname)
       if (!file) return new Response('Not found', { status: 404 })
       // The built site's config.json names the deployment's relay; the development server
-      // relays /pg itself, so it serves the configuration the source holds.
+      // relays /pg itself, so it says so.
       const content =
-        url.pathname === '/config.json'
-          ? readFileSync(join(publicFiles, 'config.json'), 'utf8')
-          : new Uint8Array(readFileSync(file))
+        url.pathname === '/config.json' ? JSON.stringify(site) : new Uint8Array(readFileSync(file))
       return new Response(content, {
         headers: {
           'content-type': types[file.slice(file.lastIndexOf('.'))] ?? 'application/octet-stream',
