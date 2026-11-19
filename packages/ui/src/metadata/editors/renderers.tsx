@@ -1,8 +1,15 @@
 import { useId } from 'preact/hooks'
 import { columnOf, kindOf } from '@platform/data'
-import { type Renderer, rendererNamed, renderersFor } from '../../fields/renderers.tsx'
+import {
+  type Renderer,
+  type RendererOption,
+  rendererNamed,
+  renderersFor,
+} from '../../fields/renderers.tsx'
 import { useSession } from '../../session.tsx'
 import { Field, Input, Select } from '../../ui/form.tsx'
+import { iconFor } from '../../ui/icons.tsx'
+import { familyOf } from '../color.ts'
 import { type MetadataChange, metadataStatements } from '@platform/data'
 import {
   customViews,
@@ -20,6 +27,7 @@ import {
 } from '@platform/vocabulary'
 import { situationTitles } from '../labels.ts'
 import { SaveStatements, useDraft } from './draft.tsx'
+import { ColourPicker, IconPicker } from './pickers.tsx'
 
 /** What each situation is, where a field is told how its values are drawn in it. */
 const hints: Record<Situation, string> = {
@@ -29,7 +37,12 @@ const hints: Record<Situation, string> = {
   filter: 'The field’s value in the filter builder.',
 }
 
-/** The options one renderer takes, and how they are written. */
+/**
+ * The options one renderer takes, and how they are given: a text and a number are typed, an
+ * icon and a colour are picked from the platform's own set and its own palette. Whichever it
+ * is, the option is kept the same way — a name and a value in the saying — and an option
+ * that is emptied is not kept at all.
+ */
 function RendererOptions({
   renderer,
   values,
@@ -44,33 +57,61 @@ function RendererOptions({
   onChange: (options: Record<string, unknown>) => void
 }) {
   if (!renderer.options?.length) return null
+  const give = (option: RendererOption, value: unknown) => {
+    const next = { ...values }
+    if (value === '') delete next[option.name]
+    else next[option.name] = value
+    onChange(next)
+  }
   return (
     <fieldset class="field field-wide renderer-options">
       <legend class="field-label">{renderer.label}</legend>
-      {renderer.options.map((option) => (
-        <Field
-          key={option.name}
-          label={option.label}
-          id={`${group}-${option.name}`}
-          hint={option.placeholder ? `For example: ${option.placeholder}` : undefined}
-        >
-          <Input
-            id={`${group}-${option.name}`}
-            mono={option.type === 'number'}
-            value={values[option.name] === undefined ? '' : String(values[option.name])}
-            disabled={disabled}
-            placeholder={option.placeholder}
-            onInput={(e) => {
-              const raw = e.currentTarget.value
-              const next = { ...values }
-              if (raw === '') delete next[option.name]
-              else if (option.type === 'number') next[option.name] = Number(raw)
-              else next[option.name] = raw
-              onChange(next)
-            }}
-          />
-        </Field>
-      ))}
+      {renderer.options.map((option) => {
+        const id = `${group}-${option.name}`
+        const given = values[option.name]
+        if (option.type === 'icon' || option.type === 'colour')
+          return (
+            <fieldset key={option.name} class="field field-wide types">
+              <legend class="field-label">{option.label}</legend>
+              {option.type === 'icon' ? (
+                <IconPicker
+                  name={id}
+                  value={iconFor(typeof given === 'string' ? given : null) ? String(given) : ''}
+                  disabled={disabled}
+                  noneTitle="No icon"
+                  onChoose={(icon) => give(option, icon)}
+                />
+              ) : (
+                <ColourPicker
+                  name={id}
+                  chosen={familyOf(given)}
+                  disabled={disabled}
+                  onChoose={(colour) => give(option, colour)}
+                />
+              )}
+            </fieldset>
+          )
+        return (
+          <Field
+            key={option.name}
+            label={option.label}
+            id={id}
+            hint={option.placeholder ? `For example: ${option.placeholder}` : undefined}
+          >
+            <Input
+              id={id}
+              mono={option.type === 'number'}
+              value={given === undefined ? '' : String(given)}
+              disabled={disabled}
+              placeholder={option.placeholder}
+              onInput={(e) => {
+                const raw = e.currentTarget.value
+                give(option, raw !== '' && option.type === 'number' ? Number(raw) : raw)
+              }}
+            />
+          </Field>
+        )
+      })}
     </fieldset>
   )
 }

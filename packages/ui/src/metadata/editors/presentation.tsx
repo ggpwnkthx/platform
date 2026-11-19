@@ -1,17 +1,9 @@
-import clsx from 'clsx'
 import { useId } from 'preact/hooks'
 import { useSession } from '../../session.tsx'
 import { Avatar } from '../../ui/avatar.tsx'
 import { Field, Input } from '../../ui/form.tsx'
-import { CollectionIcon, itemIcons, WorkspaceIcon } from '../../ui/icons.tsx'
-import {
-  type Family,
-  familyOf,
-  palette,
-  parseColor,
-  reservedFamilies,
-  studioFamilies,
-} from '../color.ts'
+import { CollectionIcon, WorkspaceIcon } from '../../ui/icons.tsx'
+import { familyOf, parseColor } from '../color.ts'
 import {
   colorKey,
   displayNameKey,
@@ -24,41 +16,11 @@ import {
 import { displayNameLimit } from '../labels.ts'
 import type { MetadataTarget } from '@platform/vocabulary'
 import { SaveStatements, useDraft } from './draft.tsx'
+import { ColourPicker, IconPicker } from './pickers.tsx'
 
 /** Are two presentations the same: the same name, the same icon and the same colour? */
 const samePresentation = (one: Presentation, other: Presentation): boolean =>
   one.displayName === other.displayName && one.icon === other.icon && one.color === other.color
-
-/** One colour of the palette, chosen by name: the family the mark is drawn as. */
-function Swatch({
-  family,
-  name,
-  chosen,
-  owner,
-  onChoose,
-}: {
-  family: Family
-  name: string
-  chosen: boolean
-  owner: boolean
-  onChoose: (value: string) => void
-}) {
-  return (
-    <label
-      class={clsx('swatch', `swatch-${family.name}`, chosen && 'is-chosen')}
-      title={family.name}
-    >
-      <input
-        type="radio"
-        name={name}
-        value={family.name}
-        checked={chosen}
-        disabled={!owner}
-        onChange={() => onChoose(family.name)}
-      />
-    </label>
-  )
-}
 
 /**
  * How an item presents itself: the name people read, the icon they recognise and the colour
@@ -137,42 +99,14 @@ export function PresentationEditor({ target, owner }: { target: MetadataTarget; 
           <>
             <fieldset class="field field-wide types">
               <legend class="field-label">Icon</legend>
-              <div class="icon-grid">
-                <label
-                  class={clsx('icon-choice', !icon && 'is-chosen')}
-                  title="The platform's own icon"
-                >
-                  <input
-                    type="radio"
-                    name={iconName}
-                    value=""
-                    checked={!icon}
-                    disabled={!owner}
-                    onChange={() => setIcon('')}
-                  />
-                  <Fallback size={18} />
-                </label>
-                {Object.keys(itemIcons).map((choice) => {
-                  const Icon = itemIcons[choice]!
-                  return (
-                    <label
-                      key={choice}
-                      class={clsx('icon-choice', icon === choice && 'is-chosen')}
-                      title={choice}
-                    >
-                      <input
-                        type="radio"
-                        name={iconName}
-                        value={choice}
-                        checked={icon === choice}
-                        disabled={!owner}
-                        onChange={() => setIcon(choice)}
-                      />
-                      <Icon size={18} />
-                    </label>
-                  )
-                })}
-              </div>
+              <IconPicker
+                name={iconName}
+                value={icon}
+                disabled={!owner}
+                none={<Fallback size={18} />}
+                noneTitle="The platform's own icon"
+                onChoose={setIcon}
+              />
               <p class="field-hint">
                 The mark drawn beside the name. Without one, the platform's own.
               </p>
@@ -180,45 +114,12 @@ export function PresentationEditor({ target, owner }: { target: MetadataTarget; 
             <fieldset class="field field-wide types">
               <legend class="field-label">Primary colour</legend>
               <div class="colour-row">
-                <div class="swatches">
-                  <label
-                    class={clsx('swatch', 'swatch-none', !chosen && 'is-chosen')}
-                    title="No colour"
-                  >
-                    <input
-                      type="radio"
-                      name={colourName}
-                      value=""
-                      checked={!chosen}
-                      disabled={!owner}
-                      onChange={() => setColour('')}
-                    />
-                  </label>
-                  {reservedFamilies.map((family) => (
-                    <Swatch
-                      key={family.name}
-                      family={family}
-                      name={colourName}
-                      chosen={chosen?.name === family.name}
-                      owner={owner}
-                      onChoose={setColour}
-                    />
-                  ))}
-                  <span class="swatch-gap" aria-hidden="true" />
-                  {studioFamilies.map((name) => {
-                    const family = palette.find((one) => one.name === name)!
-                    return (
-                      <Swatch
-                        key={family.name}
-                        family={family}
-                        name={colourName}
-                        chosen={chosen?.name === family.name}
-                        owner={owner}
-                        onChoose={setColour}
-                      />
-                    )
-                  })}
-                </div>
+                <ColourPicker
+                  name={colourName}
+                  chosen={chosen}
+                  disabled={!owner}
+                  onChoose={setColour}
+                />
                 <Input
                   class="mono colour-input"
                   value={colour}

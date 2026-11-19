@@ -32,9 +32,13 @@ export interface RendererOption {
   name: string
   /** What the option is, in a sentence. */
   label: string
-  /** A number is written as a number; anything else as text. */
-  type?: 'text' | 'number'
-  /** An example of the option, shown under it. */
+  /**
+   * How the option is given. A text and a number are typed; an icon is picked from the
+   * platform's own set and kept by its name, and a colour from its palette, by its family's.
+   * Text when it is not said.
+   */
+  type?: 'text' | 'number' | 'icon' | 'colour'
+  /** An example of the option, shown under it where it is typed. */
   placeholder?: string
 }
 
