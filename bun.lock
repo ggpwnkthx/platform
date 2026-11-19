@@ -17,17 +17,19 @@
       "version": "2.2.0",
       "devDependencies": {
         "@electric-sql/pglite": "0.5.16",
+        "@platform/data": "workspace:*",
         "@platform/pg-client": "workspace:*",
-        "@platform/vocabulary": "workspace:*",
         "@platform/ui": "workspace:*",
+        "@platform/vocabulary": "workspace:*",
+        "preact": "10.27.2",
       },
     },
     "packages/cli": {
       "name": "@platform/cli",
       "version": "2.2.0",
       "dependencies": {
-        "@platform/vocabulary": "workspace:*",
         "@platform/ui": "workspace:*",
+        "@platform/vocabulary": "workspace:*",
         "pg": "8.23.1",
         "zod": "4.6.7",
       },
@@ -52,10 +54,6 @@
       "name": "@platform/relay",
       "version": "2.2.0",
     },
-    "packages/vocabulary": {
-      "name": "@platform/vocabulary",
-      "version": "2.2.0",
-    },
     "packages/ui": {
       "name": "@platform/ui",
       "version": "2.2.0",
@@ -69,6 +67,10 @@
         "preact-iso": "2.12.2",
         "preact-render-to-string": "6.6.4",
       },
+    },
+    "packages/vocabulary": {
+      "name": "@platform/vocabulary",
+      "version": "2.2.0",
     },
   },
   "packages": {
@@ -110,9 +112,9 @@
 
     "@platform/relay": ["@platform/relay@workspace:packages/relay"],
 
-    "@platform/vocabulary": ["@platform/vocabulary@workspace:packages/vocabulary"],
-
     "@platform/ui": ["@platform/ui@workspace:packages/ui"],
+
+    "@platform/vocabulary": ["@platform/vocabulary@workspace:packages/vocabulary"],
 
     "@types/bun": ["@types/bun@1.4.4", "", { "dependencies": { "bun-types": "1.4.4" } }, "sha512-9wkRDXUXK124pEnAutE6n/l18j+i9GC5IAHK8TmX/2nlySETmky0OU6yL5U8pW1AoKh++AN9auDCr647BfurjQ=="],
 

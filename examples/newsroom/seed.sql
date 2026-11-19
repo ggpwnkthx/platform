@@ -259,6 +259,12 @@ INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name,
   ('collection', 'crm', 'accounts', NULL, 'icon', '"building-2"', 'bob@example.com', 'bob@example.com'),
   ('collection', 'crm', 'accounts', NULL, 'color', '"mint"', 'bob@example.com', 'bob@example.com');
 
+-- Renderers of the newsroom's own (extensions.tsx): a word count as the time it takes to read,
+-- and a section's name with the icon and the colour its owner picked.
+INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value, created_by, updated_by) VALUES
+  ('field', 'newsroom', 'articles', 'word_count', 'renderers', '{"list":"reading-time"}', 'admin@example.com', 'admin@example.com'),
+  ('field', 'newsroom', 'sections', 'name', 'renderers', '{"list":{"renderer":"marked","options":{"icon":"newspaper","colour":"steel"}}}', 'admin@example.com', 'admin@example.com');
+
 -- Every field carries its own views: where it appears is said of the field itself.
 INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value, created_by, updated_by) VALUES
   ('field', 'newsroom', 'sections', 'id', 'views', '{"list":"show","record":"show","filter":"show"}', 'admin@example.com', 'admin@example.com'),

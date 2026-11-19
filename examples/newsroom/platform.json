@@ -1,5 +1,6 @@
 {
   "mode": "development",
   "database": "database.ts",
+  "extensions": "extensions.tsx",
   "out": ".dist"
 }

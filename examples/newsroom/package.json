@@ -7,9 +7,11 @@
   "license": "MIT",
   "devDependencies": {
     "@electric-sql/pglite": "0.5.16",
+    "@platform/data": "workspace:*",
     "@platform/pg-client": "workspace:*",
     "@platform/vocabulary": "workspace:*",
-    "@platform/ui": "workspace:*"
+    "@platform/ui": "workspace:*",
+    "preact": "10.27.2"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
