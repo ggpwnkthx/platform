@@ -204,6 +204,38 @@ describe('the access the platform grants', () => {
     ).toThrow(InvalidName)
   })
 
+  test('a policy expression stays inside its parentheses', () => {
+    const policy = {
+      schema: 'newsroom',
+      table: 'articles',
+      name: 'own',
+      permissive: true,
+      command: 'SELECT' as const,
+      roles: ['writer'],
+      check: '',
+    }
+    const using = (expression: string) => policyStatement({ ...policy, using: expression })
+    // What PostgreSQL would read as one expression is written as it is.
+    for (const expression of [
+      "status IN ('draft', 'it''s; done)') AND (created_by = session_user)",
+      'EXISTS (SELECT 1 FROM newsroom.desks d WHERE d.id = desk_id AND d."lead;)" = session_user)',
+      "note = E'a \\' quote ;)' OR note = $q$ ;) $q$ OR note = $$ -- $$",
+    ])
+      expect(using(expression)).toContain(`USING (${expression})`)
+    // What would end the clause early, and be read as a statement of its own, is refused.
+    for (const expression of [
+      'true); DROP TABLE newsroom.articles; --',
+      'true) WITH CHECK (true',
+      'true; COMMIT',
+      '(created_by = session_user',
+      "status = 'draft",
+      'true -- and the rest',
+      'true /* and the rest',
+      'note = $q$ never closed',
+    ])
+      expect(() => using(expression)).toThrow(InvalidName)
+  })
+
   test('a policy with no role of its own is for everyone', () => {
     expect(
       policyStatement({
