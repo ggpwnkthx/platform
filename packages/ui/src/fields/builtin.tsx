@@ -4,6 +4,7 @@ import { moment } from '../format.ts'
 import { TextArea } from '../ui/form.tsx'
 import { CheckIcon, CloseIcon } from '../ui/icons.tsx'
 import { ChoiceInput, FilterChoice, FilterLine, lineInput } from './inputs.tsx'
+import { metadataValue } from '../metadata/value.tsx'
 import { RelationPicker } from './relation.tsx'
 import {
   anyNumber,
@@ -338,4 +339,6 @@ export const platformFieldTypes: FieldType[] = [
   choice,
   relation,
   other,
+  // The platform's own collections have fields of their own.
+  metadataValue,
 ]
