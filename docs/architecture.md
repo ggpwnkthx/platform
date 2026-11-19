@@ -48,7 +48,8 @@ still authorizes every explicit projection, predicate, sort, relation and write.
 - Table/column permissions: native ACLs. Row policies: CREATE POLICY and ALTER TABLE RLS.
 - `platform`: helper functions, installation marker, transactional row audit/revisions, and
   `item_metadata`: what a workspace, a collection or a field is, read and written under row
-  security that asks PostgreSQL's own privilege functions.
+  security that asks PostgreSQL's own privilege functions. A field's metadata carries the
+  views it appears in, and the default is written in one place; see [views](views.md).
 
 `platform_core` owns the platform schema. It is NOLOGIN and has no CREATEROLE, CREATEDB,
 SUPERUSER or BYPASSRLS. Only installation administrators should be members. `platform_users`
@@ -91,15 +92,17 @@ browser the bytes go over a WebSocket (`packages/ui/src/pg/socket.ts`) to the re
 them to PostgreSQL's port and understands none of them. Each action opens one login and closes
 it (`withDb` in `packages/ui/src/session.tsx`).
 
-What the page does is ordinary SQL, all of it in two files. `packages/ui/src/db/platform.ts` reads the
-catalog with PostgreSQL's privilege functions, the roles and memberships through
-`platform.visible_roles()` and `platform.visible_memberships()`, policies from `pg_policies`,
-grants from the ACLs through `aclexplode`, and activity; it reads records with filters, search,
-sort, paging and a row count, writes them without RETURNING, and guards an update with the
-version the reader saw (`WHERE id = $n AND version = $m`). `packages/ui/src/db/model.ts` builds the DDL
-for collections, fields, grants, policies, memberships and roles. Every statement that changes
-the model or access is shown to the reader before it runs, then runs as them in one
-transaction.
+What the page does is ordinary SQL, and it belongs to the domain that asks for it. The catalog
+(`packages/ui/src/catalog/`) is read with PostgreSQL's privilege functions; the roles and
+memberships (`packages/ui/src/access/`) through `platform.visible_roles()` and
+`platform.visible_memberships()`, policies from `pg_policies`, grants from the ACLs through
+`aclexplode`; the revisions (`packages/ui/src/activity/`) from `platform.activity`; the records
+(`packages/ui/src/content/`) with filters, search, sort, paging and a row count, written
+without RETURNING, and guarded on update by the version the reader saw
+(`WHERE id = $n AND version = $m`). The model (`packages/ui/src/model/`) and the access
+(`packages/ui/src/access/`) build the DDL and the DCL: collections, fields, grants, policies,
+memberships and roles. Every statement that changes the model or access is shown to the reader
+before it runs, then runs as them in one transaction.
 
 Every right the interface shows is PostgreSQL's own. The catalog is built from
 `has_table_privilege`, `has_column_privilege` and `has_schema_privilege`, and it carries one
@@ -111,7 +114,7 @@ roles. The interface keeps no second opinion about rights; it asks the database,
 fields it withholds (hidden from you, write-only, read-only), and shows a refusal with its
 SQLSTATE.
 
-The interface reaches the database through one seam, `packages/ui/src/db/connect.ts`. A production
+The interface reaches the database through one seam, `packages/ui/src/pg/connect.ts`. A production
 build leaves it alone, and the page opens a WebSocket to the relay. A development build
 (`bun run dev:ui`) resolves the same seam to `packages/ui/src/dev/database.ts`, PostgreSQL 18 running
 inside the page (PGlite) and installed with the real migrations, so the interface can be built
@@ -119,7 +122,7 @@ without a server, an issuer or a relay. The swap happens while the bundle is bui
 never reaches a production bundle.
 
 Sign-in is authorization code with PKCE against the one configured issuer, done by the page
-itself (`packages/ui/src/auth/oidc.ts`): the token kept in memory, the PKCE verifier held in
+itself (`packages/ui/src/identity/oidc.ts`): the token kept in memory, the PKCE verifier held in
 sessionStorage only across the redirect. The page reads the issuer, client id, claim, relay
 address and database name from `/config.json`, a file served beside the pages, so that a
 deployment changes it without rebuilding the bundle.
@@ -151,17 +154,29 @@ documentation and the integration tests that cross the packages.
 - `packages/sql` — the SQL the platform writes, written once: identifiers, literals, columns
   and the names a relation's constraint carries. The operator's tools and the interface both
   build DDL, and they must build it the same way, so the rules live here rather than twice.
-- `packages/cli` — the operator's tools. `db.ts` owns the CLI's connections and the token
-  login; `requirements.ts` checks the server version and its authentication rules;
-  `token.ts` signs a terminal in; `model.ts` builds typed DDL for the model importer;
-  `cli.ts` runs the operator tasks; `apply.ts` converges a database on a JSON manifest;
-  `harden.ts` hides the role catalogs; `deployment/` runs the deployments, split into the
-  local stack, Kubernetes, the help text and the runtime they share.
+- `packages/cli` — the operator's tools. `database/db.ts` owns the CLI's connections and the token
+  login, `database/config.ts` the endpoint it reaches and `database/requirements.ts` the
+  server version and its authentication rules; `token.ts` signs a terminal in; `model.ts`
+  builds typed DDL for the model importer; `cli.ts` runs the operator tasks; `apply.ts`
+  converges a database on a JSON manifest; `harden.ts` hides the role catalogs;
+  `deployment/` runs the deployments, split into the local stack, Kubernetes, the help text
+  and the runtime they share.
 - `packages/relay` — the WebSocket in front of PostgreSQL's port: `relay.ts`, and nothing else.
   It holds no credentials and reads nothing it carries.
-- `packages/ui` — the interface. `src` is the Preact application; `scripts/build.tsx` generates
-  its static pages, `scripts/headers.ts` holds the headers the site is served with, and
-  `scripts/dev.ts` serves it in development.
+- `packages/ui` — the interface. `src` is the Preact application, and it is laid out by
+  domain: each domain holds its page, the SQL it runs and the types it speaks in.
+  `content/` reads and writes the records of a collection, `model/` the collections and their
+  fields, `access/` the roles, grants and row policies, `activity/` the revisions,
+  `metadata/` what an item is and how it presents itself, `sql/` the reader's own statement,
+  `workspace/` the schema and the rights on it, `identity/` who the reader is, and
+  `catalog/` PostgreSQL's own picture of the database. Three folders are shared by all of
+  them: `pg/` speaks PostgreSQL's protocol, `ui/` holds the interface's own widgets, and
+  `dev/` is the PostgreSQL that runs inside the page in development. The root of `src` holds
+  the shell of the application: `app.tsx` routes, `session.tsx` holds the token and the
+  catalog, `shell.tsx` draws the layout, `routes.ts` names the pages, `config.ts` reads
+  `config.json`, `url.ts` carries the context in the address and `format.ts` the words.
+  `scripts/build.tsx` generates the static pages, `scripts/headers.ts` holds the headers the
+  site is served with, and `scripts/dev.ts` serves it in development.
 
 `migrations/` holds the installation scripts the CLI applies and the development build
 installs into its in-page PostgreSQL. `deploy/cdn` explains how the site is published. There

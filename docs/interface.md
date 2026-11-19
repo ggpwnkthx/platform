@@ -52,6 +52,29 @@ goes (restrict, cascade or set null). Fields may be required, unique or indexed,
 default, and take a maximum length, a list of choices, or a minimum and a maximum. Other schema
 changes use native SQL.
 
+A field may have any type the database holds, not only the platform's own. The builder offers
+the types of the installation beside them: `geometry` and `geography` where PostGIS is
+installed, an enum or a domain of the installation's own. Such a type is named with the
+schema it lives in, so it means the same thing wherever the statement runs, and it may carry
+the modifiers it takes — `Point, 4326` for a geometry:
+
+```sql
+ALTER TABLE newsroom.places ADD COLUMN "public"."geometry"("Point", 4326);
+```
+
+The values of such a field are read and written as PostgreSQL writes them: the interface does
+not know what a geometry looks like on a map, and does not pretend to.
+
+A field is more than a column: it is drawn in three situations — the records grid, the record
+form and the filter builder — and the owner of a collection may say which of them it belongs
+to. A field may be kept out of the grid, locked in the form or kept out of the filters; see
+[where a field appears](#where-a-field-appears). PostgreSQL still decides who may read the
+field and who may write it: a field kept out of the form is the reader's to change in psql.
+
+A column PostgreSQL computes itself — a generated column, or an identity column it numbers —
+is shown and never offered as an input. The interface offers only what the database would
+allow, and PostgreSQL refuses a write to such a column.
+
 ## How the page reaches PostgreSQL
 
 `packages/ui/src/pg/wire.ts` is a PostgreSQL client for protocol version 3, written for the page:
@@ -76,25 +99,25 @@ state such as SET ROLE or an open transaction does not survive into the next act
 that has expired signs the reader out before a connection is attempted; a login PostgreSQL
 refuses signs them out with PostgreSQL's message.
 
-What the page runs is ordinary SQL, all of it in `packages/ui/src/db/platform.ts` and
-`packages/ui/src/db/model.ts`:
+What the page runs is ordinary SQL, and each domain holds the SQL it asks for:
 
-- The catalog, from PostgreSQL's privilege functions (`has_table_privilege`,
-  `has_column_privilege`, `has_schema_privilege`, `pg_has_role`).
-- Roles and memberships through `platform.visible_roles()` and `platform.visible_memberships()`,
-  which answer for the reader alone; row policies from `pg_policies`; grants from the ACLs
-  through `aclexplode`; activity from `platform.activity`.
-- Records with filters, search, sort, `LIMIT`/`OFFSET` and a `count(*)` under the same
-  predicate.
+- The catalog (`packages/ui/src/catalog/`), from PostgreSQL's privilege functions
+  (`has_table_privilege`, `has_column_privilege`, `has_schema_privilege`, `pg_has_role`).
+- Roles and memberships (`packages/ui/src/access/`) through `platform.visible_roles()` and
+  `platform.visible_memberships()`, which answer for the reader alone; row policies from
+  `pg_policies`; grants from the ACLs through `aclexplode`; the revisions
+  (`packages/ui/src/activity/`) from `platform.activity`.
+- Records (`packages/ui/src/content/`) with filters, search, sort, `LIMIT`/`OFFSET` and a
+  `count(*)` under the same predicate.
 - Inserts, updates and deletes without RETURNING: the right to write a column is not a right
   to read it back, so a write reports how many rows it touched. An update made from a record
   the reader opened is guarded by its version (`WHERE id = $n AND version = $m`). When it
   touches no row, the page reads the record again: a newer version means someone changed it
   since it was opened, otherwise a row policy refused the change or the row is gone, and the
   page says "PostgreSQL changed no row".
-- Metadata in `platform.item_metadata`.
-- DDL and DCL built by `packages/ui/src/db/model.ts`: workspaces, collections, fields, grants, row
-  policies, memberships and roles.
+- Metadata (`packages/ui/src/metadata/`) in `platform.item_metadata`.
+- DDL and DCL built by `packages/ui/src/model/` and `packages/ui/src/access/`: workspaces,
+  collections, fields, grants, row policies, memberships and roles.
 
 ## Shown before it runs
 
@@ -168,6 +191,50 @@ The colour is a family of the pinned palette: `orange`, `red`, `green`, `blue`, 
 stays inside its own palette whatever the owner asks for. The colour fills the item's mark
 alone — the workspace switcher's tile, a collection tile, the icon in a page header — and never
 a heading, a border or a ground.
+
+### Where a Field Appears
+
+A field is drawn in three situations: the records grid, the record form and the filter
+builder. The owner of a collection may say where a field belongs, in the reserved key `views`
+of the field's own metadata:
+
+```json
+{ "list": "show", "record": "readonly", "filter": "hide" }
+```
+
+`list` and `filter` are `show` or `hide`. `record` is `show`, `readonly` — shown, but never
+as an input — or `hide`. A field that carries no such key appears in all three.
+
+Every field carries its own saying: the platform writes one when it makes a field, so where a
+field appears is said of the field itself and not left to be inferred. A collection that was
+made before this was true can be given the sayings it lacks, with one statement, from the
+Data model page.
+
+The saying is not limited to the three situations the interface draws. The owner of a
+collection may name views of their own — an export, a print sheet, a screen of their own
+making — and say whether the field appears in them:
+
+```json
+{ "list": "show", "record": "show", "filter": "show", "export": "hide" }
+```
+
+A view of the owner's own may be shown, hidden or shown and locked, and it is kept as it was
+said: the platform holds it, hands it back, and draws the three situations it knows. The
+drawing of a custom view is the deployment's business; the saying has a place to live, on the
+field itself, under the same rights as every other key.
+
+How the default views are changed, how a view of your own is added, and how a field is
+pointed at a view other than the default is told in full in [views](views.md).
+
+The saying is metadata like any other, so PostgreSQL's own row security decides it: whoever
+holds a right on the column reads it, and only the owner of the collection changes it. It
+narrows the interface and grants nothing.
+
+The interface honours it in the three places. The grid shows the fields whose list is
+`show`. The record form shows the fields whose record is not `hide`, locks the ones whose
+record is `readonly`, and says which fields the owner keeps out of it. The filter builder
+offers the fields whose filter is `show`. The search still reads every readable column: a
+search is a question to the database, not a view of it.
 
 ## config.json
 
@@ -278,7 +345,7 @@ policies and triggers apply as they would on a server. Signing in as someone els
 page, and the database is kept in IndexedDB across reloads. Clearing the site's storage
 forgets it: the next load starts from the seed again.
 
-The swap happens at build time: a Bun plugin replaces `packages/ui/src/db/connect.ts` with
+The swap happens at build time: a Bun plugin replaces `packages/ui/src/pg/connect.ts` with
 `packages/ui/src/dev/database.ts`, so PGlite never reaches the production bundle. The development
 server's CSP adds `'wasm-unsafe-eval'` to `script-src`, there only, because PGlite is
 WebAssembly.

@@ -19,6 +19,20 @@ members keep reading the raw role catalogs, and nobody else does.
 in one transaction, under an advisory lock. An installation at an unknown version is refused
 rather than modified.
 
+The interface and the installation are one version. The interface reads the platform's
+schema, and a schema of another version is not one it knows — a field's metadata, for
+instance, is a column the platform added in 2.2.0. So an interface built for 2.2.0 against
+an installation at 2.1.0 refuses to go further and says so:
+
+```
+This installation is at version 2.1.0 and the interface at 2.2.0.
+Run `bun run cli migrate` to install 2.2.0.
+```
+
+The local stack installs and upgrades the database itself: `bun run cli deploy local up`
+runs the installer in a one-off container, so running it again after an upgrade is what
+brings an existing database up to the version the interface expects.
+
 ## Hiding the role catalogs
 
 PostgreSQL publishes the role catalogs to every connected user: `pg_auth_members` says who

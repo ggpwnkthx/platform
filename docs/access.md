@@ -127,6 +127,12 @@ present an item they do not own, and a reader cannot change one they may merely 
 is presented by its name alone — a column is a label, not a mark — and its name reaches only
 the readers who may read the column.
 
+A fourth key of a field's metadata says where the field appears — `views` (see
+[interface](interface.md#where-a-field-appears)). It is metadata like any other: a reader
+who holds a right on the column reads it, and only the owner of the collection changes it. It
+is presentation, not access: a field kept out of the interface is still the reader's to read
+and to write in psql, and the interface grants nothing by it.
+
 A COMMENT is not metadata. PostgreSQL's comments are catalog text that every connected user
 reads, and only an owner may change them; they suit a label, not anything that should follow
 the item's rights.

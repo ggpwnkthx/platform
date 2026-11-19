@@ -115,6 +115,9 @@ real build and forwards its WebSockets to a real PostgreSQL. See [interface](doc
   and Preact with `preact-iso` routing, generated at build time and served as files.
 - Typed collection/field builders; real CHECK, NOT NULL, UNIQUE, indexes and foreign keys.
   Use native ALTER TABLE for other schema changes and native views/joins for relationships.
+  A field may have any type the database holds — `geometry` and `geography` where PostGIS is
+  installed, an enum or a domain of your own — named with its schema and with the modifiers
+  it takes.
 - Metadata for workspaces, collections and fields: what an item is, as opposed to what it
   holds. It is stored in the platform schema, and PostgreSQL's own rights decide it — a reader
   reaches the metadata of the items they may reach, and only the owner of an item may change it.
@@ -122,6 +125,10 @@ real build and forwards its WebSockets to a real PostgreSQL. See [interface](doc
   primary colour, and the interface draws them as the item's mark wherever it appears. A field
   carries metadata too, secured by the field's own rights: whoever holds a right on the column
   reaches its metadata, and a field's display name is the label the interface shows for it.
+  Every field carries its own views — where it appears in the records grid, the record form
+  and the filter builder — and the owner of a collection may name views of their own beside
+  them, and say whether the field appears in those. A column PostgreSQL computes itself is
+  shown and never offered as an input.
 - Record reads and writes as parameterized SQL on the reader's own login: inserts and updates
   without RETURNING, and updates guarded by the version the reader saw.
 - A one-statement SQL page executing as the signed-in reader. Native PostgreSQL checks every
@@ -152,6 +159,14 @@ See [access control](docs/access.md) for concrete policies and delegation.
 Each package declares its own dependencies and owns its unit tests; the root holds the
 migrations, the deployment files and the integration tests that cross the packages. The
 repository root is a Bun workspace, so `bun install` installs all of them.
+
+The interface's own source is laid out by domain: `content/`, `model/`, `access/`,
+`activity/`, `metadata/`, `sql/`, `workspace/` and `identity/` each hold their page, the SQL
+they run and the types they speak in. Three folders are shared by all of them — `pg/` speaks
+PostgreSQL's protocol, `ui/` holds the interface's own widgets, `dev/` is the PostgreSQL that
+runs inside the page in development — and the root of `packages/ui/src` holds the shell of the
+application: the router, the session, the layout, the routes, the configuration, the address
+and the formatting.
 
 ## Commands
 
@@ -184,16 +199,17 @@ installer's administrator, with `PGUSER` and `PGPASSWORD` or `PGPASSWORD_FILE`, 
 endpoint configuration. These secrets belong in operator sessions and migration jobs, never the
 interface or the relay. Tests use `TEST_ADMIN_URL`; see [operations](docs/operations.md).
 
-| Document                             | Contents                                                  |
-| ------------------------------------ | --------------------------------------------------------- |
-| [Architecture](docs/architecture.md) | Connection identity and database layout                   |
-| [Access](docs/access.md)             | Roles, grants, RLS, delegation and revocation             |
-| [Interface](docs/interface.md)       | Pages, the relay, configuration and the browser surface   |
-| [Publishing](deploy/cdn/README.md)   | The static site on a CDN: config.json, headers, the relay |
-| [Security](docs/security.md)         | Boundaries and practical limitations                      |
-| [Operations](docs/operations.md)     | Deploying, PostgreSQL 18, Dex, TLS and testing            |
-| [Applying changes](docs/apply.md)    | Declaring users, groups, workspaces, grants and policies  |
-| [Importing data](docs/import.md)     | Data, identity mappings and native permissions            |
-| [Features](docs/features.md)         | Native data and access capabilities                       |
+| Document                             | Contents                                                        |
+| ------------------------------------ | --------------------------------------------------------------- |
+| [Architecture](docs/architecture.md) | Connection identity and database layout                         |
+| [Access](docs/access.md)             | Roles, grants, RLS, delegation and revocation                   |
+| [Interface](docs/interface.md)       | Pages, the relay, configuration and the browser surface         |
+| [Views](docs/views.md)               | Where a field appears: the defaults, your own views, the saying |
+| [Publishing](deploy/cdn/README.md)   | The static site on a CDN: config.json, headers, the relay       |
+| [Security](docs/security.md)         | Boundaries and practical limitations                            |
+| [Operations](docs/operations.md)     | Deploying, PostgreSQL 18, Dex, TLS and testing                  |
+| [Applying changes](docs/apply.md)    | Declaring users, groups, workspaces, grants and policies        |
+| [Importing data](docs/import.md)     | Data, identity mappings and native permissions                  |
+| [Features](docs/features.md)         | Native data and access capabilities                             |
 
 MIT. See [LICENSE](LICENSE).

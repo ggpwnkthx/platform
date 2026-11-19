@@ -413,6 +413,20 @@ beside it, in the address and in the SQL. The name reaches only the readers who 
 column: PostgreSQL does not return the metadata of a field they may not reach, so a hidden
 field keeps its raw name and nothing else.
 
+### Where a Field Appears
+A field is drawn in three places: the records table, the record form and the filter builder.
+The owner of a collection says which of them a field belongs to, in the field's own metadata,
+so PostgreSQL keeps the rules: only the owner changes it, and it narrows the interface
+without granting anything. Every field carries its own saying; the editor is a drawer
+section of three choices — shown, hidden, and, in the record, shown and locked — with the
+statements that will run below them, like every other change. The owner may name views of
+their own beside the three, an export or a print sheet, and say whether the field appears in
+them; they are listed under the three, each with its own choice, and the model's field table
+says the same thing at a glance: three small words, struck through where the field is kept
+out, and any view of the owner's own beside them. A column PostgreSQL computes itself — a
+generated column, an identity column — is shown and locked whatever the owner says, because
+the database writes it.
+
 ### Presentation Panel
 The panel where an item's presentation is set: a preview of the mark as it will read, the
 display name in a field, the icon as a grid of choices, and the colour as the palette's

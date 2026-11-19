@@ -126,6 +126,12 @@ the interface alike.
   workspace or a collection can carry the name people read, a mark of the platform's own icons
   and a colour, and the interface draws them wherever the item appears. A field is presented
   by its name alone, and that name labels the column wherever the interface shows it.
+- A field that says where it appears: the records grid, the record form, the filter builder.
+  The owner of a collection may keep a field out of one of them, or lock it in the record. It
+  is the field's own metadata, so PostgreSQL's own rights decide who reads the saying and who
+  changes it, and it grants nothing: PostgreSQL still decides who may read the field and who
+  may write it. A column the database computes itself — a generated column, an identity
+  column — is shown and never offered as an input.
 - A record browser with named-operator filters, a case-insensitive search across the readable
   columns, sorting, paging with a row count, and updates guarded by the version the reader saw.
 - A one-statement SQL page executing as the signed-in reader; native PostgreSQL checks every

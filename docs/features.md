@@ -40,9 +40,27 @@ right on the column reaches its metadata, and nobody else does. A field's `displ
 the label the interface shows for it — in the records table and in the record form — and a
 reader who may not read the column never learns it.
 
+A field may also say where it appears, in the reserved key `views` of that same metadata: the
+records grid, the record form, the filter builder. A field may be kept out of the grid, locked
+in the form or kept out of the filters, and only the owner of the collection may say so. The
+saying narrows the interface and grants nothing: PostgreSQL still decides who may read the
+field and who may write it. A column the database computes itself — a generated column, an
+identity column — is shown and never offered as an input.
+
+Every field carries its own saying: the platform writes one when it makes a field, so where
+a field appears is said of the field itself. The owner of a collection may also name views of
+their own beside the three the interface draws — an export, a print sheet — and say whether
+the field appears in them. The platform keeps what it is told and hands it back; the drawing
+of a custom view is the deployment's business.
+
 Data modeling is available at runtime. Constraints, indexes, relations, renames and drops use
 native SQL when not covered by typed collection/field builders. Descriptive text is stored
 as native COMMENTs where the builders support it. Use views for reusable projections.
+
+A field may have any type the database holds, not only the platform's own dozen: `geometry`
+and `geography` where PostGIS is installed, an enum or a domain of the installation's own.
+Such a type is named with the schema it lives in and may carry the modifiers it takes, and
+PostgreSQL holds the column to it as it holds any other.
 
 The additive CRM model installs real foreign keys and uses PostgreSQL role names in owner
 fields. Native roles own identity; domain profile tables can store display names or other
