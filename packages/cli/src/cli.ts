@@ -9,7 +9,7 @@ import { deploy, localDatabase } from './deployment/index.ts'
 import { hardenNotes, hardenSql, type HardenMode } from './harden.ts'
 import { authenticationProblems, requirePostgres18 } from './database/requirements.ts'
 import { deviceToken } from './token.ts'
-import { VERSION } from './version.ts'
+import { VERSION, requireInstalledVersion } from './version.ts'
 import { applyModel } from './model.ts'
 
 /** The installation scripts, in order, each one leaving the database at the version it names. */
@@ -71,11 +71,7 @@ async function apply(q: pg.Client, args: string[]) {
   if (!files.length) throw new Error('apply needs a deployment and at least one manifest file')
   // The manifests are applied through the platform's own functions, which the installation
   // provides from 2.0.1 on. An older database is upgraded first, not worked around.
-  const installed = await q.query('SELECT version FROM platform.installation')
-  if (installed.rows[0]?.version !== VERSION)
-    throw new Error(
-      `This installation is at version ${installed.rows[0]?.version ?? 'none'}. Run \`bun run cli migrate\` first.`
-    )
+  await requireInstalledVersion(q)
   const manifests = files.map((file) => JSON.parse(readFileSync(file, 'utf8')))
   const changes: string[] = []
   let unchanged = 0

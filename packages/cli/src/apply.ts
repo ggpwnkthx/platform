@@ -1,6 +1,17 @@
 import type pg from 'pg'
 import { z } from 'zod'
-import { ident, qualified } from '@platform/sql'
+import {
+  createRoleStatement,
+  grantStatement,
+  ident,
+  membershipStatement,
+  type PolicyCommand,
+  policyStatement,
+  qualified,
+  schemaPrivilegeNames,
+  schemaStatement,
+  tablePrivilegeNames,
+} from '@platform/sql'
 import { applyCollections, collectionSchema, type Report, relationSchema } from './model.ts'
 
 const name = z.string().min(1)
@@ -14,22 +25,14 @@ const userSchema = z.strictObject({
   groups: z.array(name).default([]),
 })
 const groupSchema = z.strictObject({ name, state })
-const schemaPrivileges = ['usage', 'create', 'all']
-const tablePrivileges = [
-  'select',
-  'insert',
-  'update',
-  'delete',
-  'truncate',
-  'references',
-  'trigger',
-  'all',
-]
-/** Privileges PostgreSQL can limit to columns; the others always cover the whole table. */
-const columnar = new Set(['select', 'insert', 'update', 'references', 'all'])
+/** The privileges a grant may name: those of a collection and those of a workspace. */
+const grantPrivileges = z.enum([...new Set([...schemaPrivilegeNames, ...tablePrivilegeNames])] as [
+  string,
+  ...string[],
+])
 const grantSchema = z.strictObject({
   to: z.union([name, z.array(name).min(1)]),
-  privileges: z.array(z.enum([...new Set([...schemaPrivileges, ...tablePrivileges])])).min(1),
+  privileges: z.array(grantPrivileges).min(1),
   /** Without a collection the grant is on the workspace itself. */
   collection: name.optional(),
   columns: z.array(name).min(1).optional(),
@@ -82,7 +85,6 @@ export type ApplyResult = { changes: string[]; unchanged: number }
 
 const reserved = (role: string) =>
   /^(pg_.*|platform_core|platform_users|platform_admins)$/.test(role)
-const grantee = (role: string) => (role.toLowerCase() === 'public' ? 'PUBLIC' : ident(role))
 
 class Run implements Report {
   changes: string[] = []
@@ -114,9 +116,7 @@ class Run implements Report {
     // for itself: an operator reads the truth, and anyone else only about themselves.
     const found = await this.q.query('SELECT platform.is_member($1,$2) AS member', [role, group])
     if (found.rows[0]?.member) return this.same()
-    await this.q.query(
-      `GRANT ${ident(group)} TO ${ident(role)}${adminOption ? ' WITH ADMIN OPTION' : ''}`
-    )
+    await this.q.query(membershipStatement({ role: group, member: role, admin: adminOption }))
     this.changed(`add ${role} to ${group}`)
   }
   /** A user is a role and nothing else: who may claim it is the identity provider's business. */
@@ -125,7 +125,7 @@ class Run implements Report {
     const role = ident(user.name)
     const found = await this.role(user.name)
     if (!found) {
-      await q.query(`CREATE ROLE ${role} ${user.login ? 'LOGIN' : 'NOLOGIN'}`)
+      await q.query(createRoleStatement({ name: user.name, login: user.login }))
       this.changed(`create user ${user.name}`)
     } else if (found.login !== user.login) {
       await q.query(`ALTER ROLE ${role} ${user.login ? 'LOGIN' : 'NOLOGIN'}`)
@@ -165,7 +165,7 @@ class Run implements Report {
     const found = await this.role(group)
     if (found?.login) throw new Error(`${group} is a login, not a group`)
     if (found) return this.same()
-    await this.q.query(`CREATE ROLE ${ident(group)} NOLOGIN`)
+    await this.q.query(createRoleStatement({ name: group, login: false }))
     this.changed(`create group ${group}`)
   }
   /** Dropping is PostgreSQL's decision: a role that still owns or is granted anything stays. */
@@ -181,24 +181,25 @@ class Run implements Report {
     this.changed(`drop ${kind} ${role}`)
   }
   async grant(schema: string, grant: z.infer<typeof grantSchema>) {
-    const allowed = grant.collection ? tablePrivileges : schemaPrivileges
+    const allowed = (
+      grant.collection ? tablePrivilegeNames : schemaPrivilegeNames
+    ) as readonly string[]
     const wrong = grant.privileges.filter((p) => !allowed.includes(p))
     const on = grant.collection ? `${schema}.${grant.collection}` : `workspace ${schema}`
     if (wrong.length) throw new Error(`${wrong.join(', ')} cannot be granted on ${on}`)
     if (grant.columns && !grant.collection)
       throw new Error(`Columns need a collection: grant on ${on}`)
-    const columns = grant.columns ? ` (${grant.columns.map(ident).join(',')})` : ''
-    const privileges = grant.privileges
-      .map((p) => p.toUpperCase() + (columnar.has(p) ? columns : ''))
-      .join(', ')
-    const object = grant.collection
-      ? `TABLE ${qualified(schema, grant.collection)}`
-      : `SCHEMA ${ident(schema)}`
-    const roles = [grant.to].flat().map(grantee).join(', ')
-    const sql =
-      grant.state === 'present'
-        ? `GRANT ${privileges} ON ${object} TO ${roles}`
-        : `REVOKE ${privileges} ON ${object} FROM ${roles}`
+    const sql = grantStatement(
+      {
+        schema,
+        table: grant.collection ?? null,
+        privileges: grant.privileges,
+        columns: grant.columns ?? [],
+        grantee: grant.to,
+        withGrantOption: false,
+      },
+      grant.state === 'absent'
+    )
     if (!grant.collection)
       return this.converge(
         sql,
@@ -221,10 +222,16 @@ class Run implements Report {
     const statements = [`DROP POLICY IF EXISTS ${target}`]
     if (policy.state === 'present')
       statements.push(
-        `CREATE POLICY ${target} AS ${policy.restrictive ? 'RESTRICTIVE' : 'PERMISSIVE'}
-          FOR ${policy.for.toUpperCase()} TO ${policy.to.map(grantee).join(', ')}` +
-          (policy.using ? ` USING (${policy.using})` : '') +
-          (policy.check ? ` WITH CHECK (${policy.check})` : '')
+        policyStatement({
+          schema,
+          table: policy.collection,
+          name: policy.name,
+          permissive: !policy.restrictive,
+          command: policy.for.toUpperCase() as PolicyCommand,
+          roles: policy.to,
+          using: policy.using ?? '',
+          check: policy.check ?? '',
+        })
       )
     await this.converge(
       `${policy.state === 'present' ? 'set' : 'drop'} policy ${policy.name} on ${schema}.${policy.collection}`,
@@ -250,9 +257,7 @@ class Run implements Report {
     if (!able) await this.member(w.owner!, 'platform_users')
     if (owner) this.same()
     else {
-      await q.query(
-        `CREATE SCHEMA ${ident(w.slug)}${w.owner ? ` AUTHORIZATION ${ident(w.owner)}` : ''}`
-      )
+      await q.query(schemaStatement(w.slug, w.owner ?? null))
       this.changed(`create workspace ${w.slug}${w.owner ? ` owned by ${w.owner}` : ''}`)
     }
     // Everything inside is made as the owner, so that it owns it and its grants are its own.

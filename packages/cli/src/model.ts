@@ -9,25 +9,22 @@ import {
   fieldViewsStatement,
   ident,
   literal,
+  onDeleteAction,
   qualified,
+  storageType,
   systemFields,
-  type TypeName,
 } from '@platform/sql'
 import { InputError, transaction } from './database/db.ts'
-import { VERSION } from './version.ts'
+import { requireInstalledVersion } from './version.ts'
 
 /**
  * The types a manifest may name. The platform's own are here; any other name is a type of
  * the database — `geometry` and `geography` where PostGIS is installed, an enum or a domain
  * of the installation's own — and is written as it is, qualified with the schema it lives in.
  * Two names are the platform's own under another name: `string` is a text and `m2o` is a
- * relation, which is a uuid.
+ * relation, which is a uuid. The storage type is written once, for the manifests and the
+ * interface alike.
  */
-const columnType = (type: string): TypeName => {
-  if (type === 'm2o') return 'uuid'
-  if (type === 'string') return 'text'
-  return type
-}
 /** A type name: one of the platform's own, or a name of the database's, qualified or not. */
 const typeName = z
   .string()
@@ -78,7 +75,7 @@ export const collectionSchema = z.object({
 export type Field = z.infer<typeof fieldSchema>
 export function fieldSql(field: Field): string {
   if (systemFields.includes(field.name)) throw new InputError(`Reserved field ${field.name}`)
-  const type = columnType(field.type)
+  const type = storageType(field.type)
   return columnSql({
     name: field.name,
     type,
@@ -133,11 +130,7 @@ export async function applyModel(q: pg.Client, raw: unknown) {
   ident(schema)
   // Every field carries its own views, and a field's metadata is what holds them: an
   // installation older than that has no place to write them.
-  const installed = await q.query('SELECT version FROM platform.installation')
-  if (installed.rows[0]?.version !== VERSION)
-    throw new InputError(
-      `This installation is at version ${installed.rows[0]?.version ?? 'none'}. Run \`bun run cli migrate\` first.`
-    )
+  await requireInstalledVersion(q)
   return transaction(q, async () => {
     await q.query(`CREATE SCHEMA IF NOT EXISTS ${ident(schema)}`)
     await applyCollections(q, schema, model.collections, model.relations)
@@ -222,7 +215,7 @@ async function addRelation(
     [qualified(schema, table), name]
   )
   if (found.rowCount) return false
-  const action = { restrict: 'RESTRICT', cascade: 'CASCADE', set_null: 'SET NULL' }[onDelete]
+  const action = onDeleteAction(onDelete)
   await q.query(`ALTER TABLE ${qualified(schema, table)} ADD CONSTRAINT ${ident(name)}
     FOREIGN KEY (${ident(field)}) REFERENCES ${qualified(schema, related)}(id) ON DELETE ${action}`)
   return true

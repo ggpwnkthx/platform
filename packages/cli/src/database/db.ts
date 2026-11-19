@@ -1,5 +1,9 @@
 import pg from 'pg'
+import { roleOf, transaction } from '@platform/sql'
 import type { Config } from './config.ts'
+
+/** The transaction the operator's tools run their statements in, written once. */
+export { transaction }
 
 pg.types.setTypeParser(1082, (v) => v)
 pg.types.setTypeParser(1114, (v) => v)
@@ -23,20 +27,8 @@ export function bearer(header: string | undefined, claim: string): Login {
   const parts = token.split('.')
   if (token.length > 16384 || parts.length !== 3 || !parts.every((p) => /^[A-Za-z0-9_-]+$/.test(p)))
     throw new InputError('Invalid token')
-  let payload: unknown
-  try {
-    payload = JSON.parse(Buffer.from(parts[1]!, 'base64url').toString('utf8'))
-  } catch {
-    throw new InputError('Invalid token')
-  }
-  const username = (payload as Record<string, unknown> | null)?.[claim]
-  if (
-    typeof username !== 'string' ||
-    !username ||
-    username.includes('\0') ||
-    Buffer.byteLength(username) > 63
-  )
-    throw new InputError(`Token names no PostgreSQL role in its ${claim} claim`)
+  const username = roleOf(token, claim)
+  if (!username) throw new InputError(`Token names no PostgreSQL role in its ${claim} claim`)
   return { username, token }
 }
 type Wire = {
@@ -101,16 +93,5 @@ export function clientConfig(
     connectionTimeoutMillis: 5000,
     statement_timeout: config.statementTimeoutMs,
     idle_in_transaction_session_timeout: 15000,
-  }
-}
-export async function transaction<T>(q: pg.Client, fn: () => Promise<T>): Promise<T> {
-  await q.query('BEGIN')
-  try {
-    const result = await fn()
-    await q.query('COMMIT')
-    return result
-  } catch (error) {
-    await q.query('ROLLBACK').catch(() => undefined)
-    throw error
   }
 }
