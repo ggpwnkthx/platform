@@ -151,9 +151,11 @@ Four packages, each with its own dependencies and its own tests, and a repositor
 holds what belongs to the deployment as a whole: the migrations, the deployment files, the
 documentation and the integration tests that cross the packages.
 
-- `packages/sql` — the SQL the platform writes, written once: identifiers, literals, columns
-  and the names a relation's constraint carries. The operator's tools and the interface both
-  build DDL, and they must build it the same way, so the rules live here rather than twice.
+- `packages/sql` — the vocabulary the platform speaks, written once: the SQL it writes
+  (identifiers, literals, columns, the names a relation's constraint carries, and the access
+  it grants) and the tokens and versions it reads. The operator's tools and the interface
+  both build DDL and DCL, and they must build it the same way, so the rules live here rather
+  than twice. It has no dependencies and runs in the browser, in Bun and in Node.
 - `packages/cli` — the operator's tools. `database/db.ts` owns the CLI's connections and the token
   login, `database/config.ts` the endpoint it reaches and `database/requirements.ts` the
   server version and its authentication rules; `token.ts` signs a terminal in; `model.ts`

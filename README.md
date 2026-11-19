@@ -149,12 +149,12 @@ See [access control](docs/access.md) for concrete policies and delegation.
 
 ## The packages
 
-| Package          | What it is                                                                    |
-| ---------------- | ----------------------------------------------------------------------------- |
-| `packages/sql`   | The SQL the platform writes: identifiers, literals, columns, relation names.  |
-| `packages/cli`   | The operator's tools: install, apply, harden, deploy. Depends on `pg`, `zod`. |
-| `packages/relay` | The WebSocket in front of PostgreSQL's port. No dependencies, no credentials. |
-| `packages/ui`    | The interface: a Preact application, its static build and its headers.        |
+| Package          | What it is                                                                               |
+| ---------------- | ---------------------------------------------------------------------------------------- |
+| `packages/sql`   | The vocabulary the platform speaks: the SQL it writes, the tokens and versions it reads. |
+| `packages/cli`   | The operator's tools: install, apply, harden, deploy. Depends on `pg`, `zod`.            |
+| `packages/relay` | The WebSocket in front of PostgreSQL's port. No dependencies, no credentials.            |
+| `packages/ui`    | The interface: a Preact application, its static build and its headers.                   |
 
 Each package declares its own dependencies and owns its unit tests; the root holds the
 migrations, the deployment files and the integration tests that cross the packages. The

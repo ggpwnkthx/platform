@@ -69,7 +69,7 @@ what they say.
 The default saying is written in one place:
 
 ```
-packages/sql/src/index.ts    defaultViews
+packages/sql/src/core.ts    defaultViews
 ```
 
 ```ts
@@ -82,7 +82,7 @@ own is laid over it: the three situations are always there.
 
 ### Changing it
 
-1. Edit `defaultViews` in `packages/sql/src/index.ts`. Nothing else in the interface or the
+1. Edit `defaultViews` in `packages/sql/src/core.ts`. Nothing else in the interface or the
    CLI has to change — both build their statements from it.
 2. The seed of the development build carries the same saying, written out in
    `packages/ui/src/dev/seed.sql`. Update the rows there too: the test
@@ -181,7 +181,7 @@ places that hold one:
 | The situations and the order they are offered | `packages/ui/src/metadata/views.ts` → `situations`                               |
 | What each situation is called                 | `packages/ui/src/metadata/views.ts` → `situationLabels`                          |
 | What a situation may be told                  | `packages/ui/src/metadata/views.ts` → `modeLabels`, and the rule in `parseViews` |
-| The default saying                            | `packages/sql/src/index.ts` → `defaultViews`                                     |
+| The default saying                            | `packages/sql/src/core.ts` → `defaultViews`                                      |
 | The editor                                    | `packages/ui/src/metadata/metadata.tsx` → `ViewsEditor`                          |
 | The records grid                              | `packages/ui/src/content/records.tsx` → `inList`                                 |
 | The record form                               | `packages/ui/src/content/item.tsx` → `inRecord`, `isLocked`                      |
