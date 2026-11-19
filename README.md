@@ -156,7 +156,7 @@ See [access control](docs/access.md) for concrete policies and delegation.
 | --------------------- | ---------------------------------------------------------------------------------------- |
 | `packages/vocabulary` | The vocabulary the platform speaks: the SQL it writes, the tokens and versions it reads. |
 | `packages/data`       | The questions the platform asks PostgreSQL: the catalog, the records, the access.        |
-| `packages/pg`         | The PostgreSQL client the platform speaks with: the protocol, and the logins it keeps.   |
+| `packages/pg-client`  | The PostgreSQL client the platform speaks with: the protocol, and the logins it keeps.   |
 | `packages/cli`        | The operator's tools: install, apply, harden, deploy, and build the interface.           |
 | `packages/relay`      | The WebSocket in front of PostgreSQL's port. No dependencies, no credentials.            |
 | `packages/ui`         | The interface: a Preact application, and the pages it renders itself into.               |
@@ -171,7 +171,7 @@ The interface's own source is laid out by domain: `content/`, `model/`, `access/
 `activity/`, `metadata/`, `sql/`, `workspace/`, `identity/` and `fields/` each hold their page
 and what they draw — and little else. The SQL they run is the platform's own, in
 `packages/data` (the questions, asked of any source of statements) and `packages/vocabulary` (the
-vocabulary they are written in); the protocol is the client's, in `packages/pg`. Two folders
+vocabulary they are written in); the protocol is the client's, in `packages/pg-client`. Two folders
 are shared by all of them — `ui/` holds the interface's own widgets, `pg/` the one seam that
 reaches the database — and the root of `packages/ui/src` holds the shell of the
 application: the router, the session, the layout, the routes, the configuration, the address

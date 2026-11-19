@@ -15,7 +15,7 @@ import {
   removeMetadata,
   setMetadata,
 } from '../packages/data/src/metadata/query.ts'
-import type { Connection } from '../packages/pg/src/wire.ts'
+import type { Connection } from '../packages/pg-client/src/wire.ts'
 import { startIssuer } from './issuer.ts'
 import { openPage, refusal } from './page.ts'
 

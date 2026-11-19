@@ -25,7 +25,7 @@ import * as pageContent from '../packages/data/src/content/query.ts'
 import * as pageIdentity from '../packages/data/src/identity/query.ts'
 import { transaction as pageTransaction } from '../packages/vocabulary/src/index.ts'
 import * as pageSql from '../packages/ui/src/sql/query.ts'
-import type { Connection } from '../packages/pg/src/wire.ts'
+import type { Connection } from '../packages/pg-client/src/wire.ts'
 import { startIssuer } from './issuer.ts'
 import { openPage, refusal } from './page.ts'
 

@@ -7,7 +7,7 @@
   "license": "MIT",
   "devDependencies": {
     "@electric-sql/pglite": "0.5.16",
-    "@platform/pg": "workspace:*",
+    "@platform/pg-client": "workspace:*",
     "@platform/vocabulary": "workspace:*",
     "@platform/ui": "workspace:*"
   },

@@ -1,7 +1,13 @@
 import { PGlite } from '@electric-sql/pglite'
 import type { RuntimeConfig } from '@platform/ui/config.ts'
 import type { Credentials, Db, WithoutIssuer } from '@platform/ui/pg/connect.ts'
-import { type Field, PgError, parseValue, type Result, serialize } from '@platform/pg/wire.ts'
+import {
+  type Field,
+  PgError,
+  parseValue,
+  type Result,
+  serialize,
+} from '@platform/pg-client/wire.ts'
 import migration1 from '../../migrations/0001_native.sql' with { type: 'text' }
 import migration2 from '../../migrations/0002_harden_catalogs.sql' with { type: 'text' }
 import migration3 from '../../migrations/0003_metadata.sql' with { type: 'text' }

@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@platform/data": "workspace:*",
-    "@platform/pg": "workspace:*",
+    "@platform/pg-client": "workspace:*",
     "@platform/vocabulary": "workspace:*",
     "clsx": "2.1.1",
     "lucide-preact": "1.75.0",

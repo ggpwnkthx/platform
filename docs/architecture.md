@@ -86,12 +86,12 @@ page is generated where it is served, links are ordinary anchors that the router
 and the back button, bookmarks and new tabs all work. Because the token is held in memory only,
 a page load always starts signed out, which is exactly the state the generated pages show.
 
-The page speaks PostgreSQL's protocol version 3 itself (`packages/pg/src/wire.ts`): OAUTHBEARER
+The page speaks PostgreSQL's protocol version 3 itself (`packages/pg-client/src/wire.ts`): OAUTHBEARER
 (RFC 7628) login with the reader's token, the extended query protocol with exactly one
 statement per query and every value bound as a parameter, and text-format results. In a
-browser the bytes go over a WebSocket (`packages/pg/src/socket.ts`) to the relay, which forwards
+browser the bytes go over a WebSocket (`packages/pg-client/src/socket.ts`) to the relay, which forwards
 them to PostgreSQL's port and understands none of them. The page opens one login when the
-reader signs in and keeps it open while they work (`packages/pg/src/kept.ts`,
+reader signs in and keeps it open while they work (`packages/pg-client/src/kept.ts`,
 `withDb` in `packages/ui/src/session.tsx`); the reader's own statements run on a login of
 their own, so that what they type cannot reach the platform's work.
 
@@ -168,7 +168,7 @@ deployment files, the documentation and the integration tests that cross the pac
   the workspace. It holds no connection of its own: it asks through a source of statements
   (`DataSource` in `packages/vocabulary`), so the page may ask in the browser and a tool may ask
   from Node, and the question means the same thing either way.
-- `packages/pg` — the PostgreSQL client the platform speaks with: the protocol itself
+- `packages/pg-client` — the PostgreSQL client the platform speaks with: the protocol itself
   (`wire.ts`), the browser's way of carrying it (`socket.ts`) and the logins a client keeps
   open (`kept.ts`). It knows nothing about the interface, and nothing about what a statement
   means.
@@ -190,7 +190,7 @@ deployment files, the documentation and the integration tests that cross the pac
   and how it presents itself, `sql/` the reader's own statement, `workspace/` the schema and
   the rights on it, `identity/` who the reader is, and `fields/` what a column is drawn as.
   The SQL these pages run is the platform's own, in `packages/data` and `packages/vocabulary`; the
-  protocol is the client's, in `packages/pg`. What is left here is the interface: its
+  protocol is the client's, in `packages/pg-client`. What is left here is the interface: its
   widgets (`ui/`), its shell, and the one seam (`pg/connect.ts`) that reaches the database.
   The root of `src` holds
   the shell of the application: `app.tsx` routes, `session.tsx` holds the token and the

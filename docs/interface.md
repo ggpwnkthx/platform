@@ -77,7 +77,7 @@ allow, and PostgreSQL refuses a write to such a column.
 
 ## How the page reaches PostgreSQL
 
-`packages/pg/src/wire.ts` is a PostgreSQL client for protocol version 3, written for the page:
+`packages/pg-client/src/wire.ts` is a PostgreSQL client for protocol version 3, written for the page:
 
 - Login is OAUTHBEARER (RFC 7628) with the reader's own token, as the role the token's claim
   names. PostgreSQL's validator checks the token's signature, issuer and expiry; the page
@@ -87,7 +87,7 @@ allow, and PostgreSQL refuses a write to such a column.
 - The startup message sends `statement_timeout` (STATEMENT_TIMEOUT_MS from `config.json`) and
   `idle_in_transaction_session_timeout`, and the application name `platform-ui`.
 
-In a browser, the protocol travels over a WebSocket (`packages/pg/src/socket.ts`) to the relay, at
+In a browser, the protocol travels over a WebSocket (`packages/pg-client/src/socket.ts`) to the relay, at
 the address `config.json` names (`wss://relay.example.com`). The relay (`packages/relay/src/relay.ts`, the
 `relay` image) hands the bytes to PostgreSQL's port and understands none of them. It holds no
 credentials: the reader's token travels inside the PostgreSQL startup packet, and PostgreSQL
@@ -95,7 +95,7 @@ alone checks it. The one thing the relay reads is the setting PostgreSQL reports
 it has signed the session in as, so that it can keep one role from taking the database's
 connections for itself.
 
-The page keeps its login open (`packages/pg/src/kept.ts`): one login when the reader signs
+The page keeps its login open (`packages/pg-client/src/kept.ts`): one login when the reader signs
 in, closed when the sign-in ends or the token expires. Every action the platform runs — loading
 a page's data, saving a record, running a statement — runs on it, and a second action running
 at the same time gets a login of its own rather than waiting. A login the server has closed is

@@ -17,7 +17,7 @@
       "version": "2.2.0",
       "devDependencies": {
         "@electric-sql/pglite": "0.5.16",
-        "@platform/pg": "workspace:*",
+        "@platform/pg-client": "workspace:*",
         "@platform/vocabulary": "workspace:*",
         "@platform/ui": "workspace:*",
       },
@@ -44,8 +44,8 @@
         "@platform/vocabulary": "workspace:*",
       },
     },
-    "packages/pg": {
-      "name": "@platform/pg",
+    "packages/pg-client": {
+      "name": "@platform/pg-client",
       "version": "2.2.0",
     },
     "packages/relay": {
@@ -61,7 +61,7 @@
       "version": "2.2.0",
       "dependencies": {
         "@platform/data": "workspace:*",
-        "@platform/pg": "workspace:*",
+        "@platform/pg-client": "workspace:*",
         "@platform/vocabulary": "workspace:*",
         "clsx": "2.1.1",
         "lucide-preact": "1.75.0",
@@ -106,7 +106,7 @@
 
     "@platform/example-newsroom": ["@platform/example-newsroom@workspace:examples/newsroom"],
 
-    "@platform/pg": ["@platform/pg@workspace:packages/pg"],
+    "@platform/pg-client": ["@platform/pg-client@workspace:packages/pg-client"],
 
     "@platform/relay": ["@platform/relay@workspace:packages/relay"],
 
