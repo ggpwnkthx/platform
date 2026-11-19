@@ -1,30 +1,25 @@
-import clsx from 'clsx'
 import { Fragment } from 'preact'
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import { activity } from '../activity/query.ts'
-import { deleteRecord, insertRecord, record, relationOptions, updateRecord } from './query.ts'
+import { deleteRecord, insertRecord, record, relationLabels, updateRecord } from './query.ts'
 import { ident, qualified } from '@platform/sql'
-import type { ColumnInfo } from '../catalog/types.ts'
-import { ago, display, moment, shortType } from '../format.ts'
+import { ago, display, shortType } from '../format.ts'
 import { describe, useLoad, useSession } from '../session.tsx'
 import { Page, SideGroup, useWorkspace } from '../shell.tsx'
-import {
-  choicesOf,
-  columnsOf,
-  kindOf,
-  labelColumn,
-  relationOf,
-  systemColumns,
-  tableOf,
-} from '../catalog/catalog.ts'
+import { columnsOf, labelColumn, systemColumns, tableOf } from '../catalog/catalog.ts'
+import { fieldText, fieldValue, isWide } from '../fields/edit.ts'
+import { Value } from '../fields/renderers.tsx'
+import { resolveFields } from '../fields/resolve.ts'
+import { defaultText } from '../fields/text.ts'
+import type { Field as FieldInfo } from '../fields/types.ts'
 import { fieldMetadata } from '../metadata/query.ts'
 import { presentationOf } from '../metadata/presentation.ts'
-import { indexViews, inRecord, isLocked, viewsOf } from '../metadata/views.ts'
+import { inRecord, isLocked } from '../metadata/views.ts'
 import { href } from '../url.ts'
 import { Badge, Loading, Notice, Statement } from '../ui/bits.tsx'
 import { Action } from '../ui/button.tsx'
-import { Field, Input, Select, TextArea } from '../ui/form.tsx'
+import { Field } from '../ui/form.tsx'
 import {
   BackIcon,
   CheckIcon,
@@ -33,169 +28,11 @@ import {
   HistoryIcon,
   InfoIcon,
   LockIcon,
-  RelationIcon,
-  SearchIcon,
   TrashIcon,
 } from '../ui/icons.tsx'
-import { Confirm, Menu } from '../ui/overlay.tsx'
+import { Confirm } from '../ui/overlay.tsx'
 import { CollectionSidebar } from './records.tsx'
 import { RevisionList } from '../activity/activity.tsx'
-
-/** A column default as a person reads it: 'draft'::text is draft. */
-const defaultText = (expression: string) =>
-  expression.match(/^'((?:[^']|'')*)'::/)?.[1]?.replaceAll("''", "'") ?? expression
-
-const longText = /(notes?|description|body|wording|content|summary|details|bio|text)$/
-
-/** What the form holds for a column: text as typed. */
-function asText(value: unknown, column: ColumnInfo): string {
-  if (value === null || value === undefined) return ''
-  if (kindOf(column.type) === 'json') return JSON.stringify(value, null, 2)
-  return display(value)
-}
-
-/** The value a column receives from what was typed, or an error to show under the field. */
-function fromText(text: string, column: ColumnInfo): { value: unknown } | { error: string } {
-  const kind = kindOf(column.type)
-  if (text === '') return { value: kind === 'text' && column.required ? '' : null }
-  if (kind === 'json') {
-    try {
-      return { value: JSON.parse(text) }
-    } catch {
-      return { error: 'Not valid JSON' }
-    }
-  }
-  if (kind === 'boolean') return { value: text === 'true' }
-  if (kind === 'integer' && !/^-?\d+$/.test(text.trim())) return { error: 'A whole number' }
-  if (kind === 'number' && !/^-?\d+(\.\d+)?([eE][-+]?\d+)?$/.test(text.trim()))
-    return { error: 'A number' }
-  return { value: kind === 'text' ? text : text.trim() }
-}
-
-function RelationPicker({
-  schema,
-  table,
-  column,
-  value,
-  onChange,
-  disabled,
-  id,
-}: {
-  schema: string
-  table: string
-  column: string
-  value: string
-  onChange: (value: string) => void
-  disabled?: boolean
-  id: string
-}) {
-  const { catalog, withDb } = useSession()
-  const relation = relationOf(catalog, schema, table, column)!
-  const target = tableOf(catalog, relation.target_schema, relation.target_table)
-  const label = labelColumn(catalog, relation.target_schema, relation.target_table)
-  const [open, setOpen] = useState(false)
-  const [search, setSearch] = useState('')
-  const [options, setOptions] = useState<{ id: string; label: string }[]>([])
-  const [current, setCurrent] = useState<string | null>(null)
-  useEffect(() => {
-    if (!value || !target?.can_select) {
-      setCurrent(null)
-      return
-    }
-    void withDb((db) =>
-      relationOptions(db, relation.target_schema, relation.target_table, label, value)
-    )
-      .then((found) => setCurrent(found.find((o) => o.id === value)?.label ?? null))
-      .catch(() => setCurrent(null))
-  }, [value])
-  useEffect(() => {
-    if (!open || !target?.can_select) return
-    const timer = setTimeout(() => {
-      void withDb((db) =>
-        relationOptions(db, relation.target_schema, relation.target_table, label, search)
-      )
-        .then(setOptions)
-        .catch(() => setOptions([]))
-    }, 150)
-    return () => clearTimeout(timer)
-  }, [open, search])
-  if (!target?.can_select)
-    return (
-      <Input
-        id={id}
-        mono
-        value={value}
-        disabled={disabled}
-        placeholder={`id in ${relation.target_table} (you may not read it)`}
-        onInput={(e) => onChange(e.currentTarget.value)}
-      />
-    )
-  return (
-    <div class="menu-anchor relation">
-      <button
-        id={id}
-        type="button"
-        class="input relation-button"
-        disabled={disabled}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-      >
-        <RelationIcon size={16} aria-hidden="true" />
-        {value ? (
-          <span>
-            {current ?? <span class="mono">{value}</span>}
-            <small class="mono">{value.slice(0, 8)}</small>
-          </span>
-        ) : (
-          <span class="placeholder">Choose a row of {relation.target_table}</span>
-        )}
-      </button>
-      <Menu open={open} onClose={() => setOpen(false)} align="start">
-        <label class="search search-menu">
-          <SearchIcon size={16} aria-hidden="true" />
-          <input
-            value={search}
-            onInput={(e) => setSearch(e.currentTarget.value)}
-            placeholder={`Search ${relation.target_table}`}
-            aria-label={`Search ${relation.target_table}`}
-          />
-        </label>
-        <div class="relation-options" role="listbox">
-          {!column || !options.length ? <p class="menu-note">Nothing found.</p> : null}
-          {options.map((o) => (
-            <button
-              key={o.id}
-              type="button"
-              role="option"
-              aria-selected={o.id === value}
-              class={clsx('menu-item', o.id === value && 'is-current')}
-              onClick={() => {
-                onChange(o.id)
-                setOpen(false)
-              }}
-            >
-              <span>{o.label}</span>
-              <small class="mono">{o.id.slice(0, 8)}</small>
-            </button>
-          ))}
-          {value && (
-            <button
-              type="button"
-              class="menu-item"
-              onClick={() => {
-                onChange('')
-                setOpen(false)
-              }}
-            >
-              <span class="side-muted">Clear</span>
-            </button>
-          )}
-        </div>
-      </Menu>
-    </div>
-  )
-}
 
 export function Item() {
   const { catalog, withDb, notify, presentations } = useSession()
@@ -216,8 +53,8 @@ export function Item() {
     // where they appear. A field this reader may not reach is not in the second answer:
     // PostgreSQL did not return its metadata.
     info
-      ? async (db) => ({
-          record: wanted
+      ? async (db) => {
+          const row = wanted
             ? await record(
                 db,
                 ws,
@@ -225,40 +62,45 @@ export function Item() {
                 readable.map((c) => c.name),
                 id
               )
-            : null,
-          described: await fieldMetadata(db, ws, table),
-        })
+            : null
+          // The name of the row a relation points at, so the record may draw it by name.
+          const labels = row
+            ? await relationLabels(
+                db,
+                catalog,
+                ws,
+                table,
+                [row],
+                readable.map((c) => c.name)
+              )
+            : {}
+          return {
+            record: row,
+            labels,
+            described: await fieldMetadata(db, ws, table),
+          }
+        }
       : null,
     [ws, table, id, catalog, creating, wanted]
   )
   const original = loaded.data?.record ?? null
-  const described = loaded.data?.described ?? []
-  const names = new Map<string, string>()
-  for (const row of described) {
-    if (row.key === 'display_name' && typeof row.value === 'string' && row.value.trim())
-      names.set(row.column_name ?? '', row.value.trim())
-  }
-  // Where each field says it appears: the record form is one of the situations a field may
-  // name, and a field may be hidden from it. The saying is the field's own metadata, so
-  // PostgreSQL's row security decided who may read it.
-  const views = indexViews(described)
-  const fields = columns.filter(
-    (c) =>
-      !systemColumns.includes(c.name) &&
-      (creating ? c.can_insert : c.can_select || c.can_update) &&
-      inRecord(viewsOf(views, c.name))
+  // The fields of the collection, each read once: what PostgreSQL says of the column, what
+  // the field says of itself — its name, where it appears, how it is drawn — and the type
+  // that follows. The saying is the field's own metadata, so PostgreSQL's row security
+  // decided who may read it.
+  const described = loaded.data?.described
+  const all = useMemo(
+    () => resolveFields(catalog, ws, table, described),
+    [catalog, ws, table, described]
   )
-  const unreachable = columns.filter(
-    (c) =>
-      !systemColumns.includes(c.name) && !(creating ? c.can_insert : c.can_select || c.can_update)
-  )
+  /** May the reader reach the field at all, in the form they are in? */
+  const reachable = (field: FieldInfo) =>
+    creating ? field.column.can_insert : field.column.can_select || field.column.can_update
+  const own = all.filter((field) => !field.system)
+  const fields = own.filter((field) => reachable(field) && inRecord(field.views))
+  const unreachable = own.filter((field) => !reachable(field))
   // The fields the owner keeps out of the record, though the reader may reach them.
-  const withheld = columns.filter(
-    (c) =>
-      !systemColumns.includes(c.name) &&
-      !inRecord(viewsOf(views, c.name)) &&
-      (creating ? c.can_insert : c.can_select || c.can_update)
-  )
+  const withheld = own.filter((field) => reachable(field) && !inRecord(field.views))
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [confirming, setConfirming] = useState(false)
@@ -269,17 +111,20 @@ export function Item() {
     setProblem(null)
   }, [ws, table, id])
 
-  const textOf = (c: ColumnInfo) =>
-    c.name in draft ? draft[c.name]! : creating ? '' : asText(original?.[c.name], c)
+  /** What the form held for a field when it opened: the stored value, as text. */
+  const storedText = (field: FieldInfo) =>
+    creating ? '' : fieldText(field, original?.[field.name])
+  /** What the form holds for a field now: what was typed, or what was stored. */
+  const textOf = (field: FieldInfo) => draft[field.name] ?? storedText(field)
   const changed = fields.filter(
-    (c) => c.name in draft && draft[c.name] !== (creating ? '' : asText(original?.[c.name], c))
+    (field) => field.name in draft && draft[field.name] !== storedText(field)
   )
   const errors: Record<string, string> = {}
   const values: Record<string, unknown> = {}
-  for (const c of changed) {
-    const parsed = fromText(draft[c.name]!, c)
-    if ('error' in parsed) errors[c.name] = parsed.error
-    else values[c.name] = parsed.value
+  for (const field of changed) {
+    const parsed = fieldValue(field, draft[field.name]!)
+    if ('error' in parsed) errors[field.name] = parsed.error
+    else values[field.name] = parsed.value
   }
   const version = typeof original?.version === 'number' ? original.version : undefined
   const statement = useMemo(() => {
@@ -305,21 +150,10 @@ export function Item() {
         location.route(href('/content/records', { ws, c: table }))
         return
       }
+      // The write, and then the record as it stands: when PostgreSQL changed no row, what
+      // it holds now says whether someone else changed it first.
       const outcome = await withDb(async (db) => {
         const affected = await updateRecord(db, ws, table, id, values, version)
-        if (affected)
-          return {
-            affected,
-            now: readable.length
-              ? await record(
-                  db,
-                  ws,
-                  table,
-                  readable.map((c) => c.name),
-                  id
-                )
-              : null,
-          }
         const now = readable.length
           ? await record(
               db,
@@ -446,18 +280,18 @@ export function Item() {
               <>
                 <SideGroup title="Record" icon={<InfoIcon size={16} />}>
                   <dl class="facts">
-                    {systemColumns.map((name) =>
-                      original && name in original ? (
+                    {systemColumns.map((name) => {
+                      const field = all.find((one) => one.name === name)
+                      if (!field || !(name in original)) return null
+                      return (
                         <Fragment key={name}>
                           <dt>{name.replace('_', ' ').replace(/^./, (c) => c.toUpperCase())}</dt>
-                          <dd class="mono">
-                            {name.endsWith('_at')
-                              ? moment(original[name])
-                              : display(original[name])}
+                          <dd>
+                            <Value value={original[name]} field={field} situation="record" />
                           </dd>
                         </Fragment>
-                      ) : null
-                    )}
+                      )
+                    })}
                   </dl>
                   {original && typeof original.updated_at === 'string' && (
                     <p class="side-note">Last changed {ago(original.updated_at)}.</p>
@@ -489,139 +323,18 @@ export function Item() {
         </Notice>
       ) : (
         <form ref={formRef} class="form" onSubmit={save}>
-          {fields.map((c) => {
-            const fieldId = `field-${c.name}`
-            // PostgreSQL computes some columns itself, and the owner of a collection may lock
-            // a field: either way it is shown, and never offered as an input.
-            const computed = Boolean(c.generated || c.identity)
-            const locked = isLocked(viewsOf(views, c.name))
-            const writable = !computed && !locked && (creating ? c.can_insert : c.can_update)
-            const reason = computed
-              ? c.generated
-                ? 'PostgreSQL computes this column: a generated column is never written.'
-                : 'PostgreSQL numbers this column itself: an identity column is never written.'
-              : locked
-                ? 'The owner of this collection marked this field read-only.'
-                : 'PostgreSQL gives you no UPDATE on this field.'
-            const choices = choicesOf(catalog, ws, table, c.name)
-            const relation = relationOf(catalog, ws, table, c.name)
-            const kind = kindOf(c.type)
-            const text = textOf(c)
-            const set = (value: string) => setDraft({ ...draft, [c.name]: value })
-            const wide =
-              kind === 'json' ||
-              longText.test(c.name) ||
-              (kind === 'text' && !choices && text.length > 60)
-            const tags = (
-              <span class="field-tags">
-                <span class="field-type mono">{shortType(c.type)}</span>
-                {!c.can_select && (
-                  <Badge tone="warning" title="You may write this field but not read it back">
-                    write-only
-                  </Badge>
-                )}
-                {!writable && (
-                  <Badge title={reason}>
-                    <LockIcon size={12} aria-hidden="true" /> read-only
-                  </Badge>
-                )}
-              </span>
-            )
-            let control: preact.ComponentChildren
-            if (relation)
-              control = (
-                <RelationPicker
-                  id={fieldId}
-                  schema={ws}
-                  table={table}
-                  column={c.name}
-                  value={text}
-                  onChange={set}
-                  disabled={!writable}
-                />
-              )
-            else if (choices)
-              control = (
-                <Select
-                  id={fieldId}
-                  value={text}
-                  disabled={!writable}
-                  onChange={(e) => set(e.currentTarget.value)}
-                >
-                  {(!c.required || !text) && (
-                    <option value="">
-                      {c.default && creating ? `${defaultText(c.default)} (default)` : '—'}
-                    </option>
-                  )}
-                  {choices.map((o) => (
-                    <option key={o} value={o}>
-                      {o}
-                    </option>
-                  ))}
-                </Select>
-              )
-            else if (kind === 'boolean')
-              control = (
-                <Select
-                  id={fieldId}
-                  value={text}
-                  disabled={!writable}
-                  onChange={(e) => set(e.currentTarget.value)}
-                >
-                  <option value="">
-                    {creating && c.default ? `${defaultText(c.default)} (default)` : 'null'}
-                  </option>
-                  <option value="true">true</option>
-                  <option value="false">false</option>
-                </Select>
-              )
-            else if (kind === 'json' || (kind === 'text' && wide))
-              control = (
-                <TextArea
-                  id={fieldId}
-                  mono={kind === 'json'}
-                  rows={kind === 'json' ? 6 : 4}
-                  value={text}
-                  disabled={!writable}
-                  onInput={(e) => set(e.currentTarget.value)}
-                />
-              )
-            else
-              control = (
-                <Input
-                  id={fieldId}
-                  type={kind === 'date' ? 'date' : kind === 'time' ? 'time' : 'text'}
-                  inputMode={
-                    kind === 'integer' ? 'numeric' : kind === 'number' ? 'decimal' : undefined
-                  }
-                  mono={kind !== 'text'}
-                  value={text}
-                  disabled={!writable}
-                  placeholder={
-                    creating && c.default
-                      ? `Default: ${defaultText(c.default)}`
-                      : kind === 'moment'
-                        ? 'YYYY-MM-DD HH:MM:SS+00'
-                        : undefined
-                  }
-                  onInput={(e) => set(e.currentTarget.value)}
-                />
-              )
-            return (
-              <Field
-                key={c.name}
-                id={fieldId}
-                label={names.get(c.name) ?? c.name}
-                required={c.required && !c.default}
-                wide={wide}
-                error={errors[c.name]}
-                hint={c.comment ?? undefined}
-                aside={tags}
-              >
-                {control}
-              </Field>
-            )
-          })}
+          {fields.map((field) => (
+            <RecordField
+              key={field.name}
+              field={field}
+              creating={creating}
+              text={textOf(field)}
+              error={errors[field.name]}
+              onChange={(text) => setDraft({ ...draft, [field.name]: text })}
+              stored={original?.[field.name]}
+              storedLabel={loaded.data?.labels[field.name]?.[String(original?.[field.name])]}
+            />
+          ))}
           {withheld.length > 0 && (
             <div class="field field-wide unreachable">
               <p>
@@ -682,6 +395,102 @@ export function Item() {
         </p>
       </Confirm>
     </Page>
+  )
+}
+
+/**
+ * One field of the record form: its name, what it is, and either the input that changes it or
+ * the value it holds. Which of the two is PostgreSQL's to say first — a column it computes is
+ * never written, and a right it withholds is not offered — and the owner's after it.
+ */
+function RecordField({
+  field,
+  creating,
+  text,
+  error,
+  onChange,
+  stored,
+  storedLabel,
+}: {
+  field: FieldInfo
+  creating: boolean
+  /** What the form holds for the field: text, as typed. */
+  text: string
+  error?: string
+  onChange: (text: string) => void
+  /** The value the record holds, when there is a record. */
+  stored: unknown
+  /** The name of the row a relation points at, when the reader may read it. */
+  storedLabel?: string | null
+}) {
+  const { column, computed } = field
+  const id = `field-${field.name}`
+  // PostgreSQL computes some columns itself, and the owner of a collection may lock a field:
+  // either way it is shown, and never offered as an input.
+  const locked = isLocked(field.views)
+  const writable = !computed && !locked && (creating ? column.can_insert : column.can_update)
+  const reason = computed
+    ? column.generated
+      ? 'PostgreSQL computes this column: a generated column is never written.'
+      : 'PostgreSQL numbers this column itself: an identity column is never written.'
+    : locked
+      ? 'The owner of this collection marked this field read-only.'
+      : 'PostgreSQL gives you no UPDATE on this field.'
+  const wide = isWide(field, text)
+  const Input = field.type.Input
+  return (
+    <Field
+      id={id}
+      label={field.label}
+      required={column.required && !column.default}
+      wide={wide}
+      error={error}
+      hint={column.comment ?? undefined}
+      aside={
+        <span class="field-tags">
+          <span class="field-type mono">{shortType(column.type)}</span>
+          {!column.can_select && (
+            <Badge tone="warning" title="You may write this field but not read it back">
+              write-only
+            </Badge>
+          )}
+          {!writable && (
+            <Badge title={reason}>
+              <LockIcon size={12} aria-hidden="true" /> read-only
+            </Badge>
+          )}
+        </span>
+      }
+    >
+      {!computed && !locked ? (
+        <Input
+          field={field}
+          id={id}
+          text={text}
+          onChange={onChange}
+          disabled={!writable}
+          creating={creating}
+          wide={wide}
+        />
+      ) : !column.can_select ? (
+        <p class="side-note">
+          You may write this field, but you may not read it back: PostgreSQL grants you no SELECT on
+          it.
+        </p>
+      ) : creating ? (
+        <p class="side-note">
+          {column.default
+            ? `PostgreSQL writes this field: ${defaultText(column.default)} by default.`
+            : 'PostgreSQL writes this field itself.'}
+        </p>
+      ) : (
+        // A field the reader may not change is drawn, not offered: the record shows what it
+        // holds, drawn the way the field says it is drawn.
+        <div class="value-readonly">
+          <Value value={stored} field={field} situation="record" label={storedLabel} />
+        </div>
+      )}
+    </Field>
   )
 }
 

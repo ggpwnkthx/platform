@@ -6,7 +6,8 @@ import { display, count as formatCount } from '../format.ts'
 import { useLoad, useSession } from '../session.tsx'
 import { Page, useWorkspace } from '../shell.tsx'
 import { columnsOf, tablesIn } from '../catalog/catalog.ts'
-import { presentationOf, presentationKeys } from '../metadata/presentation.ts'
+import { presentationOf } from '../metadata/presentation.ts'
+import { isReservedKey } from '../metadata/types.ts'
 import { href } from '../url.ts'
 import { Avatar } from '../ui/avatar.tsx'
 import { Badge, Empty, Notice } from '../ui/bits.tsx'
@@ -200,7 +201,7 @@ export function ContentHome() {
                     : 'Use the collections granted to you'}
               </dd>
               {counts.data.about
-                .filter((entry) => !(presentationKeys as readonly string[]).includes(entry.key))
+                .filter((entry) => !isReservedKey('workspace', entry.key))
                 .map((entry) => (
                   <Fragment key={entry.key}>
                     <dt>{entry.key.replaceAll('_', ' ')}</dt>

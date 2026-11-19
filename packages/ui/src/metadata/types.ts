@@ -1,3 +1,5 @@
+import { renderersKey, viewsKey } from '@platform/sql'
+
 /** What an item's own metadata says about it. */
 
 export interface MetadataEntry {
@@ -26,3 +28,18 @@ export interface MetadataRow {
  */
 export const presentationKeys = ['display_name', 'icon', 'color'] as const
 export type PresentationKey = (typeof presentationKeys)[number]
+
+/**
+ * The reserved keys of a field's own metadata: where it appears and how its values are drawn.
+ * Each has an editor of its own, so neither is listed among the field's other keys.
+ */
+export const fieldKeys = [viewsKey, renderersKey] as const
+
+/**
+ * Is this key one the interface reads for itself — and edits in a form of its own — rather
+ * than one it only keeps? The presentation is reserved on every item; the rest on a field.
+ */
+export function isReservedKey(scope: MetadataRow['scope'], key: string): boolean {
+  if ((presentationKeys as readonly string[]).includes(key)) return true
+  return scope === 'field' && (fieldKeys as readonly string[]).includes(key)
+}

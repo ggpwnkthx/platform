@@ -1,4 +1,7 @@
 import { ident, qualified } from '@platform/sql'
+import type { PolicyInfo } from '../access/types.ts'
+import { labelColumn, relationOf, tableOf } from '../catalog/catalog.ts'
+import type { Catalog } from '../catalog/types.ts'
 import type { Db } from '../pg/connect.ts'
 import { conditionClause, type Filter } from './filter.ts'
 
@@ -167,6 +170,53 @@ export async function relationOptions(
       WHERE $1 = '' OR ${shown} ILIKE '%' || $1 || '%' OR id::text = $1
       ORDER BY 2 LIMIT 20`,
     [search.trim()]
+  )
+  return result.rows
+}
+
+/** The labels of the rows a relation column points at, read in one statement per target. */
+export async function relationLabels(
+  db: Db,
+  catalog: Catalog,
+  schema: string,
+  table: string,
+  rows: Record<string, unknown>[],
+  columns: string[]
+): Promise<Record<string, Record<string, string>>> {
+  const out: Record<string, Record<string, string>> = {}
+  for (const column of columns) {
+    const relation = relationOf(catalog, schema, table, column)
+    if (!relation) continue
+    const ids = [
+      ...new Set(rows.map((r) => r[column]).filter((v) => v !== null && v !== undefined)),
+    ]
+    if (!ids.length) continue
+    const label = labelColumn(catalog, relation.target_schema, relation.target_table)
+    const target = tableOf(catalog, relation.target_schema, relation.target_table)
+    if (!label || !target?.can_select) continue
+    try {
+      const found = await db.query<{ id: string; label: string }>(
+        `SELECT id::text AS id, ${ident(label)}::text AS label FROM ${qualified(relation.target_schema, relation.target_table)} WHERE id::text = ANY($1)`,
+        [ids.map(String)]
+      )
+      out[column] = Object.fromEntries(found.rows.map((r) => [r.id, r.label]))
+    } catch {
+      // A label the reader may not read stays an id.
+    }
+  }
+  return out
+}
+
+/** The row policies on a collection, and whether each one speaks for the reader. */
+export async function tablePolicies(db: Db, schema: string, table: string) {
+  const result = await db.query<PolicyInfo & { applies: boolean }>(
+    `SELECT schemaname::text AS schema, tablename::text AS table, policyname::text AS name, permissive,
+            roles::text[] AS roles, cmd AS command, qual AS using, with_check AS check,
+            EXISTS (SELECT 1 FROM unnest(roles) r
+                     WHERE r = 'public' OR (EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r)
+                                            AND pg_has_role(session_user, r, 'MEMBER'))) AS applies
+       FROM pg_policies WHERE schemaname = $1 AND tablename = $2 ORDER BY policyname`,
+    [schema, table]
   )
   return result.rows
 }

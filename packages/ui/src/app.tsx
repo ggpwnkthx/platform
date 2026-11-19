@@ -1,3 +1,5 @@
+// The installation's own field types and renderers, added before any page draws a field.
+import './extensions.ts'
 import { LocationProvider, Route, Router, useLocation } from 'preact-iso'
 import { pageOf } from './routes.ts'
 import { SessionProvider, useSession } from './session.tsx'

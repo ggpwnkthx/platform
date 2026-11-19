@@ -1869,6 +1869,88 @@ td .badge:first-child:not(:only-child) {
   background: var(--success-wash);
   color: var(--success);
 }
+
+/* --------------------------------------------------------- the drawing of a value */
+
+/* A value in the record: as wide as the words it holds, and no narrower. */
+.value-text {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.value-paragraph {
+  display: block;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+.value-boolean {
+  color: var(--text-muted);
+}
+.value-boolean.is-true {
+  color: var(--success);
+}
+.value-uuid,
+.value-moment,
+.value-number,
+.value-raw {
+  overflow-wrap: anywhere;
+}
+.value-json {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--bg-sunk);
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre;
+}
+.value-choice {
+  color: var(--text-soft);
+}
+.value-relation {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  max-width: 100%;
+}
+.value-relation-name {
+  overflow-wrap: anywhere;
+}
+.value-relation-id {
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+.value-link {
+  color: var(--primary);
+  overflow-wrap: anywhere;
+}
+.value-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 90px;
+}
+.value-bar-fill {
+  display: inline-block;
+  height: 6px;
+  min-width: 2px;
+  border-radius: 3px;
+  background: var(--primary);
+}
+/* A field the reader may not change is drawn, not offered. */
+.value-readonly {
+  padding: 8px 0;
+  overflow-wrap: anywhere;
+}
+.renderer-choice {
+  display: block;
+}
+.renderer-options {
+  margin: 0 0 4px;
+  padding: 0;
+  border: 0;
+}
 .constraint {
   display: inline-block;
   font-size: 11.5px;

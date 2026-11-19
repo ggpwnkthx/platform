@@ -1,31 +1,26 @@
 import clsx from 'clsx'
+import type { ComponentChildren } from 'preact'
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
-import type { Db } from '../pg/connect.ts'
 import { type Condition, type Filter, type Operator, operatorLabels, valueless } from './filter.ts'
-import { deleteRecord, records } from './query.ts'
-import { collectionTarget, fieldMetadata, metadata } from '../metadata/query.ts'
-import { indexViews, inFilter, inList, viewsOf } from '../metadata/views.ts'
-import { ident, qualified } from '@platform/sql'
-import type { Catalog, ColumnInfo } from '../catalog/types.ts'
-import type { PolicyInfo } from '../access/types.ts'
+import { deleteRecord, records, relationLabels, tablePolicies } from './query.ts'
+import { fieldMetadata } from '../metadata/query.ts'
+import { inFilter, inList } from '../metadata/views.ts'
+import { qualified } from '@platform/sql'
 import { count, plural } from '../format.ts'
 import { describe, useLoad, useSession } from '../session.tsx'
 import { Page, SideGroup, useWorkspace } from '../shell.tsx'
-import {
-  choicesOf,
-  columnsOf,
-  kindOf,
-  labelColumn,
-  relationOf,
-  systemColumns,
-  tableOf,
-} from '../catalog/catalog.ts'
+import { columnsOf, tableOf } from '../catalog/catalog.ts'
+import { filterStart, filterValue } from '../fields/edit.ts'
+import { FilterLine } from '../fields/inputs.tsx'
+import { Value } from '../fields/renderers.tsx'
+import { resolveFields } from '../fields/resolve.ts'
+import type { Field } from '../fields/types.ts'
 import { presentationOf } from '../metadata/presentation.ts'
 import { href } from '../url.ts'
 import { Badge, Empty, Loading, Notice } from '../ui/bits.tsx'
 import { Action, Button } from '../ui/button.tsx'
-import { Checkbox, Input, Select } from '../ui/form.tsx'
+import { Checkbox, Select } from '../ui/form.tsx'
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -47,26 +42,6 @@ import {
 } from '../ui/icons.tsx'
 import { Confirm, Menu } from '../ui/overlay.tsx'
 import { Legend, Rights } from '../access/rights.tsx'
-import { Cell } from './values.tsx'
-
-/** The operators that make sense for a column, by its type. */
-export function operatorsFor(column: ColumnInfo, choices: string[] | null): Operator[] {
-  if (choices) return ['eq', 'neq', 'in', 'not_in', 'is_null', 'not_null']
-  switch (kindOf(column.type)) {
-    case 'text':
-      return ['contains', 'eq', 'neq', 'starts_with', 'ends_with', 'in', 'is_null', 'not_null']
-    case 'integer':
-    case 'number':
-    case 'date':
-    case 'time':
-    case 'moment':
-      return ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'is_null', 'not_null']
-    case 'boolean':
-      return ['eq', 'is_null', 'not_null']
-    default:
-      return ['eq', 'neq', 'contains', 'is_null', 'not_null']
-  }
-}
 
 function readFilter(text: string | undefined): Filter {
   if (!text) return {}
@@ -78,60 +53,19 @@ function readFilter(text: string | undefined): Filter {
   }
 }
 
-function conditionText(condition: Condition): string {
+function conditionText(
+  condition: Condition,
+  draw?: (value: unknown) => ComponentChildren
+): ComponentChildren {
   const label = operatorLabels[condition.op]
   if (valueless.includes(condition.op)) return label
-  const value = Array.isArray(condition.value)
-    ? condition.value.join(', ')
-    : String(condition.value)
-  return `${label} ${value}`
-}
-
-/** The labels of the rows a relation column points at, read in one statement per target. */
-export async function relationLabels(
-  db: Db,
-  catalog: Catalog,
-  schema: string,
-  table: string,
-  rows: Record<string, unknown>[],
-  columns: string[]
-): Promise<Record<string, Record<string, string>>> {
-  const out: Record<string, Record<string, string>> = {}
-  for (const column of columns) {
-    const relation = relationOf(catalog, schema, table, column)
-    if (!relation) continue
-    const ids = [
-      ...new Set(rows.map((r) => r[column]).filter((v) => v !== null && v !== undefined)),
-    ]
-    if (!ids.length) continue
-    const label = labelColumn(catalog, relation.target_schema, relation.target_table)
-    const target = tableOf(catalog, relation.target_schema, relation.target_table)
-    if (!label || !target?.can_select) continue
-    try {
-      const found = await db.query<{ id: string; label: string }>(
-        `SELECT id::text AS id, ${ident(label)}::text AS label FROM ${qualified(relation.target_schema, relation.target_table)} WHERE id::text = ANY($1)`,
-        [ids.map(String)]
-      )
-      out[column] = Object.fromEntries(found.rows.map((r) => [r.id, r.label]))
-    } catch {
-      // A label the reader may not read stays an id.
-    }
-  }
-  return out
-}
-
-/** The row policies on a collection, and whether each one speaks for the reader. */
-export async function tablePolicies(db: Db, schema: string, table: string) {
-  const result = await db.query<PolicyInfo & { applies: boolean }>(
-    `SELECT schemaname::text AS schema, tablename::text AS table, policyname::text AS name, permissive,
-            roles::text[] AS roles, cmd AS command, qual AS using, with_check AS check,
-            EXISTS (SELECT 1 FROM unnest(roles) r
-                     WHERE r = 'public' OR (EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r)
-                                            AND pg_has_role(session_user, r, 'MEMBER'))) AS applies
-       FROM pg_policies WHERE schemaname = $1 AND tablename = $2 ORDER BY policyname`,
-    [schema, table]
+  const raw = Array.isArray(condition.value) ? condition.value.join(', ') : condition.value
+  if (!draw) return `${label} ${String(raw)}`
+  return (
+    <>
+      {label} {draw(raw)}
+    </>
   )
-  return result.rows
 }
 
 export function CollectionSidebar({
@@ -220,41 +154,34 @@ export function CollectionSidebar({
   )
 }
 
+/** The form that adds one condition: a field, an operator its type offers, and a value. */
 function FilterBuilder({
-  columns,
-  choices,
+  fields,
   onAdd,
 }: {
-  columns: ColumnInfo[]
-  choices: (column: string) => string[] | null
+  /** The fields that may be filtered on: those the reader reads and the owner offers. */
+  fields: Field[]
   onAdd: (column: string, condition: Condition) => void
 }) {
   const [open, setOpen] = useState(false)
-  const [column, setColumn] = useState(columns[0]?.name ?? '')
-  const info = columns.find((c) => c.name === column) ?? columns[0]
-  const options = info ? choices(info.name) : null
-  const ops = info ? operatorsFor(info, options) : []
+  const [column, setColumn] = useState(fields[0]?.name ?? '')
+  const field = fields.find((one) => one.name === column) ?? fields[0]
+  const ops = field?.type.filter.operators ?? []
   const [op, setOp] = useState<Operator>(ops[0] ?? 'eq')
-  const [value, setValue] = useState('')
+  const [value, setValue] = useState(field ? filterStart(field) : '')
+  // Another field is another type: its own operators, and its own first value.
   useEffect(() => {
     if (!ops.includes(op)) setOp(ops[0] ?? 'eq')
-    setValue(options?.[0] ?? '')
+    setValue(field ? filterStart(field) : '')
   }, [column])
   const apply = (event: Event) => {
     event.preventDefault()
-    if (!info) return
-    const kind = kindOf(info.type)
-    let parsed: unknown = value
-    if (op === 'in' || op === 'not_in')
-      parsed = value
-        .split(',')
-        .map((v) => v.trim())
-        .filter(Boolean)
-    else if (kind === 'boolean') parsed = value === 'true'
-    onAdd(info.name, { op, value: valueless.includes(op) ? null : parsed })
+    if (!field) return
+    onAdd(field.name, { op, value: filterValue(field, op, value) })
     setOpen(false)
-    setValue('')
+    setValue(filterStart(field))
   }
+  const ValueInput = field?.type.filter.Input ?? FilterLine
   return (
     <div class="menu-anchor">
       <Button icon={<FilterIcon size={16} />} aria-expanded={open} onClick={() => setOpen(!open)}>
@@ -268,9 +195,9 @@ function FilterBuilder({
             onChange={(e) => setColumn(e.currentTarget.value)}
             aria-label="Field"
           >
-            {columns.map((c) => (
-              <option key={c.name} value={c.name}>
-                {c.name}
+            {fields.map((one) => (
+              <option key={one.name} value={one.name}>
+                {one.name}
               </option>
             ))}
           </Select>
@@ -285,36 +212,9 @@ function FilterBuilder({
               </option>
             ))}
           </Select>
-          {!valueless.includes(op) &&
-            (info && kindOf(info.type) === 'boolean' ? (
-              <Select
-                value={value || 'true'}
-                onChange={(e) => setValue(e.currentTarget.value)}
-                aria-label="Value"
-              >
-                <option value="true">true</option>
-                <option value="false">false</option>
-              </Select>
-            ) : options && (op === 'eq' || op === 'neq') ? (
-              <Select
-                value={value}
-                onChange={(e) => setValue(e.currentTarget.value)}
-                aria-label="Value"
-              >
-                {options.map((o) => (
-                  <option key={o} value={o}>
-                    {o}
-                  </option>
-                ))}
-              </Select>
-            ) : (
-              <Input
-                value={value}
-                onInput={(e) => setValue(e.currentTarget.value)}
-                placeholder={op === 'in' || op === 'not_in' ? 'a, b, c' : 'Value'}
-                aria-label="Value"
-              />
-            ))}
+          {field && !valueless.includes(op) && (
+            <ValueInput field={field} op={op} text={value} onChange={setValue} />
+          )}
           <Button tone="primary" type="submit">
             Add filter
           </Button>
@@ -409,37 +309,34 @@ export function Records() {
             page.rows,
             readable.map((c) => c.name)
           )
-          const about = await metadata(db, collectionTarget(ws, table))
-          // The fields' own metadata: the names people read, for the fields this reader reaches.
+          // The fields' own metadata: what each is called, where it appears and how it is
+          // drawn, for the fields this reader reaches.
           const described = await fieldMetadata(db, ws, table)
-          return { ...page, labels, about, described }
+          return { ...page, labels, described }
         }
       : null,
     [ws, table, query.f, search, query.s, limit, pageNumber, catalog]
   )
 
-  // The name each field is read by, when its owner gave it one. A field this reader may not
-  // reach is not in the list: PostgreSQL did not return its metadata.
-  const names = new Map<string, string>()
-  for (const row of loaded.data?.described ?? []) {
-    if (row.key === 'display_name' && typeof row.value === 'string' && row.value.trim())
-      names.set(row.column_name ?? '', row.value.trim())
-  }
-  // Where each field says it appears. A field may be drawn in the grid, in the record form and
-  // in the filter builder, or in none of them: the saying is the field's own metadata, so
-  // PostgreSQL's row security decided who may read it.
-  const views = indexViews(loaded.data?.described ?? [])
+  // The fields of the collection, each read once: what PostgreSQL says of the column, what
+  // the field says of itself, and the type that draws it. A field this reader may not reach
+  // has no saying here: PostgreSQL did not return its metadata.
+  const described = loaded.data?.described
+  const fields = useMemo(
+    () => resolveFields(catalog, ws, table, described),
+    [catalog, ws, table, described]
+  )
+  const readableFields = fields.filter((field) => field.column.can_select)
   // The record's own fields first, then the platform's: who changed it and when.
-  const listed = readable.filter((c) => inList(viewsOf(views, c.name)))
+  const listed = readableFields.filter((field) => inList(field.views))
   const shown = [
-    ...listed.filter((c) => !systemColumns.includes(c.name)),
-    ...listed.filter(
-      (c) => systemColumns.includes(c.name) && (showSystem || c.name === 'updated_at')
-    ),
+    ...listed.filter((field) => !field.system),
+    ...listed.filter((field) => field.system && (showSystem || field.name === 'updated_at')),
   ]
   // The fields the filter builder offers: those whose saying lets it.
-  const filterable = readable.filter((c) => inFilter(viewsOf(views, c.name)))
-  const choices = (column: string) => choicesOf(catalog, ws, table, column)
+  const filterable = readableFields.filter((field) => inFilter(field.views))
+  /** The name of the row a relation points at, when the reader may read it. */
+  const labelOf = (field: Field, value: unknown) => loaded.data?.labels[field.name]?.[String(value)]
   const rows = loaded.data?.rows ?? []
   const total = loaded.data?.total ?? 0
   const pages = Math.max(1, Math.ceil(total / limit))
@@ -480,9 +377,6 @@ export function Records() {
     }
   }
 
-  const memoKey = useMemo(() => JSON.stringify(filter), [query.f])
-  void memoKey
-
   if (!table)
     return (
       <Page
@@ -508,10 +402,6 @@ export function Records() {
         </Notice>
       </Page>
     )
-
-  const display =
-    (loaded.data?.about.find((m) => m.key === 'display_field')?.value as string | undefined) ?? null
-  void display
 
   return (
     <Page
@@ -570,8 +460,7 @@ export function Records() {
           </label>
           {filterable.length > 0 && (
             <FilterBuilder
-              columns={filterable}
-              choices={choices}
+              fields={filterable}
               onAdd={(column, condition) =>
                 place({ f: JSON.stringify({ ...filter, [column]: condition }), p: undefined })
               }
@@ -579,7 +468,12 @@ export function Records() {
           )}
           {Object.entries(filter).map(([column, condition]) => (
             <span key={column} class="chip">
-              <span class="mono">{column}</span> {conditionText(condition)}
+              <span class="mono">{column}</span>{' '}
+              {conditionText(condition, (value) => {
+                const field = readableFields.find((one) => one.name === column)
+                if (!field) return String(value)
+                return <Value value={value} field={field} situation="filter" />
+              })}
               <button
                 type="button"
                 aria-label={`Remove the filter on ${column}`}
@@ -643,27 +537,29 @@ export function Records() {
                       />
                     </th>
                   )}
-                  {shown.map((c, i) => {
+                  {shown.map((field, i) => {
                     const direction =
-                      sort[0] === c.name
+                      sort[0] === field.name
                         ? 'ascending'
-                        : sort[0] === `-${c.name}`
+                        : sort[0] === `-${field.name}`
                           ? 'descending'
                           : 'none'
                     return (
                       <th
-                        key={c.name}
+                        key={field.name}
                         aria-sort={direction}
                         class={clsx(
-                          ['integer', 'number'].includes(kindOf(c.type)) && 'is-number',
+                          field.type.numeric && 'is-number',
                           i === 0 && 'sticky',
                           i === 0 && canDelete && 'sticky-2'
                         )}
                       >
-                        <button type="button" class="grid-sort" onClick={() => toggleSort(c.name)}>
-                          <span title={names.has(c.name) ? c.name : undefined}>
-                            {names.get(c.name) ?? c.name}
-                          </span>
+                        <button
+                          type="button"
+                          class="grid-sort"
+                          onClick={() => toggleSort(field.name)}
+                        >
+                          <span title={field.named ? field.name : undefined}>{field.label}</span>
                           {direction === 'ascending' ? (
                             <ArrowUpIcon size={14} aria-hidden="true" />
                           ) : direction === 'descending' ? (
@@ -714,37 +610,34 @@ export function Records() {
                           />
                         </td>
                       )}
-                      {shown.map((c, i) => (
-                        <td
-                          key={c.name}
-                          class={clsx(
-                            ['integer', 'number'].includes(kindOf(c.type)) && 'is-number',
-                            i === 0 && 'sticky',
-                            i === 0 && canDelete && 'sticky-2'
-                          )}
-                        >
-                          {i === 0 && open ? (
-                            <a href={open} class="grid-open clip clip-wide">
-                              <Cell
-                                value={row[c.name]}
-                                column={c}
-                                label={loaded.data?.labels[c.name]?.[String(row[c.name])]}
-                              />
-                            </a>
-                          ) : (
-                            <Cell
-                              value={row[c.name]}
-                              column={c}
-                              choices={choices(c.name)}
-                              label={
-                                relationOf(catalog, ws, table, c.name)
-                                  ? (loaded.data?.labels[c.name]?.[String(row[c.name])] ?? '')
-                                  : undefined
-                              }
-                            />
-                          )}
-                        </td>
-                      ))}
+                      {shown.map((field, i) => {
+                        const cell = (
+                          <Value
+                            value={row[field.name]}
+                            field={field}
+                            situation="list"
+                            label={labelOf(field, row[field.name])}
+                          />
+                        )
+                        return (
+                          <td
+                            key={field.name}
+                            class={clsx(
+                              field.type.numeric && 'is-number',
+                              i === 0 && 'sticky',
+                              i === 0 && canDelete && 'sticky-2'
+                            )}
+                          >
+                            {i === 0 && open ? (
+                              <a href={open} class="grid-open clip clip-wide">
+                                {cell}
+                              </a>
+                            ) : (
+                              cell
+                            )}
+                          </td>
+                        )
+                      })}
                       {hidden.map((c) => (
                         <td key={c.name} class="grid-hidden" aria-label="hidden" />
                       ))}

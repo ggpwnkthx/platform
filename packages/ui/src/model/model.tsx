@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useEffect, useState } from 'preact/hooks'
+import { useEffect, useMemo, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import {
   builtInTypes,
@@ -20,16 +20,11 @@ import { fieldMetadata } from '../metadata/query.ts'
 import { useLoad, useSession } from '../session.tsx'
 import { Page, useWorkspace } from '../shell.tsx'
 import { shortType } from '../format.ts'
-import {
-  choicesOf,
-  columnsOf,
-  relationOf,
-  systemColumns,
-  tableOf,
-  tablesIn,
-} from '../catalog/catalog.ts'
+import { choicesOf, columnsOf, systemColumns, tableOf, tablesIn } from '../catalog/catalog.ts'
+import { rendererNamed } from '../fields/renderers.tsx'
+import { resolveFields } from '../fields/resolve.ts'
 import { presentationOf } from '../metadata/presentation.ts'
-import { indexViews, customViews, situationLabels, situations, viewsOf } from '../metadata/views.ts'
+import { customViews, situationLabels, situations } from '../metadata/views.ts'
 import { href } from '../url.ts'
 import { Badge, Empty, Notice, Statement } from '../ui/bits.tsx'
 import { Action, Button } from '../ui/button.tsx'
@@ -429,7 +424,6 @@ export function CollectionModel() {
   const table = location.query.c ?? ''
   const tab = location.query.tab ?? 'fields'
   const info = tableOf(catalog, ws, table)
-  const columns = columnsOf(catalog, ws, table)
   const shown = presentationOf(presentations, ws, table)
   const workspace = presentationOf(presentations, ws)
   const CollectionGlyph = iconFor(shown.icon) ?? CollectionIcon
@@ -437,17 +431,15 @@ export function CollectionModel() {
   const [adding, setAdding] = useState<FieldDraft | null>(null)
   const [dropping, setDropping] = useState<string | null>(null)
   const [described, setDescribed] = useState<string | null>(null)
-  // The name each field is read by, when its owner gave it one.
-  const about = useLoad(info ? (db) => fieldMetadata(db, ws, table) : null, [ws, table])
-  const names = new Map<string, string>()
-  for (const row of about.data ?? []) {
-    if (row.key === 'display_name' && typeof row.value === 'string' && row.value.trim())
-      names.set(row.column_name ?? '', row.value.trim())
-  }
-  // Where each field says it appears: the list, the record, the filters.
-  const views = indexViews(about.data ?? [])
+  // What each field says of itself: its name, where it appears and how it is drawn. It is
+  // read again whenever the catalog is, since a statement that ran may have changed it.
+  const about = useLoad(info ? (db) => fieldMetadata(db, ws, table) : null, [ws, table, catalog])
+  const fields = useMemo(
+    () => resolveFields(catalog, ws, table, about.data),
+    [catalog, ws, table, about.data]
+  )
   // The fields that say nothing yet: every field carries its own views, and these do not.
-  const missing = columns.filter((c) => !views[c.name])
+  const missing = about.data ? fields.filter((field) => !field.hasViews) : []
   const [deleting, setDeleting] = useState(false)
   const [confirmName, setConfirmName] = useState('')
   const [note, setNote] = useState<string | null>(null)
@@ -633,6 +625,7 @@ export function CollectionModel() {
                   <th>Field</th>
                   <th>Type</th>
                   <th>Views</th>
+                  <th>Drawn as</th>
                   <th>Required</th>
                   <th>Default</th>
                   <th>Constraints</th>
@@ -644,14 +637,13 @@ export function CollectionModel() {
                 </tr>
               </thead>
               <tbody>
-                {columns.map((c) => {
-                  const relation = relationOf(catalog, ws, table, c.name)
-                  const system = systemColumns.includes(c.name)
+                {fields.map((field) => {
+                  const { column: c, relation, system, views } = field
                   return (
                     <tr key={c.name} class={clsx(system && 'is-system')}>
                       <td>
                         <span class="mono strong">{c.name}</span>
-                        {names.has(c.name) && <span class="field-alias">{names.get(c.name)}</span>}
+                        {field.named && <span class="field-alias">{field.label}</span>}
                         {system && <Badge tone="outline">system</Badge>}
                       </td>
                       <td class="mono">
@@ -672,12 +664,9 @@ export function CollectionModel() {
                           {situations.map((situation) => (
                             <span
                               key={situation}
-                              class={clsx(
-                                'view-mark',
-                                viewsOf(views, c.name)[situation] === 'hide' && 'is-off'
-                              )}
+                              class={clsx('view-mark', views[situation] === 'hide' && 'is-off')}
                               title={
-                                viewsOf(views, c.name)[situation] === 'hide'
+                                views[situation] === 'hide'
                                   ? `Hidden from ${situationLabels[situation]}`
                                   : `Shown in ${situationLabels[situation]}`
                               }
@@ -685,18 +674,35 @@ export function CollectionModel() {
                               {situation}
                             </span>
                           ))}
-                          {Object.entries(customViews(viewsOf(views, c.name))).map(
-                            ([name, mode]) => (
-                              <span
-                                key={name}
-                                class={clsx('view-mark', mode === 'hide' && 'is-off')}
-                                title={mode === 'hide' ? `Hidden from ${name}` : `Shown in ${name}`}
-                              >
-                                {name}
-                              </span>
-                            )
-                          )}
+                          {Object.entries(customViews(views)).map(([name, mode]) => (
+                            <span
+                              key={name}
+                              class={clsx('view-mark', mode === 'hide' && 'is-off')}
+                              title={mode === 'hide' ? `Hidden from ${name}` : `Shown in ${name}`}
+                            >
+                              {name}
+                            </span>
+                          ))}
                         </span>
+                      </td>
+                      <td>
+                        {(() => {
+                          const drawn = situations
+                            .map((situation) => {
+                              const choice = field.renderers[situation]
+                              if (!choice) return null
+                              const renderer = rendererNamed(choice.renderer)
+                              return (
+                                <span key={situation} class="view-mark" title={renderer?.label}>
+                                  {situation}: {choice.renderer}
+                                </span>
+                              )
+                            })
+                            .filter(Boolean)
+                          if (!drawn.length)
+                            return <span class="cell-muted">as the platform draws it</span>
+                          return <span class="field-views">{drawn}</span>
+                        })()}
                       </td>
                       <td>{c.required ? 'yes' : ''}</td>
                       <td class="mono cell-muted">

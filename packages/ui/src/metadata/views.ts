@@ -61,6 +61,23 @@ export const situationLabels: Record<Situation, string> = {
   filter: 'the filters',
 }
 
+/** What each situation is called where a field is told of it. */
+export const situationTitles: Record<Situation, string> = {
+  list: 'In the list',
+  record: 'In the record',
+  filter: 'In filters',
+}
+
+/**
+ * What each situation may be told. Only the record form can be locked: a cell and a filter
+ * are read either way.
+ */
+export const situationModes: Record<Situation, Mode[]> = {
+  list: ['show', 'hide'],
+  record: ['show', 'readonly', 'hide'],
+  filter: ['show', 'hide'],
+}
+
 /** What a situation may be told, in words the interface shows. */
 export const modeLabels: Record<Mode, string> = {
   show: 'Shown',
@@ -73,6 +90,9 @@ export const customModes: Mode[] = ['show', 'readonly', 'hide']
 
 /** Every mode the platform knows, in the order the interface offers them. */
 export const modes = viewModes
+
+/** Is this one of the situations the interface draws, rather than a view of the owner's own? */
+const isSituation = (name: string): name is Situation => situations.includes(name as Situation)
 
 function modeOf(value: unknown): Mode | null {
   if (value === true) return 'show'
@@ -93,11 +113,11 @@ export function parseViews(value: unknown): FieldViews {
   for (const situation of situations) {
     const mode = modeOf(given[situation])
     if (!mode) continue
-    // Only the record form can be locked; a cell and a filter are read either way.
-    views[situation] = situation === 'record' ? mode : mode === 'readonly' ? 'show' : mode
+    // A mode the situation cannot be told is the nearest it can: locked is still shown.
+    views[situation] = situationModes[situation].includes(mode) ? mode : 'show'
   }
   for (const [name, said] of Object.entries(given)) {
-    if (situations.includes(name as Situation)) continue
+    if (isSituation(name)) continue
     const mode = modeOf(said)
     if (mode) views[name] = mode
   }
@@ -109,7 +129,7 @@ export function viewsValue(views: FieldViews): Record<string, string> {
   const value: Record<string, string> = {}
   for (const situation of situations) value[situation] = views[situation]
   for (const [name, mode] of Object.entries(views)) {
-    if (situations.includes(name as Situation) || !mode) continue
+    if (isSituation(name) || !mode) continue
     value[name] = mode
   }
   return value
@@ -119,7 +139,7 @@ export function viewsValue(views: FieldViews): Record<string, string> {
 export function customViews(views: FieldViews): Record<string, Mode> {
   const custom: Record<string, Mode> = {}
   for (const [name, mode] of Object.entries(views)) {
-    if (situations.includes(name as Situation) || !mode) continue
+    if (isSituation(name) || !mode) continue
     custom[name] = mode
   }
   return custom
@@ -134,7 +154,7 @@ export function viewsEqual(one: FieldViews, other: FieldViews): boolean {
 }
 
 /** Is this a view of the owner's own, rather than one the interface draws? */
-export const isCustomView = (name: string): boolean => !situations.includes(name as Situation)
+export const isCustomView = (name: string): boolean => !isSituation(name)
 
 /**
  * The name a view may carry: letters, digits, underscores and dashes, and it starts with a

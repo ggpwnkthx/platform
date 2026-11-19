@@ -1,49 +1,22 @@
-import { useId, useState } from 'preact/hooks'
-import clsx from 'clsx'
-import { fieldTarget, metadata, metadataStatements, removeMetadata, setMetadata } from './query.ts'
-import type { MetadataChange, MetadataTarget } from './query.ts'
-import type { MetadataEntry } from './types.ts'
+import { useState } from 'preact/hooks'
 import { ago, display } from '../format.ts'
 import { describe, useLoad, useSession } from '../session.tsx'
-import { columnOf } from '../catalog/catalog.ts'
-import { familyOf, palette, parseColor, reservedFamilies, studioFamilies } from './color.ts'
-import type { Family } from './color.ts'
-import {
-  type FieldViews,
-  type Mode,
-  customModes,
-  customViews,
-  isCustomView,
-  modeLabels,
-  parseViews,
-  validViewName,
-  viewsEqual,
-  viewsKey,
-  viewsValue,
-} from './views.ts'
-import {
-  colorKey,
-  displayNameKey,
-  displayNameLimit,
-  iconKey,
-  presentationKeys,
-  presentationOf,
-} from './presentation.ts'
-import { Empty, Loading, Notice, Statement } from '../ui/bits.tsx'
-import { Avatar } from '../ui/avatar.tsx'
+import { Empty, Loading, Notice } from '../ui/bits.tsx'
 import { Button } from '../ui/button.tsx'
-import { Field, Input, Select, TextArea } from '../ui/form.tsx'
-import {
-  CollectionIcon,
-  EditIcon,
-  InfoIcon,
-  itemIcons,
-  PlusIcon,
-  TrashIcon,
-  WorkspaceIcon,
-} from '../ui/icons.tsx'
+import { Field, Input, TextArea } from '../ui/form.tsx'
+import { EditIcon, InfoIcon, PlusIcon, TrashIcon } from '../ui/icons.tsx'
 import { Drawer } from '../ui/overlay.tsx'
-import { useRunner } from '../access/runner.tsx'
+import { PresentationEditor } from './editors/presentation.tsx'
+import { RenderersEditor } from './editors/renderers.tsx'
+import { ViewsEditor } from './editors/views.tsx'
+import { fieldTarget, type MetadataTarget, metadata, removeMetadata, setMetadata } from './query.ts'
+import { isReservedKey, type MetadataEntry } from './types.ts'
+
+/**
+ * The metadata of an item, as panels and drawers: the keys it carries, the form that changes
+ * one, and — for a field — the editors of the keys the interface reads for itself. Those
+ * editors live in `editors/`; what is here is everything around them.
+ */
 
 /** A value as the editor shows it: a string as itself, anything else as JSON. */
 const asText = (value: unknown) =>
@@ -69,263 +42,9 @@ interface Editing {
   isNew: boolean
 }
 
-/** What an item is called in the interface's own words. */
-const nameOf = (target: MetadataTarget): string =>
-  target.scope === 'workspace'
-    ? 'workspace'
-    : target.scope === 'collection'
-      ? 'collection'
-      : 'field'
-
-/** One colour of the palette, chosen by name: the family the mark is drawn as. */
-function Swatch({
-  family,
-  name,
-  chosen,
-  owner,
-  onChoose,
-}: {
-  family: Family
-  name: string
-  chosen: boolean
-  owner: boolean
-  onChoose: (value: string) => void
-}) {
-  return (
-    <label
-      class={clsx('swatch', `swatch-${family.name}`, chosen && 'is-chosen')}
-      title={family.name}
-    >
-      <input
-        type="radio"
-        name={name}
-        value={family.name}
-        checked={chosen}
-        disabled={!owner}
-        onChange={() => onChoose(family.name)}
-      />
-    </label>
-  )
-}
-
-/**
- * How an item presents itself: the name people read, the icon they recognise and the colour
- * that marks it. Three reserved keys of the item's own metadata, so PostgreSQL's row security
- * decides who reads them and who changes them, as it does for every other key. A field is
- * presented by its name alone: a column is a label, not a mark.
- */
-export function PresentationEditor({ target, owner }: { target: MetadataTarget; owner: boolean }) {
-  const { presentations } = useSession()
-  const stored = presentationOf(presentations, target.schema, target.table, target.column)
-  const [name, setName] = useState(stored.displayName ?? '')
-  const [icon, setIcon] = useState(stored.icon ?? '')
-  const [colour, setColour] = useState(stored.color ?? '')
-  const [seen, setSeen] = useState(stored)
-  const runner = useRunner()
-  const group = useId()
-  const iconName = `${group}-icon`
-  const colourName = `${group}-colour`
-  const item = nameOf(target)
-  const Fallback = target.scope === 'workspace' ? WorkspaceIcon : CollectionIcon
-  const marked = target.scope !== 'field'
-
-  // What PostgreSQL holds is the truth: when it changes, the draft follows it.
-  if (
-    seen.displayName !== stored.displayName ||
-    seen.icon !== stored.icon ||
-    seen.color !== stored.color
-  ) {
-    setSeen(stored)
-    setName(stored.displayName ?? '')
-    setIcon(stored.icon ?? '')
-    setColour(stored.color ?? '')
-  }
-
-  const changes: MetadataChange[] = []
-  if (name.trim() !== (stored.displayName ?? ''))
-    changes.push({ key: displayNameKey, value: name.trim() || null })
-  if (marked && (icon || null) !== stored.icon) changes.push({ key: iconKey, value: icon || null })
-  if (marked && (colour || null) !== stored.color)
-    changes.push({ key: colorKey, value: colour || null })
-  const statements = metadataStatements(target, changes)
-  const chosen = familyOf(colour)
-  const invalid = colour.trim() !== '' && !chosen && !parseColor(colour)
-
-  return (
-    <div class="presentation">
-      <div class="presentation-preview">
-        {marked && (
-          <Avatar
-            presentation={{ displayName: name.trim() || null, icon: icon || null, color: colour }}
-            fallback={Fallback}
-            class="avatar-preview"
-            size={24}
-          />
-        )}
-        <div>
-          <strong>{name.trim() || (target.column ?? target.table ?? target.schema)}</strong>
-          <small class="mono note">
-            {target.column
-              ? `${target.schema}.${target.table}.${target.column}`
-              : target.table
-                ? `${target.schema}.${target.table}`
-                : target.schema}
-            {name.trim() ? '' : ' · the name in SQL'}
-          </small>
-        </div>
-      </div>
-      <div class="form">
-        <Field
-          label="Display name"
-          id={`${group}-name`}
-          hint={`The name people read. The ${item} keeps its own name in SQL.`}
-          error={name.length > displayNameLimit ? `${displayNameLimit} characters at most.` : null}
-        >
-          <Input
-            id={`${group}-name`}
-            value={name}
-            disabled={!owner}
-            maxLength={displayNameLimit + 20}
-            onInput={(e) => setName(e.currentTarget.value)}
-            placeholder={target.column ? 'Headline' : target.table ? 'Articles' : 'Newsroom'}
-          />
-        </Field>
-        {marked && (
-          <>
-            <fieldset class="field field-wide types">
-              <legend class="field-label">Icon</legend>
-              <div class="icon-grid">
-                <label
-                  class={clsx('icon-choice', !icon && 'is-chosen')}
-                  title="The platform's own icon"
-                >
-                  <input
-                    type="radio"
-                    name={iconName}
-                    value=""
-                    checked={!icon}
-                    disabled={!owner}
-                    onChange={() => setIcon('')}
-                  />
-                  <Fallback size={18} />
-                </label>
-                {Object.keys(itemIcons).map((choice) => {
-                  const Icon = itemIcons[choice]!
-                  return (
-                    <label
-                      key={choice}
-                      class={clsx('icon-choice', icon === choice && 'is-chosen')}
-                      title={choice}
-                    >
-                      <input
-                        type="radio"
-                        name={iconName}
-                        value={choice}
-                        checked={icon === choice}
-                        disabled={!owner}
-                        onChange={() => setIcon(choice)}
-                      />
-                      <Icon size={18} />
-                    </label>
-                  )
-                })}
-              </div>
-              <p class="field-hint">
-                The mark drawn beside the name. Without one, the platform's own.
-              </p>
-            </fieldset>
-            <fieldset class="field field-wide types">
-              <legend class="field-label">Primary colour</legend>
-              <div class="colour-row">
-                <div class="swatches">
-                  <label
-                    class={clsx('swatch', 'swatch-none', !chosen && 'is-chosen')}
-                    title="No colour"
-                  >
-                    <input
-                      type="radio"
-                      name={colourName}
-                      value=""
-                      checked={!chosen}
-                      disabled={!owner}
-                      onChange={() => setColour('')}
-                    />
-                  </label>
-                  {reservedFamilies.map((family) => (
-                    <Swatch
-                      key={family.name}
-                      family={family}
-                      name={colourName}
-                      chosen={chosen?.name === family.name}
-                      owner={owner}
-                      onChoose={setColour}
-                    />
-                  ))}
-                  <span class="swatch-gap" aria-hidden="true" />
-                  {studioFamilies.map((name) => {
-                    const family = palette.find((one) => one.name === name)!
-                    return (
-                      <Swatch
-                        key={family.name}
-                        family={family}
-                        name={colourName}
-                        chosen={chosen?.name === family.name}
-                        owner={owner}
-                        onChoose={setColour}
-                      />
-                    )
-                  })}
-                </div>
-                <Input
-                  class="mono colour-input"
-                  value={colour}
-                  disabled={!owner}
-                  maxLength={7}
-                  spellcheck={false}
-                  aria-label="Colour"
-                  onInput={(e) => setColour(e.currentTarget.value)}
-                  placeholder="steel"
-                />
-              </div>
-              {invalid ? (
-                <p class="field-error">
-                  A colour is a family of the palette &mdash; steel, cyan, bronze &mdash; or a
-                  colour of your own, written as #rrggbb.
-                </p>
-              ) : (
-                <p class="field-hint">
-                  The colour of the mark. The studio draws its own palette: a colour of your own is
-                  drawn as the family nearest to it, with the ink that reads on it.
-                </p>
-              )}
-            </fieldset>
-          </>
-        )}
-      </div>
-      {owner && (
-        <>
-          {statements.length > 0 && (
-            <Statement sql={statements.join('\n')} label="Runs as you, in one transaction" />
-          )}
-          <div class="row-actions">
-            <Button
-              tone="primary"
-              busy={runner.busy}
-              disabled={!statements.length || invalid}
-              onClick={() => runner.runStatements(statements, 'Presentation saved')}
-            >
-              Save presentation
-            </Button>
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
 /** The presentation of a workspace or a collection, as a panel of its own. */
 export function PresentationPanel({ target, owner }: { target: MetadataTarget; owner: boolean }) {
-  const item = nameOf(target)
+  const item = target.scope
   return (
     <section class="panel">
       <header class="panel-head">
@@ -343,190 +62,11 @@ export function PresentationPanel({ target, owner }: { target: MetadataTarget; o
 }
 
 /**
- * Where a field appears: in the records grid, in the record form, in the filter builder, and
- * in any view of the owner's own. A field may be shown, hidden, or — in the form — shown and
- * locked. The saying is the field's own metadata, under the reserved key `views`, so
- * PostgreSQL keeps its rules: whoever holds a right on the column reads it, and only the
- * owner of the collection changes it.
- *
- * Every field carries its own saying: the platform writes one when it makes a field, so
- * where a field appears is said of the field and not left to be inferred.
- *
- * The saying narrows the interface and grants nothing: a field that is hidden is still
- * PostgreSQL's to read and to write, and the reader may still reach it in psql.
- */
-export function ViewsEditor({
-  target,
-  owner,
-  entries,
-}: {
-  target: MetadataTarget
-  owner: boolean
-  /** The field's own metadata, as its owner and its readers may see it. */
-  entries: MetadataEntry[]
-}) {
-  const { catalog } = useSession()
-  const runner = useRunner()
-  const group = useId()
-  const stored = parseViews(entries.find((one) => one.key === viewsKey)?.value)
-  const [views, setViews] = useState<FieldViews>(stored)
-  const [seen, setSeen] = useState(stored)
-  const [named, setNamed] = useState('')
-  // What PostgreSQL holds is the truth: when it changes, the draft follows it.
-  if (!viewsEqual(seen, stored)) {
-    setSeen(stored)
-    setViews(stored)
-  }
-  const column = columnOf(catalog, target.schema, target.table ?? '', target.column ?? '')
-  const computed = Boolean(column?.generated || column?.identity)
-  const changes: MetadataChange[] = []
-  if (!viewsEqual(views, stored)) changes.push({ key: viewsKey, value: viewsValue(views) })
-  const statements = metadataStatements(target, changes)
-  const choice = (
-    label: string,
-    hint: string,
-    situation: 'list' | 'record' | 'filter',
-    modes: Mode[]
-  ) => (
-    <Field label={label} id={`${group}-${situation}`} hint={hint}>
-      <Select
-        id={`${group}-${situation}`}
-        value={views[situation]}
-        disabled={!owner}
-        onChange={(e) => setViews({ ...views, [situation]: e.currentTarget.value as Mode })}
-      >
-        {modes.map((mode) => (
-          <option key={mode} value={mode}>
-            {modeLabels[mode]}
-          </option>
-        ))}
-      </Select>
-    </Field>
-  )
-  const custom = customViews(views)
-  // A view of the owner's own may not take the name of one the interface draws.
-  const addable = (name: string): boolean =>
-    validViewName(name) && isCustomView(name) && !custom[name]
-  const addCustom = () => {
-    const name = named.trim()
-    if (!addable(name)) return
-    setViews({ ...views, [name]: 'show' })
-    setNamed('')
-  }
-  return (
-    <div class="views">
-      {choice('In the list', 'The field’s column in the records grid.', 'list', ['show', 'hide'])}
-      {choice(
-        'In the record',
-        'The field in the record form: an input, a locked value, or nothing.',
-        'record',
-        ['show', 'readonly', 'hide']
-      )}
-      {choice('In filters', 'The field in the filter builder.', 'filter', ['show', 'hide'])}
-      {Object.keys(custom).length > 0 && (
-        <fieldset class="field field-wide">
-          <legend class="field-label">Other views</legend>
-          {Object.entries(custom).map(([name, mode]) => (
-            <Field
-              key={name}
-              label={name}
-              id={`${group}-${name}`}
-              hint="A view of your own."
-              aside={
-                owner ? (
-                  <Button
-                    tone="ghost"
-                    icon={<TrashIcon size={16} />}
-                    onClick={() => {
-                      const { [name]: _gone, ...rest } = views
-                      setViews(rest as FieldViews)
-                    }}
-                  >
-                    Remove
-                  </Button>
-                ) : undefined
-              }
-            >
-              <Select
-                id={`${group}-${name}`}
-                value={mode}
-                disabled={!owner}
-                onChange={(e) => setViews({ ...views, [name]: e.currentTarget.value as Mode })}
-              >
-                {customModes.map((one) => (
-                  <option key={one} value={one}>
-                    {modeLabels[one]}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          ))}
-        </fieldset>
-      )}
-      {owner && (
-        <Field
-          label="Name a view of your own"
-          id={`${group}-custom`}
-          hint="Letters, digits, underscores and dashes. The field's saying keeps it."
-        >
-          <Input
-            id={`${group}-custom`}
-            mono
-            value={named}
-            onInput={(e) => setNamed(e.currentTarget.value)}
-            placeholder="export"
-          />
-          <div class="row-actions">
-            <Button
-              tone="ghost"
-              icon={<PlusIcon size={16} />}
-              disabled={!addable(named.trim())}
-              onClick={addCustom}
-            >
-              Add
-            </Button>
-          </div>
-        </Field>
-      )}
-      {computed && (
-        <Notice tone="info" title="PostgreSQL computes this column">
-          A generated or an identity column is written by the database itself, so the record shows
-          it and never offers it as an input.
-        </Notice>
-      )}
-      {column?.required && views.record === 'hide' && (
-        <Notice tone="warning" title="A required field out of the record">
-          PostgreSQL refuses a record that does not set {target.column}, and the form no longer
-          offers it.
-        </Notice>
-      )}
-      {owner && (
-        <>
-          {statements.length > 0 && (
-            <Statement sql={statements.join('\n')} label="Runs as you, in one transaction" />
-          )}
-          <div class="row-actions">
-            <Button
-              tone="primary"
-              busy={runner.busy}
-              disabled={!statements.length}
-              onClick={() => runner.runStatements(statements, 'Views saved')}
-            >
-              Save views
-            </Button>
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
-/**
  * The metadata of an item: what it is, as opposed to what it holds. Row security decides who
  * reads it and who changes it: the owner of the item.
  */
 export function MetadataPanel({ target, owner }: { target: MetadataTarget; owner: boolean }) {
-  const item = nameOf(target)
+  const item = target.scope
   const [editing, setEditing] = useState<Editing | null>(null)
   return (
     <section class="panel">
@@ -600,13 +140,9 @@ function MetadataKeys({
       notify({ tone: 'error', ...describe(error) })
     }
   }
-  // The presentation has a panel of its own, and a field's saying about where it appears has
-  // an editor of its own; the rest of the metadata is listed here.
-  const others = (rows ?? []).filter(
-    (entry) =>
-      !(presentationKeys as readonly string[]).includes(entry.key) &&
-      !(target.scope === 'field' && entry.key === viewsKey)
-  )
+  // The keys the interface reads for itself have editors of their own; the rest of the
+  // metadata is listed here.
+  const others = (rows ?? []).filter((entry) => !isReservedKey(target.scope, entry.key))
   if (found.error) return <Notice tone="danger" title={describe(found.error).title} />
   if (!rows) return <Loading />
   if (!others.length)
@@ -820,7 +356,28 @@ export function FieldMetadataDrawer({
                 another; PostgreSQL still decides who may read it and who may write it.
               </p>
             </div>
-            <ViewsEditor target={target} owner={owner} entries={found.data} />
+            <ViewsEditor
+              target={target}
+              owner={owner}
+              entries={found.data}
+              onSaved={found.reload}
+            />
+          </div>
+          <div class="drawer-section">
+            <div>
+              <h3 class="drawer-title">How it is drawn</h3>
+              <p class="drawer-note">
+                A value may be drawn differently in each place it appears: a uuid is eight
+                characters in the grid and thirty-six in the record. The saying is the field's own
+                metadata, so PostgreSQL keeps its rules.
+              </p>
+            </div>
+            <RenderersEditor
+              target={target}
+              owner={owner}
+              entries={found.data}
+              onSaved={found.reload}
+            />
           </div>
           <div class="drawer-section">
             <div class="row-actions row-start">
