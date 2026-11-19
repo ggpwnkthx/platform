@@ -2,15 +2,10 @@ import clsx from 'clsx'
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import type { Db } from '../pg/connect.ts'
-import {
-  type Condition,
-  type Filter,
-  type Operator,
-  operatorLabels,
-  valueless,
-} from './filter.ts'
+import { type Condition, type Filter, type Operator, operatorLabels, valueless } from './filter.ts'
 import { deleteRecord, records } from './query.ts'
 import { collectionTarget, fieldMetadata, metadata } from '../metadata/query.ts'
+import { indexViews, inFilter, inList, viewsOf } from '../metadata/views.ts'
 import { ident, qualified } from '@platform/sql'
 import type { Catalog, ColumnInfo } from '../catalog/types.ts'
 import type { PolicyInfo } from '../access/types.ts'
@@ -344,13 +339,6 @@ export function Records() {
   const columns = columnsOf(catalog, ws, table)
   const readable = columns.filter((c) => c.can_select)
   const [showSystem, setShowSystem] = useState(false)
-  // The record's own fields first, then the platform's: who changed it and when.
-  const shown = [
-    ...readable.filter((c) => !systemColumns.includes(c.name)),
-    ...readable.filter(
-      (c) => systemColumns.includes(c.name) && (showSystem || c.name === 'updated_at')
-    ),
-  ]
   const hidden = columns.filter((c) => !c.can_select)
   const filter = readFilter(query.f)
   const search = query.q ?? ''
@@ -437,6 +425,20 @@ export function Records() {
     if (row.key === 'display_name' && typeof row.value === 'string' && row.value.trim())
       names.set(row.column_name ?? '', row.value.trim())
   }
+  // Where each field says it appears. A field may be drawn in the grid, in the record form and
+  // in the filter builder, or in none of them: the saying is the field's own metadata, so
+  // PostgreSQL's row security decided who may read it.
+  const views = indexViews(loaded.data?.described ?? [])
+  // The record's own fields first, then the platform's: who changed it and when.
+  const listed = readable.filter((c) => inList(viewsOf(views, c.name)))
+  const shown = [
+    ...listed.filter((c) => !systemColumns.includes(c.name)),
+    ...listed.filter(
+      (c) => systemColumns.includes(c.name) && (showSystem || c.name === 'updated_at')
+    ),
+  ]
+  // The fields the filter builder offers: those whose saying lets it.
+  const filterable = readable.filter((c) => inFilter(viewsOf(views, c.name)))
   const choices = (column: string) => choicesOf(catalog, ws, table, column)
   const rows = loaded.data?.rows ?? []
   const total = loaded.data?.total ?? 0
@@ -566,13 +568,15 @@ export function Records() {
             />
             <kbd>/</kbd>
           </label>
-          <FilterBuilder
-            columns={readable}
-            choices={choices}
-            onAdd={(column, condition) =>
-              place({ f: JSON.stringify({ ...filter, [column]: condition }), p: undefined })
-            }
-          />
+          {filterable.length > 0 && (
+            <FilterBuilder
+              columns={filterable}
+              choices={choices}
+              onAdd={(column, condition) =>
+                place({ f: JSON.stringify({ ...filter, [column]: condition }), p: undefined })
+              }
+            />
+          )}
           {Object.entries(filter).map(([column, condition]) => (
             <span key={column} class="chip">
               <span class="mono">{column}</span> {conditionText(condition)}

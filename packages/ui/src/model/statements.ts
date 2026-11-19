@@ -2,6 +2,9 @@ import {
   columnSql as columnDefinition,
   constraintName,
   defaultLiteral,
+  fieldsViewsStatement,
+  fieldTarget,
+  fieldViewsStatement,
   ident,
   InvalidName,
   literal,
@@ -127,6 +130,8 @@ export async function fieldStatements(
   }
   if (field.note.trim())
     out.push(`COMMENT ON COLUMN ${target}.${ident(field.name)} IS ${literal(field.note.trim())};`)
+  // Every field carries its own views: where it appears is said of the field itself.
+  out.push(fieldViewsStatement(fieldTarget(schema, table, field.name)))
   return out
 }
 
@@ -139,6 +144,9 @@ export async function collectionStatements(
 ): Promise<string[]> {
   qualified(schema, name)
   const out = [`SELECT platform.create_collection(${literal(schema)}, ${literal(name)});`]
+  // Every field carries its own views: the ones the platform makes, and the ones the
+  // reader adds below.
+  out.push(fieldsViewsStatement(systemFields.map((column) => fieldTarget(schema, name, column))))
   for (const field of fields) out.push(...(await fieldStatements(schema, name, field)))
   if (note.trim())
     out.push(`COMMENT ON TABLE ${qualified(schema, name)} IS ${literal(note.trim())};`)

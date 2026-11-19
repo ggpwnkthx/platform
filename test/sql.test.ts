@@ -58,6 +58,20 @@ describe('the manifest and the interface make the same column', () => {
     expect(fromDraft).toBe(fieldSql(manifest))
     expect(fromDraft).toBe('"shape" "public"."geometry"("Point", 4326)')
   })
+  test('a field is given its own views in both', async () => {
+    const draft = {
+      name: 'title',
+      type: 'text',
+      required: false,
+      unique: false,
+      indexed: false,
+      default: '',
+      note: '',
+    }
+    const statements = await fieldStatements('newsroom', 'articles', draft)
+    expect(statements[statements.length - 1]).toContain(`'views'`)
+    expect(statements[statements.length - 1]).toContain(`'title'`)
+  })
   test('both build their SQL through the shared package', () => {
     const cli = JSON.parse(
       readFileSync(new URL('../packages/cli/package.json', import.meta.url), 'utf8')

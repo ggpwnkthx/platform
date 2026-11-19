@@ -20,6 +20,15 @@ export const tableOf = (catalog: Catalog, schema: string, table: string): TableI
 export const columnsOf = (catalog: Catalog, schema: string, table: string): ColumnInfo[] =>
   catalog.columns.filter((c) => c.schema === schema && c.table === table)
 
+/** One column of a collection, as the catalog holds it. */
+export const columnOf = (
+  catalog: Catalog,
+  schema: string,
+  table: string,
+  column: string
+): ColumnInfo | undefined =>
+  catalog.columns.find((c) => c.schema === schema && c.table === table && c.name === column)
+
 export const relationOf = (
   catalog: Catalog,
   schema: string,

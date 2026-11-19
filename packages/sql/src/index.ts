@@ -213,6 +213,54 @@ export const fieldTarget = (schema: string, table: string, column: string): Meta
   column,
 })
 
+/** The reserved key of a field's own metadata that says where the field appears. */
+export const viewsKey = 'views'
+
+/**
+ * Where a field appears, by default: everywhere the interface draws it. The owner of a
+ * collection may say otherwise, and may name views of their own beside these three.
+ */
+export const defaultViews = { list: 'show', record: 'show', filter: 'show' } as const
+
+/** The ways a field may be said to appear: shown, hidden, or shown and locked. */
+export const viewModes = ['show', 'hide', 'readonly'] as const
+
+export type ViewMode = (typeof viewModes)[number]
+
+/**
+ * The statement that gives a field its own views. Every field the platform makes carries
+ * one, so that where it appears is said of the field itself and not left to be inferred.
+ * A saying of the owner's own is laid over the default: the three the interface draws are
+ * always there.
+ */
+export function fieldViewsStatement(
+  target: MetadataTarget,
+  views?: Record<string, string>
+): string {
+  for (const [name, mode] of Object.entries(views ?? {}))
+    if (!viewModes.includes(mode as ViewMode))
+      throw new InvalidName(`${name}: a view is shown, hidden or shown and locked`)
+  return metadataStatement(target, viewsKey, { ...defaultViews, ...views })
+}
+
+/**
+ * The statement that gives several fields their own views at once: the fields every
+ * collection is made with, or the fields of a collection that have no saying yet.
+ */
+export function fieldsViewsStatement(targets: readonly MetadataTarget[]): string {
+  if (!targets.length) return ''
+  if (targets.length === 1) return fieldViewsStatement(targets[0]!)
+  const rows = targets.map(
+    (target) =>
+      `  (${literal(target.scope)}, ${literal(target.schema)}, ${literal(target.table)}, ${literal(target.column)}, ${literal(viewsKey)}, ${literal(JSON.stringify(defaultViews))}::jsonb)`
+  )
+  return `INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value)
+VALUES
+${rows.join(',\n')}
+ON CONFLICT (scope, schema_name, coalesce(table_name, ''), coalesce(column_name, ''), key)
+DO UPDATE SET value = EXCLUDED.value;`
+}
+
 /**
  * The statement that sets one metadata key of an item, and the statement that removes it.
  * The interface writes an item's metadata through them, so the reader is shown the same

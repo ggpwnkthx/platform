@@ -2133,6 +2133,45 @@ td .badge:first-child:not(:only-child) {
   color: var(--text-muted);
 }
 
+/* Where a field appears: the list, the record, the filters. A field the owner keeps out of
+   one of them is said so, and said quietly. */
+.field-views {
+  display: inline-flex;
+  gap: 4px;
+}
+.view-mark {
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  padding: 0 5px;
+  white-space: nowrap;
+}
+.view-mark.is-off {
+  color: var(--text-faint);
+  border-style: dashed;
+  text-decoration: line-through;
+}
+
+/* The saying itself, in the field's own drawer. */
+.views {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.drawer-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+.drawer-note {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 72ch;
+  line-height: 1.55;
+}
+
 /* ------------------------------------------------------------- presentation */
 
 /* An item's colour: the palette family it belongs to, and the ink that reads on it. The

@@ -3,6 +3,9 @@ import {
   columnSql,
   constraintName,
   defaultLiteral,
+  fieldTarget,
+  fieldsViewsStatement,
+  fieldViewsStatement,
   ident,
   InvalidName,
   literal,
@@ -80,6 +83,34 @@ describe('the SQL the platform writes', () => {
   })
   test('a type of the database is given a default as a literal', () => {
     expect(defaultLiteral('public.geometry', 'POINT(0 0)', 'shape')).toBe("E'POINT(0 0)'")
+  })
+  test('every field is given its own views', () => {
+    const statement = fieldViewsStatement(fieldTarget('newsroom', 'articles', 'title'))
+    expect(statement).toContain(`'field'`)
+    expect(statement).toContain(`'views'`)
+    expect(statement).toContain('"list"')
+    expect(statement).toContain('"record"')
+    expect(statement).toContain('"filter"')
+  })
+  test('a view of the owner’s own is laid over the default', () => {
+    const statement = fieldViewsStatement(fieldTarget('newsroom', 'articles', 'title'), {
+      export: 'hide',
+    })
+    expect(statement).toContain('"list":"show"')
+    expect(statement).toContain('"export":"hide"')
+  })
+  test('a mode the platform does not know is refused', () => {
+    expect(() =>
+      fieldViewsStatement(fieldTarget('newsroom', 'articles', 'title'), { export: 'perhaps' })
+    ).toThrow(InvalidName)
+  })
+  test('several fields are given their views in one statement', () => {
+    const statement = fieldsViewsStatement([
+      fieldTarget('newsroom', 'articles', 'id'),
+      fieldTarget('newsroom', 'articles', 'title'),
+    ])
+    expect(statement.split('\n').filter((line) => line.trim().startsWith('('))).toHaveLength(2)
+    expect(statement).toContain('ON CONFLICT')
   })
   test('the columns every collection is made with are named once', () => {
     expect(systemFields).toContain('created_by')

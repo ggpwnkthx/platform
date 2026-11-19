@@ -20,6 +20,7 @@ import {
 } from '../catalog/catalog.ts'
 import { fieldMetadata } from '../metadata/query.ts'
 import { presentationOf } from '../metadata/presentation.ts'
+import { indexViews, inRecord, isLocked, viewsOf } from '../metadata/views.ts'
 import { href } from '../url.ts'
 import { Badge, Loading, Notice, Statement } from '../ui/bits.tsx'
 import { Action } from '../ui/button.tsx'
@@ -237,14 +238,26 @@ export function Item() {
     if (row.key === 'display_name' && typeof row.value === 'string' && row.value.trim())
       names.set(row.column_name ?? '', row.value.trim())
   }
+  // Where each field says it appears: the record form is one of the situations a field may
+  // name, and a field may be hidden from it. The saying is the field's own metadata, so
+  // PostgreSQL's row security decided who may read it.
+  const views = indexViews(described)
   const fields = columns.filter(
     (c) =>
       !systemColumns.includes(c.name) &&
-      (creating ? c.can_insert : c.can_select || c.can_update)
+      (creating ? c.can_insert : c.can_select || c.can_update) &&
+      inRecord(viewsOf(views, c.name))
   )
   const unreachable = columns.filter(
     (c) =>
       !systemColumns.includes(c.name) && !(creating ? c.can_insert : c.can_select || c.can_update)
+  )
+  // The fields the owner keeps out of the record, though the reader may reach them.
+  const withheld = columns.filter(
+    (c) =>
+      !systemColumns.includes(c.name) &&
+      !inRecord(viewsOf(views, c.name)) &&
+      (creating ? c.can_insert : c.can_select || c.can_update)
   )
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
@@ -481,12 +494,15 @@ export function Item() {
             // PostgreSQL computes some columns itself, and the owner of a collection may lock
             // a field: either way it is shown, and never offered as an input.
             const computed = Boolean(c.generated || c.identity)
-            const writable = !computed && (creating ? c.can_insert : c.can_update)
+            const locked = isLocked(viewsOf(views, c.name))
+            const writable = !computed && !locked && (creating ? c.can_insert : c.can_update)
             const reason = computed
               ? c.generated
                 ? 'PostgreSQL computes this column: a generated column is never written.'
                 : 'PostgreSQL numbers this column itself: an identity column is never written.'
-              : 'PostgreSQL gives you no UPDATE on this field.'
+              : locked
+                ? 'The owner of this collection marked this field read-only.'
+                : 'PostgreSQL gives you no UPDATE on this field.'
             const choices = choicesOf(catalog, ws, table, c.name)
             const relation = relationOf(catalog, ws, table, c.name)
             const kind = kindOf(c.type)
@@ -606,6 +622,21 @@ export function Item() {
               </Field>
             )
           })}
+          {withheld.length > 0 && (
+            <div class="field field-wide unreachable">
+              <p>
+                <HiddenIcon size={16} aria-hidden="true" />
+                Not in the record:{' '}
+                {withheld.map((c, i) => (
+                  <span key={c.name}>
+                    {i > 0 && ', '}
+                    <span class="mono">{c.name}</span>
+                  </span>
+                ))}
+                . The owner of this collection keeps these fields out of the form.
+              </p>
+            </div>
+          )}
           {unreachable.length > 0 && (
             <div class="field field-wide unreachable">
               <p>

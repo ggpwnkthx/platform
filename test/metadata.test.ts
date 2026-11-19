@@ -341,6 +341,35 @@ describe('the metadata of a field', () => {
     expect(await as('outsider', (db) => fieldMetadata(db, 'newsroom', 'articles'))).toEqual([])
   })
 
+  test('the owner says where a field appears, and only a reader of the column learns it', async () => {
+    await as('owner', async (db) => {
+      expect(
+        await setMetadata(db, title, 'views', { list: 'show', record: 'readonly', filter: 'hide' })
+      ).toBe(1)
+    })
+    const shown = await as('owner', (db) => field(db, 'title'))
+    expect(shown.find((one) => one.key === 'views')?.value).toEqual({
+      list: 'show',
+      record: 'readonly',
+      filter: 'hide',
+    })
+    // A reader of the column reads the saying.
+    const read = await as('reader', (db) => field(db, 'title'))
+    expect(read.find((one) => one.key === 'views')?.value).toEqual({
+      list: 'show',
+      record: 'readonly',
+      filter: 'hide',
+    })
+    // The field nobody may reach: its saying is not returned at all.
+    expect(await as('reader', (db) => field(db, 'summary'))).toEqual([])
+    // And only the owner of the collection may change it.
+    await as('reader', async (db) => {
+      expect(await refusal(setMetadata(db, title, 'views', { list: 'hide' }))).toBe('42501')
+    })
+    const after = await as('owner', (db) => field(db, 'title'))
+    expect(after.find((one) => one.key === 'views')?.value).toMatchObject({ list: 'show' })
+  })
+
   test('a field that is dropped leaves its metadata behind, unread', async () => {
     await owner.query('ALTER TABLE newsroom.articles DROP COLUMN summary')
     expect(await as('owner', (db) => field(db, 'summary'))).toEqual([])

@@ -17,6 +17,7 @@ import {
 } from './statements.ts'
 import { rowSecurityStatement } from '../access/statements.ts'
 import { fieldMetadata } from '../metadata/query.ts'
+import { fieldsViewsStatement, fieldTarget } from '@platform/sql'
 import { useLoad, useSession } from '../session.tsx'
 import { Page, useWorkspace } from '../shell.tsx'
 import { shortType } from '../format.ts'
@@ -29,6 +30,7 @@ import {
   tablesIn,
 } from '../catalog/catalog.ts'
 import { presentationOf } from '../metadata/presentation.ts'
+import { indexViews, customViews, situationLabels, situations, viewsOf } from '../metadata/views.ts'
 import { href } from '../url.ts'
 import { Badge, Empty, Notice, Statement } from '../ui/bits.tsx'
 import { Action, Button } from '../ui/button.tsx'
@@ -443,6 +445,10 @@ export function CollectionModel() {
     if (row.key === 'display_name' && typeof row.value === 'string' && row.value.trim())
       names.set(row.column_name ?? '', row.value.trim())
   }
+  // Where each field says it appears: the list, the record, the filters.
+  const views = indexViews(about.data ?? [])
+  // The fields that say nothing yet: every field carries its own views, and these do not.
+  const missing = columns.filter((c) => !views[c.name])
   const [deleting, setDeleting] = useState(false)
   const [confirmName, setConfirmName] = useState('')
   const [note, setNote] = useState<string | null>(null)
@@ -605,6 +611,22 @@ export function CollectionModel() {
         </>
       ) : (
         <>
+          {owner && about.data && missing.length > 0 && (
+            <div class="row-actions row-start">
+              <Button
+                icon={<TagIcon size={16} />}
+                busy={runner.busy}
+                onClick={() =>
+                  runner.runStatements(
+                    [fieldsViewsStatement(missing.map((c) => fieldTarget(ws, table, c.name)))],
+                    'Every field carries its own views'
+                  )
+                }
+              >
+                Give every field its own views
+              </Button>
+            </div>
+          )}
           <div class="grid-wrap">
             <table class="grid">
               <thead>
@@ -645,6 +667,37 @@ export function CollectionModel() {
                             {c.identity && <Badge tone="outline">identity</Badge>}
                           </span>
                         )}
+                      </td>
+                      <td>
+                        <span class="field-views">
+                          {situations.map((situation) => (
+                            <span
+                              key={situation}
+                              class={clsx(
+                                'view-mark',
+                                viewsOf(views, c.name)[situation] === 'hide' && 'is-off'
+                              )}
+                              title={
+                                viewsOf(views, c.name)[situation] === 'hide'
+                                  ? `Hidden from ${situationLabels[situation]}`
+                                  : `Shown in ${situationLabels[situation]}`
+                              }
+                            >
+                              {situation}
+                            </span>
+                          ))}
+                          {Object.entries(customViews(viewsOf(views, c.name))).map(
+                            ([name, mode]) => (
+                              <span
+                                key={name}
+                                class={clsx('view-mark', mode === 'hide' && 'is-off')}
+                                title={mode === 'hide' ? `Hidden from ${name}` : `Shown in ${name}`}
+                              >
+                                {name}
+                              </span>
+                            )
+                          )}
+                        </span>
                       </td>
                       <td>{c.required ? 'yes' : ''}</td>
                       <td class="mono cell-muted">

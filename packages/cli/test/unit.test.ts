@@ -52,6 +52,19 @@ describe('SQL construction and credentials', () => {
       'Reserved'
     )
   })
+  test('a manifest may say where a field appears', () => {
+    const field = fieldSchema.parse({
+      name: 'internal_notes',
+      type: 'string',
+      views: { list: 'hide', export: 'hide' },
+    })
+    expect(field.views).toEqual({ list: 'hide', export: 'hide' })
+    // A field that says nothing is given the platform's default views.
+    expect(fieldSchema.parse({ name: 'title', type: 'string' }).views).toEqual({})
+    expect(() =>
+      fieldSchema.parse({ name: 'title', type: 'string', views: { list: 'perhaps' } })
+    ).toThrow()
+  })
 })
 
 describe('the operator commands’ settings', () => {

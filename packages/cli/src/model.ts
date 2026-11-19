@@ -4,6 +4,9 @@ import {
   columnSql,
   constraintName,
   defaultLiteral,
+  fieldsViewsStatement,
+  fieldTarget,
+  fieldViewsStatement,
   ident,
   literal,
   qualified,
@@ -42,6 +45,14 @@ export const fieldSchema = z.object({
   default: z.unknown().optional(),
   label: z.string().optional(),
   note: z.string().optional(),
+  /**
+   * Where the field appears: `list`, `record` and `filter`, and any view of the owner's own.
+   * A field that says nothing gets the platform's default views.
+   */
+  views: z
+    .record(z.string(), z.enum(['show', 'hide', 'readonly']))
+    .optional()
+    .default({}),
   relation: z
     .object({
       collection: z.string(),
@@ -94,6 +105,8 @@ export async function addField(
     await addRelation(q, schema, table, f.name, f.relation.collection, f.relation.on_delete)
   if (f.note || f.label)
     await q.query(`COMMENT ON COLUMN ${target}.${ident(f.name)} IS ${literal(f.note ?? f.label)}`)
+  // Every field carries its own views: what it says, or the platform's default.
+  await q.query(fieldViewsStatement(fieldTarget(schema, table, f.name), f.views))
 }
 const onDelete = z.enum(['restrict', 'cascade', 'set_null'])
 export const relationSchema = z.object({
@@ -136,6 +149,10 @@ export async function applyCollections(
     if (exists.rows[0].t) report.same()
     else {
       await q.query('SELECT platform.create_collection($1,$2)', [schema, c.name])
+      // Every field carries its own views: the ones the platform made, and the ones below.
+      await q.query(
+        fieldsViewsStatement(systemFields.map((column) => fieldTarget(schema, c.name, column)))
+      )
       report.changed(`create collection ${schema}.${c.name}`)
     }
     for (const f of c.fields) {
