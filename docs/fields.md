@@ -68,12 +68,13 @@ situation is drawn by that one instead; its input and its filter are still its t
 ## A field type of the installation's own
 
 The interface is one bundle of static files, so a type is added when it is built. An
-installation registers it in `packages/ui/src/extensions.ts`, which is imported before any
-page draws a field:
+installation registers it in the module its `platform.json` names as `extensions`, which the
+build puts in the place of `packages/ui/src/extensions.ts` — the seam the interface imports
+before any page draws a field (see [renderers](renderers.md)):
 
 ```tsx
-import { fieldTypeNamed, registerFieldType } from './fields/registry.ts'
-import { lineInput } from './fields/inputs.tsx'
+import { fieldTypeNamed, registerFieldType } from '@platform/ui/fields/registry.ts'
+import { lineInput } from '@platform/ui/fields/inputs.tsx'
 
 // Every column of the domain `public.email` is an address: a link in the grid and in the
 // record, an input the browser knows is an email, and the filters of a text.
@@ -104,6 +105,6 @@ is given the value and the field, never a connection, and it grants nothing.
 | Between the form and the database     | `packages/ui/src/fields/edit.ts` → `fieldText`, `fieldValue`, `filterValue` |
 | The inputs the types share            | `packages/ui/src/fields/inputs.tsx`, `packages/ui/src/fields/relation.tsx`  |
 | The renderers, and `Value`            | `packages/ui/src/fields/renderers.tsx`                                      |
-| An installation's own                 | `packages/ui/src/extensions.ts`                                             |
+| An installation's own                 | The module `platform.json` names as `extensions`                            |
 | The records grid and the filters      | `packages/ui/src/content/records.tsx`                                       |
 | The record form                       | `packages/ui/src/content/item.tsx` → `RecordField`                          |

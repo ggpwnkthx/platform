@@ -128,6 +128,12 @@ never reaches a production bundle. The seam carries more than the connection: it
 sign in without an issuer, what they are told, and how their choice is kept. A production
 seam has none of that — there is an issuer — and the dev-mode seam is the example's own.
 
+There is a second seam, `packages/ui/src/extensions.ts`, for what a site adds to the interface:
+field types and renderers of its own. It is empty, and a build of either mode puts the module
+a site's `platform.json` names as `extensions` in its place; the module registers with what
+`@platform/ui` publishes (`fields/registry.ts`, `fields/renderers.tsx`). The example's is
+`examples/newsroom/extensions.tsx`.
+
 Sign-in is authorization code with PKCE against the one configured issuer, done by the page
 itself (`packages/ui/src/identity/oidc.ts`): the token kept in memory, the PKCE verifier held in
 sessionStorage only across the redirect. The page reads the issuer, client id, claim, relay
