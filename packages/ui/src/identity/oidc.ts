@@ -1,18 +1,24 @@
 import type { RuntimeConfig } from '../config.ts'
+import { claims, discoverIssuer, expiresAt, roleOf } from '@platform/sql'
 
 /**
  * Sign-in: authorization code with PKCE against the one issuer PostgreSQL trusts. The page
  * exchanges the code itself, so there is no server of ours in the flow. The verifier outlives
  * the redirect in sessionStorage and is removed as soon as it is read; the token is never
  * stored anywhere but this page's memory.
+ *
+ * The token itself is read the same way the operator's tools read it: the claims are read,
+ * never verified — PostgreSQL verifies the signature, the issuer and the expiry at every
+ * login.
  */
+
+export { claims, expiresAt, roleOf }
 
 interface Discovery {
   authorization_endpoint: string
   token_endpoint: string
   end_session_endpoint?: string
 }
-
 const base64url = (bytes: Uint8Array): string =>
   btoa(String.fromCharCode(...bytes))
     .replaceAll('+', '-')
@@ -22,11 +28,11 @@ const base64url = (bytes: Uint8Array): string =>
 const random = (length: number) => base64url(crypto.getRandomValues(new Uint8Array(length)))
 
 async function discover(config: RuntimeConfig): Promise<Discovery> {
-  const response = await fetch(`${config.issuer}/.well-known/openid-configuration`).catch(
-    () => null
-  )
-  if (!response?.ok) throw new Error(`The sign-in service at ${config.issuer} did not answer.`)
-  return (await response.json()) as Discovery
+  try {
+    return (await discoverIssuer(config.issuer)) as Discovery
+  } catch {
+    throw new Error(`The sign-in service at ${config.issuer} did not answer.`)
+  }
 }
 
 const pendingKey = 'platform.signin'
@@ -104,28 +110,4 @@ export async function completeSignIn(config: RuntimeConfig): Promise<SignedIn | 
   const token = [tokens.access_token, tokens.id_token].find((t) => t && t.split('.').length === 3)
   if (!token) throw new Error('The issuer returned no signed token.')
   return { token, returnTo }
-}
-
-/** The claims of a token, read without verifying it: PostgreSQL verifies it at every login. */
-export function claims(token: string): Record<string, unknown> {
-  const part = token.split('.')[1] ?? ''
-  try {
-    const json = atob(part.replaceAll('-', '+').replaceAll('_', '/'))
-    const bytes = Uint8Array.from(json, (c) => c.charCodeAt(0))
-    return JSON.parse(new TextDecoder().decode(bytes))
-  } catch {
-    return {}
-  }
-}
-
-/** The role a token names, by the claim PostgreSQL matches. */
-export function roleOf(token: string, claim: string): string | null {
-  const value = claims(token)[claim]
-  return typeof value === 'string' && value ? value : null
-}
-
-/** When the token stops being a login, in milliseconds since the epoch. */
-export function expiresAt(token: string): number | null {
-  const exp = claims(token).exp
-  return typeof exp === 'number' ? exp * 1000 : null
 }

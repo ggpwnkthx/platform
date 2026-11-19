@@ -15,9 +15,8 @@ import {
   type OnDelete,
   typeLabel,
 } from './statements.ts'
-import { rowSecurityStatement } from '../access/statements.ts'
+import { fieldsViewsStatement, fieldTarget, rowSecurityStatement } from '@platform/sql'
 import { fieldMetadata } from '../metadata/query.ts'
-import { fieldsViewsStatement, fieldTarget } from '@platform/sql'
 import { useLoad, useSession } from '../session.tsx'
 import { Page, useWorkspace } from '../shell.tsx'
 import { shortType } from '../format.ts'

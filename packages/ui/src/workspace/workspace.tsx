@@ -1,6 +1,7 @@
 import { useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
-import { schemaGrantStatement, schemaPrivileges, workspaceStatements } from './statements.ts'
+import { schemaPrivileges } from '@platform/sql'
+import { schemaGrantStatement, workspaceStatements } from './statements.ts'
 import { roles as readRoles } from '../access/query.ts'
 import { schemaGrants } from './query.ts'
 import { describe, useLoad, useSession } from '../session.tsx'

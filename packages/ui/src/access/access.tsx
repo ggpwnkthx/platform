@@ -10,9 +10,9 @@ import {
   membershipStatement,
   type PolicyCommand,
   type PolicyDraft,
-  policyStatement,
   tablePrivileges,
-} from './statements.ts'
+} from '@platform/sql'
+import { policyStatement } from './statements.ts'
 import { grants as readGrants, policies as readPolicies, roles as readRoles } from './query.ts'
 import type { GrantInfo, RoleInfo } from './types.ts'
 import { describe, useLoad, useSession } from '../session.tsx'
@@ -572,7 +572,7 @@ export function RoleDetail() {
       <Drawer
         open={granting !== null}
         onClose={() => setGranting(null)}
-        title={granting ? `${revoke ? 'Revoke' : 'Grant'} on ${granting.table}` : ''}
+        title={granting ? `${revoke ? 'Revoke' : 'Grant'} on ${granting.table ?? ''}` : ''}
         subtitle={`To ${name}. You own this collection, so PostgreSQL lets you.`}
         footer={
           <>
@@ -627,7 +627,7 @@ export function RoleDetail() {
                   None chosen means the whole collection, including fields added later.
                 </p>
                 <div class="checks checks-columns">
-                  {columnsOf(catalog, ws, granting.table).map((c) => (
+                  {columnsOf(catalog, ws, granting.table ?? '').map((c) => (
                     <Checkbox
                       key={c.name}
                       label={<span class="mono">{c.name}</span>}

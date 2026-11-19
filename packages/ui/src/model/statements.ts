@@ -8,10 +8,14 @@ import {
   ident,
   InvalidName,
   literal,
+  type OnDelete,
+  onDeleteAction,
   qualified,
+  storageType,
   systemFields,
-  type TypeName,
 } from '@platform/sql'
+
+export type { OnDelete }
 
 /**
  * The model, written as the statements PostgreSQL runs. A builder in the interface produces
@@ -50,8 +54,6 @@ export const typeLabel = (type: string): string => fieldTypeLabels[type] ?? type
 /** The types a number may be written in. */
 export const numericTypes = ['integer', 'bigint', 'decimal', 'float']
 
-export type OnDelete = 'restrict' | 'cascade' | 'set_null'
-
 export interface FieldDraft {
   name: string
   type: FieldType
@@ -85,7 +87,7 @@ export function emptyField(): FieldDraft {
 }
 
 /** The column type a field of this type is stored as: a relation is a uuid. */
-const columnType = (type: FieldType): TypeName => (type === 'relation' ? 'uuid' : type)
+const columnType = (type: FieldType) => storageType(type)
 
 /** The column definition: type, default, NOT NULL, UNIQUE and the CHECKs its options ask for. */
 function columnSql(field: FieldDraft): string {
@@ -106,12 +108,6 @@ function columnSql(field: FieldDraft): string {
   })
 }
 
-const onDeleteSql: Record<OnDelete, string> = {
-  restrict: 'RESTRICT',
-  cascade: 'CASCADE',
-  set_null: 'SET NULL',
-}
-
 /** The statements that add one field to a collection. */
 export async function fieldStatements(
   schema: string,
@@ -125,7 +121,7 @@ export async function fieldStatements(
     if (!field.relation) throw new InvalidName(`${field.name}: choose the collection it points at`)
     out.push(
       `ALTER TABLE ${target} ADD CONSTRAINT ${ident(await constraintName(table, field.name))}
-  FOREIGN KEY (${ident(field.name)}) REFERENCES ${qualified(schema, field.relation)} (id) ON DELETE ${onDeleteSql[field.onDelete ?? 'restrict']};`
+  FOREIGN KEY (${ident(field.name)}) REFERENCES ${qualified(schema, field.relation)} (id) ON DELETE ${onDeleteAction(field.onDelete ?? 'restrict')};`
     )
   }
   if (field.note.trim())
