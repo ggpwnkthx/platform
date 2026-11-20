@@ -91,6 +91,9 @@ services:
       PLATFORM_DOMAIN: ${PLATFORM_DOMAIN:-localhost}
     volumes:
       - socket:/var/run/postgresql
+      # The examples of the checkout, read and never written: `apply --example=NAME` reads
+      # examples/NAME/models.json and the SQL beside it. The image carries the tools alone.
+      - ../../examples:/app/examples:ro
     # The socket is on a volume, not on a network: the installer needs none.
     network_mode: none
     read_only: true

@@ -31,7 +31,10 @@ export const DEPLOY_HELP = `platform deploy <local|k8s> <action> [options]
     unless you name another: admin@localhost on a new checkout), whose
     PLATFORM_ADMIN_PASSWORD is generated into .env by up/init/build/validate. Every other
     account comes from a connector, an identity provider that vouches for the addresses it
-    returns. up and init create the roles of the example people.
+    returns. up and init install the example the deployment chose, from examples/<name>: its
+    models.json (the people, groups, workspaces, grants and row policies), its migration.sql
+    (what a manifest cannot say) and, the first time, its demo.sql (records and their
+    history). A deployment that chose no example is given its administrator's role alone.
     The settings of the stack live in .env at the root of the checkout. When that file is not
     there, the first run asks for what it does not know and writes the answers down, with the
     password it generated in it. The file holds secrets: it is written for you alone and

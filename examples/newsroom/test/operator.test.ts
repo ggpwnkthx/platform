@@ -1,19 +1,18 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
 import { PGlite } from '@electric-sql/pglite'
 import type pg from 'pg'
 import { applyManifest } from '../../../packages/cli/src/apply.ts'
 import { postureNotes } from '../../../packages/cli/src/database/requirements.ts'
 import { hardenSql } from '../../../packages/cli/src/harden.ts'
 import { setLogin } from '../../../packages/cli/src/login.ts'
+import { install } from '../install.ts'
 
 /**
  * The operator's own questions and switches, asked of the real thing: PostgreSQL, installed
- * with the platform's own script and seeded with the example. What doctor says the deployment
+ * with the platform's own script and the example installed in it. What doctor says the deployment
  * has left open, the limit a manifest puts on a role's sessions, and the login a role loses
  * and is given back.
  */
-const text = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
 let lite: PGlite
 /** The operator's tools speak to a pg client; this PostgreSQL answers the same statements. */
@@ -34,8 +33,7 @@ const attributes = async (role: string) =>
 
 beforeAll(async () => {
   lite = await PGlite.create()
-  await lite.exec(text('../../../migrations/0001_platform.sql'))
-  await lite.exec(text('../seed.sql'))
+  await install(lite)
 })
 
 describe('what doctor says a deployment has left open', () => {

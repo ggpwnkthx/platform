@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
 import { PGlite } from '@electric-sql/pglite'
 import { activity } from '@platform/data'
 import type { DataSource } from '@platform/vocabulary'
+import { install } from '../install.ts'
 
 /**
  * A revision holds the whole row, and a workspace's owners read its revisions. Owning the
@@ -10,7 +10,6 @@ import type { DataSource } from '@platform/vocabulary'
  * This asks the real thing — PostgreSQL, installed with the platform's own script — as an
  * owner of a workspace who is refused one column of a collection in it.
  */
-const text = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
 let pg: PGlite
 const db: DataSource = {
@@ -33,8 +32,7 @@ const history = (role: string) => as(role, () => activity(db, { schema: 'desk', 
 
 beforeAll(async () => {
   pg = await PGlite.create()
-  await pg.exec(text('../../../migrations/0001_platform.sql'))
-  await pg.exec(text('../seed.sql'))
+  await install(pg)
   // A workspace two people own together. One of them makes a collection in it, and so owns
   // the collection; the other is given every column of it but one.
   await pg.exec(`

@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test'
+import { readdirSync, readFileSync } from 'node:fs'
 import { ident, literal } from '@platform/vocabulary'
 import { bearer } from '../src/database/db.ts'
 import { loadConfig } from '../src/database/config.ts'
+import { MIGRATIONS } from '../src/migrations.ts'
 import { fieldSchema, fieldSql } from '../src/model.ts'
 import { parseManifest } from '../src/apply.ts'
-import { exampleAdmin, exampleManifest } from '../src/example.ts'
+import { administratorManifest, exampleAdmin, namedFor } from '../src/example.ts'
 
 describe('SQL construction and credentials', () => {
   test('quotes identifiers without treating names as SQL', () => {
@@ -67,6 +69,17 @@ describe('SQL construction and credentials', () => {
       fieldSchema.parse({ name: 'title', type: 'string', views: { list: 'perhaps' } })
     ).toThrow()
   })
+  test('a field says what it is called in its metadata, and where it appears in its views', () => {
+    const field = fieldSchema.parse({
+      name: 'title',
+      type: 'string',
+      metadata: { display_name: 'Headline' },
+    })
+    expect(field.metadata).toEqual({ display_name: 'Headline' })
+    expect(() =>
+      fieldSchema.parse({ name: 'title', type: 'string', metadata: { views: { list: 'hide' } } })
+    ).toThrow()
+  })
   test('a manifest may only name the privileges the platform knows', () => {
     const manifest = (privileges: string[]) => ({
       workspaces: [{ slug: 'newsroom', grants: [{ to: 'writer', privileges }] }],
@@ -75,7 +88,7 @@ describe('SQL construction and credentials', () => {
     expect(() => parseManifest(manifest(['usage']))).not.toThrow()
     expect(() => parseManifest(manifest(['choose']))).toThrow()
   })
-  test('the example manifest the tools carry is one the platform accepts', () => {
+  test('the manifest of an example is one the platform accepts, under the deployment’s administrator', () => {
     // The administrator is the deployment's own: the one it names, or `admin` on its domain.
     expect(
       exampleAdmin({ PLATFORM_ADMIN: 'root@corp.example', PLATFORM_DOMAIN: 'x.example' })
@@ -84,14 +97,25 @@ describe('SQL construction and credentials', () => {
       'admin@platform.example.org'
     )
     expect(exampleAdmin({})).toBe('admin@example.com')
-    const manifest = parseManifest(exampleManifest('admin@localhost'))
+    const models = JSON.parse(
+      readFileSync(new URL('../../../examples/newsroom/models.json', import.meta.url), 'utf8')
+    )
+    const manifest = parseManifest(namedFor({ models }, 'admin@localhost').models)
     expect(manifest.users.map((user) => user.name)).toEqual([
       'admin@localhost',
       'alice@example.com',
       'bob@example.com',
     ])
-    expect(manifest.workspaces.map((workspace) => workspace.owner)).toEqual(['admin@localhost'])
-    expect(manifest.workspaces.map((workspace) => workspace.slug)).toEqual(['newsroom'])
+    expect(manifest.workspaces.map((workspace) => [workspace.slug, workspace.owner])).toEqual([
+      ['newsroom', 'admin@localhost'],
+      ['crm', 'sales'],
+    ])
+  })
+  test('a deployment with no example is given its administrator and nothing else', () => {
+    const manifest = parseManifest(administratorManifest('root@corp.example'))
+    expect(manifest.users).toMatchObject([{ name: 'root@corp.example', admin: true }])
+    expect(manifest.groups).toEqual([])
+    expect(manifest.workspaces).toEqual([])
   })
 })
 
@@ -105,5 +129,17 @@ describe('the operator commands’ settings', () => {
     expect(config.oidcIssuer).toBe('https://sso.example.com/dex')
     expect(config.databaseSsl).toBe('require')
     expect(config.oidcClaim).toBe('email')
+  })
+})
+
+describe('the installation scripts', () => {
+  test('are every file in migrations/, in order, each carried as what the file says', () => {
+    const directory = new URL('../../../migrations/', import.meta.url)
+    const files = readdirSync(directory)
+      .filter((file) => file.endsWith('.sql'))
+      .sort()
+    expect(MIGRATIONS.map((script) => script.file)).toEqual(files)
+    for (const script of MIGRATIONS)
+      expect(script.sql).toBe(readFileSync(new URL(script.file, directory), 'utf8'))
   })
 })

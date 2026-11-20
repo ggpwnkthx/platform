@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
 import { PGlite } from '@electric-sql/pglite'
 import {
   type Catalog,
@@ -22,15 +21,15 @@ import {
   userSchemas,
 } from '@platform/data'
 import { collectionTarget, type DataSource } from '@platform/vocabulary'
+import { install } from '../install.ts'
 
 /**
  * The platform's own schema is a workspace like any other, of another kind: its tables are
  * system collections, read by the same questions as the installation's own, and PostgreSQL's
  * row security decides which rows reach the reader. This asks the real thing — PostgreSQL,
- * installed with the platform's own script and seeded with the example — as each of the
+ * installed with the platform's own script and the example installed in it — as each of the
  * example's people.
  */
-const text = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
 let pg: PGlite
 const db: DataSource = {
@@ -72,8 +71,7 @@ async function page(read: Catalog, table: string) {
 
 beforeAll(async () => {
   pg = await PGlite.create()
-  await pg.exec(text('../../../migrations/0001_platform.sql'))
-  await pg.exec(text('../seed.sql'))
+  await install(pg)
 })
 
 describe('the platform’s own workspace', () => {

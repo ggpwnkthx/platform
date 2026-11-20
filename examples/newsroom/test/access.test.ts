@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
 import { PGlite } from '@electric-sql/pglite'
 import { grants, policies, reach, roles, schemaGrants, schemaReach } from '@platform/data'
 import {
@@ -20,14 +19,14 @@ import {
   schemaGrantStatement,
   type Wanted,
 } from '@platform/vocabulary'
+import { install } from '../install.ts'
 
 /**
  * The access pages read PostgreSQL's ACLs and write the difference between what they hold
  * and what is asked for. This asks the real thing — PostgreSQL, installed with the platform's
- * own script and seeded with the example — and runs the statements the pages would show, as
+ * own script and the example installed in it — and runs the statements the pages would show, as
  * the workspace's owner, to see that the ACL ends up saying what was asked.
  */
-const text = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
 let pg: PGlite
 const db: DataSource = {
@@ -84,8 +83,7 @@ const fields = [
 
 beforeAll(async () => {
   pg = await PGlite.create()
-  await pg.exec(text('../../../migrations/0001_platform.sql'))
-  await pg.exec(text('../seed.sql'))
+  await install(pg)
 })
 
 describe('what the ACLs of a workspace say', () => {

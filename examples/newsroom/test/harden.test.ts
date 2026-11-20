@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
 import { PGlite } from '@electric-sql/pglite'
 import {
   catalog,
@@ -13,14 +12,14 @@ import {
 } from '@platform/data'
 import type { DataSource } from '@platform/vocabulary'
 import { hardenSql } from '../../../packages/cli/src/harden.ts'
+import { install } from '../install.ts'
 
 /**
  * `cli harden` hides PostgreSQL's role catalogs from ordinary connections, and the interface
  * is said to keep working. This asks the real thing — PostgreSQL, installed with the
- * platform's own script, seeded with the example and hardened — the questions the pages ask,
+ * platform's own script, with the example installed and hardened — the questions the pages ask,
  * as people who are not operators.
  */
-const text = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
 let pg: PGlite
 const db: DataSource = {
@@ -44,8 +43,7 @@ const count = async (statement: string) =>
 
 beforeAll(async () => {
   pg = await PGlite.create()
-  await pg.exec(text('../../../migrations/0001_platform.sql'))
-  await pg.exec(text('../seed.sql'))
+  await install(pg)
   await pg.exec(hardenSql('strict'))
 })
 

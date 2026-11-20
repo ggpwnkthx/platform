@@ -306,7 +306,9 @@ async function stack(
     tail('dex', 'edge')
   )
   // The installer runs beside PostgreSQL and is let in by its socket. It installs the platform,
-  // then the roles of the people the example names, so that there is somebody to sign in as.
+  // then the example the deployment chose: its models.json, its migration.sql and, the first
+  // time, its demo.sql. A deployment that chose none is given its administrator and nothing
+  // else, so that there is somebody to sign in as.
   // What each of them did is its last line: the version installed, the count of changes.
   const lastLine = (fallback: string) => (said: string[]) => said.at(-1) ?? fallback
   const installed =
@@ -314,10 +316,18 @@ async function stack(
       doing: 'Installing the platform',
       done: lastLine('The platform is installed'),
     })) ||
-    (await beside(['apply', 'k8s', '--example'], {
-      doing: 'Creating the roles of the example people',
-      done: (said) => `The example people have their roles: ${lastLine('done')(said)}`,
-    }))
+    (await beside(
+      ['apply', 'k8s', example ? `--example=${example}` : '--administrator'],
+      example
+        ? {
+            doing: `Installing the ${example} example`,
+            done: (said) => `The ${example} example is installed: ${lastLine('done')(said)}`,
+          }
+        : {
+            doing: 'Creating the role of the administrator',
+            done: (said) => `The administrator has its role: ${lastLine('done')(said)}`,
+          }
+    ))
   if (installed || action === 'init') return installed
   const served = await run(['up', '-d', 'relay'], {
     task: { doing: 'Starting the relay', done: 'The relay is started' },
@@ -346,19 +356,11 @@ async function stack(
     if (published) return published
     await wait(() => r.healthy(`${site}/`), timeout, r, 'The site', tail('site', 'edge'))
   }
-  // The site, opened at its sign-in: the link carries nothing, and the issuer's form opens
-  // with the administrator's address filled in. The password is typed, as it always is.
-  const signIn = `${site}/#signin`
-  last.word = example ? `Sign in at ${signIn}` : 'The stack is running'
+  last.word = example ? `The site is at ${site}` : 'The stack is running'
   r.result(
     'The stack is running',
     [
-      ...(example
-        ? ([
-            ['Site', site],
-            ['Sign in', signIn],
-          ] as [string, string][])
-        : []),
+      ...(example ? ([['Site', site]] as [string, string][]) : []),
       ['Issuer', issuer],
       ['Relay', relayUrl],
       ['PostgreSQL', `${db}:${postgresPort}`],

@@ -1,11 +1,14 @@
-import { chmodSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import pg from 'pg'
 import { ZodError, z } from 'zod'
 import { applyManifest } from './apply.ts'
-import { exampleManifest } from './example.ts'
+import { administratorManifest, applyExample, type Example, exampleAdmin } from './example.ts'
 import { loadConfig } from './database/config.ts'
 import { bearer, clientConfig, TokenClient, transaction } from './database/db.ts'
+import { examplesIn } from './deployment/config.ts'
 import { deploy, localDatabase } from './deployment/index.ts'
+import { ROOT } from './deployment/runtime.ts'
 import { hardenNotes, hardenSql, type HardenMode } from './harden.ts'
 import { setLogin } from './login.ts'
 import { authenticationProblems, postureNotes, requirePostgres18 } from './database/requirements.ts'
@@ -62,29 +65,66 @@ function connection(target?: string): pg.Client {
       : 'PGTOKEN or PGTOKEN_FILE is required: sign in with `bun run cli token` and pass what it prints.'
   )
 }
+/**
+ * An example of the checkout, read from its folder: `models.json`, and the two SQL files
+ * beside it when it has them. The name is the one given, the one the deployment chose, or
+ * the only one there is.
+ */
+function readExample(given: string): { name: string; example: Example } {
+  const known = examplesIn(ROOT)
+  const name = given || process.env.PLATFORM_EXAMPLE || (known.length === 1 ? known[0]! : '')
+  if (!name) throw new Error(`--example needs a name: one of ${known.join(', ') || 'none'}`)
+  if (!known.includes(name))
+    throw new Error(`No example is named ${name}. There is: ${known.join(', ') || 'none'}`)
+  const file = (path: string) => join(ROOT, 'examples', name, path)
+  if (!existsSync(file('models.json'))) throw new Error(`examples/${name} has no models.json`)
+  const sql = (path: string) =>
+    existsSync(file(path)) ? readFileSync(file(path), 'utf8') : undefined
+  return {
+    name,
+    example: {
+      models: JSON.parse(readFileSync(file('models.json'), 'utf8')),
+      migration: sql('migration.sql'),
+      demo: sql('demo.sql'),
+    },
+  }
+}
 async function apply(q: pg.Client, args: string[]) {
   const dry = args.includes('--dry-run')
-  // The example manifest is the one the tools carry: the roles, workspace, grants and policy
-  // the example sign-ins need. It is applied first, so that a manifest beside it may name
-  // the example's administrator as the owner of a workspace.
-  const example = args.includes('--example')
-  const files = args.filter((a) => a !== '--dry-run' && a !== '--example')
+  // The deployment's administrator, and nothing else: there is somebody to sign in as.
+  const administrator = args.includes('--administrator')
+  // An example of the checkout: its models.json, then its migration.sql and its demo.sql.
+  // It is applied first, so that a manifest beside it may name the example's administrator
+  // as the owner of a workspace.
+  const flag = args.find((a) => a === '--example' || a.startsWith('--example='))
+  const example = flag === undefined ? undefined : readExample(flag.slice('--example='.length))
+  const files = args.filter((a) => a !== '--dry-run' && a !== '--administrator' && a !== flag)
   const unknown = files.find((a) => a.startsWith('--'))
   if (unknown) throw new Error(`Unknown option: ${unknown}`)
-  if (!files.length && !example)
-    throw new Error('apply needs a deployment and at least one manifest file, or --example')
+  if (!files.length && !example && !administrator)
+    throw new Error(
+      'apply needs a deployment and at least one manifest file, --example or --administrator'
+    )
   // The manifests are applied through the platform's own functions, which the installation
   // provides from 2.0.1 on. An older database is upgraded first, not worked around.
   await requireInstalledVersion(q)
   const manifests = [
-    ...(example ? [exampleManifest()] : []),
+    ...(administrator ? [administratorManifest()] : []),
     ...files.map((file) => JSON.parse(readFileSync(file, 'utf8'))),
   ]
   const changes: string[] = []
+  const notes: string[] = []
   let unchanged = 0
-  // One transaction for every file: a deployment is never left between two manifests.
+  // One transaction for everything: a deployment is never left between two manifests, or
+  // between an example's schema and its records.
   await q.query('BEGIN')
   try {
+    if (example) {
+      const result = await applyExample(q, example.example, exampleAdmin())
+      changes.push(...result.changes)
+      notes.push(...result.notes)
+      unchanged += result.unchanged
+    }
     for (const raw of manifests) {
       const result = await applyManifest(q, raw)
       changes.push(...result.changes)
@@ -96,6 +136,7 @@ async function apply(q: pg.Client, args: string[]) {
     throw error
   }
   for (const change of changes) console.log(`${dry ? '~' : '+'} ${change}`)
+  for (const note of notes) console.log(`- ${note}`)
   console.log(
     `${changes.length} ${dry ? 'to change' : 'changed'}, ${unchanged} already in place.${dry ? ' Dry run: nothing was changed.' : ''}`
   )
@@ -214,11 +255,14 @@ async function main() {
                     Hide the role catalogs from ordinary connections, so that psql no longer
                     reads who belongs to which group. Needs the cluster superuser. --keep-names
                     leaves role names readable; --restore puts PostgreSQL's default back.
-  apply <local|k8s> FILE... [--example] [--dry-run]
+  apply <local|k8s> FILE... [--example[=NAME]] [--administrator] [--dry-run]
                     Apply JSON manifests of users, groups, workspaces, collections, grants and
-                    policies to a deployment, in one transaction. --example applies the example
-                    manifest the tools carry: the roles, workspace, grants and policy the example
-                    sign-ins need. local is the local stack's published port; k8s uses the
+                    policies to a deployment, in one transaction. --example applies an example
+                    of the checkout, examples/NAME: its models.json (the schema), then, beside
+                    the server, its migration.sql (what a manifest cannot say) and, the first
+                    time, its demo.sql (records and their history). NAME is PLATFORM_EXAMPLE
+                    when it is not given. --administrator makes the deployment's administrator
+                    and nothing else. local is the local stack's published port; k8s uses the
                     settings below. Both need a token.
   model:apply FILE  Apply an additive JSON model using the caller's own DDL rights.
   sql FILE          Run a SQL file using the caller's own rights. Use BEGIN/COMMIT for atomic scripts.

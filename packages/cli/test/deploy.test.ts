@@ -162,9 +162,9 @@ describe('local deployment orchestration', () => {
     expect(
       Object.keys(init.options?.env ?? {}).filter((name) => /^(POSTGRES_PASSWORD|PG)/.test(name))
     ).toEqual([])
-    // The roles of the people this stack's Dex knows are made the same way, straight after.
+    // No example was chosen, so the administrator's role alone is made, straight after.
     const example = f.calls[f.calls.indexOf(init) + 1]!
-    expect(example.argv.slice(-5)).toEqual(['-T', 'migrate', 'apply', 'k8s', '--example'])
+    expect(example.argv.slice(-5)).toEqual(['-T', 'migrate', 'apply', 'k8s', '--administrator'])
     expect(cmds.at(-1)!.slice(-3)).toEqual(['up', '-d', 'relay'])
     // Dex answers before the installer runs; the relay is checked last.
     expect(f.urls).toEqual([
@@ -179,7 +179,11 @@ describe('local deployment orchestration', () => {
     // No service is given a password: PostgreSQL has none, and the installer shares its socket.
     expect(stack).not.toMatch(/PASSWORD|scram/)
     expect(services.migrate.environment.DATABASE_HOST).toBe('/var/run/postgresql')
-    expect(services.migrate.volumes).toEqual(['socket:/var/run/postgresql'])
+    // Beside the socket it reads the checkout's examples, and writes nothing anywhere.
+    expect(services.migrate.volumes).toEqual([
+      'socket:/var/run/postgresql',
+      '../../examples:/app/examples:ro',
+    ])
     expect(services.postgres.volumes).toContain('socket:/var/run/postgresql')
     // The interface is a static site, published to a CDN: it is not a container. The one
     // site the stack serves is an example's, with the operator's own tools, and it is
@@ -294,6 +298,10 @@ describe('local deployment orchestration', () => {
       '--production',
     ])
     expect(cmds.at(-1)!.slice(-3)).toEqual(['up', '-d', 'site'])
+    // The example itself is installed beside PostgreSQL, by name.
+    expect(cmds.filter((c) => c.includes('apply')).map((c) => c.slice(-3))).toEqual([
+      ['apply', 'k8s', '--example=newsroom'],
+    ])
     // The pages are built for the address the edge serves them on, and the relay allows it.
     const built = f.calls.at(-2)!.options?.env ?? {}
     expect(built.PLATFORM_PUBLIC_URL).toBe('http://app.localhost:9090')
@@ -306,8 +314,8 @@ describe('local deployment orchestration', () => {
     expect(f.hosts).toContain('app.localhost')
     expect(f.urls.at(-1)).toBe('http://app.localhost:9090/')
     expect(f.output.join('\n')).toContain('Site: http://app.localhost:9090')
-    // The link to sign in opens the site at its sign-in, and carries nothing secret.
-    expect(f.output.join('\n')).toContain('Sign in: http://app.localhost:9090/#signin')
+    // The site is the one link: none opens it at its sign-in, and nothing secret is said.
+    expect(f.output.join('\n')).not.toContain('#signin')
     expect(f.output.join('\n')).not.toContain(saved(f.envFile, 'PLATFORM_ADMIN_PASSWORD')!)
     // The edge routes the name only when there is an example.
     const edge = readFileSync(
@@ -367,7 +375,7 @@ describe('local deployment orchestration', () => {
     const f = fake()
     expect(await deploy(['local', 'init'], f.r)).toBe(0)
     expect(f.calls.at(-2)!.argv.slice(-2)).toEqual(['-T', 'migrate'])
-    expect(f.calls.at(-1)!.argv.slice(-4)).toEqual(['migrate', 'apply', 'k8s', '--example'])
+    expect(f.calls.at(-1)!.argv.slice(-4)).toEqual(['migrate', 'apply', 'k8s', '--administrator'])
     expect(f.urls).toEqual(['http://idp.localhost:8080/.well-known/openid-configuration'])
   })
   test('Podman is selected when Docker Compose is unavailable', async () => {
