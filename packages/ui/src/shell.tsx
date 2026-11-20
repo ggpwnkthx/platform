@@ -55,7 +55,7 @@ const snippets = (ws: string) => [
   { label: 'Who am I', sql: 'SELECT session_user, current_user, current_database(), version();' },
   {
     label: 'My roles',
-    sql: "SELECT rolname FROM pg_roles WHERE pg_has_role(session_user, oid, 'MEMBER') ORDER BY 1;",
+    sql: 'SELECT name FROM platform.visible_roles() ORDER BY 1;',
   },
   {
     label: `My grants in ${ws || 'a workspace'}`,
