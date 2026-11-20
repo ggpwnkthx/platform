@@ -96,7 +96,7 @@ export function describe(error: unknown): { title: string; detail?: string } {
   return { title: String(error) }
 }
 
-/** A sign-in that PostgreSQL no longer accepts: the token expired or the role went away. */
+/** A sign-in that the database no longer accepts: the token expired or the role went away. */
 const loginRefused = (error: unknown) =>
   error instanceof PgError && (error.code === '28000' || error.code === '28P01')
 
@@ -158,7 +158,7 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
         return await kept.run(work)
       } catch (error) {
         if (loginRefused(error))
-          signOut(`PostgreSQL refused the sign-in: ${(error as PgError).message}`)
+          signOut(`The database refused the sign-in: ${(error as PgError).message}`)
         throw error
       }
     },
@@ -268,7 +268,7 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
         }
         setPhase('signing-in')
         const role = roleOf(signed.token, cfg.claim)
-        if (!role) throw new Error(`The token names no PostgreSQL role in its ${cfg.claim} claim.`)
+        if (!role) throw new Error(`The token names no database role in its ${cfg.claim} claim.`)
         await load({ role, token: signed.token }, cfg)
         location.route(
           signed.returnTo && signed.returnTo !== '/' ? signed.returnTo : '/content',

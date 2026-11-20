@@ -125,7 +125,7 @@ function RendererOptions({
  * JSON document is a clipped line in a cell and a document in a record.
  *
  * The saying is the field's own metadata, under the reserved key `renderers`, one entry per
- * situation, and PostgreSQL's row security decides who reads it and who changes it, as it
+ * situation, and the database's row security decides who reads it and who changes it, as it
  * does for every other key. A renderer draws a value: it never decides who may read one,
  * never changes one, and never reaches for the database.
  *

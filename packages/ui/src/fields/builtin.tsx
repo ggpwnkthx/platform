@@ -18,7 +18,7 @@ import {
 import type { Draw, FieldFacts, FieldType, Parsed } from './types.ts'
 
 /**
- * The field types the platform holds: one for every kind of value PostgreSQL told it of, one
+ * The field types the platform holds: one for every kind of value the database told it of, one
  * for a value chosen from a list and one for a value that points at another row.
  *
  * Each says the whole of what the interface does with such a field. A page that shows fields
@@ -43,7 +43,7 @@ const ordered: Operator[] = ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'is_null', '
 /** The operators of a value that is only ever itself. */
 const plain: Operator[] = ['eq', 'neq', 'contains', 'is_null', 'not_null']
 
-/** A line of text in the mono face, as PostgreSQL wrote it. */
+/** A line of text in the mono face, as the database wrote it. */
 const mono: Draw = ({ value }) => <span class="mono">{textOf(value)}</span>
 
 /** Text clipped to the width of its column, with the whole of it in a hint. */
@@ -56,7 +56,7 @@ const clipped: Draw = ({ value }) => (
 /** Text in full, wrapped where it falls. */
 const wrapped: Draw = ({ value }) => <span class="value-text">{textOf(value)}</span>
 
-/** What was typed, as a number PostgreSQL will read — or why it is not one. */
+/** What was typed, as a number the database will read — or why it is not one. */
 const numberFrom =
   (shape: RegExp, error: string) =>
   (text: string): Parsed =>

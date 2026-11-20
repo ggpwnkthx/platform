@@ -26,7 +26,7 @@ export function SignIn() {
           </span>
           <i />
           <span>
-            PostgreSQL
+            The database
             <small>Checks the token and logs in your role</small>
           </span>
           <i />
@@ -40,7 +40,7 @@ export function SignIn() {
         <div class="signin-card">
           <h1>Sign in to Platform</h1>
           <p class="signin-lead">
-            PostgreSQL checks your token itself and logs you in as your own role. What you can see
+            The database checks your token itself and logs you in as your own role. What you can see
             and change here is exactly what you can in psql.
           </p>
           {notice && <Notice tone="danger" title={notice} />}

@@ -17,7 +17,7 @@
  *   registerRenderer({ name: 'initials', label: 'As initials', kinds: ['text'], situations: [], render })
  *
  *   // A type of field: its cell, its value, its input and its filter. It claims the columns
- *   // PostgreSQL says are its own — here, every column of the domain `public.email`.
+ *   // the database says are its own — here, every column of the domain `public.email`.
  *   registerFieldType({ ...fieldTypeNamed('text')!, name: 'email', claims, Input })
  *
  * See docs/fields.md and docs/renderers.md.

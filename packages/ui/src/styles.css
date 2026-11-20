@@ -1,4 +1,4 @@
-/* Platform: a data studio for PostgreSQL. One stylesheet, served from this origin, as the
+/* Platform: a data studio for the database. One stylesheet, served from this origin, as the
    strict content security policy requires. */
 
 @font-face {
@@ -1990,7 +1990,7 @@ td .badge:first-child:not(:only-child) {
   gap: 6px;
 }
 
-/* Privileges: PostgreSQL's names, each with a full, half or empty mark. */
+/* Privileges: the database's names, each with a full, half or empty mark. */
 .rights {
   display: flex;
   flex-wrap: wrap;

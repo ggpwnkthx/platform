@@ -24,16 +24,16 @@ import { fieldTypeFor } from './registry.ts'
 import type { Field } from './types.ts'
 
 /**
- * The fields of a collection, each read once: what PostgreSQL says of the column, what the
+ * The fields of a collection, each read once: what the database says of the column, what the
  * field says of itself in its own metadata, and the type that follows from the two.
  *
  * Every page that shows fields starts here. The catalog and the metadata are both the
- * reader's own answer — PostgreSQL returned the columns they may reach and the sayings they
+ * reader's own answer — the database returned the columns they may reach and the sayings they
  * may read — so a field this reader may not reach has no saying here, and is drawn as the
  * platform draws it.
  */
 
-/** What a field says of itself, beside what PostgreSQL says of its column. */
+/** What a field says of itself, beside what the database says of its column. */
 export interface FieldSaying {
   /** The row the column points at, when it is a foreign key. */
   relation?: RelationInfo | null
@@ -85,7 +85,7 @@ function sayings(rows: readonly MetadataRow[]): Map<string, FieldSaying> {
 }
 
 /**
- * Every field of a collection, in the order PostgreSQL holds its columns. The rows are the
+ * Every field of a collection, in the order the database holds its columns. The rows are the
  * fields' own metadata, as `fieldMetadata` read them; before they are read, every field is
  * what it is without a saying.
  */

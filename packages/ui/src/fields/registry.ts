@@ -4,7 +4,7 @@ import type { FieldFacts, FieldType } from './types.ts'
 /**
  * The field types the interface holds: the platform's own, and the installation's.
  *
- * What type a field is, is asked of PostgreSQL's own answer about the column — its type, the
+ * What type a field is, is asked of the database's own answer about the column — its type, the
  * row it points at, the values a CHECK allows — and every type says how strongly it claims
  * such a column. Nothing is stored about it: a domain of the installation's own is a type of
  * field the moment a field type claims it.

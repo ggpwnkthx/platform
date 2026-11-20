@@ -120,7 +120,7 @@ export function CollectionSidebar({
         <Legend />
         <p class="side-note">
           You read {columns.length - hidden.length} of {columns.length} fields and may change{' '}
-          {writable.length}. PostgreSQL decides each one.
+          {writable.length}. The database decides each one.
         </p>
         {hidden.length > 0 && (
           <ul class="side-list">
@@ -335,9 +335,9 @@ export function Records() {
     [ws, table, query.f, search, query.s, limit, pageNumber, catalog]
   )
 
-  // The fields of the collection, each read once: what PostgreSQL says of the column, what
+  // The fields of the collection, each read once: what the database says of the column, what
   // the field says of itself, and the type that draws it. A field this reader may not reach
-  // has no saying here: PostgreSQL did not return its metadata.
+  // has no saying here: the database did not return its metadata.
   const described = loaded.data?.described
   const fields = useMemo(
     () => resolveFields(catalog, ws, table, described),
@@ -381,7 +381,7 @@ export function Records() {
           tone: 'error',
           title: `${plural(removed, 'record')} deleted, ${plural(refused, 'record')} not`,
           detail:
-            'PostgreSQL deleted no row it would not let you reach: a row policy on this collection keeps the rest from you.',
+            'The database deleted no row it would not let you reach: a row policy on this collection keeps the rest from you.',
         })
       else notify({ tone: 'success', title: `${plural(removed, 'record')} deleted` })
       setSelected(new Set())
@@ -413,7 +413,7 @@ export function Records() {
         crumbs={[{ label: 'Content', href: href('/content', { ws }) }, { label: ws }]}
         icon={<CollectionIcon size={22} />}
       >
-        <Notice tone="warning" title={`PostgreSQL shows you no collection named ${ws}.${table}`}>
+        <Notice tone="warning" title={`The database shows you no collection named ${ws}.${table}`}>
           It does not exist, or your role holds no right on it. The catalog only lists what you may
           reach.
         </Notice>
@@ -525,8 +525,8 @@ export function Records() {
       {!readable.length ? (
         <Notice tone="warning" title="You may not read any field of this collection">
           {info.can_insert || columns.some((c) => c.can_insert)
-            ? 'You may still add records: PostgreSQL grants you INSERT without SELECT, so a write reports how many rows it touched and nothing more.'
-            : 'PostgreSQL grants your role no SELECT here.'}
+            ? 'You may still add records: the database grants you INSERT without SELECT, so a write reports how many rows it touched and nothing more.'
+            : 'The database grants your role no SELECT here.'}
         </Notice>
       ) : loaded.error ? (
         <Notice tone="danger" title={describe(loaded.error).title}>
@@ -590,7 +590,7 @@ export function Records() {
                     <th
                       key={c.name}
                       class="grid-hidden"
-                      title={`PostgreSQL gives you no SELECT on ${c.name}`}
+                      title={`The database gives you no SELECT on ${c.name}`}
                     >
                       <span>
                         <LockIcon size={13} aria-hidden="true" /> {c.name}
@@ -736,7 +736,7 @@ export function Records() {
       >
         <p>
           Each runs as <span class="mono">DELETE FROM {qualified(ws, table)} WHERE id = …</span>{' '}
-          under your role. A row policy may keep PostgreSQL from deleting some of them; you will be
+          under your role. A row policy may keep the database from deleting some of them; you will be
           told how many it deleted.
         </p>
       </Confirm>

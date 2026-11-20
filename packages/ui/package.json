@@ -3,7 +3,7 @@
   "version": "2.3.0",
   "private": true,
   "type": "module",
-  "description": "The interface: a static site whose pages speak PostgreSQL's protocol themselves.",
+  "description": "The interface: a static site whose pages speak the database's protocol themselves.",
   "license": "MIT",
   "exports": {
     "./access/model.ts": "./src/access/model.ts",

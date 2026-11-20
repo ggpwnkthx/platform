@@ -37,14 +37,14 @@ const hints: Record<Situation, string> = {
  * Where a field appears: in the records grid, in the record form, in the filter builder, and
  * in any view of the owner's own. A field may be shown, hidden, or — in the form — shown and
  * locked. The saying is the field's own metadata, under the reserved key `views`, so
- * PostgreSQL keeps its rules: whoever holds a right on the column reads it, and only the
+ * The database keeps its rules: whoever holds a right on the column reads it, and only the
  * owner of the collection changes it.
  *
  * Every field carries its own saying: the platform writes one when it makes a field, so
  * where a field appears is said of the field and not left to be inferred.
  *
  * The saying narrows the interface and grants nothing: a field that is hidden is still
- * PostgreSQL's to read and to write, and the reader may still reach it in psql.
+ * The database's to read and to write, and the reader may still reach it in psql.
  */
 export function ViewsEditor({
   target,
@@ -168,14 +168,14 @@ export function ViewsEditor({
         </Field>
       )}
       {computed && (
-        <Notice tone="info" title="PostgreSQL computes this column">
+        <Notice tone="info" title="The database computes this column">
           A generated or an identity column is written by the database itself, so the record shows
           it and never offers it as an input.
         </Notice>
       )}
       {column?.required && views.record === 'hide' && (
         <Notice tone="warning" title="A required field out of the record">
-          PostgreSQL refuses a record that does not set {target.column}, and the form no longer
+          The database refuses a record that does not set {target.column}, and the form no longer
           offers it.
         </Notice>
       )}

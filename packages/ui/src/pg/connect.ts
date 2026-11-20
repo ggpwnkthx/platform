@@ -3,9 +3,9 @@ import type { DataSource } from '@platform/vocabulary'
 import type { RuntimeConfig } from '../config.ts'
 
 /**
- * A logged-in session with PostgreSQL.
+ * A logged-in session with the database.
  *
- * A session is a source of statements: it runs them and hands back what PostgreSQL
+ * A session is a source of statements: it runs them and hands back what the database
  * answered. The questions the platform asks are asked of any source, so the same question
  * may be asked here and of a client in Node, and mean the same thing.
  */
@@ -13,7 +13,7 @@ export interface Db extends Login, DataSource {
   query<Row = Record<string, unknown>>(text: string, params?: unknown[]): Promise<Result<Row>>
 }
 
-/** Who is signed in: the role PostgreSQL will log in, and the token that proves it. */
+/** Who is signed in: the role the database will log in, and the token that proves it. */
 export interface Credentials {
   role: string
   token: string
@@ -22,17 +22,17 @@ export interface Credentials {
 /**
  * The seam between the interface and the database. The real build opens a WebSocket to the
  * relay and logs in with the reader's token. The development build replaces this module with
- * a PostgreSQL that runs inside the page, so the interface can be built without a server.
+ * a database that runs inside the page, so the interface can be built without a server.
  *
- * Everything the interface reads and writes runs through here, as the statements PostgreSQL
+ * Everything the interface reads and writes runs through here, as the statements the database
  * runs. Each one runs on the reader's own login, so nothing here decides a right: the catalog
- * questions ask PostgreSQL's privilege functions, and every write is judged by PostgreSQL when
+ * questions ask the database's privilege functions, and every write is judged by the database when
  * it runs.
  */
 
 /** A person who may sign in without an issuer. */
 export interface Person {
-  /** The role PostgreSQL logs them in as. */
+  /** The role the database logs them in as. */
   role: string
   /** What the reader is told about them. */
   note: string

@@ -75,7 +75,7 @@ export function ContentHome() {
             ) : undefined
           }
         >
-          PostgreSQL gives your role USAGE on no workspace yet. A workspace owner grants it with{' '}
+          The database gives your role USAGE on no workspace yet. A workspace owner grants it with{' '}
           <span class="mono">GRANT USAGE ON SCHEMA …</span>
         </Empty>
       </Page>
@@ -88,7 +88,7 @@ export function ContentHome() {
       presentation={shown}
       subtitle={
         system
-          ? 'What the platform itself holds. PostgreSQL’s row security decides which rows reach you.'
+          ? 'What the platform itself holds. The database’s row security decides which rows reach you.'
           : typeof purpose === 'string'
             ? purpose
             : `Owned by ${schema.owner}`
@@ -103,7 +103,7 @@ export function ContentHome() {
         ) : undefined
       }
     >
-      {counts.error ? <Notice tone="danger" title="PostgreSQL did not answer" /> : null}
+      {counts.error ? <Notice tone="danger" title="The database did not answer" /> : null}
       {tables.length ? (
         <div class="tiles">
           {tables.map((t) => {
@@ -157,7 +157,7 @@ export function ContentHome() {
         <Empty icon={<CollectionIcon size={28} />} title="No collection you may reach">
           {schema.can_create
             ? 'Make the first collection of this workspace.'
-            : 'PostgreSQL shows you no table here: none exists yet, or none is granted to you.'}
+            : 'The database shows you no table here: none exists yet, or none is granted to you.'}
         </Empty>
       )}
       {tables.length > 0 && counts.data && !system && (

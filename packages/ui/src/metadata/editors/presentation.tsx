@@ -24,7 +24,7 @@ const samePresentation = (one: Presentation, other: Presentation): boolean =>
 
 /**
  * How an item presents itself: the name people read, the icon they recognise and the colour
- * that marks it. Three reserved keys of the item's own metadata, so PostgreSQL's row security
+ * that marks it. Three reserved keys of the item's own metadata, so the database's row security
  * decides who reads them and who changes them, as it does for every other key. A field is
  * presented by its name alone: a column is a label, not a mark.
  */

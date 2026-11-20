@@ -49,7 +49,7 @@ const startPrefix = 'v.'
 /**
  * What a new record starts with, as the address says it: a page that sends the reader here
  * to make a row about something names that something, so the form opens with it filled in.
- * It is a start and no more — every value is still the reader's to change, and PostgreSQL's
+ * It is a start and no more — every value is still the reader's to change, and the database's
  * to refuse.
  */
 function startOf(query: Record<string, string>): Record<string, string> {
@@ -85,7 +85,7 @@ export function Item() {
   const loaded = useLoad(
     // One connection, two questions: the record itself, and what its fields are called and
     // where they appear. A field this reader may not reach is not in the second answer:
-    // PostgreSQL did not return its metadata.
+    // The database did not return its metadata.
     info
       ? async (db) => {
           const row = wanted
@@ -118,9 +118,9 @@ export function Item() {
     [ws, table, id, catalog, creating, wanted]
   )
   const original = loaded.data?.record ?? null
-  // The fields of the collection, each read once: what PostgreSQL says of the column, what
+  // The fields of the collection, each read once: what the database says of the column, what
   // the field says of itself — its name, where it appears, how it is drawn — and the type
-  // that follows. The saying is the field's own metadata, so PostgreSQL's row security
+  // that follows. The saying is the field's own metadata, so the database's row security
   // decided who may read it.
   const described = loaded.data?.described
   const all = useMemo(
@@ -179,14 +179,14 @@ export function Item() {
         const affected = await withDb((db) => insertRecord(db, ws, table, values))
         notify({
           tone: 'success',
-          title: affected ? 'Record created' : 'PostgreSQL created no record',
+          title: affected ? 'Record created' : 'The database created no record',
         })
         // A row of the platform's own may be something the interface itself reads.
         if (info?.system) await refresh().catch(() => undefined)
         location.route(from ?? href('/content/records', { ws, c: table }))
         return
       }
-      // The write, and then the record as it stands: when PostgreSQL changed no row, what
+      // The write, and then the record as it stands: when the database changed no row, what
       // it holds now says whether someone else changed it first.
       const outcome = await withDb(async (db) => {
         const affected = await updateRecord(db, ws, table, id, values, version)
@@ -213,7 +213,7 @@ export function Item() {
         })
       } else {
         setProblem({
-          title: 'PostgreSQL changed no row',
+          title: 'The database changed no row',
           detail:
             'A row policy on this collection does not let you change this record, or it is no longer there.',
         })
@@ -236,7 +236,7 @@ export function Item() {
         location.route(from ?? href('/content/records', { ws, c: table }))
       } else
         setProblem({
-          title: 'PostgreSQL deleted no row',
+          title: 'The database deleted no row',
           detail: 'A row policy keeps this record from you, or it changed since you opened it.',
         })
     } catch (error) {
@@ -263,7 +263,7 @@ export function Item() {
   if (!info)
     return (
       <Page title="Record" icon={<CollectionIcon size={22} />}>
-        <Notice tone="warning" title={`PostgreSQL shows you no collection named ${ws}.${table}`} />
+        <Notice tone="warning" title={`The database shows you no collection named ${ws}.${table}`} />
       </Page>
     )
   const title = creating
@@ -354,7 +354,7 @@ export function Item() {
       )}
       {loaded.error ? (
         <Notice tone="danger" title={describe(loaded.error).title}>
-          {describe(loaded.error).detail ?? 'PostgreSQL could not read this record.'}
+          {describe(loaded.error).detail ?? 'The database could not read this record.'}
         </Notice>
       ) : !loaded.data ? (
         <Loading />
@@ -402,7 +402,7 @@ export function Item() {
                     <span class="mono">{c.name}</span>
                   </span>
                 ))}
-                . PostgreSQL grants your role no {creating ? 'INSERT' : 'SELECT or UPDATE'} on{' '}
+                . The database grants your role no {creating ? 'INSERT' : 'SELECT or UPDATE'} on{' '}
                 {unreachable.length === 1 ? 'it' : 'them'}.
               </p>
             </div>
@@ -444,7 +444,7 @@ export function Item() {
 
 /**
  * One field of the record form: its name, what it is, and either the input that changes it or
- * the value it holds. Which of the two is PostgreSQL's to say first — a column it computes is
+ * the value it holds. Which of the two is the database's to say first — a column it computes is
  * never written, and a right it withholds is not offered — and the owner's after it.
  */
 function RecordField({
@@ -469,17 +469,17 @@ function RecordField({
 }) {
   const { column, computed } = field
   const id = `field-${field.name}`
-  // PostgreSQL computes some columns itself, and the owner of a collection may lock a field:
+  // The database computes some columns itself, and the owner of a collection may lock a field:
   // either way it is shown, and never offered as an input.
   const locked = isLocked(field.views)
   const writable = !computed && !locked && (creating ? column.can_insert : column.can_update)
   const reason = computed
     ? column.generated
-      ? 'PostgreSQL computes this column: a generated column is never written.'
-      : 'PostgreSQL numbers this column itself: an identity column is never written.'
+      ? 'The database computes this column: a generated column is never written.'
+      : 'The database numbers this column itself: an identity column is never written.'
     : locked
       ? 'The owner of this collection marked this field read-only.'
-      : 'PostgreSQL gives you no UPDATE on this field.'
+      : 'The database gives you no UPDATE on this field.'
   const wide = isWide(field, text)
   const Input = field.type.Input
   return (
@@ -518,14 +518,14 @@ function RecordField({
         />
       ) : !column.can_select ? (
         <p class="side-note">
-          You may write this field, but you may not read it back: PostgreSQL grants you no SELECT on
+          You may write this field, but you may not read it back: the database grants you no SELECT on
           it.
         </p>
       ) : creating ? (
         <p class="side-note">
           {column.default
-            ? `PostgreSQL writes this field: ${defaultText(column.default)} by default.`
-            : 'PostgreSQL writes this field itself.'}
+            ? `The database writes this field: ${defaultText(column.default)} by default.`
+            : 'The database writes this field itself.'}
         </p>
       ) : (
         // A field the reader may not change is drawn, not offered: the record shows what it

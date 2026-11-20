@@ -6,7 +6,7 @@ import { Button } from '../../ui/button.tsx'
 /** What every editor of a reserved key shares: a draft that follows the database, and a save. */
 
 /**
- * A draft of what PostgreSQL holds. What PostgreSQL holds is the truth: when it changes —
+ * A draft of what the database holds. What the database holds is the truth: when it changes —
  * the editor's own save, or someone else's — the draft follows it.
  */
 export function useDraft<T>(stored: T, same: (one: T, other: T) => boolean) {
@@ -21,7 +21,7 @@ export function useDraft<T>(stored: T, same: (one: T, other: T) => boolean) {
 
 /**
  * The end of an editor: the statements that will run, shown before they run, and the button
- * that runs them as the reader, in one transaction. A refusal is PostgreSQL's own, and it is
+ * that runs them as the reader, in one transaction. A refusal is the database's own, and it is
  * shown as it was given.
  */
 export function SaveStatements({
@@ -34,7 +34,7 @@ export function SaveStatements({
   statements: string[]
   /** What the button says. */
   label: string
-  /** What the reader is told once PostgreSQL has run them. */
+  /** What the reader is told once the database has run them. */
   saved: string
   /** The draft cannot be saved as it stands. */
   disabled?: boolean

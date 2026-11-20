@@ -86,7 +86,7 @@ const typeIcons: Record<string, typeof TextIcon> = {
 /** The mark a type is drawn with: its own, or the mark of a type nobody has drawn. */
 const iconOfType = (type: string): typeof TextIcon => typeIcons[type] ?? TagIcon
 
-/** Builds one field: its type, its name and the constraints PostgreSQL will hold it to. */
+/** Builds one field: its type, its name and the constraints the database will hold it to. */
 export function FieldEditor({
   field,
   onChange,
@@ -220,7 +220,7 @@ export function FieldEditor({
           <Field
             label="Choices"
             id={`${prefix}-choices`}
-            hint="Comma-separated. PostgreSQL will accept only these values."
+            hint="Comma-separated. The database will accept only these values."
           >
             <Input
               id={`${prefix}-choices`}
@@ -466,7 +466,7 @@ export function CollectionModel() {
   if (!info)
     return (
       <Page title={table || 'Collection'} icon={<CollectionIcon size={22} />}>
-        <Notice tone="warning" title={`PostgreSQL shows you no collection named ${ws}.${table}`} />
+        <Notice tone="warning" title={`The database shows you no collection named ${ws}.${table}`} />
       </Page>
     )
   const constraintsOf = (column: string) =>
@@ -509,7 +509,7 @@ export function CollectionModel() {
       subtitle={
         owner
           ? `You own ${ws}.${table}: its model and its access are yours.`
-          : `Owned by ${info.owner}. You may read its model; PostgreSQL gives changes to the owner.`
+          : `Owned by ${info.owner}. You may read its model; the database gives changes to the owner.`
       }
       actions={
         <>
@@ -773,7 +773,7 @@ export function CollectionModel() {
             </table>
             {!owner && (
               <p class="grid-note">
-                <LockIcon size={14} aria-hidden="true" /> PostgreSQL gives ALTER TABLE to the owner,{' '}
+                <LockIcon size={14} aria-hidden="true" /> The database gives ALTER TABLE to the owner,{' '}
                 {info.owner}, and its members.
               </p>
             )}
@@ -926,7 +926,7 @@ export function NewCollection() {
       }
     >
       {!schema?.can_create && (
-        <Notice tone="warning" title={`PostgreSQL gives you no CREATE on ${ws}`}>
+        <Notice tone="warning" title={`The database gives you no CREATE on ${ws}`}>
           Ask its owner, {schema?.owner}, for it.
         </Notice>
       )}

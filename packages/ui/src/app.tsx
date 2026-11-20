@@ -26,7 +26,7 @@ function Signed() {
   const { path } = useLocation()
   const page = pageOf(path)
   // Every page starts signed out: the token lives in memory, so the generated HTML is the
-  // sign-in, and the page itself appears once PostgreSQL has let the reader in.
+  // sign-in, and the page itself appears once the database has let the reader in.
   if (phase !== 'ready' || !page || page.path === '/') return <SignIn />
   return (
     <Shell module={page.module === 'workspace' ? 'content' : page.module}>

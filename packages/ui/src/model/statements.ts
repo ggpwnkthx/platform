@@ -13,9 +13,9 @@ export type { OnDelete }
 /**
  * The model, as the interface drafts it.
  *
- * A builder in the interface produces a draft; the draft becomes the statements PostgreSQL
+ * A builder in the interface produces a draft; the draft becomes the statements the database
  * runs, which are shown before they run and are run, as the reader, exactly as shown.
- * PostgreSQL decides whether the reader may.
+ * The database decides whether the reader may.
  *
  * The statements themselves are the platform's own, written once for the operator's tools
  * and the interface alike: what is left here is the shape the interface's form holds, and

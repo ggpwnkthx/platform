@@ -15,7 +15,7 @@ const presentation: MetadataKeyEditor = {
   name: 'presentation',
   title: 'Presentation',
   note: (target) =>
-    `How this ${target.scope} is named and marked. It is kept in its own metadata, so PostgreSQL keeps its rules: only its owner may change it.`,
+    `How this ${target.scope} is named and marked. It is kept in its own metadata, so the database keeps its rules: only its owner may change it.`,
   keys: presentationKeys,
   scopes: ['workspace', 'collection', 'field'],
   Editor: ({ target, owner }) => <PresentationEditor target={target} owner={owner} />,
@@ -26,7 +26,7 @@ const views: MetadataKeyEditor = {
   name: 'views',
   title: 'Where it appears',
   note: () =>
-    'The list, the record and the filters. A field may be shown in one and hidden in another; PostgreSQL still decides who may read it and who may write it.',
+    'The list, the record and the filters. A field may be shown in one and hidden in another; the database still decides who may read it and who may write it.',
   keys: [viewsKey],
   scopes: ['field'],
   Editor: ViewsEditor,
@@ -37,7 +37,7 @@ const renderers: MetadataKeyEditor = {
   name: 'renderers',
   title: 'How it is drawn',
   note: () =>
-    'A value may be drawn differently in each place it appears: a uuid is eight characters in the grid and thirty-six in the record. The saying is the field’s own metadata, so PostgreSQL keeps its rules.',
+    'A value may be drawn differently in each place it appears: a uuid is eight characters in the grid and thirty-six in the record. The saying is the field’s own metadata, so the database keeps its rules.',
   keys: [renderersKey],
   scopes: ['field'],
   Editor: RenderersEditor,

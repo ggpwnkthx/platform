@@ -37,7 +37,7 @@ import { hasKeyEditor, keyEditorOf, keyEditorsFor } from './registry.ts'
 
 const { schema: metaSchema, table: metaTable } = metadataCollection
 
-/** May the reader change an item's metadata? PostgreSQL gives that to the owner of the item. */
+/** May the reader change an item's metadata? The database gives that to the owner of the item. */
 export function ownsItem(catalog: Catalog, target: MetadataTarget): boolean {
   if (target.scope === 'workspace')
     return Boolean(catalog.schemas.find((s) => s.name === target.schema)?.can_alter)
@@ -47,7 +47,7 @@ export function ownsItem(catalog: Catalog, target: MetadataTarget): boolean {
 /**
  * A refusal of the metadata collection's own, in the reader's words. An item carries a key
  * once — that is the collection's one rule of its own, kept by a unique index — and
- * PostgreSQL's way of saying so names the index, not the rule.
+ * The database's way of saying so names the index, not the rule.
  */
 export function metadataRefusal(
   schema: string,
@@ -125,7 +125,7 @@ function MetadataRows({ target, tick }: { target: MetadataTarget; tick?: unknown
   )
   if (!info)
     return (
-      <Notice tone="warning" title="PostgreSQL shows you no metadata collection">
+      <Notice tone="warning" title="The database shows you no metadata collection">
         Your role has no right on <span class="mono">platform.item_metadata</span>.
       </Notice>
     )
@@ -296,7 +296,7 @@ function KeyEditorSections({
 /**
  * A field's metadata, beside the field: the editors of the keys the interface reads for
  * itself, and the field's other rows in the metadata collection. A field's metadata is as
- * private as the field: PostgreSQL returns the rows of the fields the reader may reach, and
+ * private as the field: the database returns the rows of the fields the reader may reach, and
  * no others.
  */
 export function FieldMetadataDrawer({

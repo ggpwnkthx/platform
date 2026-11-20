@@ -3,13 +3,13 @@
  * a file served beside them (/config.json): a deployment changes it without rebuilding.
  */
 export interface RuntimeConfig {
-  /** The one OpenID Connect issuer PostgreSQL trusts: Dex. */
+  /** The one OpenID Connect issuer the database trusts: Dex. */
   issuer: string
   /** The public client the page signs in with. */
   clientId: string
-  /** The token claim PostgreSQL matches against the role name. */
+  /** The token claim the database matches against the role name. */
   claim: string
-  /** The WebSocket address of the relay in front of PostgreSQL. Relative to the page if it starts with /. */
+  /** The WebSocket address of the relay in front of the database. Relative to the page if it starts with /. */
   relay: string
   /** The database Platform is installed in. */
   database: string

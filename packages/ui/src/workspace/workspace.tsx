@@ -32,7 +32,7 @@ export function NewWorkspace() {
     <Page
       title="New workspace"
       icon={<WorkspaceIcon size={22} />}
-      subtitle="A workspace is a PostgreSQL schema. Its owner administers its model."
+      subtitle="A workspace is a schema in the database. Its owner administers its model."
       actions={
         <Action
           label="Create workspace"
@@ -47,7 +47,7 @@ export function NewWorkspace() {
       }
     >
       {!identity?.can_create_workspace && (
-        <Notice tone="warning" title="PostgreSQL gives you no CREATE on this database">
+        <Notice tone="warning" title="The database gives you no CREATE on it">
           Making a workspace needs it. An operator grants it with{' '}
           <span class="mono">GRANT CREATE ON DATABASE …</span>
         </Notice>
@@ -103,7 +103,7 @@ export function WorkspaceSettings() {
   if (!schema)
     return (
       <Page title="Workspace settings" icon={<WorkspaceIcon size={22} />}>
-        <Notice tone="warning" title={`PostgreSQL shows you no workspace named ${ws}`} />
+        <Notice tone="warning" title={`The database shows you no workspace named ${ws}`} />
       </Page>
     )
   return (

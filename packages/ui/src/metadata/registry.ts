@@ -14,7 +14,7 @@ import { platformKeyEditors } from './editors/builtin.tsx'
  * It is the same seam a field type is (`fields/registry.ts`): the platform registers its
  * own, and an installation that keeps a key of its own — a retention rule, a review policy —
  * may register an editor for it in its extensions. An editor edits; it does not decide.
- * PostgreSQL's row security still says who may change an item's metadata.
+ * The database's row security still says who may change an item's metadata.
  */
 
 /** What a key editor is given. */

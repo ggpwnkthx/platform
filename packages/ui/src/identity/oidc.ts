@@ -2,13 +2,13 @@ import type { RuntimeConfig } from '../config.ts'
 import { claims, discoverIssuer, expiresAt, roleOf } from '@platform/vocabulary'
 
 /**
- * Sign-in: authorization code with PKCE against the one issuer PostgreSQL trusts. The page
+ * Sign-in: authorization code with PKCE against the one issuer the database trusts. The page
  * exchanges the code itself, so there is no server of ours in the flow. The verifier outlives
  * the redirect in sessionStorage and is removed as soon as it is read; the token is never
  * stored anywhere but this page's memory.
  *
  * The token itself is read the same way the operator's tools read it: the claims are read,
- * never verified — PostgreSQL verifies the signature, the issuer and the expiry at every
+ * never verified — the database verifies the signature, the issuer and the expiry at every
  * login.
  */
 
@@ -105,7 +105,7 @@ export async function completeSignIn(config: RuntimeConfig): Promise<SignedIn | 
     error_description?: string
   }
   if (!response.ok) throw new Error(tokens.error_description ?? 'The issuer refused the sign-in.')
-  // PostgreSQL validates the token the issuer signs for this client. Dex's access token is that
+  // The database validates the token the issuer signs for this client. Dex's access token is that
   // same signed JWT; the ID token is used when an issuer returns an opaque access token.
   const token = [tokens.access_token, tokens.id_token].find((t) => t && t.split('.').length === 3)
   if (!token) throw new Error('The issuer returned no signed token.')

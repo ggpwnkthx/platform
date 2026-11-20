@@ -212,7 +212,7 @@ export function Sql() {
       )}
       {!latest && (
         <Empty icon={<SqlIcon size={28} />} title="Run a statement">
-          GRANT, CREATE POLICY, ALTER TABLE and every other statement are checked by PostgreSQL
+          GRANT, CREATE POLICY, ALTER TABLE and every other statement are checked by the database
           against your role. There is no allowlist and no second opinion.
         </Empty>
       )}

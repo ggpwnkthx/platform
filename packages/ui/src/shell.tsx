@@ -50,7 +50,7 @@ export function useWorkspace(): string {
   return ws
 }
 
-/** Statements worth starting from: questions PostgreSQL answers about the reader. */
+/** Statements worth starting from: questions the database answers about the reader. */
 const snippets = (ws: string) => [
   { label: 'Who am I', sql: 'SELECT session_user, current_user, current_database(), version();' },
   {
@@ -125,10 +125,10 @@ function ModuleBar({ module }: { module: Module | null }) {
             <span>
               {identity?.effective_role !== identity?.username
                 ? `acting as ${identity?.effective_role}`
-                : 'PostgreSQL role'}
+                : 'Database role'}
             </span>
             <span>
-              {identity?.database} · PostgreSQL {identity?.server_version?.split(' ')[0]} · Platform{' '}
+              {identity?.database} · Database {identity?.server_version?.split(' ')[0]} · Platform{' '}
               {identity?.platform_version}
             </span>
           </div>
@@ -192,7 +192,7 @@ function WorkspaceSwitcher({ path }: { path: string }) {
             </a>
           )
         })}
-        {!own.length && <p class="menu-note">PostgreSQL gives you USAGE on no workspace yet.</p>}
+        {!own.length && <p class="menu-note">The database gives you USAGE on no workspace yet.</p>}
         {platform && (
           <>
             <div class="menu-sep" />
@@ -292,7 +292,7 @@ function NavPane({ module }: { module: Module | null }) {
           </li>
         </ul>
         <p class="nav-foot">
-          Roles, memberships, grants and policies are PostgreSQL's own. What you change here is a
+          Roles, memberships, grants and policies are the database's own. What you change here is a
           statement you run as yourself. A collection's access is also on its own page, under Data
           model.
         </p>
@@ -303,10 +303,10 @@ function NavPane({ module }: { module: Module | null }) {
       <>
         <h2 class="nav-title">SQL</h2>
         <p class="nav-foot">
-          One statement at a time, run as your own role. PostgreSQL checks every GRANT, REVOKE, DDL
+          One statement at a time, run as your own role. The database checks every GRANT, REVOKE, DDL
           and row it touches.
         </p>
-        <h2 class="nav-title">Ask PostgreSQL</h2>
+        <h2 class="nav-title">Ask the database</h2>
         <ul class="nav-list">
           {snippets(ws).map((snippet) => (
             <li key={snippet.label}>

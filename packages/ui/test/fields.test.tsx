@@ -9,7 +9,7 @@ import type { Field } from '../src/fields/types.ts'
 
 /**
  * What a field is. A field's type owns everything the interface does with it — the cell, the
- * value, the input and the filter — and the type follows from what PostgreSQL says of the
+ * value, the input and the filter — and the type follows from what the database says of the
  * column, so no page asks what kind of column it is drawing.
  */
 
@@ -88,7 +88,7 @@ const fields = resolveFields(catalog, 'newsroom', 'articles', metadata)
 const named = (name: string): Field => fields.find((field) => field.name === name)!
 
 describe('The fields of a collection', () => {
-  test('every column of the collection is a field, in PostgreSQL’s own order', () => {
+  test('every column of the collection is a field, in the database’s own order', () => {
     expect(fields.map((field) => field.name)).toEqual([
       'id',
       'title',
@@ -116,7 +116,7 @@ describe('The fields of a collection', () => {
     expect(named('words').renderers).toEqual({})
   })
 
-  test('a field knows what PostgreSQL says of its column', () => {
+  test('a field knows what the database says of its column', () => {
     expect(named('status').choices).toEqual(['draft', 'published'])
     expect(named('author').relation?.target_table).toBe('authors')
     expect(named('search').computed).toBe(true)
@@ -235,7 +235,7 @@ describe('A field, in the form', () => {
     expect(fieldValue(describeField(column('text')), '')).toEqual({ value: null })
   })
 
-  test('a number that is not one is refused before PostgreSQL is asked', () => {
+  test('a number that is not one is refused before the database is asked', () => {
     expect(fieldValue(named('words'), ' 12 ')).toEqual({ value: '12' })
     expect(fieldValue(named('words'), '1.5')).toEqual({ error: 'A whole number' })
     const price = describeField(column('numeric'))

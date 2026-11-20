@@ -22,7 +22,7 @@ import type { Draw, Field, RenderValue } from './types.ts'
  * exist, or one that does not fit its kind of value, is drawn as the platform draws it.
  *
  * A renderer draws; it does not decide. It never says who may read a value, never changes
- * one, and never reaches for the database: PostgreSQL's own rights decided that before the
+ * one, and never reaches for the database: the database's own rights decided that before the
  * renderer was called.
  */
 
@@ -171,7 +171,7 @@ function drawBoolean(value: RenderValue) {
   return <span class={clsx('value-boolean', yes && 'is-true')}>{yes ? 'Yes' : 'No'}</span>
 }
 
-/** A moment, a date or a time of day, as PostgreSQL wrote it. */
+/** A moment, a date or a time of day, as the database wrote it. */
 function drawMoment(value: RenderValue) {
   return <span class="mono value-moment">{textOf(value.value)}</span>
 }
@@ -232,7 +232,7 @@ function drawBar(value: RenderValue) {
   )
 }
 
-/** A value as PostgreSQL wrote it, and nothing more. */
+/** A value as the database wrote it, and nothing more. */
 function drawRaw(value: RenderValue) {
   return <span class="mono value-raw">{textOf(value.value)}</span>
 }
@@ -290,7 +290,7 @@ registerRenderer({
 })
 registerRenderer({
   name: 'moment',
-  label: 'The whole moment, as PostgreSQL wrote it',
+  label: 'The whole moment, as the database wrote it',
   kinds: ['moment', 'date', 'time'],
   situations: [],
   render: drawMoment,
@@ -361,7 +361,7 @@ registerRenderer({
 })
 registerRenderer({
   name: 'raw',
-  label: 'As PostgreSQL wrote it, and nothing more',
+  label: 'As the database wrote it, and nothing more',
   kinds: [],
   situations: [],
   render: drawRaw,

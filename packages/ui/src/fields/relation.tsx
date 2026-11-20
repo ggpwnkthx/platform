@@ -8,7 +8,7 @@ import { Menu } from '../ui/overlay.tsx'
 
 /**
  * The input of a relation: a row of the collection the field points at, found by its name.
- * The rows offered are the ones PostgreSQL lets this reader read; where it lets them read
+ * The rows offered are the ones the database lets this reader read; where it lets them read
  * none, the id is typed instead.
  */
 export function RelationPicker({

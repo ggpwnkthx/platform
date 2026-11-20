@@ -76,7 +76,7 @@ export function Empty({
   )
 }
 
-export function Loading({ label = 'Reading from PostgreSQL' }: { label?: string }) {
+export function Loading({ label = 'Reading from the database' }: { label?: string }) {
   return (
     <div class="loading" role="status">
       <SpinnerIcon class="spin" size={18} aria-hidden="true" />
@@ -85,7 +85,7 @@ export function Loading({ label = 'Reading from PostgreSQL' }: { label?: string 
   )
 }
 
-/** A statement as it will run: the reader sees exactly what PostgreSQL will be asked. */
+/** A statement as it will run: the reader sees exactly what the database will be asked. */
 export function Statement({ sql, label = 'Runs as you' }: { sql: string; label?: string }) {
   return (
     <figure class="statement">

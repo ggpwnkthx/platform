@@ -5,7 +5,7 @@ import type { FieldRenderers, FieldViews, Situation } from '@platform/vocabulary
 /**
  * What a field is, and everything the interface does with one.
  *
- * A field is a column PostgreSQL holds, and it is met in three situations: as a cell in the
+ * A field is a column the database holds, and it is met in three situations: as a cell in the
  * records grid, as a value or an input in the record form, and as a condition in the filter
  * builder. Keystone gives every field type a view for each of those, and a controller that
  * turns what was typed into what is stored; the platform keeps the same shape. A field type
@@ -13,11 +13,11 @@ import type { FieldRenderers, FieldViews, Situation } from '@platform/vocabulary
  * text the form holds for it and the operators a filter may use — so the pages that show
  * fields ask the field and never ask what kind of column it is.
  *
- * A field type draws and reads; it does not decide. PostgreSQL still says who may read a
+ * A field type draws and reads; it does not decide. The database still says who may read a
  * value and who may write it, and a type is never told otherwise.
  */
 
-/** What PostgreSQL says of a column: enough to tell what type of field it is. */
+/** What the database says of a column: enough to tell what type of field it is. */
 export interface FieldFacts {
   /** The column, as the catalog holds it. */
   column: ColumnInfo
@@ -39,7 +39,7 @@ export interface Field extends FieldFacts {
   named: boolean
   /** One of the columns every collection is made with: who changed a row, and when. */
   system: boolean
-  /** PostgreSQL writes the column itself: a generated or an identity column. */
+  /** The database writes the column itself: a generated or an identity column. */
   computed: boolean
   /** Where the field says it appears. */
   views: FieldViews
@@ -53,7 +53,7 @@ export interface Field extends FieldFacts {
 
 /** What a drawing is given: the value, and everything needed to draw it. */
 export interface RenderValue extends FieldFacts {
-  /** The value, as PostgreSQL wrote it. */
+  /** The value, as the database wrote it. */
   value: unknown
   /** The field the value belongs to. */
   field: Field
@@ -79,9 +79,9 @@ export interface InputProps {
   /** What the form holds for the field: text, as typed. */
   text: string
   onChange: (text: string) => void
-  /** PostgreSQL would refuse the write: the input is shown and cannot be changed. */
+  /** The database would refuse the write: the input is shown and cannot be changed. */
   disabled: boolean
-  /** The record is being made, so a default is still PostgreSQL's to write. */
+  /** The record is being made, so a default is still the database's to write. */
   creating: boolean
   /** The field takes the whole width of the form. */
   wide: boolean

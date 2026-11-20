@@ -5,7 +5,7 @@ import type { FilterInputProps, InputProps } from './types.ts'
 
 /** The inputs the field types share: a line, and a choice among a few. */
 
-/** What an empty input says: the default PostgreSQL will write, or what the type expects. */
+/** What an empty input says: the default the database will write, or what the type expects. */
 export function placeholderOf({ field, creating }: InputProps, otherwise?: string) {
   const fallback = field.column.default
   return creating && fallback ? `Default: ${defaultText(fallback)}` : otherwise
@@ -16,7 +16,7 @@ export function lineInput(
   how: {
     type?: 'date' | 'time'
     inputMode?: JSX.HTMLAttributes<HTMLInputElement>['inputMode']
-    /** What the input shows while it is empty and PostgreSQL has no default to write. */
+    /** What the input shows while it is empty and the database has no default to write. */
     placeholder?: string
     /** Set in the mono face, as everything that is not prose is. */
     mono?: boolean

@@ -4,7 +4,7 @@ import { href } from '../url.ts'
 import { EveryoneIcon, GroupIcon, KeyIcon, UserIcon } from '../ui/icons.tsx'
 import { everyone } from './model.ts'
 
-/** The privileges a reader holds on a collection, in PostgreSQL's own names. */
+/** The privileges a reader holds on a collection, in the database's own names. */
 const privileges = [
   { key: 'can_select', name: 'SELECT' },
   { key: 'can_insert', name: 'INSERT' },
