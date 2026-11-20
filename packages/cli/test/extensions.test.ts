@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { sources } from '@platform/ui/paths.ts'
 import { extensionsPlugin } from '../src/ui/build.ts'
-import { extensionsModule, findConfig } from '../src/ui/config.ts'
+import { extensionsModule, findConfig } from '../src/config.ts'
 
 /**
  * A site's own field types and renderers: the configuration names the module that holds
@@ -35,20 +35,20 @@ async function bundle(plugins: Bun.BunPlugin[]): Promise<string> {
 
 describe('the extensions a site names', () => {
   test('a configuration that names none has none', () => {
-    const config = findConfig(site({ mode: 'production' }))
+    const config = findConfig(site({}))
     expect(config?.extensions).toBeUndefined()
     expect(extensionsModule(config)).toBeNull()
     expect(extensionsModule(null)).toBeNull()
   })
 
-  test('the module is named relative to the configuration, in either mode', () => {
-    const dir = site({ mode: 'production', extensions: 'own.ts' }, { 'own.ts': 'export {}' })
+  test('the module is named relative to the configuration', () => {
+    const dir = site({ extensions: 'own.ts' }, { 'own.ts': 'export {}' })
     expect(extensionsModule(findConfig(dir))).toBe(join(dir, 'own.ts'))
   })
 
   test('a module that is not there is refused when the configuration is read', () => {
-    const dir = site({ mode: 'production', extensions: 'missing.ts' })
-    expect(() => findConfig(dir)).toThrow(/no module at missing\.ts/)
+    const dir = site({ extensions: 'missing.ts' })
+    expect(() => findConfig(dir)).toThrow(/no file at missing\.ts/)
   })
 
   test('the example names its own', () => {

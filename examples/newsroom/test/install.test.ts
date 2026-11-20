@@ -5,12 +5,12 @@ import { applyManifest } from '../../../packages/cli/src/apply.ts'
 import { applyExample, namedFor } from '../../../packages/cli/src/example.ts'
 import {
   client,
-  example,
-  fingerprint,
+  fingerprintFor,
   fingerprintOf,
-  install,
   installPlatform,
-} from '../install.ts'
+  peopleOf,
+} from '../../../packages/cli/src/in-page.ts'
+import { example, install } from './newsroom.ts'
 
 /**
  * The example is three files, applied in order by the operator's own tools: models.json for
@@ -242,12 +242,34 @@ describe('a deployment’s own administrator', () => {
 describe('what the installation is made from, as a name', () => {
   test('is the same for the same texts, and short enough to be part of a name', () => {
     expect(fingerprintOf(['a', 'b'])).toBe(fingerprintOf(['a', 'b']))
-    expect(fingerprint).toMatch(/^[0-9a-z]{1,11}$/)
+    expect(fingerprintFor(example)).toMatch(/^[0-9a-z]{1,11}$/)
   })
 
   test('is another when any text changes, or moves from one file to the next', () => {
     expect(fingerprintOf(['a', 'b'])).not.toBe(fingerprintOf(['a', 'c']))
     expect(fingerprintOf(['ab', ''])).not.toBe(fingerprintOf(['a', 'b']))
     expect(fingerprintOf([example.demo ?? ''])).not.toBe(fingerprintOf([`${example.demo} `]))
+  })
+})
+
+describe('the people who sign in without an issuer', () => {
+  test('are the people the manifest names, with what it says of them', () => {
+    expect(peopleOf(example.models)).toEqual([
+      {
+        role: 'admin@example.com',
+        note: 'Owns newsroom, administers roles, is in newsroom_reader, newsroom_writer and sales (owns crm)',
+        token: 'in-page',
+      },
+      {
+        role: 'alice@example.com',
+        note: 'Is in newsroom_reader and newsroom_writer',
+        token: 'in-page',
+      },
+      {
+        role: 'bob@example.com',
+        note: 'Is in newsroom_reader, newsroom_writer and sales (owns crm)',
+        token: 'in-page',
+      },
+    ])
   })
 })

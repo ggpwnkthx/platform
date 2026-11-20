@@ -21,7 +21,7 @@ import {
   userSchemas,
 } from '@platform/data'
 import { collectionTarget, type DataSource } from '@platform/vocabulary'
-import { install } from '../install.ts'
+import { install } from './newsroom.ts'
 
 /**
  * The platform's own schema is a workspace like any other, of another kind: its tables are

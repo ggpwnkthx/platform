@@ -2,7 +2,9 @@ import type pg from 'pg'
 import { type ApplyResult, applyManifest, parseManifest } from './apply.ts'
 
 /**
- * An example: a folder under `examples/` that says what a database holds, in three files.
+ * An example: a folder under `examples/` that says what a database holds, in the files its
+ * `platform.json` says it applies (see `config.ts`, which reads them). They are named here
+ * as the newsroom names them.
  *
  * `models.json` is the schema, as a manifest: the groups, the people, the workspaces with
  * their collections, grants and row policies. `migration.sql` is what a manifest cannot say:

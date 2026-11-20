@@ -1,6 +1,8 @@
 {
-  "mode": "development",
-  "database": "install.ts",
-  "extensions": "extensions.tsx",
-  "out": ".dist"
+  "apply": {
+    "models": "apply/models.json",
+    "migration": "apply/migration.sql",
+    "demo": "apply/demo.sql"
+  },
+  "extensions": "extensions.tsx"
 }

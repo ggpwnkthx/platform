@@ -19,7 +19,7 @@ import {
   schemaGrantStatement,
   type Wanted,
 } from '@platform/vocabulary'
-import { install } from '../install.ts'
+import { install } from './newsroom.ts'
 
 /**
  * The access pages read PostgreSQL's ACLs and write the difference between what they hold

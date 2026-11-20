@@ -22,7 +22,8 @@ export interface Credentials {
 /**
  * The seam between the interface and the database. The real build opens a WebSocket to the
  * relay and logs in with the reader's token. The development build replaces this module with
- * a database that runs inside the page, so the interface can be built without a server.
+ * a database that runs inside the page, installed from the files the site's `platform.json`
+ * says it applies, so the interface can be built without a server.
  *
  * Everything the interface reads and writes runs through here, as the statements the database
  * runs. Each one runs on the reader's own login, so nothing here decides a right: the catalog

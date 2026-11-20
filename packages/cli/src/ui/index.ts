@@ -2,30 +2,23 @@
 import { join } from 'node:path'
 import { root } from '@platform/ui/paths.ts'
 import { buildSite, extensionsPlugin, inPageAssets, seamPlugin } from './build.ts'
-import {
-  databaseModule,
-  extensionsModule,
-  findConfig,
-  findSiteConfig,
-  type InterfaceConfig,
-} from './config.ts'
+import { applyFiles, extensionsModule, type FolderConfig, findConfig } from '../config.ts'
 import { serveInterface } from './dev.ts'
 import { UI_HELP } from './help.ts'
 
 export { UI_HELP } from './help.ts'
-export { findConfig } from './config.ts'
+export { findConfig } from '../config.ts'
 
 const KNOWN = ['--dir=', '--production', '--relay=', '--port=']
 
-/** The site a configuration asks for, and where it is written. */
-function siteOf(config: InterfaceConfig | null, development: boolean) {
-  const out = config?.out
-    ? join(config.dir, config.out)
-    : development
-      ? join(config!.dir, '.dist')
-      : join(root, 'dist')
+/**
+ * The site a folder asks for, and where it is written: in the folder itself, beside what it
+ * is built from. Without a folder of its own, the interface is written where it is published
+ * from.
+ */
+function siteOf(config: FolderConfig | null, development: boolean) {
   return {
-    out,
+    out: config ? join(config.dir, '.dist') : join(root, 'dist'),
     environment: (development ? 'development' : 'production') as 'development' | 'production',
     title: development ? ' (development)' : undefined,
   }
@@ -48,8 +41,10 @@ export async function ui(args: string[]): Promise<number> {
   )
 
   const config = findConfig(dir)
-  // The published interface is what a deployment serves; a configuration may say otherwise.
-  const development = !rest.includes('--production') && config?.mode === 'development'
+  // A folder that applies something is built with it installed in the page, so that it can be
+  // worked on with nothing running. The published interface is what a deployment serves, and
+  // whoever builds for one says so.
+  const development = !rest.includes('--production') && config?.apply !== undefined
 
   if (action === 'dev') {
     await serveInterface(config, { relay, port })
@@ -57,10 +52,11 @@ export async function ui(args: string[]): Promise<number> {
   }
 
   const site = siteOf(config, development)
-  // What the site adds is the site's own in either mode; the database is the example's only.
+  // What the site adds is the site's own in either build; the database in the page is the
+  // development build's only.
   const extensions = extensionsModule(config)
   const plugins = [
-    ...(development ? [seamPlugin(databaseModule(config!))] : []),
+    ...(development ? [seamPlugin(applyFiles(config!))] : []),
     ...(extensions ? [extensionsPlugin(extensions)] : []),
   ]
   const count = await buildSite({
@@ -68,9 +64,8 @@ export async function ui(args: string[]): Promise<number> {
     environment: site.environment,
     title: site.title,
     relay: process.env.PLATFORM_RELAY_URL,
-    config: findSiteConfig(dir),
     plugins,
-    assets: development ? inPageAssets(config!.dir) : [],
+    assets: development ? inPageAssets() : [],
   })
   console.log(
     `Built ${count} static pages and one client bundle in ${site.out.replace(join(root, '..', '..'), '.')}${development ? ' (development)' : ''}`

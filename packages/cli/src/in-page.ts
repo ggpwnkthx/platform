@@ -7,28 +7,27 @@ import {
   serialize,
 } from '@platform/pg-client/wire.ts'
 import type { RuntimeConfig } from '@platform/ui/config.ts'
-import type { Credentials, Db, WithoutIssuer } from '@platform/ui/pg/connect.ts'
+import type { Credentials, Db, Person, WithoutIssuer } from '@platform/ui/pg/connect.ts'
 import type pg from 'pg'
-import { applyExample, type Example } from '../../packages/cli/src/example.ts'
-import { MIGRATIONS } from '../../packages/cli/src/migrations.ts'
-import demo from './demo.sql' with { type: 'text' }
-import migration from './migration.sql' with { type: 'text' }
-import models from './models.json'
+import { parseManifest } from './apply.ts'
+import { applyExample, type Example } from './example.ts'
+import { MIGRATIONS } from './migrations.ts'
 
 /**
- * The newsroom's one module: what the example is, how it is installed in a PostgreSQL that
- * runs in this process, and the database a development build puts in the interface's seam.
+ * PostgreSQL in the process: an example, installed in a PostgreSQL that runs where the code
+ * does, and the database a development build puts in the interface's seam.
  *
- * The first half is the installation, and the tests ask their questions of it. The second
- * half is the page's: `platform.json` names this module as the database, and the build
- * replaces the interface's own connection with `connect` and `withoutIssuer` below.
+ * The first half is the installation, and an example's tests ask their questions of it. The
+ * second half is the page's: a development build of a folder that applies something replaces
+ * the interface's own connection with what `inPage` makes of the folder's example.
  *
  * The example is installed as a deployment installs it. The platform's own installation
- * scripts, the ones `migrate` runs and in their order, then the example's three files through
- * the operator's own tools: `models.json` for the schema, `migration.sql` for what a manifest
- * cannot say, `demo.sql` for the records and their history.
+ * scripts, the ones `migrate` runs and in their order, then the example's files through the
+ * operator's own tools: the models for the schema, the migration for what a manifest cannot
+ * say, the demonstration for the records and their history.
+ *
+ * Nothing here is any one example's: the example is handed in, and so is the PostgreSQL.
  */
-export const example: Example = { models, migration, demo }
 
 /**
  * The operator's tools speak to a pg client; this PostgreSQL answers the same statements.
@@ -76,23 +75,25 @@ export function fingerprintOf(texts: string[]): string {
 }
 
 /**
- * What this installation is made from, as a name: the platform's scripts and the example's
- * three files. A database kept from an earlier build is known to be of another making by it.
+ * What an installation is made from, as a name: the platform's scripts and the example's
+ * files. A database kept from an earlier build is known to be of another making by it.
  */
-export const fingerprint = fingerprintOf([
-  ...MIGRATIONS.map((script) => script.sql),
-  JSON.stringify(models),
-  migration,
-  demo,
-])
+export function fingerprintFor(example: Example): string {
+  return fingerprintOf([
+    ...MIGRATIONS.map((script) => script.sql),
+    JSON.stringify(example.models),
+    example.migration ?? '',
+    example.demo ?? '',
+  ])
+}
 
 /** Installs the platform alone: every installation script, in order. */
 export async function installPlatform(db: PGlite): Promise<void> {
   for (const script of MIGRATIONS) await db.exec(script.sql)
 }
 
-/** Installs the platform and the newsroom. The newsroom is all there, or none of it is. */
-export async function install(db: PGlite): Promise<void> {
+/** Installs the platform and an example. The example is all there, or none of it is. */
+export async function install(db: PGlite, example: Example): Promise<void> {
   await installPlatform(db)
   const q = client(db)
   await q.query('BEGIN')
@@ -115,20 +116,15 @@ export async function install(db: PGlite): Promise<void> {
 // page, exactly as it would log in one token. It never reaches a production build: the build
 // swaps it in for the relay.
 
-/**
- * Where the in-page database is kept, between reloads. The name says what it was installed
- * from: a build whose installation scripts or example files have changed looks under another
- * name, finds nothing, and installs again. Nobody has to remember to say the files changed.
- */
+/** Where the in-page databases are kept, between reloads: every name begins with this. */
 const storagePrefix = 'platform-dev-'
-const storageKey = `${storagePrefix}${fingerprint}`
 
 /**
  * Forgets the databases of earlier builds: they would never be opened again. A browser that
  * cannot list its databases keeps them, and so does one that refuses: it is tidying, and
  * the page does not wait for it.
  */
-async function forgetEarlier(): Promise<void> {
+async function forgetEarlier(storageKey: string): Promise<void> {
   try {
     for (const { name } of await indexedDB.databases())
       if (name?.includes(`/${storagePrefix}`) && !name.endsWith(`/${storageKey}`))
@@ -138,35 +134,42 @@ async function forgetEarlier(): Promise<void> {
   }
 }
 
-/**
- * Signing in without an issuer: the example people, who choose themselves in the page.
- *
- * The choice is kept in the page's own storage, so that a reload is the same person, and it
- * is the example that says so: the interface only asks who may sign in, and how.
- */
-export const withoutIssuer: WithoutIssuer = {
-  people: [
-    {
-      role: 'admin@example.com',
-      note: 'Owns the newsroom workspace, administers roles',
-      token: 'in-page',
-    },
-    { role: 'alice@example.com', note: 'Newsroom reader and writer', token: 'in-page' },
-    {
-      role: 'bob@example.com',
-      note: 'Newsroom writer and member of sales, which owns crm',
-      token: 'in-page',
-    },
-  ],
-  notice:
-    'PostgreSQL runs inside this page, with the example workspaces installed. Choose who to be.',
-  starting: 'Starting PostgreSQL in the page',
-  chosen: () => sessionStorage.getItem('platform.dev.as'),
-  choose: (role) => sessionStorage.setItem('platform.dev.as', role),
-  forget: () => sessionStorage.removeItem('platform.dev.as'),
-}
+const listed = (names: string[]) =>
+  names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : (names[0] ?? '')
 
-let booted: { role: string; db: Promise<PGlite> } | null = null
+/**
+ * The people who may sign in without an issuer: the people the example's manifest names,
+ * each with what the manifest says of them — what they own, whether they administer roles,
+ * the groups they are in and what those own. Nobody is listed here who is not a login there.
+ */
+export function peopleOf(models: unknown): Person[] {
+  const manifest = parseManifest(models)
+  return manifest.users
+    .filter((user) => user.state === 'present' && user.login)
+    .map((user) => {
+      const ownedBy = (owner: string) =>
+        manifest.workspaces
+          .filter((workspace) => workspace.owner === owner)
+          .map((workspace) => workspace.slug)
+      const owned = ownedBy(user.name)
+      // A group may own a workspace, and then its members are who builds in it.
+      const groups = user.groups.map((group) => {
+        const theirs = ownedBy(group)
+        return theirs.length ? `${group} (owns ${listed(theirs)})` : group
+      })
+      const says = [
+        ...(owned.length ? [`owns ${listed(owned)}`] : []),
+        ...(user.admin ? ['administers roles'] : []),
+        ...(groups.length ? [`is in ${listed(groups)}`] : []),
+      ]
+      const note = says.join(', ')
+      return {
+        role: user.name,
+        note: note ? `${note[0]!.toUpperCase()}${note.slice(1)}` : 'In no group',
+        token: 'in-page',
+      }
+    })
+}
 
 async function asset(path: string): Promise<Response> {
   const response = await fetch(path)
@@ -174,7 +177,7 @@ async function asset(path: string): Promise<Response> {
   return response
 }
 
-async function start(role: string): Promise<PGlite> {
+async function start(example: Example, storageKey: string, role: string): Promise<PGlite> {
   const [pgliteWasmModule, initdbWasmModule, fsBundle] = await Promise.all([
     asset('/dev/pglite.wasm').then((r) => WebAssembly.compileStreaming(r)),
     asset('/dev/initdb.wasm').then((r) => WebAssembly.compileStreaming(r)),
@@ -191,7 +194,7 @@ async function start(role: string): Promise<PGlite> {
   let db: PGlite
   try {
     db = await PGlite.create(`idb://${storageKey}`, options)
-    void forgetEarlier()
+    void forgetEarlier(storageKey)
   } catch {
     db = await PGlite.create(options)
   }
@@ -199,7 +202,7 @@ async function start(role: string): Promise<PGlite> {
   const installed = await db
     .query<{ found: string }>(`SELECT to_regclass('platform.installation') IS NOT NULL AS found`)
     .then((r) => r.rows[0]?.found === 't')
-  if (!installed) await install(db)
+  if (!installed) await install(db, example)
   // From here on this page is one person, as a login is one token.
   await db.query(`SET SESSION AUTHORIZATION ${JSON.stringify(role)}`)
   return db
@@ -237,48 +240,76 @@ function asPgError(error: unknown): Error {
   return new PgError(fields)
 }
 
-export async function connect(_config: RuntimeConfig, who: Credentials): Promise<Db> {
-  if (booted && booted.role !== who.role) {
-    // One person per page: becoming somebody else is a new page.
-    withoutIssuer.choose(who.role)
-    location.reload()
-    await new Promise(() => undefined)
+/**
+ * The database a development build puts in the interface's seam, made of an example.
+ *
+ * Where it is kept says what it was installed from: a build whose installation scripts or
+ * example files have changed looks under another name, finds nothing, and installs again.
+ * Nobody has to remember to say the files changed.
+ *
+ * Signing in is without an issuer: the example's people choose themselves in the page. The
+ * choice is kept in the page's own storage, so that a reload is the same person.
+ */
+export function inPage(example: Example): {
+  connect: (config: RuntimeConfig, who: Credentials) => Promise<Db>
+  withoutIssuer: WithoutIssuer
+} {
+  const storageKey = `${storagePrefix}${fingerprintFor(example)}`
+  const withoutIssuer: WithoutIssuer = {
+    people: peopleOf(example.models),
+    notice: 'PostgreSQL runs inside this page, with the example installed. Choose who to be.',
+    starting: 'Starting PostgreSQL in the page',
+    chosen: () => sessionStorage.getItem('platform.dev.as'),
+    choose: (role) => sessionStorage.setItem('platform.dev.as', role),
+    forget: () => sessionStorage.removeItem('platform.dev.as'),
   }
-  booted ??= { role: who.role, db: start(who.role) }
-  const db = await booted.db
-  return {
-    async query<Row>(text: string, params: unknown[] = []): Promise<Result<Row>> {
-      try {
-        const result = await db.query<Record<string, unknown>>(text, params.map(serialize))
-        const fields: Field[] = result.fields.map((f) => ({
-          name: f.name,
-          type: f.dataTypeID,
-          table: 0,
-          column: 0,
-        }))
-        const rows = result.rows.map((row) => {
-          const out: Record<string, unknown> = {}
-          for (const field of fields) {
-            const value = row[field.name]
-            out[field.name] =
-              typeof value === 'string' ? parseValue(field.type, value) : (value ?? null)
+  let booted: { role: string; db: Promise<PGlite> } | null = null
+
+  async function connect(_config: RuntimeConfig, who: Credentials): Promise<Db> {
+    if (booted && booted.role !== who.role) {
+      // One person per page: becoming somebody else is a new page.
+      withoutIssuer.choose(who.role)
+      location.reload()
+      await new Promise(() => undefined)
+    }
+    booted ??= { role: who.role, db: start(example, storageKey, who.role) }
+    const db = await booted.db
+    return {
+      async query<Row>(text: string, params: unknown[] = []): Promise<Result<Row>> {
+        try {
+          const result = await db.query<Record<string, unknown>>(text, params.map(serialize))
+          const fields: Field[] = result.fields.map((f) => ({
+            name: f.name,
+            type: f.dataTypeID,
+            table: 0,
+            column: 0,
+          }))
+          const rows = result.rows.map((row) => {
+            const out: Record<string, unknown> = {}
+            for (const field of fields) {
+              const value = row[field.name]
+              out[field.name] =
+                typeof value === 'string' ? parseValue(field.type, value) : (value ?? null)
+            }
+            return out
+          })
+          const command = commandOf(text)
+          return {
+            fields,
+            rows: rows as Row[],
+            command,
+            affected: command === 'SELECT' ? rows.length : (result.affectedRows ?? null),
           }
-          return out
-        })
-        const command = commandOf(text)
-        return {
-          fields,
-          rows: rows as Row[],
-          command,
-          affected: command === 'SELECT' ? rows.length : (result.affectedRows ?? null),
+        } catch (error) {
+          throw asPgError(error)
         }
-      } catch (error) {
-        throw asPgError(error)
-      }
-    },
-    close() {
-      // The in-page database outlives a request; the next one logs in as the same person.
-    },
-    isClosed: false,
+      },
+      close() {
+        // The in-page database outlives a request; the next one logs in as the same person.
+      },
+      isClosed: false,
+    }
   }
+
+  return { connect, withoutIssuer }
 }

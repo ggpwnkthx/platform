@@ -9,21 +9,22 @@ import { connect } from 'node:net'
 import { join } from 'node:path'
 import { securityHeaders } from '@platform/ui/headers.ts'
 import { root, sources } from '@platform/ui/paths.ts'
-import type { InterfaceConfig } from './config.ts'
+import type { FolderConfig } from '../config.ts'
 import { fileIn, types } from './serve.ts'
 
 /** The interface, served on a port, with the site it serves beside it. */
 export async function serveInterface(
-  config: InterfaceConfig | null,
+  config: FolderConfig | null,
   options: { relay?: string; port: number }
 ): Promise<void> {
   const relay = options.relay
   // With a relay, the real interface is served: the pages sign in through the issuer and
-  // reach PostgreSQL through the relay. Without one, the configuration says how it runs.
-  const development = !relay && config?.mode === 'development'
+  // reach PostgreSQL through the relay. Without one, a folder that applies something runs
+  // with it installed in the page.
+  const development = !relay && config?.apply !== undefined
   // The site the server serves is the site it builds: the example's own in development,
   // the published one when a relay is in front of PostgreSQL.
-  const dist = development ? join(config?.dir ?? root, config?.out ?? '.dist') : join(root, 'dist')
+  const dist = development ? join(config!.dir, '.dist') : join(root, 'dist')
   const port = options.port
 
   async function build(): Promise<boolean> {

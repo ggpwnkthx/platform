@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, test } from 'bun:test'
 import { PGlite } from '@electric-sql/pglite'
 import { activity } from '@platform/data'
 import type { DataSource } from '@platform/vocabulary'
-import { install } from '../install.ts'
+import { install } from './newsroom.ts'
 
 /**
  * A revision holds the whole row, and a workspace's owners read its revisions. Owning the

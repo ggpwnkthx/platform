@@ -6,15 +6,17 @@
  * served by any static web server.
  *
  * A build is one process. Whoever asks for a build may reshape it — a development build
- * swaps the database seam for the module its configuration names, and a site that has field
- * types and renderers of its own swaps them in for the interface's empty ones — and the
- * prerendered pages and the bundle are built from the same shape.
+ * swaps the database seam for a PostgreSQL in the page, installed from the files its folder
+ * applies, and a site that has field types and renderers of its own swaps them in for the
+ * interface's empty ones — and the prerendered pages and the bundle are built from the same
+ * shape.
  */
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
-import { defaultRuntimeConfig } from '@platform/ui/config.ts'
+import { defaultRuntimeConfig, type RuntimeConfig } from '@platform/ui/config.ts'
 import { headersFile, type Origins } from '@platform/ui/headers.ts'
 import { root, sources } from '@platform/ui/paths.ts'
+import type { ApplyFiles } from '../config.ts'
 
 /** How a site is built: where it goes, what it is called, and what shapes it. */
 export type SiteBuild = {
@@ -24,14 +26,12 @@ export type SiteBuild = {
   environment?: 'development' | 'production'
   /** The title the pages carry after the site's name. */
   title?: string
-  /** The relay the pages look for. The source configuration when it is not given. */
+  /** The relay the pages look for. The platform's own default when it is not given. */
   relay?: string
   /** Plugins that reshape the bundle and the pages. */
   plugins?: Bun.BunPlugin[]
   /** Files copied into the site, beside the pages. */
   assets?: { from: string; to: string }[]
-  /** What the site says about itself: the issuer, the relay and the database. */
-  config?: Record<string, unknown> | null
 }
 
 /**
@@ -97,11 +97,10 @@ export async function buildSite(build: SiteBuild): Promise<number> {
 
   await cp(join(sources, 'styles.css'), join(out, 'styles.css'))
   await cp(join(sources, 'favicon.svg'), join(out, 'favicon.svg'))
-  await writeFile(
-    join(out, 'config.json'),
-    JSON.stringify(siteConfig(build.config, build.relay), null, 2)
-  )
-  await writeFile(join(out, '_headers'), headersFile(siteOrigins()))
+  // Both files say where the site runs, and both are written from the one answer.
+  const config = siteConfig(build.relay)
+  await writeFile(join(out, 'config.json'), JSON.stringify(config, null, 2))
+  await writeFile(join(out, '_headers'), headersFile(siteOrigins(config)))
   await mkdir(join(out, 'fonts'), { recursive: true })
   const fonts = {
     'inter-latin-wght-normal.woff2':
@@ -130,54 +129,71 @@ export async function buildSite(build: SiteBuild): Promise<number> {
 }
 
 /**
- * The deployment's names, as the environment gives them. The pages are static, so these are
- * the only things that differ between one deployment and the next: the bundle itself is the
- * same file everywhere.
- */
-export function siteOrigins(env: Record<string, string | undefined> = process.env): Origins {
-  const publicUrl = env.PLATFORM_PUBLIC_URL ?? 'http://localhost:5173'
-  const issuer = env.PLATFORM_ISSUER ?? env.OIDC_ISSUER ?? 'http://idp.localhost:5556'
-  const relay = env.PLATFORM_RELAY_URL ?? 'ws://localhost:8081'
-  return { public: publicUrl, issuer, relay }
-}
-
-/**
  * The file the pages read to find the issuer, the relay and the database. It is served
  * beside the pages, so a deployment changes it without rebuilding the bundle.
  *
- * Three say it, in this order: the platform's own defaults, the site itself (the file
- * beside its `platform.json`), and the environment the deployment runs in.
+ * Two say it, in this order: the platform's own defaults, and the environment the deployment
+ * runs in. A folder says what it is, and never where it runs, so it is not asked.
  */
 export function siteConfig(
-  site: Record<string, unknown> | null | undefined,
-  relay: string | undefined
-): Record<string, unknown> {
-  const env = process.env
-  const base = { ...defaultRuntimeConfig, ...(site ?? {}) }
+  relay: string | undefined,
+  env: Record<string, string | undefined> = process.env
+): RuntimeConfig {
+  const base = defaultRuntimeConfig
   return {
-    ...base,
     issuer: env.PLATFORM_ISSUER ?? env.OIDC_ISSUER ?? base.issuer,
     clientId: env.PLATFORM_CLIENT_ID ?? base.clientId,
     claim: env.PLATFORM_CLAIM ?? base.claim,
     relay: relay ?? base.relay,
     database: env.PLATFORM_DATABASE_NAME ?? base.database,
-    statementTimeoutMs: Number(
-      env.PLATFORM_STATEMENT_TIMEOUT_MS ?? base.statementTimeoutMs ?? 15000
-    ),
+    statementTimeoutMs: Number(env.PLATFORM_STATEMENT_TIMEOUT_MS ?? base.statementTimeoutMs),
   }
 }
 
 /**
- * The seam: the interface's own database, replaced by the module a development build names.
- * The module itself is the one thing that may see the real seam.
+ * The deployment's names, as the headers need them: who the pages may speak to. The issuer
+ * is the one `config.json` sends the pages to, so the two files cannot say different things.
  */
-export function seamPlugin(database: string): Bun.BunPlugin {
-  const replacement = resolve(database)
+export function siteOrigins(
+  config: RuntimeConfig,
+  env: Record<string, string | undefined> = process.env
+): Origins {
+  return {
+    public: env.PLATFORM_PUBLIC_URL ?? 'http://localhost:5173',
+    issuer: config.issuer,
+    relay: env.PLATFORM_RELAY_URL ?? 'ws://localhost:8081',
+  }
+}
+
+/** PostgreSQL in the page, and what makes the seam's database of an example. */
+const inPageModule = join(import.meta.dir, '..', 'in-page.ts')
+
+/**
+ * The seam: the interface's own database, replaced by a PostgreSQL that runs in the page,
+ * installed from the files a folder applies.
+ *
+ * The seam is loaded as a module that imports those files and hands them over: the manifest
+ * as what it says, the SQL as its text. Nothing is written in the folder to make it so.
+ */
+export function seamPlugin(files: ApplyFiles): Bun.BunPlugin {
+  const seam = join(sources, 'pg', 'connect.ts')
+  const text = (name: string, path: string | undefined) =>
+    path === undefined
+      ? `const ${name} = undefined`
+      : `import ${name} from ${JSON.stringify(path)} with { type: 'text' }`
+  const contents = [
+    `import { inPage } from ${JSON.stringify(inPageModule)}`,
+    `import models from ${JSON.stringify(files.models)}`,
+    text('migration', files.migration),
+    text('demo', files.demo),
+    'export const { connect, withoutIssuer } = inPage({ models, migration, demo })',
+    '',
+  ].join('\n')
   return {
     name: 'the-database-seam',
     setup(build) {
-      build.onResolve({ filter: /\/pg\/connect\.ts$/ }, (args) =>
-        resolve(args.importer) === replacement ? undefined : { path: replacement }
+      build.onLoad({ filter: /[\\/]pg[\\/]connect\.ts$/ }, (args) =>
+        resolve(args.path) === seam ? { contents, loader: 'ts' } : undefined
       )
     },
   }
@@ -210,17 +226,10 @@ export function extensionsPlugin(extensions: string): Bun.BunPlugin {
 
 /**
  * PostgreSQL itself, compiled to WebAssembly: what the in-page database runs on. It is
- * found next to the module that is the database, which is where it is installed.
+ * found where the tools find it themselves.
  */
-export function inPageAssets(dir: string): { from: string; to: string }[] {
-  let dist: string
-  try {
-    dist = dirname(Bun.resolveSync('@electric-sql/pglite', dir))
-  } catch {
-    throw new Error(
-      'The in-page database needs @electric-sql/pglite: install it beside the module that is the database.'
-    )
-  }
+export function inPageAssets(): { from: string; to: string }[] {
+  const dist = dirname(Bun.resolveSync('@electric-sql/pglite', import.meta.dir))
   return ['pglite.wasm', 'initdb.wasm', 'pglite.data'].map((file) => ({
     from: join(dist, file),
     to: join('dev', file),

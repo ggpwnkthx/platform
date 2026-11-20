@@ -12,7 +12,7 @@ import {
 } from '@platform/data'
 import type { DataSource } from '@platform/vocabulary'
 import { hardenSql } from '../../../packages/cli/src/harden.ts'
-import { install } from '../install.ts'
+import { install } from './newsroom.ts'
 
 /**
  * `cli harden` hides PostgreSQL's role catalogs from ordinary connections, and the interface

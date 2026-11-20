@@ -5,7 +5,7 @@ import { applyManifest } from '../../../packages/cli/src/apply.ts'
 import { postureNotes } from '../../../packages/cli/src/database/requirements.ts'
 import { hardenSql } from '../../../packages/cli/src/harden.ts'
 import { setLogin } from '../../../packages/cli/src/login.ts'
-import { install } from '../install.ts'
+import { install } from './newsroom.ts'
 
 /**
  * The operator's own questions and switches, asked of the real thing: PostgreSQL, installed

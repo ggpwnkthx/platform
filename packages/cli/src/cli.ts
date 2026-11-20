@@ -1,8 +1,9 @@
-import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import pg from 'pg'
 import { ZodError, z } from 'zod'
 import { applyManifest } from './apply.ts'
+import { findConfig, readExample } from './config.ts'
 import { administratorManifest, applyExample, type Example, exampleAdmin } from './example.ts'
 import { loadConfig } from './database/config.ts'
 import { bearer, clientConfig, TokenClient, transaction } from './database/db.ts'
@@ -66,38 +67,26 @@ function connection(target?: string): pg.Client {
   )
 }
 /**
- * An example of the checkout, read from its folder: `models.json`, and the two SQL files
- * beside it when it has them. The name is the one given, the one the deployment chose, or
- * the only one there is.
+ * An example of the checkout, read from its folder: the files its `platform.json` says it
+ * applies. The name is the one given, the one the deployment chose, or the only one there is.
  */
-function readExample(given: string): { name: string; example: Example } {
+function exampleNamed(given: string): { name: string; example: Example } {
   const known = examplesIn(ROOT)
   const name = given || process.env.PLATFORM_EXAMPLE || (known.length === 1 ? known[0]! : '')
   if (!name) throw new Error(`--example needs a name: one of ${known.join(', ') || 'none'}`)
   if (!known.includes(name))
     throw new Error(`No example is named ${name}. There is: ${known.join(', ') || 'none'}`)
-  const file = (path: string) => join(ROOT, 'examples', name, path)
-  if (!existsSync(file('models.json'))) throw new Error(`examples/${name} has no models.json`)
-  const sql = (path: string) =>
-    existsSync(file(path)) ? readFileSync(file(path), 'utf8') : undefined
-  return {
-    name,
-    example: {
-      models: JSON.parse(readFileSync(file('models.json'), 'utf8')),
-      migration: sql('migration.sql'),
-      demo: sql('demo.sql'),
-    },
-  }
+  return { name, example: readExample(findConfig(join(ROOT, 'examples', name))!) }
 }
 async function apply(q: pg.Client, args: string[]) {
   const dry = args.includes('--dry-run')
   // The deployment's administrator, and nothing else: there is somebody to sign in as.
   const administrator = args.includes('--administrator')
-  // An example of the checkout: its models.json, then its migration.sql and its demo.sql.
+  // An example of the checkout: its models, then its migration and its demonstration.
   // It is applied first, so that a manifest beside it may name the example's administrator
   // as the owner of a workspace.
   const flag = args.find((a) => a === '--example' || a.startsWith('--example='))
-  const example = flag === undefined ? undefined : readExample(flag.slice('--example='.length))
+  const example = flag === undefined ? undefined : exampleNamed(flag.slice('--example='.length))
   const files = args.filter((a) => a !== '--dry-run' && a !== '--administrator' && a !== flag)
   const unknown = files.find((a) => a.startsWith('--'))
   if (unknown) throw new Error(`Unknown option: ${unknown}`)

@@ -17,16 +17,23 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
+import { CONFIG_FILE, findConfig } from '../config.ts'
 import { Cancelled, type Choice } from '../terminal.ts'
 import { type DeployRuntime, ROOT, saved } from './runtime.ts'
 
-/** The examples a checkout carries: the workspaces under examples/. */
+/**
+ * The examples a checkout carries: the folders under examples/ whose `platform.json` says
+ * they apply something to a database.
+ */
 export function examplesIn(root: string): string[] {
   const directory = join(root, 'examples')
   if (!existsSync(directory)) return []
   return readdirSync(directory, { withFileTypes: true })
     .filter(
-      (entry) => entry.isDirectory() && existsSync(join(directory, entry.name, 'package.json'))
+      (entry) =>
+        entry.isDirectory() &&
+        existsSync(join(directory, entry.name, CONFIG_FILE)) &&
+        findConfig(join(directory, entry.name))?.apply !== undefined
     )
     .map((entry) => entry.name)
     .sort()

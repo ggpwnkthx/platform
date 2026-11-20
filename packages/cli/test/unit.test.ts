@@ -98,7 +98,7 @@ describe('SQL construction and credentials', () => {
     )
     expect(exampleAdmin({})).toBe('admin@example.com')
     const models = JSON.parse(
-      readFileSync(new URL('../../../examples/newsroom/models.json', import.meta.url), 'utf8')
+      readFileSync(new URL('../../../examples/newsroom/apply/models.json', import.meta.url), 'utf8')
     )
     const manifest = parseManifest(namedFor({ models }, 'admin@localhost').models)
     expect(manifest.users.map((user) => user.name)).toEqual([
