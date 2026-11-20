@@ -1,6 +1,6 @@
 {
   "apply": {
-    "models": "apply/models.json",
+    "models": "apply/models.ts",
     "migration": "apply/migration.sql",
     "demo": "apply/demo.sql"
   },

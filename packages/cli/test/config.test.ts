@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { applyFiles, findConfig, readExample } from '../src/config.ts'
+import { applyFiles, findConfig, readApplied } from '../src/config.ts'
+import { manifestOf } from '../src/folder.ts'
 import { examplesIn } from '../src/deployment/config.ts'
 import { siteConfig, siteOrigins } from '../src/ui/build.ts'
 
@@ -23,20 +24,23 @@ describe('what a folder applies', () => {
   test('the example names its three files, and they are read as they are', () => {
     const config = findConfig(newsroom)!
     expect(config.apply).toEqual({
-      models: 'apply/models.json',
+      models: 'apply/models.ts',
       migration: 'apply/migration.sql',
       demo: 'apply/demo.sql',
     })
-    expect(applyFiles(config).models).toBe(join(newsroom, 'apply', 'models.json'))
-    const example = readExample(config)
-    expect((example.models as { format: number }).format).toBe(1)
+    expect(applyFiles(config).models).toBe(join(newsroom, 'apply', 'models.ts'))
+    const example = readApplied(config)
+    // The models are a module: a function of what the deployment says of itself.
+    expect((manifestOf(example, { admin: 'root@corp.example' }) as { format: number }).format).toBe(
+      1
+    )
     expect(example.migration).toContain('item_metadata')
     expect(example.demo).toContain('INSERT INTO newsroom.sections')
   })
 
   test('the files are named as the folder likes, and the SQL is its own to leave out', () => {
     const dir = folder({ apply: { models: 'schema.json' } }, { 'schema.json': '{"format":1}' })
-    expect(readExample(findConfig(dir)!)).toEqual({
+    expect(readApplied(findConfig(dir)!)).toEqual({
       models: { format: 1 },
       migration: undefined,
       demo: undefined,
@@ -59,10 +63,10 @@ describe('what a folder applies', () => {
     expect(() => findConfig(dir)).toThrow(/apply needs models/)
   })
 
-  test('a folder that applies nothing is no example', () => {
+  test('a folder that applies nothing has nothing to read', () => {
     const config = findConfig(folder({}))!
     expect(config.apply).toBeUndefined()
-    expect(() => readExample(config)).toThrow(/names nothing to apply/)
+    expect(() => readApplied(config)).toThrow(/names nothing to apply/)
   })
 
   test('what a folder does not say is refused, and so is where it runs', () => {

@@ -2,18 +2,19 @@ import { beforeAll, describe, expect, test } from 'bun:test'
 import { PGlite } from '@electric-sql/pglite'
 import { defaultViews, viewsKey } from '@platform/vocabulary'
 import { applyManifest } from '../../../packages/cli/src/apply.ts'
-import { applyExample, namedFor } from '../../../packages/cli/src/example.ts'
+import { applyFolder, manifestOf } from '../../../packages/cli/src/folder.ts'
 import {
   client,
   fingerprintFor,
   fingerprintOf,
+  install as installExample,
   installPlatform,
   peopleOf,
 } from '../../../packages/cli/src/in-page.ts'
 import { example, install } from './newsroom.ts'
 
 /**
- * The example is three files, applied in order by the operator's own tools: models.json for
+ * The example is three files, applied in order by the operator's own tools: models.ts for
  * the schema, migration.sql for what a manifest cannot say, demo.sql for the records and
  * their history. They are applied here to the real thing, as a deployment applies them.
  */
@@ -27,7 +28,7 @@ const count = async (table: string) =>
 const again = async (admin?: string) => {
   const q = client(db)
   await q.query('BEGIN')
-  const result = await applyExample(q, example, admin)
+  const result = await applyFolder(q, example, admin === undefined ? undefined : { admin })
   await q.query('COMMIT')
   return result
 }
@@ -37,7 +38,7 @@ beforeAll(async () => {
   await install(db)
 })
 
-describe('the schema, from models.json', () => {
+describe('the schema, from models.ts', () => {
   test('both workspaces are made, each owned by who the manifest names', async () => {
     const owners = await db.query<{ workspace: string; owner: string }>(
       `SELECT nspname AS workspace, pg_get_userbyid(nspowner) AS owner FROM pg_namespace
@@ -207,19 +208,56 @@ describe('a manifest that says otherwise of what is already there', () => {
   })
 })
 
+describe('an installation that fails halfway', () => {
+  test('leaves nothing: not the example, and not the platform either', async () => {
+    const other = await PGlite.create()
+    const broken = { ...example, demo: 'SELECT no_such_function()' }
+    await expect(installExample(other, broken)).rejects.toThrow('no_such_function')
+    const found = await other.query<{ platform: boolean; people: number }>(
+      `SELECT to_regclass('platform.installation') IS NOT NULL AS platform,
+              (SELECT count(*)::int FROM pg_roles WHERE rolname LIKE '%@example.com') AS people`
+    )
+    expect(found.rows).toEqual([{ platform: false, people: 0 }])
+    // What is left is a database the whole of it can be installed in.
+    await installExample(other, example)
+    await other.close()
+  })
+})
+
 describe('a deployment’s own administrator', () => {
-  test('is named wherever the example names its own, in all three files', () => {
-    const named = namedFor(example, 'root@corp.example')
-    for (const text of [JSON.stringify(named.models), named.migration, named.demo]) {
-      expect(text).toContain('root@corp.example')
-      expect(text).not.toContain('admin@example.com')
-    }
+  test('is passed to the models as a variable, and read by the SQL as a setting', () => {
+    const manifest = JSON.stringify(manifestOf(example, { admin: 'root@corp.example' }))
+    expect(manifest).toContain('root@corp.example')
+    expect(manifest).not.toContain('admin@example.com')
     // The other people of the example keep their names.
-    expect(named.demo).toContain('alice@example.com')
+    expect(manifest).toContain('alice@example.com')
+    // No file names an administrator of its own: there is nothing to write over.
+    for (const sql of [example.migration, example.demo]) {
+      expect(sql).toContain("current_setting('deployment.admin')")
+      expect(sql).not.toContain('admin@example.com')
+    }
   })
 
-  test('must be an address: it is written into SQL', () => {
-    expect(() => namedFor(example, `x"; DROP ROLE postgres; --`)).toThrow('is an address')
+  test('is a value wherever it goes, and never part of the SQL', async () => {
+    const other = await PGlite.create()
+    const q = client(other)
+    await installPlatform(other)
+    const admin = `o'brien@corp.example`
+    await q.query('BEGIN')
+    await applyFolder(q, example, { admin })
+    await q.query('COMMIT')
+    const found = await other.query<{ owner: string; by: string }>(
+      `SELECT pg_get_userbyid(nspowner) AS owner,
+              (SELECT DISTINCT created_by FROM newsroom.sections) AS by
+         FROM pg_namespace WHERE nspname = 'newsroom'`
+    )
+    expect(found.rows).toEqual([{ owner: admin, by: admin }])
+    // The setting was the transaction's, and went with it.
+    const after = await other.query<{ admin: string | null }>(
+      `SELECT nullif(current_setting('deployment.admin', true), '') AS admin`
+    )
+    expect(after.rows).toEqual([{ admin: null }])
+    await other.close()
   })
 
   test('owns the newsroom, and the example’s own administrator is nobody', async () => {
@@ -227,7 +265,7 @@ describe('a deployment’s own administrator', () => {
     const q = client(other)
     await installPlatform(other)
     await q.query('BEGIN')
-    await applyExample(q, example, 'root@corp.example')
+    await applyFolder(q, example, { admin: 'root@corp.example' })
     await q.query('COMMIT')
     const found = await other.query<{ owner: string; example: number }>(
       `SELECT pg_get_userbyid(nspowner) AS owner,
@@ -254,7 +292,7 @@ describe('what the installation is made from, as a name', () => {
 
 describe('the people who sign in without an issuer', () => {
   test('are the people the manifest names, with what it says of them', () => {
-    expect(peopleOf(example.models)).toEqual([
+    expect(peopleOf(manifestOf(example))).toEqual([
       {
         role: 'admin@example.com',
         note: 'Owns newsroom, administers roles, is in newsroom_reader, newsroom_writer and sales (owns crm)',

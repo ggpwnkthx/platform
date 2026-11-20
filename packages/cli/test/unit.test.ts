@@ -6,7 +6,8 @@ import { loadConfig } from '../src/database/config.ts'
 import { MIGRATIONS } from '../src/migrations.ts'
 import { fieldSchema, fieldSql } from '../src/model.ts'
 import { parseManifest } from '../src/apply.ts'
-import { administratorManifest, exampleAdmin, namedFor } from '../src/example.ts'
+import { administratorManifest, deploymentAdmin, deploymentVariables } from '../src/folder.ts'
+import newsroomModels from '../../../examples/newsroom/apply/models.ts'
 
 describe('SQL construction and credentials', () => {
   test('quotes identifiers without treating names as SQL', () => {
@@ -88,19 +89,19 @@ describe('SQL construction and credentials', () => {
     expect(() => parseManifest(manifest(['usage']))).not.toThrow()
     expect(() => parseManifest(manifest(['choose']))).toThrow()
   })
-  test('the manifest of an example is one the platform accepts, under the deployment’s administrator', () => {
+  test('the manifest a folder applies is one the platform accepts, under the deployment’s administrator', () => {
     // The administrator is the deployment's own: the one it names, or `admin` on its domain.
     expect(
-      exampleAdmin({ PLATFORM_ADMIN: 'root@corp.example', PLATFORM_DOMAIN: 'x.example' })
+      deploymentAdmin({ PLATFORM_ADMIN: 'root@corp.example', PLATFORM_DOMAIN: 'x.example' })
     ).toBe('root@corp.example')
-    expect(exampleAdmin({ PLATFORM_DOMAIN: 'platform.example.org' })).toBe(
+    expect(deploymentAdmin({ PLATFORM_DOMAIN: 'platform.example.org' })).toBe(
       'admin@platform.example.org'
     )
-    expect(exampleAdmin({})).toBe('admin@example.com')
-    const models = JSON.parse(
-      readFileSync(new URL('../../../examples/newsroom/apply/models.json', import.meta.url), 'utf8')
-    )
-    const manifest = parseManifest(namedFor({ models }, 'admin@localhost').models)
+    expect(deploymentAdmin({})).toBe('admin@example.com')
+    expect(deploymentVariables({ PLATFORM_DOMAIN: 'localhost' })).toEqual({
+      admin: 'admin@localhost',
+    })
+    const manifest = parseManifest(newsroomModels({ admin: 'admin@localhost' }))
     expect(manifest.users.map((user) => user.name)).toEqual([
       'admin@localhost',
       'alice@example.com',
@@ -111,7 +112,7 @@ describe('SQL construction and credentials', () => {
       ['crm', 'sales'],
     ])
   })
-  test('a deployment with no example is given its administrator and nothing else', () => {
+  test('a deployment whose site applies nothing is given its administrator and nothing else', () => {
     const manifest = parseManifest(administratorManifest('root@corp.example'))
     expect(manifest.users).toMatchObject([{ name: 'root@corp.example', admin: true }])
     expect(manifest.groups).toEqual([])

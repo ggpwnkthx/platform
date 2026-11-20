@@ -1,15 +1,13 @@
 import { chmodSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { resolve } from 'node:path'
 import pg from 'pg'
 import { ZodError, z } from 'zod'
 import { applyManifest } from './apply.ts'
-import { findConfig, readExample } from './config.ts'
-import { administratorManifest, applyExample, type Example, exampleAdmin } from './example.ts'
+import { findConfig, readApplied } from './config.ts'
+import { administratorManifest, applyFolder, type Applied, deploymentVariables } from './folder.ts'
 import { loadConfig } from './database/config.ts'
 import { bearer, clientConfig, TokenClient, transaction } from './database/db.ts'
-import { examplesIn } from './deployment/config.ts'
 import { deploy, localDatabase } from './deployment/index.ts'
-import { ROOT } from './deployment/runtime.ts'
 import { hardenNotes, hardenSql, type HardenMode } from './harden.ts'
 import { setLogin } from './login.ts'
 import { authenticationProblems, postureNotes, requirePostgres18 } from './database/requirements.ts'
@@ -67,32 +65,30 @@ function connection(target?: string): pg.Client {
   )
 }
 /**
- * An example of the checkout, read from its folder: the files its `platform.json` says it
- * applies. The name is the one given, the one the deployment chose, or the only one there is.
+ * What a folder applies, read: the files its `platform.json` says it applies. The folder is
+ * any folder that holds one, named as `ui build --dir` names it.
  */
-function exampleNamed(given: string): { name: string; example: Example } {
-  const known = examplesIn(ROOT)
-  const name = given || process.env.PLATFORM_EXAMPLE || (known.length === 1 ? known[0]! : '')
-  if (!name) throw new Error(`--example needs a name: one of ${known.join(', ') || 'none'}`)
-  if (!known.includes(name))
-    throw new Error(`No example is named ${name}. There is: ${known.join(', ') || 'none'}`)
-  return { name, example: readExample(findConfig(join(ROOT, 'examples', name))!) }
+function appliedIn(dir: string): Applied {
+  if (!dir) throw new Error('--dir needs a folder: the one that holds platform.json')
+  const config = findConfig(resolve(dir))
+  if (!config) throw new Error(`There is no platform.json in ${resolve(dir)}`)
+  return readApplied(config)
 }
 async function apply(q: pg.Client, args: string[]) {
   const dry = args.includes('--dry-run')
   // The deployment's administrator, and nothing else: there is somebody to sign in as.
   const administrator = args.includes('--administrator')
-  // An example of the checkout: its models, then its migration and its demonstration.
-  // It is applied first, so that a manifest beside it may name the example's administrator
+  // What a folder applies: its models, then its migration and its demonstration.
+  // It is applied first, so that a manifest beside it may name the folder's administrator
   // as the owner of a workspace.
-  const flag = args.find((a) => a === '--example' || a.startsWith('--example='))
-  const example = flag === undefined ? undefined : exampleNamed(flag.slice('--example='.length))
+  const flag = args.find((a) => a === '--dir' || a.startsWith('--dir='))
+  const applied = flag === undefined ? undefined : appliedIn(flag.slice('--dir='.length))
   const files = args.filter((a) => a !== '--dry-run' && a !== '--administrator' && a !== flag)
   const unknown = files.find((a) => a.startsWith('--'))
   if (unknown) throw new Error(`Unknown option: ${unknown}`)
-  if (!files.length && !example && !administrator)
+  if (!files.length && !applied && !administrator)
     throw new Error(
-      'apply needs a deployment and at least one manifest file, --example or --administrator'
+      'apply needs a deployment and at least one manifest file, --dir or --administrator'
     )
   // The manifests are applied through the platform's own functions, which the installation
   // provides from 2.0.1 on. An older database is upgraded first, not worked around.
@@ -105,11 +101,11 @@ async function apply(q: pg.Client, args: string[]) {
   const notes: string[] = []
   let unchanged = 0
   // One transaction for everything: a deployment is never left between two manifests, or
-  // between an example's schema and its records.
+  // between a folder's schema and its records.
   await q.query('BEGIN')
   try {
-    if (example) {
-      const result = await applyExample(q, example.example, exampleAdmin())
+    if (applied) {
+      const result = await applyFolder(q, applied, deploymentVariables())
       changes.push(...result.changes)
       notes.push(...result.notes)
       unchanged += result.unchanged
@@ -244,13 +240,13 @@ async function main() {
                     Hide the role catalogs from ordinary connections, so that psql no longer
                     reads who belongs to which group. Needs the cluster superuser. --keep-names
                     leaves role names readable; --restore puts PostgreSQL's default back.
-  apply <local|k8s> FILE... [--example[=NAME]] [--administrator] [--dry-run]
+  apply <local|k8s> FILE... [--dir=DIR] [--administrator] [--dry-run]
                     Apply JSON manifests of users, groups, workspaces, collections, grants and
-                    policies to a deployment, in one transaction. --example applies an example
-                    of the checkout, examples/NAME: its models.json (the schema), then, beside
-                    the server, its migration.sql (what a manifest cannot say) and, the first
-                    time, its demo.sql (records and their history). NAME is PLATFORM_EXAMPLE
-                    when it is not given. --administrator makes the deployment's administrator
+                    policies to a deployment, in one transaction. --dir applies what a folder
+                    says it applies in its platform.json, any folder that holds one: its
+                    models.ts (the schema), then, beside the server, its migration.sql (what
+                    a manifest cannot say) and, the first time, its demo.sql (records and
+                    their history). --administrator makes the deployment's administrator
                     and nothing else. local is the local stack's published port; k8s uses the
                     settings below. Both need a token.
   model:apply FILE  Apply an additive JSON model using the caller's own DDL rights.

@@ -60,7 +60,7 @@ export interface WithoutIssuer {
 /**
  * Signing in without an issuer. A production interface has an issuer, so there is nobody to
  * choose and nothing to remember: the list is empty and the choice is kept nowhere. The
- * development build replaces this module with one that has the example people, so that the
+ * development build replaces this module with one that has the people the folder's manifest names, so that the
  * interface asks who they are instead of knowing.
  */
 export const withoutIssuer: WithoutIssuer = {

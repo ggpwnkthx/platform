@@ -3,7 +3,7 @@
  *
  * This is what a CDN does with the site, and nothing more: every file is sent as it was
  * written, with the headers the `_headers` file beside it lists. It is the server a local
- * stack puts behind its edge when it deploys an example; a real deployment publishes the
+ * stack puts behind its edge when it deploys a site; a real deployment publishes the
  * same files to a CDN and has no use for it.
  *
  * It loads nothing of the interface: the files are all there is to it.

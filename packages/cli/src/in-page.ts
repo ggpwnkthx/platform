@@ -10,23 +10,23 @@ import type { RuntimeConfig } from '@platform/ui/config.ts'
 import type { Credentials, Db, Person, WithoutIssuer } from '@platform/ui/pg/connect.ts'
 import type pg from 'pg'
 import { parseManifest } from './apply.ts'
-import { applyExample, type Example } from './example.ts'
+import { applyFolder, type Applied, manifestOf } from './folder.ts'
 import { MIGRATIONS } from './migrations.ts'
 
 /**
- * PostgreSQL in the process: an example, installed in a PostgreSQL that runs where the code
- * does, and the database a development build puts in the interface's seam.
+ * PostgreSQL in the process: what a folder applies, installed in a PostgreSQL that runs where
+ * the code does, and the database a development build puts in the interface's seam.
  *
- * The first half is the installation, and an example's tests ask their questions of it. The
+ * The first half is the installation, and a folder's tests ask their questions of it. The
  * second half is the page's: a development build of a folder that applies something replaces
- * the interface's own connection with what `inPage` makes of the folder's example.
+ * the interface's own connection with what `inPage` makes of what the folder applies.
  *
- * The example is installed as a deployment installs it. The platform's own installation
- * scripts, the ones `migrate` runs and in their order, then the example's files through the
+ * The files are installed as a deployment installs them. The platform's own installation
+ * scripts, the ones `migrate` runs and in their order, then the folder's files through the
  * operator's own tools: the models for the schema, the migration for what a manifest cannot
  * say, the demonstration for the records and their history.
  *
- * Nothing here is any one example's: the example is handed in, and so is the PostgreSQL.
+ * Nothing here is any one folder's: its files are handed in, and so is the PostgreSQL.
  */
 
 /**
@@ -75,15 +75,24 @@ export function fingerprintOf(texts: string[]): string {
 }
 
 /**
- * What an installation is made from, as a name: the platform's scripts and the example's
- * files. A database kept from an earlier build is known to be of another making by it.
+ * How an installation is made, as far as a database that is kept can tell: all at once. One
+ * kept from a build that installed the platform and then the folder's files may hold the first
+ * without the second, and is not looked for again.
  */
-export function fingerprintFor(example: Example): string {
+const making = 'all at once'
+
+/**
+ * What an installation is made from, as a name: the platform's scripts and the folder's
+ * files, and how they are installed. A database kept from an earlier build is known to be of
+ * another making by it.
+ */
+export function fingerprintFor(applied: Applied): string {
   return fingerprintOf([
+    making,
     ...MIGRATIONS.map((script) => script.sql),
-    JSON.stringify(example.models),
-    example.migration ?? '',
-    example.demo ?? '',
+    JSON.stringify(manifestOf(applied)),
+    applied.migration ?? '',
+    applied.demo ?? '',
   ])
 }
 
@@ -92,13 +101,17 @@ export async function installPlatform(db: PGlite): Promise<void> {
   for (const script of MIGRATIONS) await db.exec(script.sql)
 }
 
-/** Installs the platform and an example. The example is all there, or none of it is. */
-export async function install(db: PGlite, example: Example): Promise<void> {
-  await installPlatform(db)
+/**
+ * Installs the platform and what a folder applies. It is all there, or none of it is: the platform too,
+ * because a database that is kept is asked only whether the platform is in it. A page that
+ * is closed halfway leaves nothing, and the next one installs from the start.
+ */
+export async function install(db: PGlite, applied: Applied): Promise<void> {
   const q = client(db)
   await q.query('BEGIN')
   try {
-    await applyExample(q, example)
+    await installPlatform(db)
+    await applyFolder(q, applied)
     await q.query('COMMIT')
   } catch (error) {
     await q.query('ROLLBACK').catch(() => undefined)
@@ -138,7 +151,7 @@ const listed = (names: string[]) =>
   names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : (names[0] ?? '')
 
 /**
- * The people who may sign in without an issuer: the people the example's manifest names,
+ * The people who may sign in without an issuer: the people the folder's manifest names,
  * each with what the manifest says of them — what they own, whether they administer roles,
  * the groups they are in and what those own. Nobody is listed here who is not a login there.
  */
@@ -177,7 +190,7 @@ async function asset(path: string): Promise<Response> {
   return response
 }
 
-async function start(example: Example, storageKey: string, role: string): Promise<PGlite> {
+async function start(applied: Applied, storageKey: string, role: string): Promise<PGlite> {
   const [pgliteWasmModule, initdbWasmModule, fsBundle] = await Promise.all([
     asset('/dev/pglite.wasm').then((r) => WebAssembly.compileStreaming(r)),
     asset('/dev/initdb.wasm').then((r) => WebAssembly.compileStreaming(r)),
@@ -202,7 +215,7 @@ async function start(example: Example, storageKey: string, role: string): Promis
   const installed = await db
     .query<{ found: string }>(`SELECT to_regclass('platform.installation') IS NOT NULL AS found`)
     .then((r) => r.rows[0]?.found === 't')
-  if (!installed) await install(db, example)
+  if (!installed) await install(db, applied)
   // From here on this page is one person, as a login is one token.
   await db.query(`SET SESSION AUTHORIZATION ${JSON.stringify(role)}`)
   return db
@@ -241,23 +254,24 @@ function asPgError(error: unknown): Error {
 }
 
 /**
- * The database a development build puts in the interface's seam, made of an example.
+ * The database a development build puts in the interface's seam, made of what a folder
+ * applies.
  *
  * Where it is kept says what it was installed from: a build whose installation scripts or
- * example files have changed looks under another name, finds nothing, and installs again.
+ * files have changed looks under another name, finds nothing, and installs again.
  * Nobody has to remember to say the files changed.
  *
- * Signing in is without an issuer: the example's people choose themselves in the page. The
+ * Signing in is without an issuer: the manifest's people choose themselves in the page. The
  * choice is kept in the page's own storage, so that a reload is the same person.
  */
-export function inPage(example: Example): {
+export function inPage(applied: Applied): {
   connect: (config: RuntimeConfig, who: Credentials) => Promise<Db>
   withoutIssuer: WithoutIssuer
 } {
-  const storageKey = `${storagePrefix}${fingerprintFor(example)}`
+  const storageKey = `${storagePrefix}${fingerprintFor(applied)}`
   const withoutIssuer: WithoutIssuer = {
-    people: peopleOf(example.models),
-    notice: 'PostgreSQL runs inside this page, with the example installed. Choose who to be.',
+    people: peopleOf(manifestOf(applied)),
+    notice: 'PostgreSQL runs inside this page, with the site installed. Choose who to be.',
     starting: 'Starting PostgreSQL in the page',
     chosen: () => sessionStorage.getItem('platform.dev.as'),
     choose: (role) => sessionStorage.setItem('platform.dev.as', role),
@@ -272,7 +286,7 @@ export function inPage(example: Example): {
       location.reload()
       await new Promise(() => undefined)
     }
-    booted ??= { role: who.role, db: start(example, storageKey, who.role) }
+    booted ??= { role: who.role, db: start(applied, storageKey, who.role) }
     const db = await booted.db
     return {
       async query<Row>(text: string, params: unknown[] = []): Promise<Result<Row>> {

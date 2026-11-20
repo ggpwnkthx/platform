@@ -7,7 +7,7 @@
  *
  *   {
  *     "apply": {
- *       "models": "apply/models.json",
+ *       "models": "apply/models.ts",
  *       "migration": "apply/migration.sql",
  *       "demo": "apply/demo.sql"
  *     },
@@ -19,8 +19,9 @@
  * It is optional: without one, the interface is built as it is published.
  */
 import { existsSync, readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { join, resolve } from 'node:path'
-import type { Example } from './example.ts'
+import type { Applied } from './folder.ts'
 
 /** The name of the file a folder's configuration is written in. */
 export const CONFIG_FILE = 'platform.json'
@@ -39,7 +40,7 @@ export interface ApplyFiles {
 export interface FolderConfig {
   /** The folder the configuration was found in. */
   dir: string
-  /** What the folder applies to a database: an example has this. */
+  /** What the folder applies to a database, when it applies anything. */
   apply?: ApplyFiles
   /** The module that holds the site's own field types and renderers, relative to the folder. */
   extensions?: string
@@ -108,16 +109,29 @@ export function applyFiles(config: FolderConfig): ApplyFiles {
   }
 }
 
-/** The example a folder is: the files its configuration names, read. */
-export function readExample(config: FolderConfig): Example {
+const require = createRequire(import.meta.url)
+
+/**
+ * What a folder applies: the files its configuration names, read. The models are a
+ * module, whose default export is the manifest as a function of the deployment's variables,
+ * or a JSON file, which is the manifest and uses none.
+ */
+export function readApplied(config: FolderConfig): Applied {
   const files = applyFiles(config)
   const text = (path: string | undefined) =>
     path === undefined ? undefined : readFileSync(path, 'utf8')
   let models: unknown
-  try {
-    models = JSON.parse(readFileSync(files.models, 'utf8'))
-  } catch (error) {
-    throw new Error(`${files.models} is not valid JSON: ${(error as Error).message}`)
+  if (files.models.endsWith('.json')) {
+    try {
+      models = JSON.parse(readFileSync(files.models, 'utf8'))
+    } catch (error) {
+      throw new Error(`${files.models} is not valid JSON: ${(error as Error).message}`)
+    }
+  } else {
+    const module = require(files.models) as { default?: unknown }
+    if (module.default === undefined)
+      throw new Error(`${files.models} exports no manifest: its default export is the models.`)
+    models = module.default
   }
   return { models, migration: text(files.migration), demo: text(files.demo) }
 }

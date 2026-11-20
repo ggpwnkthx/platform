@@ -1,5 +1,5 @@
 -- The demonstration: the records of the example's collections, and the history they would
--- have. It is run once, when the example is first installed, after models.json and
+-- have. It is run once, when the example is first installed, after models.ts and
 -- migration.sql, as the server's own superuser.
 --
 -- The rows are written with the triggers off and the stamps set to who would have written
@@ -16,7 +16,7 @@ ALTER TABLE crm.deals DISABLE TRIGGER USER;
 
 -- newsroom: the desks, the stories and their corrections.
 INSERT INTO newsroom.sections (name, desk_email, created_by, updated_by, created_at, updated_at)
-SELECT name, desk_email, 'admin@example.com', 'admin@example.com',
+SELECT name, desk_email, current_setting('deployment.admin'), current_setting('deployment.admin'),
        now() - interval '40 days', now() - interval '40 days'
   FROM (VALUES
   ('Politics', 'politics@example.com'), ('City', 'city@example.com'), ('Business', 'business@example.com'),
@@ -77,7 +77,7 @@ SELECT id, 'An earlier version of this article gave the wrong date for the meeti
 INSERT INTO newsroom.corrections (article, wording, severity)
 SELECT id, 'This article misattributed a quote to the council leader; it was said by her deputy.', 'material'
   FROM newsroom.articles WHERE status = 'published' ORDER BY title DESC LIMIT 2;
-UPDATE newsroom.corrections c SET created_by = 'admin@example.com', updated_by = 'admin@example.com',
+UPDATE newsroom.corrections c SET created_by = current_setting('deployment.admin'), updated_by = current_setting('deployment.admin'),
        created_at = a.updated_at + interval '40 minutes', updated_at = a.updated_at + interval '40 minutes'
   FROM newsroom.articles a WHERE a.id = c.article;
 
@@ -132,7 +132,7 @@ SELECT a.updated_at - interval '3 hours', a.created_by, (SELECT oid FROM pg_role
        to_jsonb(a) || jsonb_build_object('status', 'review', 'version', 2)
   FROM newsroom.articles a WHERE a.status IN ('review', 'published');
 INSERT INTO demo_activity (at, actor, actor_oid, workspace_owner, schema_name, table_name, operation, before_row, after_row)
-SELECT a.updated_at, 'admin@example.com', (SELECT oid FROM pg_roles WHERE rolname = 'admin@example.com'),
+SELECT a.updated_at, current_setting('deployment.admin'), (SELECT oid FROM pg_roles WHERE rolname = current_setting('deployment.admin')),
        (SELECT nspowner FROM pg_namespace WHERE nspname = 'newsroom'), 'newsroom', 'articles', 'UPDATE',
        to_jsonb(a) || jsonb_build_object('status', 'review', 'version', 2, 'published_at', null),
        to_jsonb(a) || jsonb_build_object('version', 3)

@@ -22,7 +22,7 @@ export async function serveInterface(
   // reach PostgreSQL through the relay. Without one, a folder that applies something runs
   // with it installed in the page.
   const development = !relay && config?.apply !== undefined
-  // The site the server serves is the site it builds: the example's own in development,
+  // The site the server serves is the site it builds: the folder's own in development,
   // the published one when a relay is in front of PostgreSQL.
   const dist = development ? join(config!.dir, '.dist') : join(root, 'dist')
   const port = options.port

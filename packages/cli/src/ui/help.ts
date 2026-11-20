@@ -6,7 +6,7 @@ export const UI_HELP = `platform ui <build|dev|serve> [options]
   dev     Write the site and serve it, rebuilding it on every change.
   serve   Serve a site that is already built, as the files it is, with the headers its
           _headers file lists: --dir is the built site, --port defaults to 8080. It is what
-          the local stack puts behind its edge for an example; a deployment uses a CDN.
+          the local stack puts behind its edge for the site it deploys; a real deployment uses a CDN.
   --dir=DIR       The directory that holds platform.json. Default: the working directory.
   --production    Build the published interface: the one that signs in through the issuer
                   and reaches PostgreSQL through the relay.
@@ -18,15 +18,14 @@ export const UI_HELP = `platform ui <build|dev|serve> [options]
   The configuration is platform.json, in the directory the command is pointed at. It says
   what the folder is, and every tool reads the same one:
 
-    { "apply": { "models": "apply/models.json", "migration": "apply/migration.sql",
+    { "apply": { "models": "apply/models.ts", "migration": "apply/migration.sql",
                  "demo": "apply/demo.sql" },
       "extensions": "extensions.tsx" }
 
-  "apply" names what a database is brought to: the manifest, and the SQL beside it. A folder
-  that has it is an example: \`apply --example\` applies those files to a deployment, and a
-  build of the folder installs them in a PostgreSQL that runs inside the page, in the place
-  of the interface's database seam, unless --production or --relay asks for the published
-  interface. "extensions" names the site's own field types and renderers, registered with
+  "apply" names what a database is brought to: the manifest, and the SQL beside it.
+  \`apply --dir=DIR\` applies those files to a deployment, and a build of the folder installs
+  them in a PostgreSQL that runs inside the page, in the place of the interface's database
+  seam, unless --production or --relay asks for the published interface. "extensions" names the site's own field types and renderers, registered with
   @platform/ui/fields/registry.ts and @platform/ui/fields/renderers.tsx: every build of the
   folder puts the module in the place of the interface's own, which is empty.
 
