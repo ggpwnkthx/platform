@@ -173,6 +173,7 @@ async function main() {
   if (command === 'token') {
     const config = loadConfig()
     if (!config.oidcIssuer) throw new Error('OIDC_ISSUER is required')
+    // The token is the only thing on stdout, so that it can be captured.
     let signingIn: Waiting | undefined
     const token = await deviceToken(
       config.oidcIssuer,
