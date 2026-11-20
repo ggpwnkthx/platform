@@ -19,8 +19,9 @@ import { connect as connectTls } from 'node:tls'
  *   - one role may hold only so many open sessions at a time.
  *
  * The caps answer different questions. Those on logins keep clients that never sign in from
- * taking PostgreSQL's connections: a session that has said nothing has no connection at
- * all, and one that does not finish its login is closed. The cap on a role keeps one person
+ * taking PostgreSQL's connections: a session has no connection at all until it has sent a
+ * whole startup packet, anything else it might open with is refused, and one that does not
+ * finish its login is closed. The cap on a role keeps one person
  * from taking the database's connections for themselves, which is the cap that matters once
  * the interface keeps its session open instead of opening one per action.
  *
@@ -32,7 +33,13 @@ import { connect as connectTls } from 'node:tls'
  * PostgreSQL reports once it has signed the session in. That is the truth: a client cannot
  * claim a role it has not been signed in as, so a session counts against a role only once
  * PostgreSQL has accepted it. The bytes themselves are carried as they are; the relay
- * neither holds them nor delays them.
+ * holds only the first packet, until it is whole, and delays nothing after it.
+ *
+ * Of the client's stream it reads one thing too: that the first packet is a startup packet
+ * of protocol 3. A request for TLS inside the stream, for GSSAPI or to cancel another
+ * session's statement is not a login, and PostgreSQL answers the first two with a single
+ * byte that is no message at all, which would leave the relay reading the role from the
+ * wrong place. None of them is carried.
  */
 export type RelayOptions = {
   /**
@@ -77,6 +84,8 @@ type Session = {
   opened: boolean
   /** How many bytes the client has sent before PostgreSQL signed it in. */
   sent: number
+  /** The client's first packet, held until it is whole. */
+  first: Buffer
   /** What closes the session if it does not log in in time. */
   deadline: ReturnType<typeof setTimeout> | null
   address: string
@@ -184,6 +193,23 @@ const REFUSED = 1008
  * token, with room to spare, and nothing like a statement.
  */
 const BEFORE_LOGIN = 64 * 1024
+
+/** The longest startup packet PostgreSQL itself reads. */
+const STARTUP_PACKET = 10000
+
+/**
+ * What the client's first bytes are: a whole startup packet of protocol 3, the beginning of
+ * one, or something else. The packet is its length, the protocol's version and the settings
+ * the client asks for; the version's upper half is 3 for a login, and 1234 for the requests
+ * that are not one.
+ */
+export function startupPacketIn(bytes: Buffer): 'whole' | 'partial' | 'refused' {
+  if (bytes.length < 8) return 'partial'
+  const length = bytes.readInt32BE(0)
+  if (length < 8 || length > STARTUP_PACKET) return 'refused'
+  if (bytes.readInt32BE(4) >>> 16 !== 3) return 'refused'
+  return bytes.length >= length ? 'whole' : 'partial'
+}
 
 /** How much the relay holds for a browser that is behind before a session is beyond help. */
 const HELD_FOR_BROWSER = 16 * 1024 * 1024
@@ -375,6 +401,7 @@ export function startRelay(options: RelayOptions): Relay {
         socket: null,
         opened: false,
         sent: 0,
+        first: Buffer.alloc(0),
         deadline: null,
         address,
         role: null,
@@ -394,8 +421,8 @@ export function startRelay(options: RelayOptions): Relay {
       closeOnBackpressureLimit: true,
       open(ws) {
         const session = ws.data as Session
-        // PostgreSQL waits for the client to speak first, so a session that says nothing
-        // needs no connection there, and gets none. It has this long to sign in.
+        // PostgreSQL waits for the client to speak first, so a session that has not sent a
+        // startup packet needs no connection there, and gets none. It has this long to sign in.
         session.deadline = setTimeout(() => {
           session.deadline = null
           if (session.loggingIn) ws.close(REFUSED, 'The session did not log in in time')
@@ -411,7 +438,18 @@ export function startRelay(options: RelayOptions): Relay {
             return
           }
         }
+        let carried: Buffer = bytes
         if (!session.opened) {
+          // The first packet is held until it is whole, and is a login or is not carried.
+          session.first = Buffer.concat([session.first, bytes])
+          const packet = startupPacketIn(session.first)
+          if (packet === 'refused') {
+            ws.close(REFUSED, 'The session did not open with a startup packet')
+            return
+          }
+          if (packet === 'partial') return
+          carried = session.first
+          session.first = Buffer.alloc(0)
           session.opened = true
           const socket = upstream()
           session.socket = socket
@@ -433,7 +471,7 @@ export function startRelay(options: RelayOptions): Relay {
           socket.on('close', () => ws.close())
         }
         // PostgreSQL is behind: the browser is not read until it has caught up.
-        if (session.socket && !session.socket.write(bytes)) ws.pause()
+        if (session.socket && !session.socket.write(carried)) ws.pause()
       },
       drain(ws) {
         ;(ws.data as Session).socket?.resume()

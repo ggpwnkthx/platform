@@ -10,6 +10,7 @@ import {
   originAllowed,
   relayOptionsFromEnv,
   startRelay,
+  startupPacketIn,
 } from '../src/relay.ts'
 
 /** A TCP server that answers with the bytes it is given, one for one. */
@@ -166,7 +167,7 @@ const closed = (socket: WebSocket): Promise<CloseEvent> =>
   })
 
 describe('the relay', () => {
-  test('carries the bytes in both directions, and understands none of them', async () => {
+  test('carries the bytes in both directions, as they are', async () => {
     const server = await echoServer()
     const relay = startRelay({
       upstream: { host: '127.0.0.1', port: server.port },
@@ -177,12 +178,12 @@ describe('the relay', () => {
     })
     try {
       const socket = await open(`ws://127.0.0.1:${relay.port}`)
-      const sent = new TextEncoder().encode('a startup packet')
+      const sent = startupPacket('alice@example.com')
       const answer = new Promise<Uint8Array>((resolve) => {
         socket.onmessage = (event) => resolve(new Uint8Array(event.data as ArrayBuffer))
       })
-      socket.send(sent)
-      expect(new TextDecoder().decode(await answer)).toBe('a startup packet')
+      socket.send(new Uint8Array(sent))
+      expect(Buffer.from(await answer).equals(sent)).toBe(true)
       socket.close()
     } finally {
       relay.stop()
@@ -464,6 +465,65 @@ describe('a session that has not logged in', () => {
     }
   })
 
+  test('has no connection to PostgreSQL until its startup packet is whole', async () => {
+    const server = countingServer()
+    const relay = startRelay({
+      upstream: { host: '127.0.0.1', port: server.port },
+      port: 0,
+      allowedOrigins: [],
+      sessionsPerAddress: 20,
+      sessionsPerRole: 20,
+    })
+    try {
+      const socket = await open(`ws://127.0.0.1:${relay.port}`)
+      const packet = startupPacket('alice@example.com')
+      socket.send(new Uint8Array(packet.subarray(0, 11)))
+      await pause(50)
+      expect(server.connections()).toBe(0)
+      const answer = new Promise((resolve) => {
+        socket.onmessage = resolve
+      })
+      socket.send(new Uint8Array(packet.subarray(11)))
+      await answer
+      expect(server.connections()).toBe(1)
+      socket.close()
+    } finally {
+      relay.stop()
+      server.stop()
+    }
+  })
+
+  test('is refused, with no connection to PostgreSQL, when it opens with anything else', async () => {
+    const server = countingServer()
+    const relay = startRelay({
+      upstream: { host: '127.0.0.1', port: server.port },
+      port: 0,
+      allowedOrigins: [],
+      sessionsPerAddress: 20,
+      sessionsPerRole: 20,
+    })
+    // A request for TLS inside the stream, one to cancel a statement, and no packet at all.
+    const openings = [
+      Buffer.concat([int32(8), int32(80877103)]),
+      Buffer.concat([int32(16), int32(80877102), int32(1), int32(2)]),
+      Buffer.from('not a packet'),
+    ]
+    try {
+      for (const opening of openings) {
+        const socket = await open(`ws://127.0.0.1:${relay.port}`)
+        const end = closed(socket)
+        socket.send(new Uint8Array(opening))
+        const event = await end
+        expect(event.code).toBe(1008)
+        expect(event.reason).toContain('startup packet')
+      }
+      expect(server.connections()).toBe(0)
+    } finally {
+      relay.stop()
+      server.stop()
+    }
+  })
+
   test('counts against a cap on every address together', async () => {
     const server = countingServer()
     const relay = startRelay({
@@ -697,11 +757,12 @@ describe('the connection to PostgreSQL in TLS', () => {
     })
     try {
       const socket = await open(`ws://127.0.0.1:${relay.port}`)
+      const sent = startupPacket('alice@example.com')
       const answer = new Promise<Uint8Array>((resolve) => {
         socket.onmessage = (event) => resolve(new Uint8Array(event.data as ArrayBuffer))
       })
-      socket.send(new TextEncoder().encode('a startup packet'))
-      expect(new TextDecoder().decode(await answer)).toBe('a startup packet')
+      socket.send(new Uint8Array(sent))
+      expect(Buffer.from(await answer).equals(sent)).toBe(true)
       expect(server.protocols).toEqual(['postgresql'])
       socket.close()
     } finally {
@@ -726,7 +787,7 @@ describe('the connection to PostgreSQL in TLS', () => {
       const carried: unknown[] = []
       socket.onmessage = (event) => carried.push(event.data)
       const end = closed(socket)
-      socket.send(new TextEncoder().encode('a startup packet'))
+      socket.send(new Uint8Array(startupPacket('alice@example.com')))
       await end
       expect(carried).toEqual([])
     } finally {
@@ -736,8 +797,32 @@ describe('the connection to PostgreSQL in TLS', () => {
   })
 })
 
+describe('the first packet of a session', () => {
+  test('is a startup packet of protocol 3, whole or not yet', () => {
+    const packet = startupPacket('alice@example.com')
+    expect(startupPacketIn(packet)).toBe('whole')
+    expect(startupPacketIn(packet.subarray(0, 4))).toBe('partial')
+    expect(startupPacketIn(packet.subarray(0, packet.length - 1))).toBe('partial')
+    // Protocol 3.2, as libpq 18 may ask for it.
+    expect(startupPacketIn(Buffer.concat([int32(9), int32(196610), Buffer.alloc(1)]))).toBe('whole')
+  })
+
+  test('is nothing else: no request for TLS, no cancel, no length PostgreSQL would not read', () => {
+    expect(startupPacketIn(Buffer.concat([int32(8), int32(80877103)]))).toBe('refused')
+    expect(startupPacketIn(Buffer.concat([int32(8), int32(80877104)]))).toBe('refused')
+    expect(startupPacketIn(Buffer.concat([int32(16), int32(80877102)]))).toBe('refused')
+    expect(startupPacketIn(Buffer.concat([int32(10001), int32(196608)]))).toBe('refused')
+    expect(startupPacketIn(Buffer.concat([int32(4), int32(196608)]))).toBe('refused')
+    expect(startupPacketIn(Buffer.concat([int32(-1), int32(196608)]))).toBe('refused')
+  })
+})
+
 describe('the options a deployment sets', () => {
-  const env = { RELAY_UPSTREAM: 'postgres:5432' }
+  const env = {
+    RELAY_UPSTREAM: 'postgres:5432',
+    RELAY_UPSTREAM_TLS: 'off',
+    RELAY_ORIGINS: 'https://platform.example.com/',
+  }
 
   test('have defaults that keep a login short and counted', () => {
     const options = relayOptionsFromEnv(env)
