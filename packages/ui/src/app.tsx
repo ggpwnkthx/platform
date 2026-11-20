@@ -1,7 +1,8 @@
 // The installation's own field types and renderers, added before any page draws a field.
 import './extensions.ts'
+import { useEffect } from 'preact/hooks'
 import { LocationProvider, Route, Router, useLocation } from 'preact-iso'
-import { pageOf } from './routes.ts'
+import { pageOf, titleAt } from './routes.ts'
 import { SessionProvider, useSession } from './session.tsx'
 import { Shell } from './shell.tsx'
 import { Toasts } from './ui/toasts.tsx'
@@ -25,6 +26,10 @@ function Signed() {
   const { phase } = useSession()
   const { path } = useLocation()
   const page = pageOf(path)
+  // The generated file titles the page it is; a link inside the app loads no file.
+  useEffect(() => {
+    document.title = titleAt(path, document.title)
+  }, [path])
   // Every page starts signed out: the token lives in memory, so the generated HTML is the
   // sign-in, and the page itself appears once the database has let the reader in.
   if (phase !== 'ready' || !page || page.path === '/') return <SignIn />

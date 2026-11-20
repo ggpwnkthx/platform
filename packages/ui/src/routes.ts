@@ -32,6 +32,18 @@ export const pages: PageInfo[] = [
 export const pageOf = (path: string): PageInfo | undefined =>
   pages.find((p) => p.path === (path.replace(/\/+$/, '') || '/'))
 
+/**
+ * The title the document carries at a path. A generated page is titled as it is built, but
+ * a link inside the app moves between pages without loading one, so the title is said again
+ * here. What follows the page's own name — the site's name, and whatever the build added to
+ * it — is kept from the title the document already has.
+ */
+export function titleAt(path: string, current: string): string {
+  const mark = current.indexOf(' · ')
+  const site = mark < 0 ? ' · Platform' : current.slice(mark)
+  return `${pageOf(path)?.title ?? 'Sign in'}${site}`
+}
+
 /** The file a page is generated at. */
 export const fileFor = (path: string) =>
   path === '/' ? 'index.html' : `${path.slice(1)}/index.html`
