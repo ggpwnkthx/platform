@@ -130,7 +130,7 @@ thing:
   touches no row, the page reads the record again: a newer version means someone changed it
   since it was opened, otherwise a row policy refused the change or the row is gone, and the
   page says "PostgreSQL changed no row".
-- Metadata (`packages/data/src/metadata/`) in each workspace's own `item_metadata`.
+- Metadata (`packages/data/src/metadata/`) in `platform.item_metadata`.
 - DDL and DCL built by `packages/ui/src/model/` and `packages/ui/src/access/`: workspaces,
   collections, fields, grants, row policies, memberships and roles. The statements
   themselves are the platform's own, in `packages/vocabulary`, so that the operator's tools and
@@ -159,7 +159,7 @@ interactive transactions and scripts.
 
 Metadata is what an item is, as opposed to what it holds: a workspace may say what it is for,
 a collection may say how it should be read, a field may say what it holds. It is stored in
-the workspace's own metadata collection — `item_metadata`, in the workspace's schema — one
+one collection of the platform's own — `platform.item_metadata` — one
 row per key per item, and PostgreSQL decides who reaches it (see
 [access](access.md#metadata)). A reader is shown the keys they may see and nothing for the
 rest; a write by anyone but the owner is refused by PostgreSQL. A value is any JSON value. A
@@ -173,27 +173,20 @@ statement, and labels the fields it may read with their `display_name` when they
 
 ### Metadata is a collection
 
-Every workspace keeps its metadata in a collection of its own: `item_metadata`, in the
-workspace's schema, owned by the workspace's owner and made by `platform.create_metadata`
-when the workspace is. It is listed among the workspace's collections, and the interface has
-no second way of reading or changing it. Its model is the platform's — the catalog marks it
-as a system collection, so the interface offers no change to its fields — and its rows are
-their owners'. What an item's page shows as its metadata is that collection,
+The metadata of every item is kept in one table, `platform.item_metadata`, and that table is
+a system collection: it is listed in the platform's own workspace, and the interface has no
+second way of reading or changing it. Its model is the platform's — the interface offers no
+change to its fields — and its rows are their owners'. What an item's page shows as its metadata is that collection,
 filtered to the item (`metadataFilter` in `packages/data/src/metadata/collection.ts`): read by
 the question every collection is read by, and drawn by the fields every collection is drawn
 by. A key is a link to its row, and **Add key** opens the ordinary record form with the names
 of the item filled in; a row is changed and removed there, by its `id` and its `version`, as
 every row is. **Open as a collection** shows the same rows in the records grid.
 
-A workspace whose schema was made by hand, and not by the statements the platform makes a
-workspace with, has no collection until its owner gives it one. The interface says so where
-the workspace's metadata would be, and offers its owner the statement:
-`SELECT platform.create_metadata('<workspace>');`.
-
 Three things about it are its own, and they are small:
 
-- **What a row is about.** The item is named — a scope and the names of a table and a
-  column, in the workspace the row is in — and not pointed at: the platform keeps no table of items, and metadata
+- **What a row is about.** The item is named — a scope and the names of a schema, a table
+  and a column — and not pointed at: the platform keeps no table of items, and metadata
   outlives its item. So the item is composed from the names (`metadataTargetOf`), not drawn
   as a relation.
 - **The value.** It is a JSON column, typed as it is meant: a sentence is kept as a string
@@ -232,9 +225,9 @@ the items they may reach, and only the owner of an item may change it. The inter
 them as ordinary statements, shown before they run:
 
 ```sql
-INSERT INTO newsroom.item_metadata (scope, table_name, key, value)
-VALUES ('workspace', NULL, 'display_name', '"Newsroom"'::jsonb)
-ON CONFLICT (scope, coalesce(table_name, ''), coalesce(column_name, ''), key)
+INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value)
+VALUES ('workspace', 'newsroom', NULL, NULL, 'display_name', '"Newsroom"'::jsonb)
+ON CONFLICT (scope, schema_name, coalesce(table_name, ''), coalesce(column_name, ''), key)
 DO UPDATE SET value = EXCLUDED.value;
 ```
 

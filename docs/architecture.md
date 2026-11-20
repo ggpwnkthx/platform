@@ -47,8 +47,8 @@ still authorizes every explicit projection, predicate, sort, relation and write.
 - User: LOGIN role; group: NOLOGIN role. Membership lives in pg_auth_members.
 - Table/column permissions: native ACLs. Row policies: CREATE POLICY and ALTER TABLE RLS.
 - `platform`: helper functions, installation marker and transactional row audit/revisions.
-- `<workspace>.item_metadata`: what the workspace, a collection or a field is. Every
-  workspace keeps its own, read and written under forced row security that asks PostgreSQL's
+- `platform.item_metadata`: what a workspace, a collection or a field is. One collection
+  for every workspace, read and written under forced row security that asks PostgreSQL's
   own privilege functions. A field's metadata carries the
   views it appears in, and the default is written in one place; see [views](views.md).
 

@@ -25,8 +25,7 @@ forward: a database that holds a development version from before 2.3.0 is refuse
 made again. The next change to the schema is the next file in `migrations/`.
 
 The interface and the installation are one version. The interface reads the platform's
-schema, and a schema of another version is not one it knows — a workspace's own metadata
-collection, for instance, is one the platform added in 2.3.0. So an interface built for
+schema, and a schema of another version is not one it knows. So an interface built for
 2.3.0 against an installation at 2.2.0 refuses to go further and says so:
 
 ```

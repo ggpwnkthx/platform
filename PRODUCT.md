@@ -173,9 +173,10 @@ the interface alike.
   sessions while the interface keeps working.
 - The audit table is append-only for ordinary roles, not tamper-proof against database owners,
   `platform_core` members or superusers. RLS is not a substitute for withholding table ownership.
-- Every workspace keeps its metadata in its own `item_metadata` collection, under forced row
-  security, made with the workspace. A schema made by hand has none until its owner runs
-  `platform.create_metadata`.
+- The metadata of every workspace is kept in one collection, `platform.item_metadata`, under
+  forced row security. A row names its item by name: an item that is renamed leaves its
+  metadata behind until a database administrator carries the rows across, and a workspace
+  dumped by its schema does not take its metadata with it.
 - Metadata is not audited in `platform.activity`; its rows carry their own `created_by`,
   `updated_by` and `version`, and a dropped collection leaves its metadata behind, unread.
 - Writes return counts rather than `RETURNING *`.

@@ -97,9 +97,9 @@ client but not one reader from another.
 ## Metadata
 
 Metadata describes an item instead of holding its records: what a workspace is for, how a
-collection should be read, who answers for it, what a field holds. Every workspace keeps its
-own, in a collection of its own — `item_metadata`, in the workspace's schema, owned by the
-workspace's owner — one row per key per item, and it is reached under the same two rules as
+collection should be read, who answers for it, what a field holds. It is kept in one
+collection of the platform's own — `platform.item_metadata`, where a row names the workspace
+it is about — one row per key per item, and it is reached under the same two rules as
 the items themselves:
 
 - a reader sees the metadata of the items they may reach — USAGE on the schema for a
@@ -123,16 +123,18 @@ else: the metadata of a field is as private as the field it describes, and a rea
 not read a column never learns what it is called. Delegating a model without giving away the
 database is native: a NOLOGIN role that owns the workspace owns its metadata for its members.
 
-Row security is forced on the collection, so the workspace's owner — who owns the table — is
-held to the same two rules as everyone else: owning a workspace is not a right to read what a
-field of somebody else's collection in it is called. The owner of a table can lift that, as
-the owner of any table can; it is not lifted by default. The collection carries no audit
-trigger, for the same reason: revisions are read by the workspace's owners.
+The collection is owned by `platform_core`, not by any workspace's owner, and row security
+is forced on it, so its owner is held to the same two rules as everyone else: owning a
+workspace is not a right to read what a field of somebody else's collection in it is called,
+and neither is membership of `platform_core`. The collection carries no audit trigger, for
+the same reason: revisions are read by the workspace's owners.
 
-`platform.create_metadata('<workspace>')` gives a workspace its collection. It runs with the
-caller's rights, only the workspace's owner may run it, and it is safe to repeat. It is run
-when a workspace is made — by the interface, by `apply` and by `model`. A schema made by
-hand has none until its owner runs it.
+Every workspace has its metadata from the moment it exists, a schema made by hand included:
+there is nothing to make. A row names its item by name, so a workspace, a collection or a
+field that is renamed leaves its metadata behind, as unreachable as that of a dropped item,
+and a database administrator carries the rows across (`UPDATE platform.item_metadata SET
+schema_name = …`); a workspace that is dumped by its schema does not take its metadata with
+it.
 
 Three keys are reserved for how an item presents itself — `display_name`, `icon` and `color`
 (see [interface](interface.md#presentation)). They are metadata like any other, so the same two

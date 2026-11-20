@@ -7,7 +7,7 @@
 | Role catalog                      | The interface shows the caller's own roles; `cli harden` hides the raw catalogs from psql                            |
 | Permission management             | SQL GRANT/REVOKE, CREATE/ALTER POLICY, native ownership; the interface shows each statement before it runs           |
 | Model                             | PostgreSQL catalog; invoker DDL helpers and native ALTER TABLE                                                       |
-| Metadata                          | What a workspace, a collection or a field is, in the workspace's own `item_metadata`, under PostgreSQL's own rights  |
+| Metadata                          | What a workspace, a collection or a field is, in `platform.item_metadata`, under PostgreSQL's own rights             |
 | Records                           | Parameterized SQL on the reader's own login; database ACLs and RLS are authoritative                                 |
 | Complex queries and relationships | Native SQL, foreign keys, joins and views                                                                            |
 | Audit                             | Trigger-generated transactional revisions, including direct SQL writes                                               |
