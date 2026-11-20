@@ -1,5 +1,4 @@
 import { chmodSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
 import pg from 'pg'
 import { ZodError, z } from 'zod'
 import { applyManifest } from './apply.ts'
@@ -14,15 +13,7 @@ import { Cancelled, close, note, type Waiting, waiting } from './terminal.ts'
 import { deviceToken } from './token.ts'
 import { VERSION, requireInstalledVersion } from './version.ts'
 import { applyModel } from './model.ts'
-
-/**
- * The installation scripts, in order, each one leaving the database at the version it names.
- * There is one: the platform has not been released, so there is no installation of an
- * earlier version to bring forward. The next change to the schema is the next file here.
- */
-const MIGRATIONS = [{ file: '0001_platform.sql', version: '2.3.0' }]
-if (MIGRATIONS[MIGRATIONS.length - 1]!.version !== VERSION)
-  throw new Error(`The last migration must produce version ${VERSION}`)
+import { MIGRATIONS } from './migrations.ts'
 
 const secret = (name: string) => {
   const path = process.env[`${name}_FILE`]
@@ -278,10 +269,7 @@ directory is the server's own socket, for a command that runs beside the server.
           console.log(`Already installed at version ${VERSION}`)
           return
         }
-        for (const migration of pending)
-          await q.query(
-            readFileSync(join(import.meta.dir, '../../../migrations', migration.file), 'utf8')
-          )
+        for (const migration of pending) await q.query(migration.sql)
         console.log(
           installed
             ? `Upgraded PostgreSQL-native platform to version ${VERSION}`
