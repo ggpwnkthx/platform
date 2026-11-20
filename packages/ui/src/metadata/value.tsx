@@ -1,11 +1,11 @@
-import { metadataTable } from '@platform/vocabulary'
+import { metadataCollection } from '@platform/data'
 import { TextArea } from '../ui/form.tsx'
 import type { FieldType } from '../fields/types.ts'
 
 /**
  * The value of a piece of metadata, as a type of field.
  *
- * A workspace's metadata is a collection, and its value is a JSON column like any other — but what
+ * Metadata is a system collection, and its value is a JSON column like any other — but what
  * people keep in it is mostly a sentence: a purpose, a contact. So the field is typed as it
  * is meant: plain text is kept as a string, and what reads as JSON — an object, a list, a
  * number, true — is kept as itself. It is one more field type, claiming one column, and the
@@ -33,7 +33,12 @@ export const metadataValue: FieldType = {
   name: 'metadata-value',
   label: 'Metadata value',
   // Above every claim the platform makes by kind, by choices or by relation: the column is this type's.
-  claims: ({ column }) => (column.table === metadataTable && column.name === 'value' ? 40 : 0),
+  claims: ({ column }) =>
+    column.schema === metadataCollection.schema &&
+    column.table === metadataCollection.table &&
+    column.name === 'value'
+      ? 40
+      : 0,
   draw: {
     list: ({ value }) =>
       typeof value === 'string' ? (

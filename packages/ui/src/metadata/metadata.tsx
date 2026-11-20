@@ -1,21 +1,16 @@
 import {
   columnsOf,
+  isSystemWorkspace,
   metadata,
+  metadataCollection,
   metadataFilter,
-  metadataOfWorkspace,
   metadataStart,
   metadataTargetOf,
   records,
   tableOf,
   type Catalog,
 } from '@platform/data'
-import {
-  fieldTarget,
-  type MetadataEntry,
-  type MetadataTarget,
-  metadataSetupStatement,
-  metadataTable,
-} from '@platform/vocabulary'
+import { fieldTarget, type MetadataEntry, type MetadataTarget } from '@platform/vocabulary'
 import { PgError } from '@platform/pg-client'
 import { useMemo } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
@@ -27,23 +22,20 @@ import { Empty, Loading, Notice } from '../ui/bits.tsx'
 import { InfoIcon, PlusIcon } from '../ui/icons.tsx'
 import { Drawer } from '../ui/overlay.tsx'
 import { href } from '../url.ts'
-import { SaveStatements } from './editors/draft.tsx'
 import { hasKeyEditor, keyEditorOf, keyEditorsFor } from './registry.ts'
 
 /**
  * The metadata of an item, where the item is shown.
  *
- * Every workspace keeps its metadata in a collection of its own — `item_metadata`, in the
- * workspace's schema — and nothing here is a second way of reading or changing it. What an
- * item carries is that collection, filtered to the item: read by the question every collection is read by, drawn by the fields every
+ * Metadata is a system collection — `platform.item_metadata` — and nothing here is a second
+ * way of reading or changing it. What an item carries is that collection, filtered to the
+ * item: read by the question every collection is read by, drawn by the fields every
  * collection is drawn by, and changed in the record form every row is changed in. The keys
  * the interface reads for itself have editors of their own, held in `registry.ts`; what is
  * left here is where the two are put — beside the item they are about.
  */
 
-/** Is this collection the one its workspace keeps its metadata in? */
-const isMetadata = (catalog: Catalog, schema: string, table: string): boolean =>
-  table === metadataTable && Boolean(tableOf(catalog, schema, table)?.system)
+const { schema: metaSchema, table: metaTable } = metadataCollection
 
 /** May the reader change an item's metadata? PostgreSQL gives that to the owner of the item. */
 export function ownsItem(catalog: Catalog, target: MetadataTarget): boolean {
@@ -62,7 +54,7 @@ export function metadataRefusal(
   table: string,
   error: unknown
 ): { title: string; detail?: string } | null {
-  if (!schema || table !== metadataTable) return null
+  if (schema !== metaSchema || table !== metaTable) return null
   if (!(error instanceof PgError) || error.code !== '23505') return null
   return {
     title: 'This item already carries that key',
@@ -78,51 +70,22 @@ function useHere(): string {
 }
 
 /** The record form of one row of the metadata collection, or of a new one about an item. */
-function rowHref(schema: string, id: string, from: string, target?: MetadataTarget): string {
+function rowHref(id: string, from: string, target?: MetadataTarget): string {
   const start = target ? metadataStart(target) : {}
   return href('/content/item', {
-    ws: schema,
-    c: metadataTable,
+    ws: metaSchema,
+    c: metaTable,
     id,
     from,
     ...Object.fromEntries(Object.entries(start).map(([name, value]) => [`v.${name}`, value])),
   })
 }
 
-/**
- * A workspace that keeps no metadata yet: its schema was made by hand, and not by the
- * statements the platform makes a workspace with. Its owner gives it its collection — one
- * statement, shown before it runs.
- */
-function MetadataSetup({ schema }: { schema: string }) {
-  const { catalog } = useSession()
-  const owner = Boolean(catalog.schemas.find((s) => s.name === schema)?.can_alter)
-  return (
-    <>
-      <Notice tone="warning" title={`${schema} keeps no metadata yet`}>
-        A workspace keeps its metadata in a collection of its own,{' '}
-        <span class="mono">
-          {schema}.{metadataTable}
-        </span>
-        , and this one has none you may reach.{' '}
-        {owner ? 'You own the workspace, so you may give it one.' : 'Its owner gives it one.'}
-      </Notice>
-      {owner && (
-        <SaveStatements
-          statements={[metadataSetupStatement(schema)]}
-          label="Give it its metadata collection"
-          saved="The workspace keeps its own metadata"
-        />
-      )}
-    </>
-  )
-}
-
 /** The metadata collection itself, filtered to one item: the same rows, in the records grid. */
 const collectionHref = (target: MetadataTarget): string =>
   href('/content/records', {
-    ws: target.schema,
-    c: metadataTable,
+    ws: metaSchema,
+    c: metaTable,
     f: JSON.stringify(metadataFilter(target)),
   })
 
@@ -137,19 +100,18 @@ const listed = ['id', 'key', 'value', 'updated_by', 'updated_at', 'version']
 function MetadataRows({ target, tick }: { target: MetadataTarget; tick?: unknown }) {
   const { catalog } = useSession()
   const here = useHere()
-  const schema = target.schema
-  const info = metadataOfWorkspace(catalog, schema)
-  const columns = columnsOf(catalog, schema, metadataTable)
+  const info = tableOf(catalog, metaSchema, metaTable)
+  const columns = columnsOf(catalog, metaSchema, metaTable)
     .filter((c) => c.can_select && listed.includes(c.name))
     .map((c) => c.name)
-  const fields = useMemo(() => resolveFields(catalog, schema, metadataTable), [catalog, schema])
+  const fields = useMemo(() => resolveFields(catalog, metaSchema, metaTable), [catalog])
   const value = fields.find((field) => field.name === 'value')
   const found = useLoad(
     info && columns.length
       ? (db) =>
           records(db, {
-            schema,
-            table: metadataTable,
+            schema: metaSchema,
+            table: metaTable,
             columns,
             searchable: [],
             filter: metadataFilter(target),
@@ -161,7 +123,12 @@ function MetadataRows({ target, tick }: { target: MetadataTarget; tick?: unknown
       : null,
     [target.scope, target.schema, target.table, target.column, catalog, tick]
   )
-  if (!info) return <MetadataSetup schema={schema} />
+  if (!info)
+    return (
+      <Notice tone="warning" title="PostgreSQL shows you no metadata collection">
+        Your role has no right on <span class="mono">platform.item_metadata</span>.
+      </Notice>
+    )
   if (found.error) return <Notice tone="danger" title={describe(found.error).title} />
   if (!found.data) return <Loading />
   const rows = (found.data.rows as Record<string, unknown>[]).filter(
@@ -190,7 +157,7 @@ function MetadataRows({ target, tick }: { target: MetadataTarget; tick?: unknown
               {row.id === undefined ? (
                 String(row.key)
               ) : (
-                <a class="grid-open" href={rowHref(schema, String(row.id), here)}>
+                <a class="grid-open" href={rowHref(String(row.id), here)}>
                   {String(row.key)}
                 </a>
               )}
@@ -218,7 +185,7 @@ function MetadataRows({ target, tick }: { target: MetadataTarget; tick?: unknown
 function MetadataLinks({ target, owner }: { target: MetadataTarget; owner: boolean }) {
   const { catalog } = useSession()
   const here = useHere()
-  const info = metadataOfWorkspace(catalog, target.schema)
+  const info = tableOf(catalog, metaSchema, metaTable)
   if (!info) return null
   return (
     <div class="row-actions">
@@ -226,10 +193,7 @@ function MetadataLinks({ target, owner }: { target: MetadataTarget; owner: boole
         Open as a collection
       </a>
       {owner && info.can_insert && (
-        <a
-          class="button button-secondary button-small"
-          href={rowHref(target.schema, '+', here, target)}
-        >
+        <a class="button button-secondary button-small" href={rowHref('+', here, target)}>
           <PlusIcon size={16} aria-hidden="true" />
           <span>Add key</span>
         </a>
@@ -250,11 +214,9 @@ export function MetadataPanel({ target, owner }: { target: MetadataTarget; owner
         <div>
           <h2>Metadata</h2>
           <p>
-            What this {item} is: its rows in the workspace's own metadata collection,{' '}
-            <span class="mono">
-              {target.schema}.{metadataTable}
-            </span>
-            . {owner ? 'You own it, so you may change them.' : 'Only its owner may change them.'}
+            What this {item} is: its rows in the system collection{' '}
+            <span class="mono">platform.item_metadata</span>.{' '}
+            {owner ? 'You own it, so you may change them.' : 'Only its owner may change them.'}
           </p>
         </div>
         <MetadataLinks target={target} owner={owner} />
@@ -269,19 +231,13 @@ export function MetadataPanel({ target, owner }: { target: MetadataTarget; owner
  * editor registered for this kind of item.
  */
 export function KeyEditorPanels({ target, owner }: { target: MetadataTarget; owner: boolean }) {
-  const { catalog } = useSession()
-  const kept = Boolean(metadataOfWorkspace(catalog, target.schema))
   const editors = keyEditorsFor(target.scope)
-  const found = useLoad(editors.length && kept ? (db) => metadata(db, target) : null, [
+  const found = useLoad(editors.length ? (db) => metadata(db, target) : null, [
     target.scope,
     target.schema,
     target.table,
     target.column,
-    kept,
   ])
-  // A workspace that keeps no metadata yet has nowhere to write a key: the panel that lists
-  // its metadata says so, and offers its owner the statement that gives it its collection.
-  if (!kept) return null
   return (
     <>
       {editors.map(({ name, title, note, Editor }) => (
@@ -358,12 +314,9 @@ export function FieldMetadataDrawer({
   open: boolean
   onClose: () => void
 }) {
-  const { catalog } = useSession()
-  const kept = Boolean(metadataOfWorkspace(catalog, schema))
   const target = fieldTarget(schema, table, column)
-  const found = useLoad(open && kept ? (db) => metadata(db, target) : null, [
+  const found = useLoad(open ? (db) => metadata(db, target) : null, [
     open,
-    kept,
     target.scope,
     target.schema,
     target.table,
@@ -374,11 +327,9 @@ export function FieldMetadataDrawer({
       open={open}
       onClose={onClose}
       title={`Metadata of ${column}`}
-      subtitle={`What this field is: its rows in ${schema}.${metadataTable}, the workspace's own metadata.`}
+      subtitle="What this field is: its rows in the system collection platform.item_metadata."
     >
-      {!kept ? (
-        <MetadataSetup schema={schema} />
-      ) : found.error ? (
+      {found.error ? (
         <Notice tone="danger" title={describe(found.error).title} />
       ) : !found.data ? (
         <Loading />
@@ -425,7 +376,8 @@ export function MetadataRowEditor({
   onSaved: () => void
 }) {
   const { catalog } = useSession()
-  const target = isMetadata(catalog, schema, table) ? metadataTargetOf(schema, row) : null
+  const ours = isSystemWorkspace(catalog, schema) && schema === metaSchema && table === metaTable
+  const target = ours ? metadataTargetOf(row) : null
   const key = typeof row?.key === 'string' ? row.key : ''
   const editor = target ? keyEditorOf(target.scope, key) : null
   const found = useLoad(target && editor ? (db) => metadata(db, target) : null, [

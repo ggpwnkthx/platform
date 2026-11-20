@@ -11,7 +11,6 @@ import {
   identity as readIdentity,
   type Identity,
   presentations as readPresentations,
-  workspacesWithMetadata,
 } from '@platform/data'
 import { ConnectionError, PgError } from '@platform/pg-client'
 import { indexPresentations, type PresentationIndex } from '@platform/data'
@@ -202,8 +201,7 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
         const wrong = versionProblem(me.platform_version)
         if (wrong) throw new Error(wrong)
         const found = await readCatalog(db)
-        // Every workspace keeps its own metadata: the catalog says which of them the reader reaches.
-        const shown = await readPresentations(db, workspacesWithMetadata(found))
+        const shown = await readPresentations(db)
         return { identity: me, catalog: found, presentations: indexPresentations(shown) }
       })
       setIdentity(found.identity)
@@ -223,11 +221,10 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
       const me = await readIdentity(db)
       const wrong = versionProblem(me.platform_version)
       if (wrong) throw new Error(wrong)
-      const read = await readCatalog(db)
       return {
         identity: me,
-        catalog: read,
-        presentations: await readPresentations(db, workspacesWithMetadata(read)),
+        catalog: await readCatalog(db),
+        presentations: await readPresentations(db),
       }
     })
     setIdentity(found.identity)
