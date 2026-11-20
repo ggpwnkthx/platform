@@ -5,4 +5,4 @@ packages/ui/dist/
 examples/newsroom/.dist/
 platform-threat-model.md
 /.*
-/.github
+!/.github

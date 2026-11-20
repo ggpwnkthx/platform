@@ -1,0 +1,46 @@
+name: Check
+on: [push, pull_request]
+# The checks read the repository and write nothing to it.
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      # PostgreSQL 18 with the token validator, trusting the issuer the tests run in-process.
+      # It has no password: the tests' administrator signs in with a token, like everyone else.
+      # Host networking lets the server reach that issuer on the runner's loopback.
+      - run: docker build -t platform-postgres:test deploy/postgres
+      # The images the local stack builds, built here so that a pruned workspace or a missing
+      # dependency is caught by the checks, and not on a developer's machine.
+      - run: docker build -t platform-cli:test --target cli .
+      - run: docker build -t platform-relay:test --target relay .
+      - run: >-
+          docker run -d --name postgres --network host
+          -e PGPORT=54329
+          -e PLATFORM_ADMIN=installer@example.com
+          -e PLATFORM_OIDC_ISSUER=http://127.0.0.1:54330
+          platform-postgres:test postgres -c listen_addresses=127.0.0.1
+      - run: timeout 60 sh -c 'until docker exec postgres pg_isready -p 54329 -U postgres; do sleep 1; done'
+      # The relay the interface reaches PostgreSQL through, for the wire client's tests.
+      - run: |
+          nohup bun packages/relay/src/relay.ts > /tmp/relay.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:54331/health && break
+            sleep 1
+          done
+        env:
+          RELAY_UPSTREAM: 127.0.0.1:54329
+          RELAY_PORT: 54331
+          RELAY_SESSIONS_PER_ADDRESS: 64
+          RELAY_SESSIONS_PER_ROLE: 64
+      - run: bun run check
+        env:
+          TEST_ADMIN_URL: postgres://installer%40example.com@127.0.0.1:54329/postgres
+          TEST_OIDC_ISSUER: http://127.0.0.1:54330
+          TEST_RELAY_URL: ws://127.0.0.1:54331
