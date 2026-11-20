@@ -89,11 +89,11 @@ dev mode:
 bun run examples:newsroom:dev     # http://localhost:5173/
 ```
 
-The dev mode is the example: `examples/newsroom/platform.json` says how it is built — the
-mode, the module that is the database, the module that holds its own renderers, and where the
-site is written — and the CLI reads it.
+The dev mode is the example: `examples/newsroom/platform.json` says what the folder is — the
+files it applies to a database, and the module that holds its own renderers — and every tool
+reads it.
 The dev mode runs **PostgreSQL 18 inside the page** (PGlite), installed with the real
-`migrations/*.sql` and then with the example's own three files, as a deployment installs
+`migrations/*.sql` and then with the three files the example applies, as a deployment installs
 them — `models.json` (the schema), `migration.sql` (what a manifest cannot say) and `demo.sql`
 (records and their history): the newsroom workspace with its
 sections, articles and corrections, the crm workspace owned by the group `sales` with its

@@ -209,7 +209,7 @@ not of how it feels — which future work may keep or replace.
 
 ## Evidence on Hand
 
-- Real content: the newsroom example (`examples/newsroom`: `models.json`, `migration.sql`,
+- Real content: the newsroom example (`examples/newsroom/apply`: `models.json`, `migration.sql`,
   `demo.sql`, applied by `apply --example`), `deploy/models/crm.json`, the product documents in `docs/`, and the
   generated interface pages in `packages/ui/dist`.
 - Real demonstrations: the local stack with its three example accounts; integration tests and CI

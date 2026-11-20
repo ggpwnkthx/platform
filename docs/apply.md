@@ -15,8 +15,22 @@ Each change is printed, then a count of what changed and what was already in pla
 the same manifest again changes nothing. `--dry-run` runs every statement and rolls back, so
 its report is PostgreSQL's answer, including any permission it would refuse.
 
-`--example=NAME` applies an example of the checkout, the folder `examples/NAME`. An example is
-three files, applied in this order:
+`--example=NAME` applies an example of the checkout, the folder `examples/NAME`. The folder's
+`platform.json` names what it applies, each file relative to the folder:
+
+```json
+{
+  "apply": {
+    "models": "apply/models.json",
+    "migration": "apply/migration.sql",
+    "demo": "apply/demo.sql"
+  }
+}
+```
+
+`models` is required and the two SQL files are the example's to leave out. A folder is an
+example because its `platform.json` has `apply`. The newsroom keeps its three in
+`examples/newsroom/apply/`, and they are applied in this order:
 
 | File            | What it holds                                                                                                                    | When it runs                                          |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |

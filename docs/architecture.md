@@ -84,8 +84,8 @@ The interface is a static site in `packages/ui/`, generated at build time. `pack
 Preact application; `packages/cli` renders every page to HTML with the interface's own
 prerenderer and bundles the client with Bun's bundler into `packages/ui/dist`: one file per page, one
 client bundle (`app.js`), `styles.css`, the self-hosted Inter and JetBrains Mono fonts and
-`config.json` — the file the site says in, written by the build from the site's own
-configuration and the environment. A web server hands out those files; nothing renders a page at request time,
+`config.json` — the file that says where the site runs, written by the build from the
+platform's defaults and the environment. A web server hands out those files; nothing renders a page at request time,
 holds a session or adds authorization of its own. The pages are listed in
 `packages/ui/src/routes.ts` and described in [interface](interface.md).
 
@@ -128,16 +128,17 @@ SQLSTATE.
 
 The interface reaches the database through one seam, `packages/ui/src/pg/connect.ts`. A production
 build leaves it alone, and the page opens a WebSocket to the relay. A dev-mode build
-(`bun run examples:newsroom:dev`) resolves the same seam to the module the example's
-configuration names — `examples/newsroom/install.ts` — PostgreSQL 18 running
+(`bun run examples:newsroom:dev`) loads the same seam as `packages/cli/src/in-page.ts`, handed
+the files the example's `platform.json` says it applies: PostgreSQL 18 running
 inside the page (PGlite) and installed with the real migrations, so the interface can be built
 without a server, an issuer or a relay. The swap happens while the bundle is built, so PGlite
 never reaches a production bundle. The seam carries more than the connection: it says who may
 sign in without an issuer, what they are told, and how their choice is kept. A production
-seam has none of that — there is an issuer — and the dev-mode seam is the example's own.
+seam has none of that — there is an issuer — and the dev-mode seam reads it from the example:
+the people are the ones its `models.json` names.
 
 There is a second seam, `packages/ui/src/extensions.ts`, for what a site adds to the interface:
-field types and renderers of its own. It is empty, and a build of either mode puts the module
+field types and renderers of its own. It is empty, and every build of a site puts the module
 a site's `platform.json` names as `extensions` in its place; the module registers with what
 `@platform/ui` publishes (`fields/registry.ts`, `fields/renderers.tsx`). The example's is
 `examples/newsroom/extensions.tsx`.
@@ -192,8 +193,10 @@ deployment files, the documentation and the integration tests that cross the pac
   builds typed DDL for the model importer; `cli.ts` runs the operator tasks; `apply.ts`
   converges a database on a JSON manifest; `harden.ts` hides the role catalogs;
   `deployment/` runs the deployments, split into the local stack, Kubernetes, the help text
-  and the runtime they share; `ui/` builds the interface as a static site and serves it
-  while it is worked on, reading `platform.json` for what to build.
+  and the runtime they share; `config.ts` reads `platform.json`, what a folder says of
+  itself; `ui/` builds the interface as a static site and serves it while it is worked on;
+  `in-page.ts` is PostgreSQL in the process, which installs an example for its tests and is
+  the database a dev-mode build puts in the seam.
 - `packages/relay` — the WebSocket in front of PostgreSQL's port: `relay.ts`, and nothing else.
   It holds no credentials, and it reads one setting: the role PostgreSQL reports, so that it
   can keep one role from taking the database's connections for itself.
@@ -213,12 +216,13 @@ deployment files, the documentation and the integration tests that cross the pac
   `src/prerender.tsx` renders the pages, `src/headers.ts` holds the headers the site is
   served with, and `src/paths.ts` says where the interface lives. There is no build script
   here: the interface is source, and the packages that need a site build one. The dev-mode
-  server is not here either: it belongs to the example, which is where the PostgreSQL that
-  runs inside the page lives too.
-- `examples/newsroom` — the newsroom example, running. It imports the interface and the
-  builder, and it is the only thing that knows PostgreSQL runs inside the page: the in-page
-  database, the files it installs (`models.json`, `migration.sql`, `demo.sql`), the people who sign in without an issuer, the dev-mode
-  build and the server that serves it.
+  server is not here either, and nor is the PostgreSQL that runs inside the page: both are
+  the CLI's.
+- `examples/newsroom` — the newsroom example. It is content, and no machinery: `platform.json`
+  says what the folder is, `apply/` holds what it applies to a database (`models.json`,
+  `migration.sql` and `demo.sql`), and `extensions.tsx` is what it adds to the interface. The same files are
+  applied to a deployment, installed in the page of a dev-mode build, and asked questions of
+  by the tests beside them.
 
 `migrations/` holds the installation scripts the CLI applies and the dev-mode build
 installs into its in-page PostgreSQL. `deploy/cdn` explains how the site is published. There

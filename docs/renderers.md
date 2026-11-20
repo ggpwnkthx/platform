@@ -191,7 +191,14 @@ in its `platform.json`, and the build puts it in the seam's place — in the pre
 and in the bundle alike, in a development build and a production one:
 
 ```json
-{ "mode": "development", "database": "install.ts", "extensions": "extensions.tsx", "out": ".dist" }
+{
+  "apply": {
+    "models": "apply/models.json",
+    "migration": "apply/migration.sql",
+    "demo": "apply/demo.sql"
+  },
+  "extensions": "extensions.tsx"
+}
 ```
 
 The module is the site's: it is kept beside the site's configuration, it is compiled as the

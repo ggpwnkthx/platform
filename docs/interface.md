@@ -379,13 +379,13 @@ The pages are static, so what they need to find the issuer and the database is a
 beside them, read once at start (`packages/ui/src/config.ts`). It is a file in the published site, so
 a deployment changes it without rebuilding the bundle.
 
-The file belongs to the site, not to the interface: the interface says nothing about where it
-runs. Three things say it, in this order — the platform's own defaults
-(`defaultRuntimeConfig` in `packages/ui/src/config.ts`), the site itself (a `config.json`
-beside its `platform.json`, as `examples/newsroom/config.json` has), and the environment the
+The file belongs to the deployment: neither the interface nor a site's `platform.json` says
+where it runs. Two things say it, in this order — the platform's own defaults
+(`defaultRuntimeConfig` in `packages/ui/src/config.ts`) and the environment the
 deployment runs in (`PLATFORM_ISSUER`, `PLATFORM_RELAY_URL`, `PLATFORM_CLIENT_ID`,
 `PLATFORM_CLAIM`, `PLATFORM_DATABASE_NAME`, `PLATFORM_STATEMENT_TIMEOUT_MS`). The build
-writes the result into the site, so a deployment changes it without rebuilding the bundle.
+writes the result into the site, and writes the `_headers` file from the same answer, so the
+issuer the pages are sent to is the issuer the headers let them reach.
 
 | Field                | Example                            | Purpose                                                    |
 | -------------------- | ---------------------------------- | ---------------------------------------------------------- |
@@ -507,53 +507,72 @@ balancer, a tunnel, or the relay itself with a certificate.
 `examples/newsroom/.dist` and serves it on http://localhost:5173 (PORT to change). Every change
 under `packages/ui/src` — or under `examples/newsroom` — rebuilds the pages; reload to see it.
 
-The CLI reads `platform.json` from the directory it is pointed at. That file is how the
-example says what it is: the mode it is built in, the module that is the database, the module
-that holds its own field types and renderers, and where the site is written.
+The CLI reads `platform.json` from the directory it is pointed at. That file is how a folder
+says what it is, and every tool reads the same one (`packages/cli/src/config.ts`): the files
+it applies to a database, and the module that holds its own field types and renderers.
 
 ```json
-{ "mode": "development", "database": "install.ts", "extensions": "extensions.tsx", "out": ".dist" }
+{
+  "apply": {
+    "models": "apply/models.json",
+    "migration": "apply/migration.sql",
+    "demo": "apply/demo.sql"
+  },
+  "extensions": "extensions.tsx"
+}
 ```
 
-`extensions` is optional, and it is read in either mode: the build puts the module it names
-in the place of `packages/ui/src/extensions.ts`, which is empty, so what the site registers
-is in the prerendered pages and in the bundle. See [renderers](renderers.md) and
-[fields](fields.md).
+`apply` is what makes the folder an example. `apply --example` applies those files to a
+deployment ([apply](apply.md)), and a build of the folder installs them in a PostgreSQL that
+runs inside the page. `models` is required; the two SQL files are the folder's to leave out.
 
-`bun run cli ui build` and `bun run cli ui dev` take the same file, in the working directory or
-in `--dir=DIR`. Without one, the interface is built as it is published: the real one, with the
-relay and the issuer.
+`extensions` is optional, and it is read by every build of the folder: the build puts the
+module it names in the place of `packages/ui/src/extensions.ts`, which is empty, so what the
+site registers is in the prerendered pages and in the bundle. See [renderers](renderers.md)
+and [fields](fields.md).
+
+The file says what the folder is, and nothing else. How it is built is the command's to say:
+`ui build` and `ui dev` build a folder that applies something with it installed in the page,
+and `--production` (or `--relay` with `dev`) builds the published interface instead, the one
+with the relay and the issuer. Where it runs is the deployment's to say, in its environment
+(see [config.json](#configjson)). A key the file does not know is refused. The site is
+written to `.dist` in the folder.
+
+`bun run cli ui build` and `bun run cli ui dev` take the file in the working directory or
+in `--dir=DIR`. Without one, the interface is built as it is published, in
+`packages/ui/dist`.
 
 In it, PostgreSQL 18 runs inside the page: PGlite (`@electric-sql/pglite`, a dependency of the
-example package),
+CLI, which builds the site),
 installed with the real `migrations/*.sql` (the list `migrate` runs,
 `packages/cli/src/migrations.ts`) and then with the example's own files, through the
-same code a deployment applies them with (`examples/newsroom/install.ts`, the example's one
-module: the installation, and the database the build puts in the seam): `models.json` is
+same code a deployment applies them with (`packages/cli/src/in-page.ts`: the installation,
+and the database the build puts in the seam, made of whichever example it is handed): `models.json` is
 the schema, `migration.sql` is what a manifest cannot say, and `demo.sql` is the records and
 their history. Together they leave the newsroom
 workspace with sections, articles and corrections and its grants and policies; the crm
 workspace, owned by the group `sales`, with accounts, contacts and deals and real foreign
-keys; revisions and metadata. The sign-in page offers the three example people, admin, alice
-and bob. Choosing one logs that role in with `SET SESSION AUTHORIZATION`, so grants, row
+keys; revisions and metadata. The sign-in page offers the people `models.json` names — admin,
+alice and bob — each with what the manifest says of them: what they own, whether they
+administer roles, and their groups. Choosing one logs that role in with `SET SESSION AUTHORIZATION`, so grants, row
 policies and triggers apply as they would on a server. Signing in as someone else reloads the
 page, and the database is kept in IndexedDB across reloads, under a name made from the
 installation scripts and the example's three files. A change to any of them is another name:
 the next load installs the example again, forgets the database of the earlier build, and with
 it what was written in the page. Clearing the site's storage does the same.
 
-The swap happens at build time: a Bun plugin replaces `packages/ui/src/pg/connect.ts` with
-`examples/newsroom/install.ts`, so PGlite never reaches the production bundle. The example is a
-package of its own (`examples/newsroom/package.json`): it depends on `@platform/ui`, and it is the
-only thing that knows PostgreSQL runs in the page. What it holds is its configuration
-(`platform.json`): the mode it is built in, the module that is the database, the module that
-holds its own renderers (`extensions.tsx`), and where the site is written. The people who sign in without an issuer come from the example too — the people, the
-words the sign-in page says, and the storage that keeps the choice between reloads. The
-interface asks the seam who may sign in and how, and the production seam has none. The
+The swap happens at build time: a Bun plugin loads `packages/ui/src/pg/connect.ts` as a module
+that imports the files `apply` names and hands them to `packages/cli/src/in-page.ts`, so
+PGlite never reaches the production bundle and nothing is written in the example to make it
+so. The example is a package of its own (`examples/newsroom/package.json`) so that its
+extensions and its tests are compiled as its own; it holds no code that knows PostgreSQL
+runs in the page. The interface asks the seam who may sign in and how — the people, the
+words the sign-in page says, and the storage that keeps the choice between reloads — and the
+production seam has none. The
 dev-mode server's CSP adds `'wasm-unsafe-eval'` to `script-src`, there only, because PGlite is
 WebAssembly.
 
 `bun run examples:newsroom:dev --relay=HOST:PORT` serves the real build from `packages/ui/dist` instead and forwards
 `/pg` WebSockets to a PostgreSQL at HOST:PORT, byte for byte, as the deployment's relay does.
-Sign-in then goes through the issuer in `examples/newsroom/config.json`. Use it to work
-against the local stack.
+Sign-in then goes through the issuer the environment names (`PLATFORM_ISSUER`), or the
+platform's default, `http://idp.localhost:5556`. Use it to work against the local stack.
