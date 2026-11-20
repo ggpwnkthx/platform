@@ -1,9 +1,12 @@
 /** What the ui command can do, and what it needs. */
-export const UI_HELP = `platform ui <build|dev> [options]
+export const UI_HELP = `platform ui <build|dev|serve> [options]
 
   build   Write the interface out as a static site: every page rendered to HTML, one client
           bundle, the styles, the fonts, config.json and the _headers file.
   dev     Write the site and serve it, rebuilding it on every change.
+  serve   Serve a site that is already built, as the files it is, with the headers its
+          _headers file lists: --dir is the built site, --port defaults to 8080. It is what
+          the local stack puts behind its edge for an example; a deployment uses a CDN.
   --dir=DIR       The directory that holds platform.json. Default: the working directory.
   --production    Build the published interface, whatever the configuration says.
   --relay=HOST:PORT

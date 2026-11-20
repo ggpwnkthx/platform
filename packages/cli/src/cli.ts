@@ -9,6 +9,7 @@ import { bearer, clientConfig, TokenClient, transaction } from './database/db.ts
 import { deploy, localDatabase } from './deployment/index.ts'
 import { hardenNotes, hardenSql, type HardenMode } from './harden.ts'
 import { authenticationProblems, requirePostgres18 } from './database/requirements.ts'
+import { Cancelled, close, note, type Waiting, waiting } from './terminal.ts'
 import { deviceToken } from './token.ts'
 import { VERSION, requireInstalledVersion } from './version.ts'
 import { applyModel } from './model.ts'
@@ -154,6 +155,12 @@ async function main() {
     return
   }
   if (command === 'ui') {
+    // A built site is served by the server alone: nothing of the interface is loaded for it.
+    if (process.argv[3] === 'serve') {
+      const { serve } = await import('./ui/serve.ts')
+      process.exitCode = serve(process.argv.slice(4))
+      return
+    }
     // Loaded here, so that the operator's commands do not carry the interface with them.
     const { ui } = await import('./ui/index.ts')
     process.exitCode = await ui(process.argv.slice(3))
@@ -166,12 +173,20 @@ async function main() {
   if (command === 'token') {
     const config = loadConfig()
     if (!config.oidcIssuer) throw new Error('OIDC_ISSUER is required')
-    // The token is the only thing on stdout, so that it can be captured.
-    console.log(
-      await deviceToken(config.oidcIssuer, process.env.OIDC_CLI_CLIENT_ID ?? 'platform-psql', (m) =>
-        console.error(m)
-      )
-    )
+    let signingIn: Waiting | undefined
+    const token = await deviceToken(
+      config.oidcIssuer,
+      process.env.OIDC_CLI_CLIENT_ID ?? 'platform-psql',
+      (message) => {
+        note(message)
+        signingIn = waiting('Waiting for the sign-in')
+      }
+    ).catch((error) => {
+      signingIn?.fail('Not signed in')
+      throw error
+    })
+    signingIn?.done('Signed in')
+    console.log(token)
     return
   }
   if (
@@ -271,8 +286,19 @@ directory is the server's own socket, for a command that runs beside the server.
   }
 }
 main().catch((error: Error & { code?: string }) => {
-  console.error(
-    error instanceof ZodError ? z.prettifyError(error) : error.message || error.code || error
+  // A question left unanswered has already been said so, where it was asked.
+  if (error instanceof Cancelled) {
+    close()
+    process.exitCode = 130
+    return
+  }
+  // Under what the command had said so far, and the last thing it says.
+  note(
+    String(
+      error instanceof ZodError ? z.prettifyError(error) : error.message || error.code || error
+    ),
+    'error'
   )
+  close()
   process.exitCode = 1
 })

@@ -4,24 +4,13 @@
  * The site is built by a fresh process every time, so that a change to the sources is read
  * and not the module that was loaded before it.
  */
-import { existsSync, readFileSync, statSync, watch } from 'node:fs'
+import { readFileSync, watch } from 'node:fs'
 import { connect } from 'node:net'
 import { join } from 'node:path'
 import { securityHeaders } from '@platform/ui/headers.ts'
 import { root, sources } from '@platform/ui/paths.ts'
 import type { InterfaceConfig } from './config.ts'
-
-const types: Record<string, string> = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.json': 'application/json; charset=utf-8',
-  '.woff2': 'font/woff2',
-  '.wasm': 'application/wasm',
-  '.data': 'application/octet-stream',
-  '.map': 'application/json',
-}
+import { fileIn, types } from './serve.ts'
 
 /** The interface, served on a port, with the site it serves beside it. */
 export async function serveInterface(
@@ -45,12 +34,7 @@ export async function serveInterface(
     return (await child.exited) === 0
   }
 
-  function fileFor(path: string): string | null {
-    const clean = decodeURIComponent(path).replace(/^\/+|\/+$/g, '')
-    if (clean.split('/').includes('..')) return null
-    const candidate = clean.includes('.') ? join(dist, clean) : join(dist, clean, 'index.html')
-    return existsSync(candidate) && statSync(candidate).isFile() ? candidate : null
-  }
+  const fileFor = (path: string) => fileIn(dist, path)
 
   if (!(await build())) process.exit(1)
 
