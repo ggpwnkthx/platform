@@ -7,13 +7,24 @@ services:
     environment:
       POSTGRES_DB: platform
       POSTGRES_USER: postgres
-      PLATFORM_OIDC_ISSUER: http://localhost:${DEX_PORT:-5556}/dex
+      # The issuer, on the deployment's own name for Dex, on the port the edge answers on.
+      # It is the same address everywhere: the browser, this container and the tools.
+      PLATFORM_OIDC_ISSUER: http://${PLATFORM_IDP_HOST:-idp}.${PLATFORM_DOMAIN:-localhost}:${EDGE_PORT:-8080}
       PLATFORM_TOKEN_ONLY_FROM: 10.89.71.0/24
+    # The edge shares this container's network namespace, so the issuer's name is the
+    # loopback here, and the edge answers for it.
+    extra_hosts:
+      - "${PLATFORM_IDP_HOST:-idp}.${PLATFORM_DOMAIN:-localhost}:127.0.0.1"
     networks: [default, relay]
     ports:
+      # PostgreSQL, on its own name: db.<domain> answers on the default port.
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
-      # Dex, below, listens in this container's network namespace.
-      - "127.0.0.1:${DEX_PORT:-5556}:${DEX_PORT:-5556}"
+      # The edge, below: the only part of the stack that answers on the network, so the
+      # only part that is published. The ports are the operator's to choose, and are
+      # never 80 or 443: a rootless container cannot bind those. The port inside is the
+      # port outside, so that one address is the same everywhere.
+      - "127.0.0.1:${EDGE_PORT:-8080}:${EDGE_PORT:-8080}"
+      - "127.0.0.1:${EDGE_TLS_PORT:-4433}:${EDGE_TLS_PORT:-4433}"
     volumes:
       # Not the volume a PostgreSQL 16 stack used: that one is left as it was.
       - data18:/var/lib/postgresql
@@ -33,16 +44,26 @@ services:
     command: [dex, serve, /etc/dex/config.yaml]
     network_mode: service:postgres
     environment:
-      DEX_ISSUER: http://localhost:${DEX_PORT:-5556}/dex
+      # The issuer, on the deployment's own name for Dex, on the port the edge answers on.
+      # It is the same address the browser and PostgreSQL use: the tokens carry it, and
+      # PostgreSQL compares it with what it was told.
+      DEX_ISSUER: http://${PLATFORM_IDP_HOST:-idp}.${PLATFORM_DOMAIN:-localhost}:${EDGE_PORT:-8080}
       DEX_HTTP_PORT: ${DEX_PORT:-5556}
       PLATFORM_PUBLIC_ORIGIN: ${PLATFORM_PUBLIC_ORIGIN:-http://localhost:5173}
-      DEX_LOCAL_USERS: "1"
+      # The one account with a password: the break-glass administrator. Everybody else
+      # signs in through a connector, an identity provider that vouches for its addresses.
+      DEX_LOCAL_ADMIN: "1"
+      # Who that is: the deployment's own administrator, on its own domain.
+      DEX_ADMIN_EMAIL: ${PLATFORM_ADMIN:-admin@localhost}
       DEX_ADMIN_HASH: ${DEX_ADMIN_HASH:-}
-      DEX_ALICE_HASH: ${DEX_ALICE_HASH:-}
-      DEX_BOB_HASH: ${DEX_BOB_HASH:-}
     volumes:
       - ../dex/config.yaml.tmpl:/etc/dex/config.yaml:ro
+      # The sign-in form, with the administrator's address filled in: Dex's own, with that
+      # one change, over the image's.
+      - ../dex/password.html:/srv/dex/web/templates/password.html:ro
       - dex:/var/dex
+    # No extra hosts here: a container that joins another's network namespace may not
+    # carry them. Dex does not need the name: the browser and PostgreSQL open the issuer.
     tmpfs: [/tmp]
     depends_on: [postgres]
     read_only: true
@@ -64,11 +85,60 @@ services:
       DATABASE_NAME: platform
       DATABASE_SSL: disable
       PGUSER: postgres
+      # The administrator the example's roles are made for: the account Dex keeps.
+      PLATFORM_ADMIN: ${PLATFORM_ADMIN:-}
+      PLATFORM_DOMAIN: ${PLATFORM_DOMAIN:-localhost}
     volumes:
       - socket:/var/run/postgresql
     # The socket is on a volume, not on a network: the installer needs none.
     network_mode: none
     read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+  # The site of an example, when the deployment chose one: its built files, served as a CDN
+  # would serve them, with the headers the build wrote beside them. It is started only for
+  # an example; a site of the operator's own is published to a CDN and is not a container.
+  # The image is the installer's: the operator's tools carry the server.
+  site:
+    image: platform-cli:local
+    command: [ui, serve, --dir=/site, --port=8080]
+    volumes:
+      # The files `ui build` wrote on this machine, read and never written.
+      - ${PLATFORM_SITE_DIR:-../../packages/ui/dist}:/site:ro
+    # Not published: the edge, below, is how the site is reached, by its own name.
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+  # The edge: the only part of the stack that answers on the network's usual ports. It
+  # shares PostgreSQL's network namespace, where Dex lives too, so that the issuer's name
+  # is the loopback there and PostgreSQL fetches the issuer's keys through the edge.
+  edge:
+    image: docker.io/library/traefik:v3.5
+    network_mode: service:postgres
+    command:
+      # The same port inside and out, so that one address is the same everywhere.
+      - --entryPoints.web.address=:${EDGE_PORT:-8080}
+      # The port TLS is answered on, for an operator who gives the edge a certificate.
+      - --entryPoints.websecure.address=:${EDGE_TLS_PORT:-4433}
+      - --providers.file.filename=/etc/traefik/dynamic.yaml
+      - --accessLog=false
+    environment:
+      PLATFORM_DOMAIN: ${PLATFORM_DOMAIN:-localhost}
+      PLATFORM_IDP_HOST: ${PLATFORM_IDP_HOST:-idp}
+      PLATFORM_API_HOST: ${PLATFORM_API_HOST:-api}
+      # The example the deployment chose, if it chose one, and the name its site answers on.
+      PLATFORM_EXAMPLE: ${PLATFORM_EXAMPLE:-}
+      PLATFORM_APP_HOST: ${PLATFORM_APP_HOST:-app}
+      DEX_PORT: ${DEX_PORT:-5556}
+      RELAY_PORT: ${RELAY_PORT:-8081}
+    volumes:
+      - ../traefik/dynamic.yaml:/etc/traefik/dynamic.yaml:ro
+    # Not the relay: the edge is started before it, with Dex, and answers for the relay
+    # once the relay is there.
+    depends_on: [postgres]
+    read_only: true
+    tmpfs: [/tmp]
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
   # Forwards the interface's WebSockets to PostgreSQL's port, byte for byte. It holds no
@@ -80,12 +150,11 @@ services:
     image: platform-relay:local
     environment:
       RELAY_UPSTREAM: postgres:5432
-      RELAY_PORT: 8081
+      RELAY_PORT: ${RELAY_PORT:-8081}
       # The only origin allowed to open a session: the address the site is served from.
       RELAY_ORIGINS: ${PLATFORM_PUBLIC_ORIGIN:-http://localhost:8080}
     networks: [relay]
-    # Published for local use: a browser on this machine opens the relay directly.
-    ports: ["127.0.0.1:${RELAY_PORT:-8081}:8081"]
+    # Not published: the edge, above, is how the relay is reached, by its own name.
     depends_on:
       postgres:
         condition: service_healthy

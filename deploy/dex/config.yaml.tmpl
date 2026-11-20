@@ -1,7 +1,7 @@
 # Dex: the one issuer PostgreSQL trusts. Every upstream sign-in system is a connector here, and
 # whichever one a person uses, the token PostgreSQL receives comes from this issuer.
 # The Dex image renders this file with gomplate, so values come from the environment.
-issuer: {{ getenv "DEX_ISSUER" "http://localhost:5556/dex" }}
+issuer: {{ getenv "DEX_ISSUER" "http://idp.localhost:8080" }}
 
 storage:
   type: sqlite3
@@ -34,7 +34,7 @@ staticClients:
     name: psql
     public: true
     # Dex sends a device sign-in back to itself, at the issuer's own path.
-    redirectURIs: ['{{ (urlParse (getenv "DEX_ISSUER" "http://localhost:5556/dex")).Path }}/device/callback']
+    redirectURIs: ['{{ getenv "DEX_ISSUER" "http://idp.localhost:8080" }}/device/callback']
 
 # Upstream sign-in systems. The claim PostgreSQL matches against a role name is the email a
 # connector reports, so only add connectors you trust to vouch for every address they return.
@@ -46,27 +46,26 @@ staticClients:
 #       issuer: https://login.example.com
 #       clientID: $CORPORATE_CLIENT_ID
 #       clientSecret: $CORPORATE_CLIENT_SECRET
-#       redirectURI: {{ getenv "DEX_ISSUER" "http://localhost:5556/dex" }}/callback
+#       redirectURI: {{ getenv "DEX_ISSUER" "http://idp.localhost:8080" }}/callback
 #       insecureSkipEmailVerified: false
 
-{{- if getenv "DEX_LOCAL_USERS" }}
+{{- if getenv "DEX_LOCAL_ADMIN" }}
 
-# Local development only: three example people kept in Dex itself, standing in for a connector.
-# The deployment CLI generates their passwords and passes the hashes; nothing is built in.
+# Local development only: the one account with a password. It is the break-glass
+# administrator: the person who installs the database and gets in when nothing else does.
+# The deployment CLI generates its password and passes the hash; nothing is built in.
+# Every other account comes from a connector above: an identity provider that vouches for
+# the addresses it returns. Nobody else gets a password here.
 enablePasswordDB: true
+# The sign-in form opens with that one account's address filled in: see password.html.
+frontend:
+  extra:
+    admin: {{ getenv "DEX_ADMIN_EMAIL" "admin@localhost" }}
 staticPasswords:
-  - email: admin@example.com
+  - email: {{ getenv "DEX_ADMIN_EMAIL" "admin@localhost" }}
     username: admin
     userID: 4c8f6f0e-0001-4a51-9d4e-a3a1f0c0a001
     hashFromEnv: DEX_ADMIN_HASH
-  - email: alice@example.com
-    username: alice
-    userID: 4c8f6f0e-0002-4a51-9d4e-a3a1f0c0a002
-    hashFromEnv: DEX_ALICE_HASH
-  - email: bob@example.com
-    username: bob
-    userID: 4c8f6f0e-0003-4a51-9d4e-a3a1f0c0a003
-    hashFromEnv: DEX_BOB_HASH
 {{- else }}
 
 enablePasswordDB: false

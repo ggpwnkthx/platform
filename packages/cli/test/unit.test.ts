@@ -4,7 +4,7 @@ import { bearer } from '../src/database/db.ts'
 import { loadConfig } from '../src/database/config.ts'
 import { fieldSchema, fieldSql } from '../src/model.ts'
 import { parseManifest } from '../src/apply.ts'
-import { exampleManifest } from '../src/example.ts'
+import { exampleAdmin, exampleManifest } from '../src/example.ts'
 
 describe('SQL construction and credentials', () => {
   test('quotes identifiers without treating names as SQL', () => {
@@ -76,12 +76,21 @@ describe('SQL construction and credentials', () => {
     expect(() => parseManifest(manifest(['choose']))).toThrow()
   })
   test('the example manifest the tools carry is one the platform accepts', () => {
-    const manifest = parseManifest(exampleManifest)
+    // The administrator is the deployment's own: the one it names, or `admin` on its domain.
+    expect(
+      exampleAdmin({ PLATFORM_ADMIN: 'root@corp.example', PLATFORM_DOMAIN: 'x.example' })
+    ).toBe('root@corp.example')
+    expect(exampleAdmin({ PLATFORM_DOMAIN: 'platform.example.org' })).toBe(
+      'admin@platform.example.org'
+    )
+    expect(exampleAdmin({})).toBe('admin@example.com')
+    const manifest = parseManifest(exampleManifest('admin@localhost'))
     expect(manifest.users.map((user) => user.name)).toEqual([
-      'admin@example.com',
+      'admin@localhost',
       'alice@example.com',
       'bob@example.com',
     ])
+    expect(manifest.workspaces.map((workspace) => workspace.owner)).toEqual(['admin@localhost'])
     expect(manifest.workspaces.map((workspace) => workspace.slug)).toEqual(['newsroom'])
   })
 })

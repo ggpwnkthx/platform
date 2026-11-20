@@ -85,7 +85,7 @@ async function apply(q: pg.Client, args: string[]) {
   // provides from 2.0.1 on. An older database is upgraded first, not worked around.
   await requireInstalledVersion(q)
   const manifests = [
-    ...(example ? [exampleManifest] : []),
+    ...(example ? [exampleManifest()] : []),
     ...files.map((file) => JSON.parse(readFileSync(file, 'utf8'))),
   ]
   const changes: string[] = []

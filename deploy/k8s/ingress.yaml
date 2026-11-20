@@ -16,10 +16,10 @@ metadata:
 spec:
   ingressClassName: nginx
   tls:
-    - hosts: [relay.example.com]
+    - hosts: [api.YOUR_DOMAIN]
       secretName: platform-relay-tls
   rules:
-    - host: relay.example.com
+    - host: api.YOUR_DOMAIN
       http:
         paths:
           - path: /

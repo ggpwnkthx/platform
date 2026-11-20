@@ -25,7 +25,7 @@ spec:
           image: YOUR_REGISTRY/platform-relay:2.3.0
           ports: [{ containerPort: 8081 }]
           env:
-            - { name: RELAY_UPSTREAM, value: "postgres.example.com:5432" }
+            - { name: RELAY_UPSTREAM, value: "db.YOUR_DOMAIN:5432" }
             - { name: RELAY_PORT, value: "8081" }
             # The only origin allowed to open a session: the address of the site on the CDN.
             - { name: RELAY_ORIGINS, value: "https://platform.example.com" }

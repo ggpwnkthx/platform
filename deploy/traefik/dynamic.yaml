@@ -1,0 +1,44 @@
+# The edge: the only part of the stack that answers on the network's usual ports.
+#
+# Everything behind it is reached by the deployment's own names — idp.<domain> for Dex,
+# api.<domain> for the relay — so the addresses the pages and the operator's tools use
+# carry no port. The ports the services listen on are the edge's business, and change
+# with it: a local stack, a Kubernetes ingress and a cloud load balancer each reach them
+# in their own way, and none of that reaches the configuration.
+#
+# The names are taken from the environment, so one file serves every deployment. Traefik
+# reads this file as a Go template: `{{ env "NAME" }}` is the way a value is read, and a
+# shell's `${NAME}` is not expanded at all.
+http:
+  routers:
+    idp:
+      rule: 'Host(`{{ env "PLATFORM_IDP_HOST" }}.{{ env "PLATFORM_DOMAIN" }}`)'
+      service: idp
+    api:
+      rule: 'Host(`{{ env "PLATFORM_API_HOST" }}.{{ env "PLATFORM_DOMAIN" }}`)'
+      service: api
+    # The site of an example, only when the deployment chose one. The template's own lines
+    # are written as comments, so that the file is YAML before it is rendered and after.
+    # {{ if env "PLATFORM_EXAMPLE" }}
+    app:
+      rule: 'Host(`{{ env "PLATFORM_APP_HOST" }}.{{ env "PLATFORM_DOMAIN" }}`)'
+      service: app
+    # {{ end }}
+  services:
+    idp:
+      loadBalancer:
+        servers:
+          # Dex shares PostgreSQL's network namespace, which the edge shares too: it is
+          # on the loopback here.
+          - url: 'http://127.0.0.1:{{ env "DEX_PORT" }}'
+    api:
+      loadBalancer:
+        servers:
+          - url: 'http://relay:{{ env "RELAY_PORT" }}'
+    # {{ if env "PLATFORM_EXAMPLE" }}
+    app:
+      loadBalancer:
+        servers:
+          # The example's built files, served by the stack's own static server.
+          - url: "http://site:8080"
+    # {{ end }}
