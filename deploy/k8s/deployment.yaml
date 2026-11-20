@@ -33,9 +33,13 @@ spec:
             # Name its addresses here and the relay counts logins against the client it
             # reports in X-Forwarded-For; from any other address the header is ignored.
             # - { name: RELAY_TRUSTED_PROXIES, value: "10.0.0.0/8" }
-            # Reach PostgreSQL in TLS, and check its certificate, where the network between
-            # the pods and the database is not one you would trust with a token.
-            # - { name: RELAY_UPSTREAM_TLS, value: "verify" }
+            # Reach PostgreSQL in TLS, and check its certificate: the stream carries every
+            # reader's token. PostgreSQL needs ssl=on and a certificate for the name above
+            # (name its authority in RELAY_UPSTREAM_CA when it is not one the system knows).
+            # "off" is for a network between the pods and the database that you would trust
+            # with a token, such as a service mesh with mTLS; the relay does not start
+            # without one or the other.
+            - { name: RELAY_UPSTREAM_TLS, value: "verify" }
           resources:
             requests: { cpu: 50m, memory: 32Mi }
             limits: { cpu: 500m, memory: 128Mi }

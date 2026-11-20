@@ -150,6 +150,9 @@ services:
     image: platform-relay:local
     environment:
       RELAY_UPSTREAM: postgres:5432
+      # In the clear, and said so: the relay and PostgreSQL share a network of this machine's
+      # own, which nothing else is on.
+      RELAY_UPSTREAM_TLS: "off"
       RELAY_PORT: ${RELAY_PORT:-8081}
       # The only origin allowed to open a session: the address the site is served from.
       RELAY_ORIGINS: ${PLATFORM_PUBLIC_ORIGIN:-http://localhost:8080}
