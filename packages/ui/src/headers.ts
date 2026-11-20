@@ -11,7 +11,7 @@
 export type Origins = {
   /** The address the pages are served from, such as `https://platform.example.com`. */
   public: string
-  /** The issuer the pages sign in against, such as `https://sso.example.com/dex`. */
+  /** The issuer the pages sign in against, such as `https://idp.platform.example.com`. */
   issuer: string
   /** The relay the pages open their database sessions through, such as `wss://relay.example.com`. */
   relay: string

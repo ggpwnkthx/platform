@@ -136,7 +136,7 @@ export async function buildSite(build: SiteBuild): Promise<number> {
  */
 export function siteOrigins(env: Record<string, string | undefined> = process.env): Origins {
   const publicUrl = env.PLATFORM_PUBLIC_URL ?? 'http://localhost:5173'
-  const issuer = env.PLATFORM_ISSUER ?? env.OIDC_ISSUER ?? 'http://localhost:5556/dex'
+  const issuer = env.PLATFORM_ISSUER ?? env.OIDC_ISSUER ?? 'http://idp.localhost:5556'
   const relay = env.PLATFORM_RELAY_URL ?? 'ws://localhost:8081'
   return { public: publicUrl, issuer, relay }
 }

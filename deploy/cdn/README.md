@@ -20,10 +20,10 @@ one file.
 
 ```json
 {
-  "issuer": "https://sso.example.com/dex",
+  "issuer": "https://idp.platform.example.com",
   "clientId": "platform-console",
   "claim": "email",
-  "relay": "wss://relay.example.com",
+  "relay": "wss://api.platform.example.com",
   "database": "platform",
   "statementTimeoutMs": 15000
 }
@@ -38,14 +38,14 @@ The values in both files come from one source, `packages/ui/src/headers.ts`, so 
 serves, the development server and the tests cannot drift apart. `bun run build:ui` writes
 them from the environment:
 
-| Variable                 | What it names                                               |
-| ------------------------ | ----------------------------------------------------------- |
-| `PLATFORM_PUBLIC_URL`    | the address the site is served from                         |
-| `PLATFORM_ISSUER`        | the issuer the pages sign in against                        |
-| `PLATFORM_RELAY_URL`     | the address of the relay, such as `wss://relay.example.com` |
-| `PLATFORM_CLIENT_ID`     | the public client the pages sign in with                    |
-| `PLATFORM_CLAIM`         | the token claim that names the PostgreSQL role              |
-| `PLATFORM_DATABASE_NAME` | the database Platform is installed in                       |
+| Variable                 | What it names                                                      |
+| ------------------------ | ------------------------------------------------------------------ |
+| `PLATFORM_PUBLIC_URL`    | the address the site is served from                                |
+| `PLATFORM_ISSUER`        | the issuer the pages sign in against                               |
+| `PLATFORM_RELAY_URL`     | the address of the relay, such as `wss://api.platform.example.com` |
+| `PLATFORM_CLIENT_ID`     | the public client the pages sign in with                           |
+| `PLATFORM_CLAIM`         | the token claim that names the PostgreSQL role                     |
+| `PLATFORM_DATABASE_NAME` | the database Platform is installed in                              |
 
 ## Publishing
 

@@ -21,7 +21,7 @@ export interface RuntimeConfig {
  * its own issuer, relay and database, and the builder starts from these.
  */
 export const defaultRuntimeConfig: RuntimeConfig = {
-  issuer: 'http://localhost:5556/dex',
+  issuer: 'http://idp.localhost:5556',
   clientId: 'platform-console',
   claim: 'email',
   relay: '/pg',

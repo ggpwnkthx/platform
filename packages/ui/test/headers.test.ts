@@ -3,8 +3,8 @@ import { contentSecurityPolicy, headersFile, securityHeaders } from '../src/head
 
 const origins = {
   public: 'https://platform.example.com',
-  issuer: 'https://sso.example.com/dex',
-  relay: 'wss://relay.example.com',
+  issuer: 'https://idp.platform.example.com',
+  relay: 'wss://api.platform.example.com',
 }
 
 describe('the headers the site is served with', () => {
@@ -16,13 +16,19 @@ describe('the headers the site is served with', () => {
     expect(policy).toContain("base-uri 'none'")
     expect(policy).toContain("form-action 'self'")
     expect(policy).toContain('connect-src')
-    expect(policy).toContain('wss://relay.example.com')
-    expect(policy).toContain('https://sso.example.com')
-    expect(policy).not.toContain('https://platform.example.com')
+    expect(policy).toContain('wss://api.platform.example.com')
+    expect(policy).toContain('https://idp.platform.example.com')
+    expect(policy).not.toContain("'self' https://platform.example.com")
   })
   test('the issuer and the relay keep only their origin, not their path', () => {
-    const policy = contentSecurityPolicy(origins)
-    expect(policy).not.toContain('https://sso.example.com/dex')
+    // An issuer may still be published under a path of its own; the policy names the
+    // origin it is at, and never the path.
+    const policy = contentSecurityPolicy({
+      ...origins,
+      issuer: 'https://idp.platform.example.com/dex',
+    })
+    expect(policy).toContain('https://idp.platform.example.com')
+    expect(policy).not.toContain('https://idp.platform.example.com/dex')
   })
   test('the headers a CDN is told to send', () => {
     const headers = securityHeaders(origins)
