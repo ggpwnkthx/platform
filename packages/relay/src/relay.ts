@@ -53,6 +53,8 @@ export type RelayOptions = {
   /**
    * The origins allowed to open a session, such as `https://platform.example.com`. Empty
    * allows any origin, which is only right when something else already refuses them.
+   * A WebSocket handshake is not a request a CORS policy decides: a browser sends it from
+   * any page, so a platform's CORS settings do not stand in for this list.
    */
   allowedOrigins: string[]
   /** How many sessions one address may hold at once while they are still logging in. */
@@ -495,15 +497,24 @@ export function startRelay(options: RelayOptions): Relay {
   }
 }
 
+/** Whether a host is this machine: the one place a token crosses no network on its way. */
+const isLoopback = (host: string) =>
+  host === 'localhost' || host === '::1' || host === '[::1]' || /^127(\.\d{1,3}){3}$/.test(host)
+
 /** The relay's options, read from the environment a deployment sets. */
 export function relayOptionsFromEnv(env: Record<string, string | undefined> = process.env) {
   const upstream = env.RELAY_UPSTREAM ?? '127.0.0.1:5432'
   const [host, port] = upstream.split(':')
   if (!host || !port) throw new Error(`RELAY_UPSTREAM must be host:port, not ${upstream}`)
-  const origins = (env.RELAY_ORIGINS ?? '')
+  // Unset, the relay checks no origin: the deployment may refuse them somewhere else. `*`
+  // says the same thing aloud.
+  const named = (env.RELAY_ORIGINS ?? '')
     .split(',')
     .map((o) => o.trim().replace(/\/+$/, ''))
     .filter(Boolean)
+  if (named.includes('*') && named.length > 1)
+    throw new Error('RELAY_ORIGINS is * alone, or a list of origins')
+  const origins = named.includes('*') ? [] : named
   const sessions = Number(env.RELAY_SESSIONS_PER_ADDRESS ?? '20')
   if (!Number.isInteger(sessions) || sessions < 1)
     throw new Error('RELAY_SESSIONS_PER_ADDRESS must be a number')
@@ -525,6 +536,12 @@ export function relayOptionsFromEnv(env: Record<string, string | undefined> = pr
   const upstreamTls = (env.RELAY_UPSTREAM_TLS ?? '').trim().toLowerCase()
   if (!['', 'off', 'verify'].includes(upstreamTls))
     throw new Error('RELAY_UPSTREAM_TLS must be verify or off')
+  // The stream carries every reader's token. On this machine it crosses no network; anywhere
+  // else, whether it crosses one in the clear is the deployment's to say, not a default.
+  if (!upstreamTls && !isLoopback(host))
+    throw new Error(
+      `RELAY_UPSTREAM_TLS must be set to reach ${host}: verify, or off where the network between the relay and PostgreSQL is one you trust with a token`
+    )
   const upstreamCa = env.RELAY_UPSTREAM_CA
   if (upstreamCa && upstreamTls !== 'verify')
     throw new Error('RELAY_UPSTREAM_CA needs RELAY_UPSTREAM_TLS=verify')
@@ -562,7 +579,7 @@ if (import.meta.main) {
   console.log(
     options.allowedOrigins.length
       ? `Origins allowed: ${options.allowedOrigins.join(', ')}`
-      : 'No origin is restricted: set RELAY_ORIGINS to the address of the site.'
+      : 'The relay checks no origin: set RELAY_ORIGINS to the address of the site, unless what is in front of the relay refuses other origins on the WebSocket handshake itself.'
   )
   console.log(
     `Sessions: ${options.sessionsPerAddress} logging in at once per address and ${options.sessionsLoggingIn} in all, ${options.loginTimeoutMs / 1000} seconds to log in, ${options.sessionsPerRole} open at once per role.`

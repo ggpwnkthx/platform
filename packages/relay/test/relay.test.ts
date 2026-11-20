@@ -830,6 +830,25 @@ describe('the options a deployment sets', () => {
     expect(options.loginTimeoutMs).toBe(30000)
     expect(options.trustedProxies).toEqual([])
     expect(options.upstream).toEqual({ host: 'postgres', port: 5432 })
+    expect(options.allowedOrigins).toEqual(['https://platform.example.com'])
+  })
+
+  test('check no origin when the deployment names none, or says any', () => {
+    expect(relayOptionsFromEnv({ ...env, RELAY_ORIGINS: undefined }).allowedOrigins).toEqual([])
+    expect(relayOptionsFromEnv({ ...env, RELAY_ORIGINS: '*' }).allowedOrigins).toEqual([])
+    expect(() => relayOptionsFromEnv({ ...env, RELAY_ORIGINS: '*, https://a.example' })).toThrow(
+      'alone'
+    )
+  })
+
+  test('reach a PostgreSQL on another machine in the clear only when the deployment says so', () => {
+    const elsewhere = { ...env, RELAY_UPSTREAM_TLS: undefined }
+    expect(() => relayOptionsFromEnv(elsewhere)).toThrow('RELAY_UPSTREAM_TLS')
+    // On this machine the stream crosses no network.
+    for (const here of ['127.0.0.1:5432', 'localhost:5432'])
+      expect(relayOptionsFromEnv({ ...elsewhere, RELAY_UPSTREAM: here }).upstream.tls).toBe(
+        undefined
+      )
   })
 
   test('name the proxies to believe and ask for TLS to PostgreSQL', () => {
