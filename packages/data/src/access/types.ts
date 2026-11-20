@@ -41,3 +41,31 @@ export interface GrantInfo {
   grantor: string
   grantable: boolean
 }
+
+/** How much of a privilege a role holds: the whole collection, some of its fields, or none. */
+export type Hold = 'all' | 'some' | 'none'
+
+/**
+ * What one role may do with one collection, as PostgreSQL answers for that role: through
+ * its own grants, through the groups whose rights it inherits, and through PUBLIC.
+ */
+export interface ReachInfo {
+  role: string
+  table: string
+  /** USAGE on the workspace: without it no grant on a collection inside is of any use. */
+  usage: boolean
+  select: Hold
+  insert: Hold
+  update: Hold
+  references: Hold
+  delete: boolean
+  truncate: boolean
+  trigger: boolean
+}
+
+/** What one role may do with a workspace's own schema, as PostgreSQL answers for that role. */
+export interface SchemaReachInfo {
+  role: string
+  usage: boolean
+  create: boolean
+}
