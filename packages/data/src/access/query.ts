@@ -14,7 +14,13 @@ import type {
  * platform's own functions and the catalog's ACLs.
  */
 
-/** The roles and memberships the reader may see, through the platform's own functions. */
+/**
+ * The roles and memberships the reader may see, through the platform's own functions.
+ *
+ * A role admits members to a group it holds with the admin option, and an operator to any.
+ * The right to create roles is not that right: since PostgreSQL 16 it admits nobody to a
+ * role it does not hold with the admin option, and holds that way the roles it created.
+ */
 export async function roles(
   db: DataSource
 ): Promise<{ roles: RoleInfo[]; memberships: MembershipInfo[] }> {
@@ -22,9 +28,7 @@ export async function roles(
     SELECT r.*,
       (platform.is_operator()
        OR EXISTS (SELECT 1 FROM platform.visible_memberships() m
-                   WHERE m.role = r.name AND m.member = session_user AND m.admin_option)
-       OR (coalesce((SELECT create_role FROM platform.role_attributes(session_user)), false)
-           AND NOT r.superuser)) AS admits
+                   WHERE m.role = r.name AND m.member = session_user AND m.admin_option)) AS admits
       FROM platform.visible_roles() r`)
   const memberships = await db.query<MembershipInfo>('SELECT * FROM platform.visible_memberships()')
   return { roles: found.rows, memberships: memberships.rows }
@@ -70,6 +74,14 @@ export async function grants(db: DataSource, schema: string): Promise<GrantInfo[
  * the workspace's own ACLs name, and PUBLIC. A role an ACL names is named there for every
  * connected user to read, so asking about it tells the reader nothing the catalog did not.
  */
+/**
+ * Whether a name is a role's. An ACL may name a role that has since been dropped, by a
+ * number, and the privilege functions refuse a name that is nobody's. PostgreSQL is asked
+ * for the role rather than pg_roles for a row: the catalog may be hidden from the reader
+ * (`cli harden`), and the answer is the same.
+ */
+const isRole = (name: string) => `to_regrole(quote_ident(${name})) IS NOT NULL`
+
 const asked = `
   SELECT r.name FROM platform.visible_roles() r WHERE r.name NOT LIKE 'pg\\_%' ESCAPE '\\'
   UNION
@@ -108,7 +120,7 @@ export async function reach(
     `
     WITH w AS (SELECT name FROM (${asked}) known
                 WHERE ($2::text IS NULL OR name = $2)
-                  AND (name = 'public' OR EXISTS (SELECT 1 FROM pg_roles r WHERE r.rolname = name)))
+                  AND (name = 'public' OR ${isRole('name')}))
     SELECT w.name AS role, c.relname::text AS table,
            has_schema_privilege(w.name::name, n.oid, 'USAGE') AS usage,
            ${hold('SELECT')} AS select, ${hold('INSERT')} AS insert,
@@ -130,7 +142,7 @@ export async function schemaReach(db: DataSource, schema: string): Promise<Schem
   const result = await db.query<SchemaReachInfo>(
     `
     WITH w AS (SELECT name FROM (${asked}) known
-                WHERE name = 'public' OR EXISTS (SELECT 1 FROM pg_roles r WHERE r.rolname = name))
+                WHERE name = 'public' OR ${isRole('name')})
     SELECT w.name AS role,
            has_schema_privilege(w.name::name, n.oid, 'USAGE') AS usage,
            has_schema_privilege(w.name::name, n.oid, 'CREATE') AS create

@@ -212,14 +212,18 @@ export async function relationLabels(
   return out
 }
 
-/** The row policies on a collection, and whether each one speaks for the reader. */
+/**
+ * The row policies on a collection, and whether each one speaks for the reader. The role a
+ * policy names is asked of PostgreSQL and not read from pg_roles, which may be hidden from
+ * the reader (`cli harden`).
+ */
 export async function tablePolicies(db: DataSource, schema: string, table: string) {
   const result = await db.query<PolicyInfo & { applies: boolean }>(
     `SELECT schemaname::text AS schema, tablename::text AS table, policyname::text AS name, permissive,
             roles::text[] AS roles, cmd AS command, qual AS using, with_check AS check,
             EXISTS (SELECT 1 FROM unnest(roles) r
-                     WHERE r = 'public' OR (EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r)
-                                            AND pg_has_role(session_user, r, 'MEMBER'))) AS applies
+                     WHERE r = 'public'
+                        OR pg_has_role(session_user, to_regrole(quote_ident(r::text))::oid, 'MEMBER')) AS applies
        FROM pg_policies WHERE schemaname = $1 AND tablename = $2 ORDER BY policyname`,
     [schema, table]
   )

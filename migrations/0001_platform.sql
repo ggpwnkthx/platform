@@ -72,9 +72,10 @@ ALTER TABLE platform.activity ENABLE ROW LEVEL SECURITY;
 GRANT SELECT ON platform.activity TO platform_users;
 -- Only workspace owners (or members inheriting the owner's rights) see full revisions.
 -- Letting all actors read their own entries would leak columns hidden by column GRANTs.
+-- The policy runs as the reader, so it asks PostgreSQL and reads no catalog: pg_roles may be
+-- hidden from the reader (`cli harden`). An owner that has been dropped is nobody's role.
 CREATE POLICY owner_reads ON platform.activity FOR SELECT TO platform_users
-  USING (CASE WHEN EXISTS (SELECT 1 FROM pg_roles WHERE oid=workspace_owner)
-    THEN pg_has_role(session_user,workspace_owner,'USAGE') ELSE false END);
+  USING (pg_has_role(session_user,workspace_owner,'USAGE'));
 
 CREATE FUNCTION platform.stamp() RETURNS trigger
 LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog AS $$
