@@ -15,6 +15,14 @@
 #                          WebSocket relay the interface reaches PostgreSQL through. From them
 #                          PLATFORM_ADMIN does not log in at all: a token that names the
 #                          administrator is not a way in through the interface.
+#   PLATFORM_ADMIN_FROM    Optional. Comma-separated CIDR blocks: the operators' own networks.
+#                          With it PLATFORM_ADMIN logs in from those and from nowhere else, so
+#                          a network nobody thought of is not a way in for the administrator.
+#   PLATFORM_HBA_DATABASES Optional. Comma-separated names of the databases a token opens over
+#                          the network. Default: POSTGRES_DB when the cluster is made with one,
+#                          and otherwise all. The relay carries whichever name a client asks
+#                          for, so a database that is not named here is not reached through it.
+#                          The administrator, from PLATFORM_ADMIN_FROM, reaches them all.
 #
 # No login has a password. POSTGRES_PASSWORD is refused, not ignored.
 set -eu
@@ -34,6 +42,19 @@ for value in "$issuer" "$claim" "$superuser" "$admin" "${PLATFORM_OIDC_JWKS_URL:
   case $value in *[[:space:]\"\'\\,]*) echo "Unsupported character in: $value" >&2; exit 1 ;; esac
 done
 case $host in host|hostssl) ;; *) echo "PLATFORM_HBA_HOST must be host or hostssl" >&2; exit 1 ;; esac
+# The databases a token opens. Each name is quoted, so that one spelled like a keyword of the
+# rules is a name; `all` alone is the keyword.
+named=${PLATFORM_HBA_DATABASES:-${POSTGRES_DB:-all}}
+case $named in *[[:space:]\"\'\\]*) echo "Unsupported character in: $named" >&2; exit 1 ;; esac
+if [ "$named" = all ]; then
+  databases=all
+else
+  databases=''
+  for name in $(printf '%s' "$named" | tr ',' ' '); do
+    databases="${databases:+$databases,}\"$name\""
+  done
+  [ -n "$databases" ] || { echo "PLATFORM_HBA_DATABASES names no database" >&2; exit 1; }
+fi
 token_only=''
 for block in $(printf '%s' "${PLATFORM_TOKEN_ONLY_FROM:-}" | tr ',' ' '); do
   case $block in
@@ -44,18 +65,37 @@ for block in $(printf '%s' "${PLATFORM_TOKEN_ONLY_FROM:-}" | tr ',' ' '); do
 "
   fi
 done
+# The networks the administrator logs in from, when the deployment names them: those, and
+# then a rule that refuses that role from everywhere else.
+admin_from=''
+for block in $(printf '%s' "${PLATFORM_ADMIN_FROM:-}" | tr ',' ' '); do
+  case $block in
+    *[!0-9a-fA-F.:/]*|'') echo "PLATFORM_ADMIN_FROM must list CIDR blocks: $block" >&2; exit 1 ;;
+  esac
+  if [ -z "$admin" ]; then
+    echo "PLATFORM_ADMIN_FROM needs PLATFORM_ADMIN: it says where that role logs in from" >&2
+    exit 1
+  fi
+  admin_from="$admin_from$host   all  \"$admin\"      $block  oauth issuer=\"$issuer\" scope=\"\"
+"
+done
+if [ -n "$admin_from" ]; then
+  admin_from="$admin_from$host   all  \"$admin\"      all  reject
+"
+fi
 
 # The socket inside the container is the image's own administrative path, as upstream ships it:
 # it makes the cluster, answers the health check, and is the way in when the issuer is not.
 # Over the network a token from the issuer is the only way in, and the validator names the role
 # it belongs to. The server's own superuser is not a role a token may name: it has no login
 # over the network at all. From the relay's networks neither has the administrator: the first
-# matching rule decides, so those rules come before the one that lets everyone in.
+# matching rule decides, so those rules come before the one that lets everyone in. That last
+# rule names the databases a token opens: any other is refused, having no rule at all.
 # Dex puts no scope claim in its tokens, so there is none to require.
 cat > /etc/platform/pg_hba.conf <<HBA
 local   all  all                trust
 $host   all  "$superuser"      all  reject
-$token_only$host   all  all           all  oauth issuer="$issuer" scope=""
+$token_only$admin_from$host   $databases  all           all  oauth issuer="$issuer" scope=""
 HBA
 
 # The image's own entrypoint makes no cluster without a password for its superuser. It is given
