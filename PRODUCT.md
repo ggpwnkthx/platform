@@ -63,11 +63,14 @@ the interface alike.
 - `bun run cli apply <deployment> FILE` applies a manifest as the person whose token it is given.
   `deploy/models/crm.json` is a second manifest, an additive CRM model with real foreign keys
   and role names in its owner fields.
-- The local Dex holds three example accounts — `admin@example.com`, `alice@example.com`,
-  `bob@example.com` — and what it asks each of them for is generated into `.env`
-  (`PLATFORM_ADMIN_PASSWORD`, `ALICE_PASSWORD`, `BOB_PASSWORD`). They stand in for a real sign-in system; a deployment adds providers to Dex
-  as connectors (`deploy/dex/config.yaml.tmpl`). A person can log in when a PostgreSQL role named
-  after their email exists.
+- The local Dex holds one account with a password — the break-glass administrator,
+  `PLATFORM_ADMIN`, which is `admin` on the deployment's own domain (`admin@localhost`) unless
+  another is named — and what it asks it for is generated into `.env`
+  (`PLATFORM_ADMIN_PASSWORD`). It stands in for a real sign-in system; every other account
+  comes from a provider added to Dex as a connector (`deploy/dex/config.yaml.tmpl`). The
+  example's roles — the administrator, `alice@example.com`, `bob@example.com` — are roles, not
+  accounts: who may sign in as them is the identity provider's business. A person can log in
+  when a PostgreSQL role named after their email exists.
 - psql 18 signs in through Dex itself: it prints an address and a code. `PGOAUTHDEBUG=UNSAFE` is
   needed only because the local Dex is plain HTTP.
 - The interface is a static site in `packages/ui/`, generated at build time (`bun run build:ui` →

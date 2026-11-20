@@ -2,7 +2,9 @@
 
 Run the examples in README first. `admin@example.com` owns the newsroom schema and article table.
 `alice@example.com` and `bob@example.com` are real LOGIN roles, named after the email their
-sign-in reports. `newsroom_reader` and `newsroom_writer` are native groups. Roles have no
+sign-in reports. A role is not an account: who may sign in as it is the identity provider's
+business, and the roles exist so that a person whose provider reports that address has
+somewhere to land. `newsroom_reader` and `newsroom_writer` are native groups. Roles have no
 passwords: a person logs in with a token from Dex, and no application password table exists.
 
 ## Three independent checks

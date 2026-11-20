@@ -105,7 +105,7 @@ The database server needs three things, all of which deploy/postgres provides as
    local   all  all                trust      # the container's own socket, as upstream ships it
    host    all  "postgres"    all  reject     # the server's own superuser: the socket alone
    host    all  "admin@example.com"  10.89.71.0/24  reject   # the administrator, never from the relay
-   host    all  all           all  oauth issuer="https://sso.example.com/dex" scope=""
+   host    all  all           all  oauth issuer="https://idp.platform.example.com" scope=""
    ```
 
    No login has a password. The image refuses POSTGRES_PASSWORD, and a new cluster's own
@@ -151,7 +151,9 @@ and `cli token`). For a real deployment:
 - Give Dex the address of the site as PLATFORM_PUBLIC_ORIGIN: it is the origin Dex allows to
   exchange the code, and the one it redirects to after the sign-in. With the interface on a
   CDN, that is the CDN's address, not the relay's.
-- Add your providers under `connectors` and leave DEX_LOCAL_USERS unset.
+- Add your providers under `connectors` and leave DEX_LOCAL_ADMIN unset: the password database
+  holds one account, the break-glass administrator, and every other account comes from a
+  provider that vouches for it.
 - Run this Dex for Platform alone. The validator checks a token's signature, issuer and
   expiry but not its audience, so any client registered with this Dex can obtain tokens that
   PostgreSQL accepts.
@@ -165,7 +167,7 @@ needs the `libpq-oauth` package beside libpq:
 
 ```bash
 psql "host=db.example.com dbname=platform user=alice@example.com \
-  oauth_issuer=https://sso.example.com/dex oauth_client_id=platform-psql oauth_scope='openid email'"
+  oauth_issuer=https://idp.platform.example.com oauth_client_id=platform-psql oauth_scope='openid email'"
 ```
 
 libpq refuses an issuer that is not HTTPS unless PGOAUTHDEBUG=UNSAFE is set, which is for the
@@ -179,26 +181,30 @@ deployment never renders a page at runtime and runs no application server: the f
 published to a CDN. The relay (`packages/relay/src/relay.ts`, the Dockerfile target `relay`) is the only
 part of the path that answers on the network.
 
-| Variable                       | Default                   | Purpose                                                       |
-| ------------------------------ | ------------------------- | ------------------------------------------------------------- |
-| PLATFORM_PUBLIC_URL            | http://localhost:5173     | The address people open; the only origin the relay allows     |
-| PLATFORM_ISSUER                | http://localhost:5556/dex | Your Dex. The same issuer PostgreSQL trusts                   |
-| PLATFORM_CLIENT_ID             | platform-console          | The public client the interface signs in with                 |
-| PLATFORM_CLAIM                 | email                     | Token claim holding the role name; must match the validator's |
-| PLATFORM_RELAY_URL             | ws://localhost:8081       | The relay the pages open their sessions through               |
-| PLATFORM_DATABASE_NAME         | platform                  | The database Platform is installed in                         |
-| PLATFORM_STATEMENT_TIMEOUT_MS  | 15000                     | `statement_timeout` sent with each login                      |
-| RELAY_UPSTREAM                 | 127.0.0.1:5432            | host:port of PostgreSQL, for the relay                        |
-| RELAY_PORT                     | 8081                      | The port the relay listens on                                 |
-| RELAY_ORIGINS                  | any                       | Comma-separated origins allowed to open a session             |
-| RELAY_SESSIONS_PER_ADDRESS     | 20                        | Logins one client address may have signing in at once         |
-| RELAY_SESSIONS_PER_ROLE        | 20                        | Open database sessions one role may hold                      |
-| RELAY_SESSIONS_LOGGING_IN      | 64                        | Logins every address together may have signing in at once     |
-| RELAY_LOGIN_SECONDS            | 30                        | How long a session has to log in before it is closed          |
-| RELAY_TRUSTED_PROXIES          | none                      | Addresses or CIDR blocks whose X-Forwarded-For names a client |
-| RELAY_UPSTREAM_TLS             | off                       | `verify` reaches PostgreSQL in TLS and checks its certificate |
-| RELAY_UPSTREAM_CA              | the system's              | The authority that certificate must come from, as a PEM file  |
-| RELAY_TLS_CERT / RELAY_TLS_KEY | none                      | The certificate the relay serves TLS with                     |
+| Variable                       | Default                   | Purpose                                                                           |
+| ------------------------------ | ------------------------- | --------------------------------------------------------------------------------- |
+| PLATFORM_DOMAIN                | localhost                 | The domain the deployment is named by; each service answers on a sub-domain of it |
+| PLATFORM_IDP_HOST              | idp                       | The sub-domain Dex answers on: the issuer                                         |
+| PLATFORM_API_HOST              | api                       | The sub-domain the relay answers on                                               |
+| PLATFORM_DB_HOST               | db                        | The sub-domain PostgreSQL answers on                                              |
+| PLATFORM_PUBLIC_URL            | http://app.localhost:5173 | The address people open; the only origin the relay allows                         |
+| PLATFORM_ISSUER                | http://idp.localhost:8080 | Your Dex. The same issuer PostgreSQL trusts                                       |
+| PLATFORM_CLIENT_ID             | platform-console          | The public client the interface signs in with                                     |
+| PLATFORM_CLAIM                 | email                     | Token claim holding the role name; must match the validator's                     |
+| PLATFORM_RELAY_URL             | ws://api.localhost:8080   | The relay the pages open their sessions through                                   |
+| PLATFORM_DATABASE_NAME         | platform                  | The database Platform is installed in                                             |
+| PLATFORM_STATEMENT_TIMEOUT_MS  | 15000                     | `statement_timeout` sent with each login                                          |
+| RELAY_UPSTREAM                 | 127.0.0.1:5432            | host:port of PostgreSQL, for the relay                                            |
+| RELAY_PORT                     | 8081                      | The port the relay listens on                                                     |
+| RELAY_ORIGINS                  | any                       | Comma-separated origins allowed to open a session                                 |
+| RELAY_SESSIONS_PER_ADDRESS     | 20                        | Logins one client address may have signing in at once                             |
+| RELAY_SESSIONS_PER_ROLE        | 20                        | Open database sessions one role may hold                                          |
+| RELAY_SESSIONS_LOGGING_IN      | 64                        | Logins every address together may have signing in at once                         |
+| RELAY_LOGIN_SECONDS            | 30                        | How long a session has to log in before it is closed                              |
+| RELAY_TRUSTED_PROXIES          | none                      | Addresses or CIDR blocks whose X-Forwarded-For names a client                     |
+| RELAY_UPSTREAM_TLS             | off                       | `verify` reaches PostgreSQL in TLS and checks its certificate                     |
+| RELAY_UPSTREAM_CA              | the system's              | The authority that certificate must come from, as a PEM file                      |
+| RELAY_TLS_CERT / RELAY_TLS_KEY | none                      | The certificate the relay serves TLS with                                         |
 
 `bun run build:ui` writes `config.json` and the `_headers` file from these; see
 [interface](interface.md) for `config.json`, the headers and the browser surface, and
@@ -259,10 +265,71 @@ bun run cli deploy local logs -f relay
 bun run cli deploy local down
 ```
 
+A checkout carries no configuration: a deployment's settings are its own. The first run that
+needs them — `up`, `init`, `build`, `validate`, `ui`, and the Kubernetes actions that render
+or apply manifests — writes them to `.env` at the root of the checkout (or wherever
+PLATFORM_ENV_FILE says). It asks only for what it cannot work out: the domain the deployment
+is named by, the sub-domains its services answer on (idp, api, db), and the three ports,
+because those are the ones that depend on the machine. The issuer, the relay's address and
+the database's address follow from the domain and the sub-domains, so they are never asked
+for.
+
+The site is a question, not a default: the walkthrough asks whether one already exists, and
+a site of the operator's own is named by its full URL. Left empty, an interface is deployed
+instead: the examples the checkout carries are offered by name (there is one, `newsroom`), or
+the platform's own interface if none is chosen. It is deployed on a sub-domain of the
+deployment's own domain — `app` unless another is chosen — and the site's address follows
+from it. The example that was chosen is the one `deploy local ui` builds, and `deploy local up` builds it too and
+serves it from the stack itself: a `site` container runs `platform ui serve` over
+`examples/<name>/.dist`, and the edge routes `app.<domain>` to it, on the port the edge
+answers on (`http://app.localhost:8080`). Without an example nothing is served there. For Kubernetes it asks for the domain and the image;
+the issuer and the database's address follow from the domain. The one
+password there is, the break-glass administrator's, is never asked for: it is generated and
+saved. What the command line or the environment already gave is kept and not asked for again.
+The file holds the pieces the deployment is made of, and nothing else: the domain, the
+sub-domains, the ports, the example, and the site's address when the operator has a site of
+their own. The addresses — the issuer, the relay, the database, an example's — are made of
+those pieces at runtime, so they are never written down and never fall out of step with the
+domain: change the domain and every address follows. A file that holds such an address from
+an earlier run has it taken out, and the deployment is told which ones. The environment speaks
+last: a value there overrides the file's, and an address that has to be something else is set
+there.
+
+The file holds secrets, so it is written with mode 0600, it is added to `.gitignore` if it is
+not ignored already, and it is never printed. Without a terminal to ask in, the defaults are
+written instead and the secrets are generated, which is what a script or a CI run gets. A file
+that is already there is not rewritten: the settings it lacks are added to it, and the
+entries it holds are left alone. Nothing is written when a value is wrong, or when a setting
+that has no default could not be answered — the deployment then fails with the error that
+names what is missing, and the file is not left half written.
+
+The names have to answer in three places: in the browser, which opens the issuer and the
+relay; in the PostgreSQL container, which fetches the issuer's keys; and in the operator's own
+tools, which connect to the database. The Compose file gives the names to the containers
+directly (`extra_hosts`), and `deploy local` gives them to this machine: a name under
+`.localhost` is answered by the resolver itself, a name under `.local` is answered by
+multicast DNS — which may be another machine on the network, and is said so plainly — and
+anything else goes in the hosts file, which the operator is asked about before it is touched.
+
+What answers on the network's usual ports is the deployment's business: here an edge
+(Traefik, in deploy/traefik/dynamic.yaml), in Kubernetes an ingress, in a cloud the
+provider's own domain settings. The services behind the edge listen on their own ports
+(DEX_PORT, RELAY_PORT), which are the edge's backends and reach nothing else. Services that
+talk to each other use the default ports: PostgreSQL on 5432, and the relay forwards to it
+there.
+
+Locally, the edge answers on ports of the operator's choosing — EDGE_PORT (8080) and
+EDGE_TLS_PORT (4433) — and the names carry the port the edge answers on:
+`http://idp.<domain>:8080` and `ws://api.<domain>:8080`. Never 80 or 443: a rootless
+container cannot bind a port below 1024, and which ports the operator's machine answers on is
+the operator's business. A deployment that terminates TLS itself — the ingress, the cloud's
+own edge — has no such port in its names at all: `https://idp.<domain>` and
+`wss://api.<domain>`.
+
 `up` builds the PostgreSQL, relay and installer images, starts PostgreSQL 18 and Dex, waits
 for both, runs the idempotent database installer in a one-off container (`migrate`, image
 `platform-cli:local`, Dockerfile target `cli`), applies the example manifest the same way, then
-starts the relay and waits for http://localhost:8081/health. The installer is given no
+starts the relay and waits for http://api.localhost:8081/health. The installer is given no
 credentials, because there are none: it shares the volume PostgreSQL's socket is on, where
 PostgreSQL lets its own superuser in, has no network, and is removed when it exits.
 `bun run cli deploy local admin <command>` runs any other operator command the same way
@@ -274,12 +341,17 @@ database/build portion without starting the relay; `build` builds the images onl
 builds the static interface into `packages/ui/dist` and says what to publish; the interface is
 files on a CDN, not a container.
 
-Dex is published at http://localhost:5556/dex (DEX_PORT) and keeps three example people,
-admin@example.com, alice@example.com and bob@example.com. It stands in for a real sign-in
-system, so it asks them for something: PLATFORM_ADMIN_PASSWORD, ALICE_PASSWORD and
-BOB_PASSWORD, generated into .env (created with mode 0600, ignored by git and by the image
-build) and never printed; Dex is given only their bcrypt hashes. They are Dex's, not
-PostgreSQL's: PostgreSQL sees the token Dex issues and nothing else. An issuer has one URL that both the
+Dex is published at http://idp.localhost:5556 (DEX_PORT), on the deployment's own name
+for it. It stands in for a real sign-in
+system, and it keeps exactly one account with a password: the break-glass administrator,
+PLATFORM_ADMIN — `admin` on the deployment's own domain, so admin@localhost, unless another
+address is named — whose PLATFORM_ADMIN_PASSWORD is generated into .env (created with mode
+0600, ignored by git and by the image build) and never printed; Dex is given only its bcrypt
+hash. Every other account comes from a connector — an identity provider you add to the
+stack's Dex (deploy/dex/config.yaml.tmpl) that vouches for the addresses it returns. The
+example's roles (the administrator, alice@example.com, bob@example.com) are roles, not
+accounts: who may sign in as them is the identity provider's business. The password is Dex's,
+not PostgreSQL's: PostgreSQL sees the token Dex issues and nothing else. An issuer has one URL that both the
 browser and PostgreSQL must open, and on a developer's machine that is localhost, so the
 stack's Dex shares PostgreSQL's network namespace. The stack's data volume is `data18`: a
 volume left by an earlier PostgreSQL 16 stack is not touched or upgraded. Move its contents
@@ -290,7 +362,7 @@ Choose `--engine=docker` or `--engine=podman`, or use automatic detection. Stand
 in .env by an earlier version is no longer read, and a volume made with one keeps a verifier
 that no rule accepts. Provision users with
 `PGTOKEN=$(bun run --silent cli token) bun run cli apply local FILE`, signed in as
-admin@example.com (see [applying changes](apply.md)), or with psql and the example scripts.
+the administrator (see [applying changes](apply.md)), or with psql and the example scripts.
 
 The Compose project name is consistently `platform`. The default relay/SQL host ports are
 8081/5432, and Dex's is 5556; override RELAY_PORT/POSTGRES_PORT/DEX_PORT to avoid
@@ -310,8 +382,9 @@ policies.
 
 ```bash
 export PLATFORM_IMAGE=your-registry/platform-relay:2.3.0
+export PLATFORM_DOMAIN=platform.example.com
 export PUBLIC_URL=https://platform.example.com
-export OIDC_ISSUER=https://sso.example.com/dex
+export OIDC_ISSUER=https://idp.platform.example.com
 export DATABASE_HOST=your-postgres.example.com
 export DATABASE_NAME=platform
 export DATABASE_PORT=5432
@@ -323,8 +396,13 @@ bun run cli deploy k8s status --namespace=platform
 bun run cli deploy k8s logs --namespace=platform -f
 ```
 
-Equivalent flags are --image, --public-url, --oidc-issuer, --database-host, --database-name,
---database-port. PUBLIC_URL and OIDC_ISSUER must be HTTPS.
+The deployment is named by a domain: each service answers on its own sub-domain of it, and
+the addresses follow — `idp.<domain>` for Dex, `api.<domain>` for the relay, `db.<domain>`
+for PostgreSQL. Give the domain (`--domain`, or PLATFORM_DOMAIN) and the issuer, the relay's
+address and the database's address are worked out from it; give any of them outright and
+they are used as they are. Equivalent flags are --domain, --image, --public-url,
+--oidc-issuer, --database-host, --database-name, --database-port. PUBLIC_URL and OIDC_ISSUER
+must be HTTPS.
 `render` is offline. `validate` is a server-side dry run and needs cluster connectivity.
 `diff` preserves kubectl's exit 1 for differences; `apply` waits for rollout and propagates
 failure. Namespace defaults to `default`, and `--timeout=120` controls the rollout timeout.

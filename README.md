@@ -27,9 +27,13 @@ both into one image (deploy/postgres) and runs Dex beside it.
 
 ```bash
 bun install --frozen-lockfile
-cp .env.example .env
 # Installs the database and the example roles, workspace, grants and policy. PostgreSQL is
-# given no password; what Dex asks the three example people for is generated into .env.
+# given no password; what Dex asks the break-glass administrator for is generated into .env.
+# There is no .env in a checkout: the first run asks for the settings it does not know and
+# writes them down, with the secrets it generated in it. The file is yours alone and is kept
+# out of git. The deployment is named by a domain: each service answers on its own
+# sub-domain of it (idp for Dex, api for the relay, db for PostgreSQL), and the names are put
+# where they can be resolved.
 bun run cli deploy local up
 ```
 
@@ -40,12 +44,13 @@ bun run cli deploy local ui                     # build it into packages/ui/dist
 bun run examples:newsroom:dev --relay=127.0.0.1:5432   # or serve it on http://localhost:5173/
 ```
 
-Choose Sign in. Dex asks for an email and password: use
-`admin@example.com`, `alice@example.com` or `bob@example.com` with PLATFORM_ADMIN_PASSWORD,
-ALICE_PASSWORD or BOB_PASSWORD from .env. There are no built-in credentials. Those three live in
-the local stack's Dex and stand in for a real sign-in system; in a deployment you add your
-providers to Dex as connectors instead (deploy/dex/config.yaml.tmpl). A person can log in when a
-role named after their email exists. The bootstrap administrator is a database user with
+Choose Sign in. The local stack's Dex keeps exactly one account with a password: the
+break-glass administrator, `admin@localhost` (`PLATFORM_ADMIN`: `admin` on the deployment's
+own domain unless another is named), with PLATFORM_ADMIN_PASSWORD from .env. Every
+other account comes from a connector — an identity provider that vouches for the addresses it
+returns — so in the local stack you add one to Dex (deploy/dex/config.yaml.tmpl) to sign in as
+anybody else. There are no built-in credentials. A person can log in when a role named after
+their email exists. The bootstrap administrator is a database user with
 `CREATEROLE` and permission to create schemas; it has no application administrator flag.
 The deploy command builds the images, starts PostgreSQL and Dex, installs the database, then
 starts the relay. In a deployment the interface is published to a CDN and the relay is the only
@@ -59,7 +64,7 @@ it prints an address and a code to enter there.
 ```bash
 # PGOAUTHDEBUG=UNSAFE is needed only because the local stack's Dex is plain HTTP.
 PGOAUTHDEBUG=UNSAFE psql "host=127.0.0.1 dbname=platform user=alice@example.com \
-  oauth_issuer=http://localhost:5556/dex oauth_client_id=platform-psql oauth_scope='openid email'"
+  oauth_issuer=http://idp.localhost:5556/dex oauth_client_id=platform-psql oauth_scope='openid email'"
 ```
 
 ```sql
@@ -92,7 +97,9 @@ The dev mode runs **PostgreSQL 18 inside the page** (PGlite), installed with the
 sections, articles and corrections, the crm workspace owned by the group `sales` with its
 accounts, contacts and deals, and their grants, policies, revisions and metadata. The sign-in
 page offers the three example people, admin, alice and bob; choosing one logs that role in,
-and every grant, row policy and trigger applies to them as it would on a server. The database
+and every grant, row policy and trigger applies to them as it would on a server. There is no
+issuer and no password here: the page is the identity provider, and nobody signs in with a
+secret. The database
 is kept in the browser's IndexedDB across reloads. `PORT=8080 bun run examples:newsroom:dev` chooses the port.
 
 Editing anything under `packages/ui/src` — or under `examples/newsroom` — rebuilds the pages and the page picks it up on the next

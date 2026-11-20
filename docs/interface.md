@@ -88,7 +88,7 @@ allow, and PostgreSQL refuses a write to such a column.
   `idle_in_transaction_session_timeout`, and the application name `platform-ui`.
 
 In a browser, the protocol travels over a WebSocket (`packages/pg-client/src/socket.ts`) to the relay, at
-the address `config.json` names (`wss://relay.example.com`). The relay (`packages/relay/src/relay.ts`, the
+the address `config.json` names (`wss://api.platform.example.com`). The relay (`packages/relay/src/relay.ts`, the
 `relay` image) hands the bytes to PostgreSQL's port and understands none of them. It holds no
 credentials: the reader's token travels inside the PostgreSQL startup packet, and PostgreSQL
 alone checks it. The one thing the relay reads is the setting PostgreSQL reports for the role
@@ -343,14 +343,14 @@ deployment runs in (`PLATFORM_ISSUER`, `PLATFORM_RELAY_URL`, `PLATFORM_CLIENT_ID
 `PLATFORM_CLAIM`, `PLATFORM_DATABASE_NAME`, `PLATFORM_STATEMENT_TIMEOUT_MS`). The build
 writes the result into the site, so a deployment changes it without rebuilding the bundle.
 
-| Field                | Example                       | Purpose                                                    |
-| -------------------- | ----------------------------- | ---------------------------------------------------------- |
-| `issuer`             | `https://sso.example.com/dex` | The one OpenID Connect issuer PostgreSQL trusts: your Dex  |
-| `clientId`           | `platform-console`            | The public client the page signs in with                   |
-| `claim`              | `email`                       | The token claim PostgreSQL matches against the role name   |
-| `relay`              | `wss://relay.example.com`     | The relay's WebSocket; a path is resolved against the page |
-| `database`           | `platform`                    | The database Platform is installed in                      |
-| `statementTimeoutMs` | `15000`                       | Sent as `statement_timeout` with each login                |
+| Field                | Example                            | Purpose                                                    |
+| -------------------- | ---------------------------------- | ---------------------------------------------------------- |
+| `issuer`             | `https://idp.platform.example.com` | The one OpenID Connect issuer PostgreSQL trusts: your Dex  |
+| `clientId`           | `platform-console`                 | The public client the page signs in with                   |
+| `claim`              | `email`                            | The token claim PostgreSQL matches against the role name   |
+| `relay`              | `wss://api.platform.example.com`   | The relay's WebSocket; a path is resolved against the page |
+| `database`           | `platform`                         | The database Platform is installed in                      |
+| `statementTimeoutMs` | `15000`                            | Sent as `statement_timeout` with each login                |
 
 A relative `relay` becomes `ws://` on an `http` page and `wss://` on an `https` one. An
 absolute `ws://` or `wss://` address is used as it is, which is what a site on a CDN needs:
@@ -368,10 +368,10 @@ build serves every deployment. The build reads them from the environment:
 | Variable                      | Default                   | Purpose                                                   |
 | ----------------------------- | ------------------------- | --------------------------------------------------------- |
 | PLATFORM_PUBLIC_URL           | http://localhost:5173     | The address people open; the only origin the relay allows |
-| PLATFORM_ISSUER               | http://localhost:5556/dex | Your Dex, the issuer PostgreSQL trusts                    |
+| PLATFORM_ISSUER               | http://idp.localhost:5556 | Your Dex, the issuer PostgreSQL trusts                    |
 | PLATFORM_CLIENT_ID            | platform-console          | The public client the pages sign in with                  |
 | PLATFORM_CLAIM                | email                     | The claim that names the role; must match the validator's |
-| PLATFORM_RELAY_URL            | ws://localhost:8081       | The relay the pages open their sessions through           |
+| PLATFORM_RELAY_URL            | ws://api.localhost:8081   | The relay the pages open their sessions through           |
 | PLATFORM_DATABASE_NAME        | platform                  | The database Platform is installed in                     |
 | PLATFORM_STATEMENT_TIMEOUT_MS | 15000                     | Sent with each login as `statement_timeout`               |
 

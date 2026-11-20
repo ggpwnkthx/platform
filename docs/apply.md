@@ -31,8 +31,8 @@ The operator is a person: sign in and pass the token,
 `PGTOKEN=$(bun run --silent cli token) bun run cli apply local team.json`. No login has a
 password, so there is no other way to say who you are. PostgreSQL then decides what you may
 change: you manage the roles you created and the workspaces you own. On the local stack,
-`deploy local up` has already applied `--example` beside the server, so admin@example.com is
-there to sign in as.
+`deploy local up` has already applied `--example` beside the server, so the deployment's
+administrator (PLATFORM_ADMIN: admin@localhost unless another is named) is there to sign in as.
 
 ## Manifest
 
