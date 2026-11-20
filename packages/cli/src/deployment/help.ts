@@ -31,10 +31,11 @@ export const DEPLOY_HELP = `platform deploy <local|k8s> <action> [options]
     unless you name another: admin@localhost on a new checkout), whose
     PLATFORM_ADMIN_PASSWORD is generated into .env by up/init/build/validate. Every other
     account comes from a connector, an identity provider that vouches for the addresses it
-    returns. up and init install the example the deployment chose, from examples/<name>: its
-    models.json (the people, groups, workspaces, grants and row policies), its migration.sql
-    (what a manifest cannot say) and, the first time, its demo.sql (records and their
-    history). A deployment that chose no example is given its administrator's role alone.
+    returns. up and init install what the deployment's site applies, from the folder
+    PLATFORM_SITE names: its models.ts (the people, groups, workspaces, grants and row
+    policies), its migration.sql (what a manifest cannot say) and, the first time, its
+    demo.sql (records and their history). A deployment with no site, or whose site applies
+    nothing, is given its administrator's role alone.
     The settings of the stack live in .env at the root of the checkout. When that file is not
     there, the first run asks for what it does not know and writes the answers down, with the
     password it generated in it. The file holds secrets: it is written for you alone and
@@ -43,10 +44,12 @@ export const DEPLOY_HELP = `platform deploy <local|k8s> <action> [options]
     are made of those pieces every time, so they never fall out of step with the domain. One
     question is a decision rather than a value: whether a site already exists. A site of your
     own is named by its full URL; left empty, an interface is deployed on a sub-domain of the
-    domain above (app, unless you choose another) — one of the examples the checkout carries,
-    or the platform's own interface. An example is built by up and served by the stack
-    itself, behind the edge, at http://app.<domain>:<EDGE_PORT>: its files are the ones a CDN
-    would be given, in examples/<name>/.dist.
+    domain above (app, unless you choose another) — the site of any folder that holds a
+    platform.json, or the platform's own interface. The examples the checkout carries are
+    offered; any other folder is named by PLATFORM_SITE, from the root of the checkout or
+    in full. The site is built by up and served by the stack itself, behind the edge, at
+    http://app.<domain>:<EDGE_PORT>: its files are the ones a CDN would be given, in the
+    folder's .dist.
 
   k8s    Kubernetes, using deploy/k8s/deployment.yaml and your current kubectl context.
     render      Print configured manifests without contacting a cluster.

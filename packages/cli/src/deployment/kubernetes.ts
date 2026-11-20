@@ -101,9 +101,9 @@ export async function kubernetes(
   const apiHost = settingValue(r, 'PLATFORM_API_HOST') ?? 'api'
   const dbHost = settingValue(r, 'PLATFORM_DB_HOST') ?? 'db'
   const image = given.PLATFORM_IMAGE ?? settingValue(r, 'PLATFORM_IMAGE') ?? ''
-  // The site's address: the one the operator gave, or the one the example is deployed on.
+  // The site's address: the one the operator gave, or the one the site is deployed on.
   const publicUrl =
-    given.PUBLIC_URL ?? settingValue(r, 'PUBLIC_URL') ?? computed.PLATFORM_EXAMPLE_URL ?? ''
+    given.PUBLIC_URL ?? settingValue(r, 'PUBLIC_URL') ?? computed.PLATFORM_SITE_URL ?? ''
   const oidcIssuer = given.OIDC_ISSUER ?? computed.OIDC_ISSUER ?? ''
   const relayUrl = computed.PLATFORM_RELAY_URL ?? ''
   const databasePort = given.DATABASE_PORT ?? settingValue(r, 'DATABASE_PORT') ?? '5432'

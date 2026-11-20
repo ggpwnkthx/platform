@@ -1,6 +1,6 @@
 /** The local stack: Docker Compose or Podman Compose, with PostgreSQL, Dex and the relay. */
 import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import {
   type DeployRuntime,
   type RunOptions,
@@ -12,7 +12,7 @@ import {
   saved,
   seconds,
 } from './runtime.ts'
-import { computedValues, ensureConfig, settingValue } from './config.ts'
+import { computedValues, ensureConfig, settingValue, siteFolder } from './config.ts'
 
 /**
  * The one account the local stack's Dex keeps with a password: the break-glass
@@ -28,16 +28,30 @@ function settingOf(r: DeployRuntime, name: string, fallback: string): string {
   return settingValue(r, name) ?? fallback
 }
 /**
- * The site's address: the one the operator gave, or the one the example is deployed on.
+ * The site's address: the one the operator gave, or the one the site is deployed on.
  * It is worked out from the pieces the configuration holds.
  */
 function siteAddress(r: DeployRuntime, computed: Record<string, string>): string {
   return (
     settingValue(r, 'PLATFORM_PUBLIC_URL') ??
     settingValue(r, 'PUBLIC_URL') ??
-    computed.PLATFORM_EXAMPLE_URL ??
+    computed.PLATFORM_SITE_URL ??
     'http://localhost:5173'
   )
+}
+/**
+ * The folder of the site the deployment chose, as the configuration names it: from the root
+ * of the checkout, or in full. A configuration written when a site could only be one of the
+ * checkout's examples is told what to say now, and is not guessed at.
+ */
+function chosenSite(r: DeployRuntime): string {
+  const site = settingValue(r, 'PLATFORM_SITE') ?? ''
+  const before = settingValue(r, 'PLATFORM_EXAMPLE')
+  if (!site && before)
+    throw new Error(
+      `PLATFORM_EXAMPLE=${before} is PLATFORM_SITE=examples/${before} now: a deployment names the folder of its site, which may be any folder that holds platform.json. Change the line in ${r.envFile}.`
+    )
+  return site
 }
 /** Where the local stack publishes PostgreSQL, for commands that sign in to it with a token. */
 export function localDatabase(r: DeployRuntime = runtime) {
@@ -160,11 +174,14 @@ async function stack(
   const edgeTlsPort = setting('EDGE_TLS_PORT', '4433')
   // The names have to answer on this machine: the browser opens the issuer and the relay,
   // the operator's own tools reach the database.
-  // The example the deployment chose, if it chose one: its site is served by the stack
-  // itself, on a name of its own. A site of the operator's own is not the stack's business.
+  // The site the deployment chose, if it chose one: the folder that holds its
+  // platform.json, any folder at all. It is built here and served by the stack itself, on a
+  // name of its own. A site that already exists elsewhere is not the stack's business.
   const own = settingValue(r, 'PLATFORM_PUBLIC_URL') ?? settingValue(r, 'PUBLIC_URL')
-  const example = own ? '' : text('PLATFORM_EXAMPLE', '')
-  if (example && !/^[a-z0-9][a-z0-9-]*$/.test(example)) throw new Error('Invalid PLATFORM_EXAMPLE')
+  const site = own ? '' : chosenSite(r)
+  const folder = site ? siteFolder(site) : null
+  // What the site is called in what is said of it: its folder's own name.
+  const siteName = folder ? basename(folder.dir) : ''
   const appHost = text('PLATFORM_APP_HOST', 'app')
   // The one account the stack's Dex keeps, and the role the installer makes for it: the
   // deployment's own administrator, on its own domain unless another is named.
@@ -172,7 +189,7 @@ async function stack(
   if (!/^[^\s"'\\,@]+@[^\s"'\\,@]+$/.test(admin) || admin.length > 63)
     throw new Error('Invalid PLATFORM_ADMIN')
   const app = `${appHost}.${domain}`
-  await r.hosts([idp, api, db, ...(example ? [app] : [])])
+  await r.hosts([idp, api, db, ...(site ? [app] : [])])
   const tool = await compose(engine, r)
   const base = tool.length
   const cmd = [
@@ -205,13 +222,14 @@ async function stack(
     EDGE_TLS_PORT: edgeTlsPort,
     // The only origin the relay allows: the address the site is served from.
     PLATFORM_PUBLIC_ORIGIN: siteAddress(r, computed),
-    // The example's site: the edge routes its name only when there is one, and the files
-    // it is served from are the ones built on this machine.
-    PLATFORM_EXAMPLE: example,
+    // The site: the edge routes its name only when there is one, the installer reads what
+    // its folder applies, and the files it is served from are the ones built on this machine.
+    PLATFORM_SITE: site,
+    PLATFORM_SITE_FOLDER: folder?.dir ?? join(ROOT, 'examples'),
     // The administrator: the account Dex keeps, and the role the installer makes for it.
     PLATFORM_ADMIN: admin,
     PLATFORM_APP_HOST: appHost,
-    PLATFORM_SITE_DIR: join(ROOT, example ? `examples/${example}/.dist` : 'packages/ui/dist'),
+    PLATFORM_SITE_DIST: folder ? join(folder.dir, '.dist') : join(ROOT, 'packages/ui/dist'),
   }
   // Dex is given only hashes. The password stays in the saved file for the operator to read.
   if (prepares)
@@ -306,9 +324,10 @@ async function stack(
     tail('dex', 'edge')
   )
   // The installer runs beside PostgreSQL and is let in by its socket. It installs the platform,
-  // then the example the deployment chose: its models.json, its migration.sql and, the first
-  // time, its demo.sql. A deployment that chose none is given its administrator and nothing
-  // else, so that there is somebody to sign in as.
+  // then what the deployment's site applies, from its folder: its models.ts, its
+  // migration.sql and, the first time, its demo.sql. A deployment whose site applies
+  // nothing, or that has no site, is given its administrator and nothing else, so that
+  // there is somebody to sign in as.
   // What each of them did is its last line: the version installed, the count of changes.
   const lastLine = (fallback: string) => (said: string[]) => said.at(-1) ?? fallback
   const installed =
@@ -317,11 +336,12 @@ async function stack(
       done: lastLine('The platform is installed'),
     })) ||
     (await beside(
-      ['apply', 'k8s', example ? `--example=${example}` : '--administrator'],
-      example
+      // The folder is mounted beside the installer, wherever it is on this machine.
+      ['apply', 'k8s', folder?.apply ? '--dir=/app/site' : '--administrator'],
+      folder?.apply
         ? {
-            doing: `Installing the ${example} example`,
-            done: (said) => `The ${example} example is installed: ${lastLine('done')(said)}`,
+            doing: `Installing what ${siteName} applies`,
+            done: (said) => `What ${siteName} applies is installed: ${lastLine('done')(said)}`,
           }
         : {
             doing: 'Creating the role of the administrator',
@@ -341,26 +361,26 @@ async function stack(
     tail('relay', 'edge')
   )
   const relayUrl = `ws://${api}:${edgePort}`
-  // The example's site: built here, as it would be for a CDN, and served by the stack's own
+  // The site: built here, as it would be for a CDN, and served by the stack's own
   // static server behind the edge. It is last: the pages need the issuer and the relay.
-  const site = `http://${app}:${edgePort}`
-  if (example) {
+  const siteUrl = `http://${app}:${edgePort}`
+  if (site) {
     const files = await buildFiles(r, computed, {
-      doing: `Building the ${example} site`,
-      done: `The ${example} site is built`,
+      doing: `Building the ${siteName} site`,
+      done: `The ${siteName} site is built`,
     })
     if (files.code) return files.code
     const published = await run(['up', '-d', 'site'], {
       task: { doing: 'Starting the site', done: 'The site is started' },
     })
     if (published) return published
-    await wait(() => r.healthy(`${site}/`), timeout, r, 'The site', tail('site', 'edge'))
+    await wait(() => r.healthy(`${siteUrl}/`), timeout, r, 'The site', tail('site', 'edge'))
   }
-  last.word = example ? `The site is at ${site}` : 'The stack is running'
+  last.word = site ? `The site is at ${siteUrl}` : 'The stack is running'
   r.result(
     'The stack is running',
     [
-      ...(example ? ([['Site', site]] as [string, string][]) : []),
+      ...(site ? ([['Site', siteUrl]] as [string, string][]) : []),
       ['Issuer', issuer],
       ['Relay', relayUrl],
       ['PostgreSQL', `${db}:${postgresPort}`],
@@ -369,8 +389,8 @@ async function stack(
       `Sign in as ${admin}, the break-glass administrator: Dex's form opens with the address filled in, and the password is PLATFORM_ADMIN_PASSWORD in ${r.envFile}.`,
       'Everybody else signs in through a connector: add an identity provider in deploy/dex/config.yaml.tmpl.',
       'PostgreSQL has no password: sign in with a token (`bun run cli token`), or administer the stack with `bun run cli deploy local admin <command>`.',
-      example
-        ? `The site's files are in examples/${example}/.dist: \`bun run cli deploy local ui\` builds them again, and they are served at once.`
+      site
+        ? `The site's files are in ${join(site, '.dist')}: \`bun run cli deploy local ui\` builds them again, and they are served at once.`
         : `The interface is a static site: build it with \`bun run cli deploy local ui\` and publish packages/ui/dist to a CDN, with config.json pointing at ${relayUrl}.`,
     ]
   )
@@ -406,25 +426,18 @@ async function buildFiles(
     PLATFORM_ISSUER: r.env.PLATFORM_ISSUER ?? r.env.OIDC_ISSUER ?? computed.PLATFORM_ISSUER ?? '',
     PLATFORM_RELAY_URL: r.env.PLATFORM_RELAY_URL ?? computed.PLATFORM_RELAY_URL ?? '',
   }
-  // The example the deployment chose, if it chose one: the platform's own interface is
+  // The site the deployment chose, if it chose one: the platform's own interface is
   // built otherwise.
-  const example = r.env.PLATFORM_EXAMPLE ?? saved(r.envFile, 'PLATFORM_EXAMPLE') ?? ''
-  const built = example
+  const site = chosenSite(r)
+  const built = site
     ? await r.run(
-        [
-          'bun',
-          'packages/cli/src/cli.ts',
-          'ui',
-          'build',
-          `--dir=examples/${example}`,
-          '--production',
-        ],
+        ['bun', 'packages/cli/src/cli.ts', 'ui', 'build', `--dir=${site}`, '--production'],
         { env, task }
       )
     : await r.run(['bun', 'run', 'build:ui'], { env, task })
   return {
     code: built,
-    where: example ? `examples/${example}/.dist` : 'packages/ui/dist',
+    where: site ? join(site, '.dist') : 'packages/ui/dist',
     relay: env.PLATFORM_RELAY_URL,
   }
 }

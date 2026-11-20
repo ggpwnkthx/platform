@@ -16,14 +16,40 @@ import {
   readdirSync,
   writeFileSync,
 } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
-import { CONFIG_FILE, findConfig } from '../config.ts'
+import { basename, dirname, join, resolve } from 'node:path'
+import { CONFIG_FILE, type FolderConfig, findConfig } from '../config.ts'
 import { Cancelled, type Choice } from '../terminal.ts'
 import { type DeployRuntime, ROOT, saved } from './runtime.ts'
 
 /**
+ * The folder of the site a deployment chose: any folder that holds a `platform.json`,
+ * named from the root of the checkout or in full. It need not be one of the checkout's own.
+ */
+export function siteFolder(site: string, root: string = ROOT): FolderConfig {
+  const dir = resolve(root, site)
+  const config = existsSync(dir) ? findConfig(dir) : null
+  if (!config)
+    throw new Error(
+      `PLATFORM_SITE names the folder of a site, one that holds ${CONFIG_FILE}: there is none at ${dir}`
+    )
+  return config
+}
+
+/** What is wrong with the folder a deployment names as its site, if anything is. */
+function aSiteFolder(value: string): string | undefined {
+  if (!value) return undefined
+  try {
+    siteFolder(value)
+    return undefined
+  } catch {
+    return `must be a folder that holds ${CONFIG_FILE}, named from the root of the checkout or in full`
+  }
+}
+
+/**
  * The examples a checkout carries: the folders under examples/ whose `platform.json` says
- * they apply something to a database.
+ * they apply something to a database. They are offered when a deployment is asked for its
+ * site, and a deployment may name any other folder.
  */
 export function examplesIn(root: string): string[] {
   const directory = join(root, 'examples')
@@ -168,51 +194,47 @@ function localSettings(): Setting[] {
     },
     {
       name: 'PLATFORM_PUBLIC_URL',
-      note: 'The address of the site: if one already exists, give its full URL; leave it empty and an example will be deployed',
-      question: 'URL of your site (empty to deploy an example)',
-      // Asked once: a deployment that has chosen where its example goes has answered it.
-      when: (answers) => !answers.PLATFORM_APP_HOST && !answers.PLATFORM_EXAMPLE,
-      // An empty answer means an example is deployed, and its address is worked out below.
+      note: 'The address of the site: if one already exists, give its full URL; leave it empty and one will be deployed from a folder',
+      question: 'URL of your site (empty to deploy one from a folder)',
+      // Asked once: a deployment that has chosen where its site goes has answered it.
+      when: (answers) => !answers.PLATFORM_APP_HOST && !answers.PLATFORM_SITE,
+      // An empty answer means a site is deployed, and its address is worked out below.
       fallback: () => '',
       check: aUrl,
     },
     {
-      name: 'PLATFORM_EXAMPLE_URL',
-      note: 'The address an example is deployed on',
-      // Only when an example is deployed: a site of the operator's own needs no address.
+      name: 'PLATFORM_SITE_URL',
+      note: 'The address the site is deployed on',
+      // Only when a site is deployed: one that already exists has its own address.
       when: (answers) => !answers.PLATFORM_PUBLIC_URL,
-      // The example's address is made of the domain and the sub-domain it is deployed on.
+      // The site's address is made of the domain and the sub-domain it is deployed on.
       follows: (answers) => {
         const app = answers.PLATFORM_APP_HOST
         const domain = answers.PLATFORM_DOMAIN
         if (!app || !domain) return undefined
-        // An example is served by the stack itself, behind the edge. Without one the site
+        // A site is served by the stack itself, behind the edge. Without one the site
         // is the development server's, on the port it serves on.
-        return answers.PLATFORM_EXAMPLE
+        return answers.PLATFORM_SITE
           ? `http://${app}.${domain}:${answers.EDGE_PORT ?? '8080'}`
           : `http://${app}.${domain}:5173`
       },
     },
     {
-      name: 'PLATFORM_EXAMPLE',
-      note: `Which example should be deployed: ${examplesIn(ROOT).join(', ') || 'none'}`,
-      question: 'Example to deploy',
-      // Only asked when there is no site of the operator's own.
+      name: 'PLATFORM_SITE',
+      note: 'The folder of the site to deploy, the one that holds platform.json: any folder, named from the root of the checkout or in full',
+      question: 'Folder of the site to deploy',
+      // Only asked when there is no site that already exists.
       when: (answers) => !answers.PLATFORM_PUBLIC_URL,
-      // Empty means the platform's own interface, which is no example at all.
+      // Empty means the platform's own interface, which is no folder's.
       fallback: () => '',
-      check: (value) => {
-        if (!value) return undefined
-        const examples = examplesIn(ROOT)
-        return examples.includes(value) ? undefined : `must be one of: ${examples.join(', ')}`
-      },
-      choices: exampleChoices,
+      check: aSiteFolder,
+      choices: siteChoices,
     },
     {
       name: 'PLATFORM_APP_HOST',
-      note: 'The sub-domain the example is deployed on',
-      question: 'Sub-domain for the example',
-      // Only asked when there is no site of the operator's own.
+      note: 'The sub-domain the site is deployed on',
+      question: 'Sub-domain for the site',
+      // Only asked when there is no site that already exists.
       when: (answers) => !answers.PLATFORM_PUBLIC_URL,
       fallback: 'app',
       check: aSubDomain,
@@ -348,20 +370,20 @@ function kubernetesSettings(): Setting[] {
     },
     {
       name: 'PUBLIC_URL',
-      note: 'The address of the site: if one already exists, give its full URL; leave it empty and an example will be deployed',
-      question: 'URL of your site (empty to deploy an example)',
-      // Asked once: a deployment that has chosen where its example goes has answered it.
-      when: (answers) => !answers.PLATFORM_APP_HOST && !answers.PLATFORM_EXAMPLE,
-      // An empty answer means an example is deployed, and its address is worked out below.
+      note: 'The address of the site: if one already exists, give its full URL; leave it empty and one will be deployed from a folder',
+      question: 'URL of your site (empty to deploy one from a folder)',
+      // Asked once: a deployment that has chosen where its site goes has answered it.
+      when: (answers) => !answers.PLATFORM_APP_HOST && !answers.PLATFORM_SITE,
+      // An empty answer means a site is deployed, and its address is worked out below.
       fallback: () => '',
       check: anHttpsUrl,
     },
     {
-      name: 'PLATFORM_EXAMPLE_URL',
-      note: 'The address an example is deployed on',
-      // Only when an example is deployed: a site of the operator's own needs no address.
+      name: 'PLATFORM_SITE_URL',
+      note: 'The address the site is deployed on',
+      // Only when a site is deployed: one that already exists has its own address.
       when: (answers) => !answers.PUBLIC_URL,
-      // The example's address is made of the domain and the sub-domain it is deployed on.
+      // The site's address is made of the domain and the sub-domain it is deployed on.
       follows: (answers) => {
         const app = answers.PLATFORM_APP_HOST
         const domain = answers.PLATFORM_DOMAIN
@@ -369,25 +391,21 @@ function kubernetesSettings(): Setting[] {
       },
     },
     {
-      name: 'PLATFORM_EXAMPLE',
-      note: `Which example should be deployed: ${examplesIn(ROOT).join(', ') || 'none'}`,
-      question: 'Example to deploy',
-      // Only asked when there is no site of the operator's own.
+      name: 'PLATFORM_SITE',
+      note: 'The folder of the site to deploy, the one that holds platform.json: any folder, named from the root of the checkout or in full',
+      question: 'Folder of the site to deploy',
+      // Only asked when there is no site that already exists.
       when: (answers) => !answers.PUBLIC_URL,
-      // Empty means the platform's own interface, which is no example at all.
+      // Empty means the platform's own interface, which is no folder's.
       fallback: () => '',
-      check: (value) => {
-        if (!value) return undefined
-        const examples = examplesIn(ROOT)
-        return examples.includes(value) ? undefined : `must be one of: ${examples.join(', ')}`
-      },
-      choices: exampleChoices,
+      check: aSiteFolder,
+      choices: siteChoices,
     },
     {
       name: 'PLATFORM_APP_HOST',
-      note: 'The sub-domain the example is deployed on',
-      question: 'Sub-domain for the example',
-      // Only asked when there is no site of the operator's own.
+      note: 'The sub-domain the site is deployed on',
+      question: 'Sub-domain for the site',
+      // Only asked when there is no site that already exists.
       when: (answers) => !answers.PUBLIC_URL,
       fallback: 'app',
       check: aSubDomain,
@@ -477,10 +495,18 @@ export function settingValue(r: DeployRuntime, name: string): string | undefined
   return fromFile
 }
 
-/** The examples a deployment may carry, and the platform's own interface, which is none of them. */
-function exampleChoices(): Choice[] {
+/**
+ * The sites that are offered: the examples the checkout carries, and the platform's own
+ * interface, which is no folder's. Any other folder is named in the configuration itself,
+ * PLATFORM_SITE, and is then not asked for.
+ */
+function siteChoices(): Choice[] {
   return [
-    ...examplesIn(ROOT).map((name) => ({ value: name, label: name, hint: `examples/${name}` })),
+    ...examplesIn(ROOT).map((name) => ({
+      value: `examples/${name}`,
+      label: name,
+      hint: `examples/${name}`,
+    })),
     { value: '', label: 'None', hint: "the platform's own interface" },
   ]
 }
@@ -644,7 +670,7 @@ export async function ensureConfig(
   try {
     // The values the tool computes now are taken out of the file first: they are made of
     // the pieces it holds, and the pieces are what may be changed. What the file holds is
-    // read before they are taken out, so that the example's address is known.
+    // read before they are taken out, so that the site's address is known.
     const pieces: Record<string, string> = {}
     for (const setting of settings) {
       if (setting.follows) continue
@@ -654,12 +680,11 @@ export async function ensureConfig(
       if (value) pieces[setting.name] = value
     }
     const computedNames = settings.filter((s) => s.follows).map((s) => s.name)
-    const exampleUrl = computed(settings, pieces).PLATFORM_EXAMPLE_URL
+    const siteUrl = computed(settings, pieces).PLATFORM_SITE_URL
     const removed = removeComputed(
       r.envFile,
       [...computedNames, 'PLATFORM_PUBLIC_URL', 'PUBLIC_URL'],
-      (name, value) =>
-        computedNames.includes(name) || (exampleUrl !== undefined && value === exampleUrl)
+      (name, value) => computedNames.includes(name) || (siteUrl !== undefined && value === siteUrl)
     )
     if (removed.length) {
       // The environment holds the file's own values, and they are not there any more.

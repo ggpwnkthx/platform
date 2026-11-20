@@ -162,9 +162,15 @@ describe('local deployment orchestration', () => {
     expect(
       Object.keys(init.options?.env ?? {}).filter((name) => /^(POSTGRES_PASSWORD|PG)/.test(name))
     ).toEqual([])
-    // No example was chosen, so the administrator's role alone is made, straight after.
-    const example = f.calls[f.calls.indexOf(init) + 1]!
-    expect(example.argv.slice(-5)).toEqual(['-T', 'migrate', 'apply', 'k8s', '--administrator'])
+    // No site was chosen, so the administrator's role alone is made, straight after.
+    const administrator = f.calls[f.calls.indexOf(init) + 1]!
+    expect(administrator.argv.slice(-5)).toEqual([
+      '-T',
+      'migrate',
+      'apply',
+      'k8s',
+      '--administrator',
+    ])
     expect(cmds.at(-1)!.slice(-3)).toEqual(['up', '-d', 'relay'])
     // Dex answers before the installer runs; the relay is checked last.
     expect(f.urls).toEqual([
@@ -179,14 +185,16 @@ describe('local deployment orchestration', () => {
     // No service is given a password: PostgreSQL has none, and the installer shares its socket.
     expect(stack).not.toMatch(/PASSWORD|scram/)
     expect(services.migrate.environment.DATABASE_HOST).toBe('/var/run/postgresql')
-    // Beside the socket it reads the checkout's examples, and writes nothing anywhere.
+    // Beside the socket it reads the folder of the deployment's site, wherever that is on
+    // this machine, and writes nothing anywhere.
     expect(services.migrate.volumes).toEqual([
       'socket:/var/run/postgresql',
-      '../../examples:/app/examples:ro',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: it is Compose's own variable, as the file writes it
+      '${PLATFORM_SITE_FOLDER:-../../examples}:/app/site:ro',
     ])
     expect(services.postgres.volumes).toContain('socket:/var/run/postgresql')
     // The interface is a static site, published to a CDN: it is not a container. The one
-    // site the stack serves is an example's, with the operator's own tools, and it is
+    // site the stack serves is the one it was given a folder for, with the operator's own tools, and it is
     // reached through the edge like everything else.
     expect(services.ui).toBeUndefined()
     expect(Object.keys(services).sort()).toEqual([
@@ -200,7 +208,7 @@ describe('local deployment orchestration', () => {
     expect(services.site.image).toBe(services.migrate.image)
     expect(services.site.command).toEqual(['ui', 'serve', '--dir=/site', '--port=8080'])
     expect(services.site.ports).toBeUndefined()
-    // No example was chosen here, so no site is built or started.
+    // No site was chosen here, so none is built or started.
     expect(cmds.some((cmd) => cmd.includes('site'))).toBe(false)
     // The edge is the only part that answers on the network: it is the only one published,
     // and the services behind it are reached by the deployment's own names.
@@ -284,8 +292,8 @@ describe('local deployment orchestration', () => {
     for (const name of ['PLATFORM_DOMAIN', 'PLATFORM_IDP_HOST', 'PLATFORM_API_HOST', 'DEX_PORT'])
       expect(edge).toContain(`{{ env "${name}" }}`)
   })
-  test('an example is built, served by the stack and routed by the edge', async () => {
-    const f = fake({ PLATFORM_EXAMPLE: 'newsroom', EDGE_PORT: '9090' })
+  test('the site of a folder is built, served by the stack and routed by the edge', async () => {
+    const f = fake({ PLATFORM_SITE: 'examples/newsroom', EDGE_PORT: '9090' })
     expect(await deploy(['local', 'up'], f.r)).toBe(0)
     const cmds = f.calls.map((c) => c.argv)
     // The site is last: built on this machine, as it would be for a CDN, then started.
@@ -298,9 +306,9 @@ describe('local deployment orchestration', () => {
       '--production',
     ])
     expect(cmds.at(-1)!.slice(-3)).toEqual(['up', '-d', 'site'])
-    // The example itself is installed beside PostgreSQL, by name.
+    // What the folder applies is installed beside PostgreSQL, from where it is mounted.
     expect(cmds.filter((c) => c.includes('apply')).map((c) => c.slice(-3))).toEqual([
-      ['apply', 'k8s', '--example=newsroom'],
+      ['apply', 'k8s', '--dir=/app/site'],
     ])
     // The pages are built for the address the edge serves them on, and the relay allows it.
     const built = f.calls.at(-2)!.options?.env ?? {}
@@ -308,8 +316,9 @@ describe('local deployment orchestration', () => {
     expect(built.PLATFORM_RELAY_URL).toBe('ws://api.localhost:9090')
     const stack = f.calls.at(-1)!.options?.env ?? {}
     expect(stack.PLATFORM_PUBLIC_ORIGIN).toBe('http://app.localhost:9090')
-    expect(stack.PLATFORM_EXAMPLE).toBe('newsroom')
-    expect(stack.PLATFORM_SITE_DIR).toEndWith('/examples/newsroom/.dist')
+    expect(stack.PLATFORM_SITE).toBe('examples/newsroom')
+    expect(stack.PLATFORM_SITE_FOLDER).toEndWith('/examples/newsroom')
+    expect(stack.PLATFORM_SITE_DIST).toEndWith('/examples/newsroom/.dist')
     // The site's name answers on this machine with the others, and is waited for last.
     expect(f.hosts).toContain('app.localhost')
     expect(f.urls.at(-1)).toBe('http://app.localhost:9090/')
@@ -317,15 +326,18 @@ describe('local deployment orchestration', () => {
     // The site is the one link: none opens it at its sign-in, and nothing secret is said.
     expect(f.output.join('\n')).not.toContain('#signin')
     expect(f.output.join('\n')).not.toContain(saved(f.envFile, 'PLATFORM_ADMIN_PASSWORD')!)
-    // The edge routes the name only when there is an example.
+    // The edge routes the name only when there is a site.
     const edge = readFileSync(
       new URL('../../../deploy/traefik/dynamic.yaml', import.meta.url),
       'utf8'
     )
-    expect(edge).toMatch(/\{\{ if env "PLATFORM_EXAMPLE" \}\}\s+app:\s+rule: 'Host/)
+    expect(edge).toMatch(/\{\{ if env "PLATFORM_SITE" \}\}\s+app:\s+rule: 'Host/)
     expect(edge).toContain('http://site:8080')
     // A site of the operator's own is not the stack's to serve.
-    const own = fake({ PLATFORM_EXAMPLE: 'newsroom', PLATFORM_PUBLIC_URL: 'https://x.example.com' })
+    const own = fake({
+      PLATFORM_SITE: 'examples/newsroom',
+      PLATFORM_PUBLIC_URL: 'https://x.example.com',
+    })
     expect(await deploy(['local', 'up'], own.r)).toBe(0)
     expect(own.calls.some((c) => c.argv.includes('site'))).toBe(false)
   })
@@ -570,11 +582,11 @@ describe('the configuration of a deployment', () => {
     expect(await deploy(['local', 'up'], f.r)).toBe(0)
     expect(f.asked).toEqual([])
     const saved = readFileSync(f.envFile, 'utf8')
-    // No site of the operator's own: an example is deployed, on its own sub-domain, and
+    // No site that already exists: one is deployed, on its own sub-domain, and
     // its address is made of the domain and it rather than kept.
     expect(saved).not.toContain('PLATFORM_PUBLIC_URL')
     expect(saved).toContain('PLATFORM_APP_HOST=app')
-    expect(f.r.env.PLATFORM_EXAMPLE_URL).toBe('http://app.localhost:5173')
+    expect(f.r.env.PLATFORM_SITE_URL).toBe('http://app.localhost:5173')
     expect(saved).toContain('DEX_PORT=5556')
     expect(saved).toMatch(/^PLATFORM_ADMIN_PASSWORD=[\w-]{32}$/m)
   })
@@ -637,10 +649,10 @@ describe('the configuration of a deployment', () => {
     // The names have to answer on this machine: the browser and the operator's tools.
     expect(f.hosts).toEqual(['idp.dex.local', 'api.dex.local', 'db.dex.local'])
   })
-  test('a site that already exists is asked for by its full URL, and no example is deployed', async () => {
+  test('a site that already exists is asked for by its full URL, and none is deployed', async () => {
     const f = fake({}, { PLATFORM_PUBLIC_URL: 'https://console.example.com' }, true)
     expect(await deploy(['local', 'up'], f.r)).toBe(0)
-    // The operator is asked for the address of the site, and the example is not deployed.
+    // The operator is asked for the address of the site, and no site is deployed.
     expect(f.asked).toContain('PLATFORM_PUBLIC_URL')
     expect(f.asked).not.toContain('PLATFORM_APP_HOST')
     const saved = readFileSync(f.envFile, 'utf8')
@@ -648,31 +660,53 @@ describe('the configuration of a deployment', () => {
     expect(saved).not.toContain('PLATFORM_APP_HOST')
   })
   test('the examples a checkout carries are offered, and one of them is deployed', async () => {
-    const f = fake({}, { PLATFORM_EXAMPLE: 'newsroom' }, true)
+    const f = fake({}, { PLATFORM_SITE: 'examples/newsroom' }, true)
     expect(await deploy(['local', 'up'], f.r)).toBe(0)
-    // The question names the examples there are.
-    expect(f.asked).toContain('PLATFORM_EXAMPLE')
+    // The question is which folder the site is in.
+    expect(f.asked).toContain('PLATFORM_SITE')
     const saved = readFileSync(f.envFile, 'utf8')
-    expect(saved).toContain('PLATFORM_EXAMPLE=newsroom')
-    // The interface that is built is the example that was chosen.
+    expect(saved).toContain('PLATFORM_SITE=examples/newsroom')
+    // The interface that is built is the one in the folder that was chosen.
     f.calls.length = 0
     expect(await deploy(['local', 'ui'], f.r)).toBe(0)
     expect(f.calls.at(-1)!.argv).toContain('--dir=examples/newsroom')
   })
-  test('an example that does not exist is refused', async () => {
-    const f = fake({ PLATFORM_EXAMPLE: 'nonesuch' })
-    await expect(deploy(['local', 'up'], f.r)).rejects.toThrow('PLATFORM_EXAMPLE')
+  test('a folder that is no site is refused', async () => {
+    const f = fake({ PLATFORM_SITE: 'examples/nonesuch' })
+    await expect(deploy(['local', 'up'], f.r)).rejects.toThrow('PLATFORM_SITE')
     expect(existsSync(f.envFile)).toBe(false)
   })
-  test('an example is deployed on a sub-domain of the deployment domain', async () => {
+  test('the site is any folder that holds a platform.json, wherever it is', async () => {
+    // A folder outside the checkout, which applies nothing: a site, and no example.
+    const dir = mkdtempSync(join(tmpdir(), 'platform-site-'))
+    writeFileSync(join(dir, 'platform.json'), '{}')
+    const f = fake({ PLATFORM_SITE: dir })
+    expect(await deploy(['local', 'up'], f.r)).toBe(0)
+    const cmds = f.calls.map((c) => c.argv)
+    // It is built where it is, and served from there.
+    expect(cmds.at(-2)).toContain(`--dir=${dir}`)
+    const stack = f.calls.at(-1)!.options?.env ?? {}
+    expect(stack.PLATFORM_SITE_FOLDER).toBe(dir)
+    expect(stack.PLATFORM_SITE_DIST).toBe(join(dir, '.dist'))
+    // It applies nothing, so the administrator's role alone is made.
+    expect(cmds.filter((c) => c.includes('apply')).map((c) => c.slice(-3))).toEqual([
+      ['apply', 'k8s', '--administrator'],
+    ])
+    rmSync(dir, { recursive: true })
+  })
+  test('a configuration that names an example is told what to say now', async () => {
+    const f = fake({ PLATFORM_EXAMPLE: 'newsroom' })
+    await expect(deploy(['local', 'up'], f.r)).rejects.toThrow('PLATFORM_SITE=examples/newsroom')
+  })
+  test('the site is deployed on a sub-domain of the deployment domain', async () => {
     const f = fake({}, { PLATFORM_APP_HOST: 'console' }, true)
     expect(await deploy(['local', 'up'], f.r)).toBe(0)
-    // The site is not the operator's own, so the sub-domain is asked for, and the address
-    // of the example follows from the domain and it.
+    // No site exists already, so the sub-domain is asked for, and the address of the
+    // site follows from the domain and it.
     expect(f.asked).toContain('PLATFORM_APP_HOST')
     const saved = readFileSync(f.envFile, 'utf8')
     expect(saved).toContain('PLATFORM_APP_HOST=console')
-    expect(f.r.env.PLATFORM_EXAMPLE_URL).toBe('http://console.localhost:5173')
+    expect(f.r.env.PLATFORM_SITE_URL).toBe('http://console.localhost:5173')
   })
   test('the edge answers on ports the operator chooses, never on 80 or 443', async () => {
     const f = fake({}, {}, true)

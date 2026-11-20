@@ -86,30 +86,31 @@ services:
       DATABASE_NAME: platform
       DATABASE_SSL: disable
       PGUSER: postgres
-      # The administrator the example's roles are made for: the account Dex keeps.
+      # The administrator the site's roles are made for: the account Dex keeps.
       PLATFORM_ADMIN: ${PLATFORM_ADMIN:-}
       PLATFORM_DOMAIN: ${PLATFORM_DOMAIN:-localhost}
     volumes:
       - socket:/var/run/postgresql
-      # The examples of the checkout, read and never written: `apply --example=NAME` reads
-      # examples/NAME/platform.json and the files it says it applies. The image carries the
-      # tools alone.
-      - ../../examples:/app/examples:ro
+      # The folder of the site the deployment chose, read and never written: `apply
+      # --dir=/app/site` reads its platform.json and the files it says it applies. It is
+      # any folder on this machine; the image carries the tools alone. A deployment that
+      # chose no site reads nothing here.
+      - ${PLATFORM_SITE_FOLDER:-../../examples}:/app/site:ro
     # The socket is on a volume, not on a network: the installer needs none.
     network_mode: none
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
-  # The site of an example, when the deployment chose one: its built files, served as a CDN
-  # would serve them, with the headers the build wrote beside them. It is started only for
-  # an example; a site of the operator's own is published to a CDN and is not a container.
+  # The site, when the deployment chose a folder to deploy one from: its built files, served
+  # as a CDN would serve them, with the headers the build wrote beside them. It is started
+  # only then; a site that already exists is published to a CDN and is not a container.
   # The image is the installer's: the operator's tools carry the server.
   site:
     image: platform-cli:local
     command: [ui, serve, --dir=/site, --port=8080]
     volumes:
       # The files `ui build` wrote on this machine, read and never written.
-      - ${PLATFORM_SITE_DIR:-../../packages/ui/dist}:/site:ro
+      - ${PLATFORM_SITE_DIST:-../../packages/ui/dist}:/site:ro
     # Not published: the edge, below, is how the site is reached, by its own name.
     restart: unless-stopped
     read_only: true
@@ -132,8 +133,8 @@ services:
       PLATFORM_DOMAIN: ${PLATFORM_DOMAIN:-localhost}
       PLATFORM_IDP_HOST: ${PLATFORM_IDP_HOST:-idp}
       PLATFORM_API_HOST: ${PLATFORM_API_HOST:-api}
-      # The example the deployment chose, if it chose one, and the name its site answers on.
-      PLATFORM_EXAMPLE: ${PLATFORM_EXAMPLE:-}
+      # The site the deployment chose, if it chose one, and the name it answers on.
+      PLATFORM_SITE: ${PLATFORM_SITE:-}
       PLATFORM_APP_HOST: ${PLATFORM_APP_HOST:-app}
       DEX_PORT: ${DEX_PORT:-5556}
       RELAY_PORT: ${RELAY_PORT:-8081}
