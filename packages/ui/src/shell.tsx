@@ -18,6 +18,7 @@ import {
   ContentIcon,
   GroupIcon,
   iconFor,
+  KeyIcon,
   MenuIcon,
   ModelIcon,
   PlusIcon,
@@ -280,14 +281,20 @@ function NavPane({ module }: { module: Module | null }) {
         <ul class="nav-list">
           <li>{link('/access', 'Roles', <GroupIcon size={18} aria-hidden="true" />)}</li>
           <li>
+            {link('/access/grants', 'Permissions', <KeyIcon size={18} aria-hidden="true" />, {
+              ws,
+            })}
+          </li>
+          <li>
             {link('/access/policies', 'Row policies', <PolicyIcon size={18} aria-hidden="true" />, {
               ws,
             })}
           </li>
         </ul>
         <p class="nav-foot">
-          Roles, memberships and grants are PostgreSQL's own. What you change here is a statement
-          you run as yourself.
+          Roles, memberships, grants and policies are PostgreSQL's own. What you change here is a
+          statement you run as yourself. A collection's access is also on its own page, under Data
+          model.
         </p>
       </>
     )

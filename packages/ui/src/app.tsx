@@ -5,7 +5,9 @@ import { pageOf } from './routes.ts'
 import { SessionProvider, useSession } from './session.tsx'
 import { Shell } from './shell.tsx'
 import { Toasts } from './ui/toasts.tsx'
-import { Policies, RoleDetail, Roles } from './access/access.tsx'
+import { Policies } from './access/policies.tsx'
+import { RoleDetail, Roles } from './access/roles.tsx'
+import { Grants } from './access/workspace-access.tsx'
 import { Activity } from './activity/activity.tsx'
 import { ContentHome } from './content/content.tsx'
 import { Item } from './content/item.tsx'
@@ -39,6 +41,7 @@ function Signed() {
         <Route path="/workspace/settings" component={WorkspaceSettings} />
         <Route path="/access" component={Roles} />
         <Route path="/access/role" component={RoleDetail} />
+        <Route path="/access/grants" component={Grants} />
         <Route path="/access/policies" component={Policies} />
         <Route path="/activity" component={Activity} />
         <Route path="/sql" component={Sql} />

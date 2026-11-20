@@ -3327,3 +3327,329 @@ button.perm:hover:not(:disabled) {
   background: var(--danger-wash);
   color: var(--danger);
 }
+
+/* ------------------------------------------------------------------ access */
+
+/* A role's name: a person, a group or everyone, in the database's own letters. */
+.role-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  color: var(--text);
+  font-weight: 500;
+  vertical-align: middle;
+}
+.role-label svg {
+  color: var(--text-faint);
+  flex: none;
+}
+a.role-label:hover {
+  color: var(--primary-ink);
+}
+.role-label + .badge {
+  margin-left: 8px;
+}
+.members .role-label {
+  flex: 1;
+}
+
+/* A table of marks: how many fields a half mark covers, beside it. */
+.matrix th.matrix-cell {
+  font-size: 12px;
+  font-weight: 500;
+}
+/* The count sits beside the mark without moving it: marks stay in one column. */
+.matrix .matrix-cell {
+  position: relative;
+}
+.cell-count {
+  position: absolute;
+  left: calc(50% + 16px);
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  text-align: left;
+  vertical-align: middle;
+}
+.cell-caption {
+  display: block;
+  font-size: 11px;
+  color: var(--text-faint);
+  line-height: 1.2;
+}
+.grid-tight td {
+  height: 40px;
+}
+.grid-tight th {
+  position: static;
+}
+.grid-tight .matrix-cell {
+  width: 96px;
+}
+.grid-note {
+  flex-wrap: wrap;
+  gap: 6px 20px;
+}
+
+/* Collections that each carry several rows: the collection is said once, at the top. */
+.grouped tbody + tbody tr:first-child td {
+  border-top: 1px solid var(--line);
+}
+.grouped .group-cell {
+  vertical-align: top;
+  padding-top: 13px;
+  padding-bottom: 12px;
+  border-right: 1px solid var(--line-soft);
+  background: var(--bg);
+}
+.grouped tbody tr:hover td.group-cell {
+  background: var(--bg);
+}
+.group-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Who holds a field: the roles, by name. One that holds the whole collection is quieter. */
+.who {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+.who-role {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 4px;
+  border: 1px solid var(--line-strong);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg);
+}
+.grid td > .who {
+  padding: 6px 0;
+}
+.who-role.is-whole {
+  border-color: var(--line);
+  color: var(--text-muted);
+  background: var(--bg-subdued);
+}
+a.who-role:hover {
+  border-color: var(--primary);
+  color: var(--primary-ink);
+}
+
+/* One privilege in the grant editor: its mark, its name and what it lets a role do, and how
+   much of the collection it is held on. */
+.grant-rows {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+.grant-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) 220px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 10px 10px;
+  border-top: 1px solid var(--line-soft);
+}
+.grant-row:first-child {
+  border-top: 0;
+}
+.grant-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.grant-name label {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.grant-name small {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+.grant-name .grant-through {
+  color: var(--info-ink);
+}
+.grant-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.input-row .input {
+  flex: 1;
+}
+.fieldset > .input-row,
+fieldset.field > .input-row {
+  margin-top: 12px;
+}
+.link-quiet {
+  margin-left: 8px;
+  border: 0;
+  background: none;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--primary-ink);
+}
+.link-quiet:hover {
+  text-decoration: underline;
+}
+/* What follows the privileges in an access drawer keeps one rhythm. */
+.drawer-body > .drawer-section:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.drawer-body > .form + .drawer-section {
+  margin-top: 20px;
+}
+.drawer-body > .checkbox {
+  display: flex;
+  margin-top: 20px;
+}
+.drawer-body > .grid-wrap + .form,
+.drawer-body > .grid-wrap + .drawer-note {
+  margin-top: 20px;
+}
+.drawer-body > .checkbox + .notice,
+.drawer-body > .form + .notice,
+.drawer-body > .grid-wrap + .notice,
+.drawer-body > .drawer-section + .notice,
+.drawer-body > .notice + .drawer-note,
+.drawer-body > .drawer-section + .drawer-note {
+  margin-top: 16px;
+}
+.notice-text .checkbox {
+  display: flex;
+  margin-top: 10px;
+}
+/* A hint in an access drawer is the studio's own sentence, not a statement's words. */
+.drawer-body > .checkbox label small,
+.grant-checks .checkbox label small {
+  font-family: var(--sans);
+  font-size: 12.5px;
+}
+
+/* Expressions a policy's clause may start from. */
+.starts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.start {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 13px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  font-size: 12.5px;
+  color: var(--text-soft);
+}
+.start:hover {
+  border-color: var(--primary);
+  color: var(--primary-ink);
+}
+.policy-actions {
+  display: inline-flex;
+  margin-left: auto;
+}
+.policy-head .policy-actions .icon-button {
+  margin-left: 0;
+}
+.policy-roles .mono {
+  color: var(--text);
+}
+.section-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.section-head h2 .badge {
+  margin-left: 6px;
+}
+.section-head h2 a:hover {
+  color: var(--primary-ink);
+}
+.section-head p a,
+.panel-head p a {
+  color: var(--primary-ink);
+  font-weight: 500;
+}
+.section-head p a:hover,
+.panel-head p a:hover {
+  text-decoration: underline;
+}
+
+/* The end of a panel that holds a table: its legend, and a way on. */
+.panel-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 20px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.panel > .grid-plain + .panel-foot {
+  margin-top: 24px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+}
+.link-more,
+.side-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary-ink);
+}
+.link-more {
+  margin-left: auto;
+}
+.link-more:hover,
+.side-link:hover {
+  text-decoration: underline;
+}
+
+/* What a role holds on the workspace itself, above what it holds on the collections. */
+.reach-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  font-size: 13.5px;
+}
+
+@media (max-width: 860px) {
+  .grant-row {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+  .grant-row .select {
+    grid-column: 2;
+  }
+}

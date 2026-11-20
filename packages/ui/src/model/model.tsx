@@ -20,7 +20,6 @@ import {
   customViews,
   fieldTarget,
   fieldsViewsStatement,
-  rowSecurityStatement,
   situations,
 } from '@platform/vocabulary'
 import { useLoad, useSession } from '../session.tsx'
@@ -41,7 +40,7 @@ import { situationLabels } from '../metadata/labels.ts'
 import { href } from '../url.ts'
 import { Badge, Empty, Notice, Statement } from '../ui/bits.tsx'
 import { Action, Button } from '../ui/button.tsx'
-import { Checkbox, Field, Input, Select, TextArea, Toggle } from '../ui/form.tsx'
+import { Checkbox, Field, Input, Select, TextArea } from '../ui/form.tsx'
 import {
   BooleanIcon,
   ChevronRightIcon,
@@ -50,6 +49,7 @@ import {
   iconFor,
   IntegerIcon,
   JsonIcon,
+  KeyIcon,
   LockIcon,
   ModelIcon,
   MomentIcon,
@@ -64,6 +64,7 @@ import {
 } from '../ui/icons.tsx'
 import { Confirm, Drawer } from '../ui/overlay.tsx'
 import { FieldMetadataDrawer, KeyEditorPanels, MetadataPanel } from '../metadata/metadata.tsx'
+import { CollectionAccess, FieldAccess } from '../access/collection-access.tsx'
 import { Rights } from '../access/rights.tsx'
 import { useRunner } from '../access/runner.tsx'
 
@@ -443,6 +444,7 @@ export function CollectionModel() {
   const [adding, setAdding] = useState<FieldDraft | null>(null)
   const [dropping, setDropping] = useState<string | null>(null)
   const [described, setDescribed] = useState<string | null>(null)
+  const [accessOf, setAccessOf] = useState<string | null>(null)
   // What each field says of itself: its name, where it appears and how it is drawn. It is
   // read again whenever the catalog is, since a statement that ran may have changed it.
   const about = useLoad(info ? (db) => fieldMetadata(db, ws, table) : null, [ws, table, catalog])
@@ -532,9 +534,7 @@ export function CollectionModel() {
         <nav class="tabs" aria-label="Collection settings">
           {tabLink('fields', 'Fields')}
           {tabLink('about', 'About')}
-          <a href={href('/access/policies', { ws, c: table })} class="tab">
-            Access
-          </a>
+          {tabLink('access', 'Access')}
           <a href={href('/content/records', { ws, c: table })} class="tab tab-end">
             Open records <ChevronRightIcon size={16} aria-hidden="true" />
           </a>
@@ -551,10 +551,11 @@ export function CollectionModel() {
           <section class="panel">
             <header class="panel-head">
               <div>
-                <h2>Note and row security</h2>
+                <h2>Note</h2>
                 <p>
-                  The note is the table's comment. Row security decides whether policies filter its
-                  rows.
+                  The table's comment: psql and every client show it, to every connected user. Who
+                  reaches the collection, its fields and its rows is under{' '}
+                  <a href={href('/model/collection', { ws, c: table, tab: 'access' })}>Access</a>.
                 </p>
               </div>
             </header>
@@ -590,28 +591,13 @@ export function CollectionModel() {
                   </div>
                 </div>
               )}
-              <div class="field field-wide">
-                <Toggle
-                  checked={info.rls}
-                  disabled={!owner || runner.busy}
-                  label={
-                    info.rls
-                      ? 'Row security is on: only rows a policy allows are reachable'
-                      : 'Row security is off: grants alone decide'
-                  }
-                  onChange={(on) =>
-                    runner.runStatements(
-                      [rowSecurityStatement(ws, table, on)],
-                      on ? 'Row security on' : 'Row security off'
-                    )
-                  }
-                />
-              </div>
             </div>
           </section>
           <KeyEditorPanels target={collectionTarget(ws, table)} owner={owner} />
           <MetadataPanel target={collectionTarget(ws, table)} owner={owner} />
         </>
+      ) : tab === 'access' ? (
+        <CollectionAccess table={info} />
       ) : (
         <>
           {owner && about.data && missing.length > 0 && (
@@ -759,6 +745,15 @@ export function CollectionModel() {
                         >
                           <TagIcon size={16} />
                         </button>
+                        <button
+                          type="button"
+                          class="icon-button"
+                          aria-label={`Access to ${c.name}`}
+                          title="Who holds this field"
+                          onClick={() => setAccessOf(c.name)}
+                        >
+                          <KeyIcon size={16} />
+                        </button>
                         {owner && !system && info.kind !== 'v' && (
                           <button
                             type="button"
@@ -793,6 +788,7 @@ export function CollectionModel() {
         open={described !== null}
         onClose={() => setDescribed(null)}
       />
+      <FieldAccess schema={ws} table={table} column={accessOf} onClose={() => setAccessOf(null)} />
       <Drawer
         open={adding !== null}
         onClose={() => setAdding(null)}

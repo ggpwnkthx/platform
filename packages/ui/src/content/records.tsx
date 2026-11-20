@@ -133,6 +133,14 @@ export function CollectionSidebar({
             ))}
           </ul>
         )}
+        <a
+          class="side-link"
+          href={href('/model/collection', { ws: schema, c: table, tab: 'access' })}
+        >
+          {info.can_alter
+            ? 'Manage who reaches this collection'
+            : 'Who else reaches this collection'}
+        </a>
       </SideGroup>
       <SideGroup title="Row policies" icon={<PolicyIcon size={16} />} count={policies.data?.length}>
         {!info.rls ? (

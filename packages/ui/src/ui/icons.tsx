@@ -66,6 +66,7 @@ export {
   Ellipsis as MoreIcon,
   EyeOff as HiddenIcon,
   FingerprintPattern as UuidIcon,
+  Globe as EveryoneIcon,
   Hash as IntegerIcon,
   Info as InfoIcon,
   KeyRound as KeyIcon,

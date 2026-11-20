@@ -23,6 +23,7 @@ export const pages: PageInfo[] = [
   { path: '/workspace/settings', title: 'Workspace settings', module: 'workspace' },
   { path: '/access', title: 'Roles', module: 'access' },
   { path: '/access/role', title: 'Role', module: 'access' },
+  { path: '/access/grants', title: 'Permissions', module: 'access' },
   { path: '/access/policies', title: 'Row policies', module: 'access' },
   { path: '/activity', title: 'Activity', module: 'activity' },
   { path: '/sql', title: 'SQL', module: 'sql' },

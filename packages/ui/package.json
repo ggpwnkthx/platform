@@ -6,6 +6,7 @@
   "description": "The interface: a static site whose pages speak PostgreSQL's protocol themselves.",
   "license": "MIT",
   "exports": {
+    "./access/model.ts": "./src/access/model.ts",
     "./config.ts": "./src/config.ts",
     "./fields/inputs.tsx": "./src/fields/inputs.tsx",
     "./fields/registry.ts": "./src/fields/registry.ts",

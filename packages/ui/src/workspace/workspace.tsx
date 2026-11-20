@@ -1,19 +1,18 @@
 import { useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
-import { schemaPrivileges, workspaceTarget } from '@platform/vocabulary'
-import { schemaGrantStatement, workspaceStatements } from '@platform/vocabulary'
-import { roles as readRoles, schemaGrants } from '@platform/data'
-import { describe, useLoad, useSession } from '../session.tsx'
+import { workspaceStatements, workspaceTarget } from '@platform/vocabulary'
+import { roles as readRoles } from '@platform/data'
+import { useLoad, useSession } from '../session.tsx'
 import { Page, useWorkspace } from '../shell.tsx'
 import { presentationOf } from '@platform/data'
 import { href } from '../url.ts'
-import { Badge, Loading, Notice, Statement } from '../ui/bits.tsx'
-import { Action, Button } from '../ui/button.tsx'
-import { Checkbox, Field, Input, Select } from '../ui/form.tsx'
-import { GrantIcon, iconFor, PlusIcon, TrashIcon, WorkspaceIcon } from '../ui/icons.tsx'
-import { Confirm, Drawer } from '../ui/overlay.tsx'
+import { Notice, Statement } from '../ui/bits.tsx'
+import { Action } from '../ui/button.tsx'
+import { Field, Input, Select } from '../ui/form.tsx'
+import { iconFor, PlusIcon, WorkspaceIcon } from '../ui/icons.tsx'
 import { KeyEditorPanels, MetadataPanel } from '../metadata/metadata.tsx'
 import { useRunner } from '../access/runner.tsx'
+import { WorkspaceGrants } from '../access/workspace-access.tsx'
 
 export function NewWorkspace() {
   const { identity } = useSession()
@@ -99,13 +98,7 @@ export function WorkspaceSettings() {
   const schema = catalog.schemas.find((s) => s.name === ws)
   const shown = presentationOf(presentations, ws)
   const WorkspaceGlyph = iconFor(shown.icon) ?? WorkspaceIcon
-  const grants = useLoad(ws ? (db) => schemaGrants(db, ws) : null, [ws, catalog])
   const roles = useLoad((db) => readRoles(db), [])
-  const runner = useRunner()
-  const [composing, setComposing] = useState(false)
-  const [grantee, setGrantee] = useState('')
-  const [chosen, setChosen] = useState<string[]>(['USAGE'])
-  const [revoking, setRevoking] = useState<{ grantee: string; privilege: string } | null>(null)
   const owner = Boolean(schema?.can_alter)
   if (!schema)
     return (
@@ -113,16 +106,6 @@ export function WorkspaceSettings() {
         <Notice tone="warning" title={`PostgreSQL shows you no workspace named ${ws}`} />
       </Page>
     )
-  let statement = ''
-  let invalid: string | null = null
-  try {
-    statement = schemaGrantStatement(ws, chosen, grantee)
-  } catch (error) {
-    invalid = error instanceof Error ? error.message : String(error)
-  }
-  const byGrantee = new Map<string, string[]>()
-  for (const g of grants.data ?? [])
-    byGrantee.set(g.grantee, [...(byGrantee.get(g.grantee) ?? []), g.privilege])
   return (
     <Page
       title={`${shown.displayName ?? ws} settings`}
@@ -134,159 +117,9 @@ export function WorkspaceSettings() {
       ]}
       subtitle={`Owned by ${schema.owner}.`}
     >
-      {runner.problem && (
-        <Notice tone="danger" title={runner.problem.title}>
-          {runner.problem.detail}
-        </Notice>
-      )}
       <KeyEditorPanels target={workspaceTarget(ws)} owner={owner} />
       <MetadataPanel target={workspaceTarget(ws)} owner={owner} />
-      <section class="panel">
-        <header class="panel-head">
-          <div>
-            <h2>Who may use this workspace</h2>
-            <p>
-              USAGE lets a role reach the collections inside, subject to their own grants. CREATE
-              lets it make collections here.
-            </p>
-          </div>
-          {owner && (
-            <Button icon={<GrantIcon size={16} />} onClick={() => setComposing(true)}>
-              Grant
-            </Button>
-          )}
-        </header>
-        {grants.error ? (
-          <Notice tone="danger" title={describe(grants.error).title} />
-        ) : !grants.data ? (
-          <Loading />
-        ) : (
-          <table class="grid grid-plain">
-            <thead>
-              <tr>
-                <th>Role</th>
-                <th>Privileges</th>
-                {owner && (
-                  <th class="grid-actions">
-                    <span class="sr-only">Actions</span>
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {[...byGrantee].map(([who, privileges]) => (
-                <tr key={who}>
-                  <td class="mono">
-                    {who}
-                    {who === schema.owner && <Badge tone="outline">owner</Badge>}
-                  </td>
-                  <td>
-                    {privileges.map((p) => (
-                      <Badge key={p} tone="primary">
-                        {p}
-                      </Badge>
-                    ))}
-                  </td>
-                  {owner && (
-                    <td class="grid-actions">
-                      {who !== schema.owner &&
-                        privileges.map((p) => (
-                          <button
-                            key={p}
-                            type="button"
-                            class="icon-button"
-                            aria-label={`Revoke ${p} from ${who}`}
-                            title={`Revoke ${p}`}
-                            onClick={() => setRevoking({ grantee: who, privilege: p })}
-                          >
-                            <TrashIcon size={16} />
-                          </button>
-                        ))}
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
-      <Drawer
-        open={composing}
-        onClose={() => setComposing(false)}
-        title={`Grant on ${ws}`}
-        footer={
-          <>
-            <Button onClick={() => setComposing(false)}>Cancel</Button>
-            <Button
-              tone="primary"
-              busy={runner.busy}
-              disabled={!!invalid}
-              onClick={async () => {
-                if (await runner.runStatements([statement], 'Granted')) {
-                  setComposing(false)
-                  grants.reload()
-                }
-              }}
-            >
-              Grant
-            </Button>
-          </>
-        }
-      >
-        <div class="form">
-          <Field label="To" id="sg-role" wide required>
-            <Select
-              id="sg-role"
-              value={grantee}
-              onChange={(e) => setGrantee(e.currentTarget.value)}
-            >
-              <option value="">Choose a role</option>
-              <option value="PUBLIC">PUBLIC (everyone)</option>
-              {roles.data?.roles
-                .filter((r) => !r.name.startsWith('pg_'))
-                .map((r) => (
-                  <option key={r.name} value={r.name}>
-                    {r.name}
-                  </option>
-                ))}
-            </Select>
-          </Field>
-          <div class="field field-wide checks">
-            {schemaPrivileges.map((p) => (
-              <Checkbox
-                key={p}
-                label={p}
-                checked={chosen.includes(p)}
-                onChange={(on) => setChosen(on ? [...chosen, p] : chosen.filter((x) => x !== p))}
-              />
-            ))}
-          </div>
-        </div>
-        {statement && <Statement sql={statement} />}
-      </Drawer>
-      <Confirm
-        open={revoking !== null}
-        title="Revoke this privilege?"
-        confirm="Revoke"
-        busy={runner.busy}
-        onClose={() => setRevoking(null)}
-        onConfirm={async () => {
-          if (!revoking) return
-          if (
-            await runner.runStatements(
-              [schemaGrantStatement(ws, [revoking.privilege], revoking.grantee, true)],
-              'Revoked'
-            )
-          ) {
-            setRevoking(null)
-            grants.reload()
-          }
-        }}
-      >
-        {revoking && (
-          <Statement sql={schemaGrantStatement(ws, [revoking.privilege], revoking.grantee, true)} />
-        )}
-      </Confirm>
+      <WorkspaceGrants schema={schema} roles={roles.data?.roles ?? []} more />
     </Page>
   )
 }
