@@ -69,13 +69,12 @@ describe('The catalog', () => {
     expect(asked).toContain(
       "CASE WHEN n.nspname = 'platform' THEN 'system' ELSE 'user' END AS kind"
     )
-    // A system collection is one of the platform's own, or a workspace's metadata collection.
-    expect(asked).toContain("(n.nspname = 'platform' OR (c.relname = 'item_metadata' AND EXISTS (")
-    expect(asked).toContain("p.polname = 'metadata_read'))) AS system")
+    expect(asked).toContain("n.nspname = 'platform' AS system")
     // Its model is the platform's: the interface is never told the reader may change it.
     expect(asked).toContain("has_schema_privilege(n.oid, 'CREATE') AND NOT n.nspname = 'platform'")
-    expect(asked).toContain("pg_has_role(current_user, c.relowner, 'USAGE') AND NOT (n.nspname")
-    expect(asked).toContain("p.polname = 'metadata_read'))) AS can_alter")
+    expect(asked).toContain(
+      "pg_has_role(current_user, c.relowner, 'USAGE') AND NOT n.nspname = 'platform' AS can_alter"
+    )
     // The installation's workspaces come first, so the one a reader lands on is theirs.
     expect(asked).toContain("ORDER BY n.nspname = 'platform', 1")
   })

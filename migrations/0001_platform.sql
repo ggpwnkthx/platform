@@ -4,8 +4,7 @@
 -- Everything the platform keeps in a database is made here, in the order it depends on
 -- itself: the reserved roles; the platform's own schema, with its marker, its revisions and
 -- the functions that make a collection; the answers it gives about the caller's own roles;
--- and the rules of metadata, with the function that gives a workspace the collection it
--- keeps its metadata in.
+-- and metadata, with the rules it is read and written by.
 --
 -- Nothing here grants a person anything: identity, rights and row security are PostgreSQL's
 -- own, and the platform's functions run with the caller's privileges unless they say why not.
@@ -229,11 +228,10 @@ $$;
 -- Metadata.
 --
 -- Metadata describes an item rather than holding its records: what a workspace is for, how
--- a collection should be read, who answers for it, what a field holds. Every workspace
--- keeps its own, in a collection of its own — `item_metadata`, in the workspace's schema,
--- owned by the workspace's owner — so that what a workspace says about itself lives in the
--- workspace, is read and written like any other collection of it, and goes where the
--- workspace goes.
+-- a collection should be read, who answers for it, what a field holds. It is kept in one
+-- collection of the platform's own — `platform.item_metadata` — because it describes every
+-- workspace at once: a row names the workspace it is about, and the collection or the field
+-- in it.
 --
 -- Its access rules are PostgreSQL's own, asked of PostgreSQL's own privilege functions, so a
 -- grant, a revoke or a membership change takes effect on the next statement:
@@ -245,18 +243,20 @@ $$;
 --
 -- Both rules are row security policies on the collection. Nothing in the application
 -- decides them, and a row the caller may not reach is not merely hidden: PostgreSQL does
--- not return it at all. A row that names a collection or a column that has been dropped is
--- unreachable in the same way, and the metadata of a field is as private as the field: a
--- reader who may not read a column never learns what it is called.
+-- not return it at all. A row that names a workspace, a collection or a column that has been
+-- dropped is unreachable in the same way, and the metadata of a field is as private as the
+-- field: a reader who may not read a column never learns what it is called.
 --
 -- Row security is forced on the collection, so its owner is held to the same rules as
--- everyone else: owning a workspace is not a right to read what a field of somebody else's
--- collection is called. The collection carries no audit trigger, for the same reason — a
--- revision is read by the workspace's owners — so metadata is not in the activity log; its
--- rows carry their own created_by, updated_by and version.
+-- everyone else: a member of platform_core reads and writes the metadata of the items they
+-- may reach, and no more. The collection carries no audit trigger — a revision is read by a
+-- workspace's owners, and the metadata of a field is not theirs to read by owning the
+-- workspace — so metadata is not in the activity log; its rows carry their own created_by,
+-- updated_by and version.
 --
--- A row does not name its schema: it is in it. The policies ask which schema the row's own
--- table is in, so a workspace that is renamed keeps its metadata.
+-- A row names its item by name, so a workspace, a collection or a field that is renamed
+-- leaves its metadata behind, as unreachable as that of an item that was dropped: the old
+-- name owns nothing, so nobody the policies bind can carry the rows across.
 
 -- Any right on a collection: on the table, or on one of its columns. A reader who
 -- holds a single column may read the collection's metadata.
@@ -347,110 +347,66 @@ CREATE FUNCTION platform.owns_metadata(
   END
 $$;
 
--- The schema a table is in, by the table's own oid: what a metadata row asks of the table
--- that holds it.
-CREATE FUNCTION platform.metadata_home(p_table oid)
-RETURNS text LANGUAGE sql STABLE SET search_path = pg_catalog, pg_temp AS $$
-  SELECT n.nspname::text FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-   WHERE c.oid = p_table
-$$;
+CREATE TABLE platform.item_metadata (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  scope text NOT NULL,
+  schema_name text NOT NULL,
+  table_name text,
+  column_name text,
+  key text NOT NULL,
+  value jsonb NOT NULL DEFAULT 'null'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT statement_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT statement_timestamp(),
+  created_by text NOT NULL DEFAULT session_user,
+  updated_by text NOT NULL DEFAULT session_user,
+  version bigint NOT NULL DEFAULT 1,
+  CONSTRAINT item_metadata_scope_check CHECK (scope IN ('workspace','collection','field')),
+  CONSTRAINT item_metadata_schema_check CHECK (octet_length(schema_name) BETWEEN 1 AND 63),
+  CONSTRAINT item_metadata_key_check CHECK (octet_length(key) BETWEEN 1 AND 128),
+  CONSTRAINT item_metadata_value_check CHECK (octet_length(value::text) <= 65536),
+  -- A workspace names a schema; a collection names a table in one; a field names a column of
+  -- one. The shape is checked here, so no row can name an item in more than one form.
+  CONSTRAINT item_metadata_target_check CHECK (
+    (scope = 'workspace' AND table_name IS NULL AND column_name IS NULL)
+    OR (scope = 'collection' AND table_name IS NOT NULL AND column_name IS NULL)
+    OR (scope = 'field' AND table_name IS NOT NULL AND column_name IS NOT NULL))
+);
+-- One row per key per item: the collection's one rule of its own. The names are empty where
+-- an item has none, so the keys of a workspace are unique as well as the keys of a field.
+CREATE UNIQUE INDEX item_metadata_key ON platform.item_metadata
+  (scope, schema_name, coalesce(table_name, ''), coalesce(column_name, ''), key);
+-- The metadata of one workspace, and of one collection in it, is read together.
+CREATE INDEX item_metadata_item ON platform.item_metadata (schema_name, table_name);
+COMMENT ON TABLE platform.item_metadata IS
+  'What every workspace, its collections and their fields are: one row for each key of each item.';
+-- The same stamp every collection carries: who wrote it, when, and which version.
+CREATE TRIGGER platform_stamp BEFORE INSERT OR UPDATE ON platform.item_metadata
+  FOR EACH ROW EXECUTE FUNCTION platform.stamp();
+-- Forced: the owner of the collection reads and writes by the same rules as everyone else.
+ALTER TABLE platform.item_metadata ENABLE ROW LEVEL SECURITY;
+ALTER TABLE platform.item_metadata FORCE ROW LEVEL SECURITY;
 
--- Is this table a workspace's metadata collection? It is named as one, and it carries the
--- policy the platform gives one.
-CREATE FUNCTION platform.is_metadata(p_table oid)
-RETURNS boolean LANGUAGE sql STABLE SET search_path = pg_catalog, pg_temp AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM pg_class c JOIN pg_policy p ON p.polrelid = c.oid
-     WHERE c.oid = p_table AND c.relname = 'item_metadata' AND p.polname = 'metadata_read')
-$$;
+-- Reading: the rows of the items the caller may reach.
+CREATE POLICY metadata_read ON platform.item_metadata FOR SELECT TO platform_users
+  USING (platform.can_read_metadata(scope, schema_name, table_name, column_name));
 
--- Gives a workspace its metadata collection. Like all modeling it runs with the caller's
--- privileges: the caller is the workspace's owner, or a member of the group that is. A
--- workspace that has one already is left as it is, so the call is safe to repeat.
-CREATE FUNCTION platform.create_metadata(schema_name text) RETURNS void
-LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog AS $$
-DECLARE
-  owner_oid oid;
-  existing oid;
-BEGIN
-  IF octet_length(schema_name) > 63 OR schema_name = '' THEN
-    RAISE EXCEPTION 'Invalid identifier length' USING ERRCODE = '22023';
-  END IF;
-  IF schema_name IN ('platform','information_schema','public') OR schema_name LIKE 'pg\_%' ESCAPE '\' THEN
-    RAISE EXCEPTION 'Reserved schema' USING ERRCODE = '22023';
-  END IF;
-  SELECT n.nspowner INTO owner_oid FROM pg_namespace n WHERE n.nspname = schema_name;
-  IF owner_oid IS NULL THEN
-    RAISE EXCEPTION 'No workspace named %', schema_name USING ERRCODE = '3F000';
-  END IF;
-  existing := platform.metadata_relation(schema_name, 'item_metadata');
-  IF existing IS NOT NULL THEN
-    IF platform.is_metadata(existing) THEN
-      RETURN;
-    END IF;
-    RAISE EXCEPTION 'Workspace % already has a table named item_metadata that is not its metadata', schema_name
-      USING ERRCODE = '42P07';
-  END IF;
-  IF NOT pg_has_role(current_user, owner_oid, 'USAGE') THEN
-    RAISE EXCEPTION 'Only the owner of workspace % may give it its metadata collection', schema_name
-      USING ERRCODE = '42501';
-  END IF;
-  EXECUTE format('CREATE TABLE %I.item_metadata (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    scope text NOT NULL,
-    table_name text,
-    column_name text,
-    key text NOT NULL,
-    value jsonb NOT NULL DEFAULT ''null''::jsonb,
-    created_at timestamptz NOT NULL DEFAULT statement_timestamp(),
-    updated_at timestamptz NOT NULL DEFAULT statement_timestamp(),
-    created_by text NOT NULL DEFAULT session_user,
-    updated_by text NOT NULL DEFAULT session_user,
-    version bigint NOT NULL DEFAULT 1,
-    CONSTRAINT item_metadata_scope_check CHECK (scope IN (''workspace'',''collection'',''field'')),
-    CONSTRAINT item_metadata_key_check CHECK (octet_length(key) BETWEEN 1 AND 128),
-    CONSTRAINT item_metadata_value_check CHECK (octet_length(value::text) <= 65536),
-    CONSTRAINT item_metadata_target_check CHECK (
-      (scope = ''workspace'' AND table_name IS NULL AND column_name IS NULL)
-      OR (scope = ''collection'' AND table_name IS NOT NULL AND column_name IS NULL)
-      OR (scope = ''field'' AND table_name IS NOT NULL AND column_name IS NOT NULL))
-  )', schema_name);
-  -- One row per key per item: the collection''s one rule of its own.
-  EXECUTE format('CREATE UNIQUE INDEX item_metadata_key ON %I.item_metadata
-    (scope, coalesce(table_name, ''''), coalesce(column_name, ''''), key)', schema_name);
-  EXECUTE format('COMMENT ON TABLE %I.item_metadata IS %L', schema_name,
-    'What this workspace, its collections and their fields are: one row for each key of each item.');
-  EXECUTE format('CREATE TRIGGER platform_stamp BEFORE INSERT OR UPDATE ON %I.item_metadata
-    FOR EACH ROW EXECUTE FUNCTION platform.stamp()', schema_name);
-  -- Forced: the owner of the workspace reads and writes by the same rules as everyone else.
-  EXECUTE format('ALTER TABLE %I.item_metadata ENABLE ROW LEVEL SECURITY', schema_name);
-  EXECUTE format('ALTER TABLE %I.item_metadata FORCE ROW LEVEL SECURITY', schema_name);
-  EXECUTE format('CREATE POLICY metadata_read ON %I.item_metadata FOR SELECT TO platform_users
-    USING (platform.can_read_metadata(scope, platform.metadata_home(tableoid), table_name, column_name))',
-    schema_name);
-  EXECUTE format('CREATE POLICY metadata_write ON %I.item_metadata FOR ALL TO platform_users
-    USING (platform.owns_metadata(scope, platform.metadata_home(tableoid), table_name, column_name))
-    WITH CHECK (platform.owns_metadata(scope, platform.metadata_home(tableoid), table_name, column_name))',
-    schema_name);
-  -- Open to every member of platform_users; the policies decide which rows each reaches.
-  EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I.item_metadata TO platform_users', schema_name);
-  -- The collection is the workspace''s: a member who made it for a group hands it to the group.
-  IF owner_oid <> (SELECT oid FROM pg_roles WHERE rolname = current_user) THEN
-    EXECUTE format('ALTER TABLE %I.item_metadata OWNER TO %I', schema_name,
-      (SELECT rolname FROM pg_roles WHERE oid = owner_oid));
-  END IF;
-END $$;
+-- Writing: the rows of the items the caller owns. The check runs on the new row too, so a
+-- row cannot be moved into an item the caller does not own.
+CREATE POLICY metadata_write ON platform.item_metadata FOR ALL TO platform_users
+  USING (platform.owns_metadata(scope, schema_name, table_name, column_name))
+  WITH CHECK (platform.owns_metadata(scope, schema_name, table_name, column_name));
+
+-- Open to every member of platform_users; the policies decide which rows each reaches.
+GRANT SELECT, INSERT, UPDATE, DELETE ON platform.item_metadata TO platform_users;
 
 -- The helpers answer about the caller, so they are read with the caller's own rights and are
 -- given to the same people.
 REVOKE ALL ON FUNCTION platform.metadata_relation(text,text), platform.metadata_item(text,text,text),
   platform.has_item_right(oid), platform.can_read_field(text,text,text),
-  platform.can_read_metadata(text,text,text,text), platform.owns_metadata(text,text,text,text),
-  platform.metadata_home(oid), platform.is_metadata(oid), platform.create_metadata(text) FROM PUBLIC;
+  platform.can_read_metadata(text,text,text,text), platform.owns_metadata(text,text,text,text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION platform.metadata_relation(text,text), platform.metadata_item(text,text,text),
   platform.has_item_right(oid), platform.can_read_field(text,text,text),
-  platform.can_read_metadata(text,text,text,text), platform.owns_metadata(text,text,text,text),
-  platform.metadata_home(oid), platform.is_metadata(oid), platform.create_metadata(text) TO platform_users;
+  platform.can_read_metadata(text,text,text,text), platform.owns_metadata(text,text,text,text) TO platform_users;
 
 RESET ROLE;
 

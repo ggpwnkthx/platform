@@ -1,6 +1,5 @@
 import { ident, qualified, role, schemaStatement } from './core.ts'
 import { InvalidName } from './errors.ts'
-import { metadataSetupStatement } from './metadata.ts'
 
 /**
  * The access the platform grants, written once.
@@ -234,12 +233,10 @@ export function policyStatement(
 
 /**
  * The workspace, written as the statements PostgreSQL runs: the schema itself and the
- * collection it keeps its metadata in. They are shown to the reader before they run, and then run as the reader.
+ * rights on it. They are shown to the reader before they run, and then run as the reader.
  */
 export const workspaceStatements = (name: string, owner: string | null): string[] => [
   schemaStatement(name, owner),
-  // A workspace keeps its own metadata: the collection it is kept in is made with it.
-  metadataSetupStatement(name),
 ]
 
 /** The rights on the workspace's own schema. */

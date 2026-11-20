@@ -11,7 +11,7 @@
  */
 
 import { InvalidName } from './errors.ts'
-import { literal, qualified } from './core.ts'
+import { literal } from './core.ts'
 
 /**
  * The item a metadata row names: a workspace, a collection, or a field of one. A field is a
@@ -50,27 +50,6 @@ export const fieldTarget = (schema: string, table: string, column: string): Meta
   table,
   column,
 })
-
-/**
- * The collection a workspace keeps its metadata in: a table of this name in the workspace's
- * own schema, made by `platform.create_metadata`. Every workspace has its own, so what a
- * workspace says of itself lives in it and is read and written like any other collection.
- */
-export const metadataTable = 'item_metadata'
-
-/** The metadata collection of a workspace, as it is written in a statement. */
-export const metadataOf = (schema: string): string => qualified(schema, metadataTable)
-
-/** The rule the collection keeps of its own: an item carries a key once. */
-export const metadataConflict = "(scope, coalesce(table_name, ''), coalesce(column_name, ''), key)"
-
-/**
- * The statement that gives a workspace its metadata collection. It is safe to repeat: a
- * workspace that has one is left as it is. It runs as the reader, who is the workspace's
- * owner — nobody else may give a workspace its collection.
- */
-export const metadataSetupStatement = (schema: string): string =>
-  `SELECT platform.create_metadata(${literal(schema)});`
 
 /** One row of an item's metadata: what it says about the item it names. */
 export interface MetadataRow {
@@ -462,39 +441,33 @@ export function fieldRenderersStatement(
 export function fieldsViewsStatement(targets: readonly MetadataTarget[]): string {
   if (!targets.length) return ''
   if (targets.length === 1) return fieldViewsStatement(targets[0]!)
-  // The fields of one collection, so of one workspace: they are written to its own metadata.
-  const schema = targets[0]!.schema
-  if (targets.some((target) => target.schema !== schema))
-    throw new InvalidName('The fields are of more than one workspace')
   const rows = targets.map(
     (target) =>
-      `  (${literal(target.scope)}, ${literal(target.table)}, ${literal(target.column)}, ${literal(viewsKey)}, ${literal(JSON.stringify(defaultViews))}::jsonb)`
+      `  (${literal(target.scope)}, ${literal(target.schema)}, ${literal(target.table)}, ${literal(target.column)}, ${literal(viewsKey)}, ${literal(JSON.stringify(defaultViews))}::jsonb)`
   )
-  return `INSERT INTO ${metadataOf(schema)} (scope, table_name, column_name, key, value)
+  return `INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value)
 VALUES
 ${rows.join(',\n')}
-ON CONFLICT ${metadataConflict}
+ON CONFLICT (scope, schema_name, coalesce(table_name, ''), coalesce(column_name, ''), key)
 DO UPDATE SET value = EXCLUDED.value;`
 }
 
 /**
  * The statement that sets one metadata key of an item, and the statement that removes it.
  * The interface writes an item's metadata through them, so the reader is shown the same
- * statement a psql session would run, and runs exactly that. The row is written to the
- * metadata collection of the item's own workspace, and does not name the workspace: it is
- * in it.
+ * statement a psql session would run, and runs exactly that.
  */
 export function metadataStatement(target: MetadataTarget, key: string, value: unknown): string {
-  return `INSERT INTO ${metadataOf(target.schema)} (scope, table_name, column_name, key, value)
-VALUES (${literal(target.scope)}, ${literal(target.table)}, ${literal(target.column)}, ${literal(key)}, ${literal(JSON.stringify(value ?? null))}::jsonb)
-ON CONFLICT ${metadataConflict}
+  return `INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value)
+VALUES (${literal(target.scope)}, ${literal(target.schema)}, ${literal(target.table)}, ${literal(target.column)}, ${literal(key)}, ${literal(JSON.stringify(value ?? null))}::jsonb)
+ON CONFLICT (scope, schema_name, coalesce(table_name, ''), coalesce(column_name, ''), key)
 DO UPDATE SET value = EXCLUDED.value;`
 }
 
 /** The statement that removes one metadata key of an item. */
 export function metadataRemoval(target: MetadataTarget, key: string): string {
-  return `DELETE FROM ${metadataOf(target.schema)}
- WHERE scope = ${literal(target.scope)}
+  return `DELETE FROM platform.item_metadata
+ WHERE scope = ${literal(target.scope)} AND schema_name = ${literal(target.schema)}
    AND table_name IS NOT DISTINCT FROM ${literal(target.table)}
    AND column_name IS NOT DISTINCT FROM ${literal(target.column)}
    AND key = ${literal(key)};`

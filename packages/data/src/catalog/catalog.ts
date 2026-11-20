@@ -1,4 +1,3 @@
-import { metadataTable } from '@platform/vocabulary'
 import type { Catalog, ColumnInfo, RelationInfo, SchemaInfo, TableInfo } from './types.ts'
 
 /** Questions about the catalog. Every answer is one PostgreSQL gave this reader. */
@@ -31,29 +30,15 @@ export const isSystemWorkspace = (catalog: Catalog, schema: string): boolean =>
   catalog.schemas.some((s) => s.name === schema && s.kind === 'system')
 
 /**
- * The collection a workspace keeps its metadata in, when it has one and the reader may
- * reach it. A workspace whose schema was made by hand has none until its owner gives it
- * one.
- */
-export const metadataOfWorkspace = (catalog: Catalog, schema: string): TableInfo | undefined =>
-  catalog.tables.find((t) => t.schema === schema && t.name === metadataTable && t.system)
-
-/** The workspaces that keep metadata the reader may reach, by name. */
-export const workspacesWithMetadata = (catalog: Catalog): string[] =>
-  catalog.tables
-    .filter((t) => t.name === metadataTable && t.system && t.schema !== systemSchema)
-    .map((t) => t.schema)
-
-/**
  * The column that names a row of a system collection. A collection of the installation's
- * says it in its own metadata; the platform's say it here, because what names a row of
+ * says it in its own metadata; the platform's own say it here, because what names a row of
  * theirs is not the first text they hold — a piece of metadata is named by its key, not by
  * the scope it is said of.
  */
 const systemLabels: Record<string, string> = {
-  [metadataTable]: 'key',
-  activity: 'operation',
-  installation: 'version',
+  [`${systemSchema}.item_metadata`]: 'key',
+  [`${systemSchema}.activity`]: 'operation',
+  [`${systemSchema}.installation`]: 'version',
 }
 
 export const tablesIn = (catalog: Catalog, schema: string): TableInfo[] =>
@@ -117,7 +102,7 @@ export function labelColumn(
 ): string | null {
   const columns = columnsOf(catalog, schema, table).filter((c) => c.can_select)
   if (display && columns.some((c) => c.name === display)) return display
-  const own = tableOf(catalog, schema, table)?.system ? systemLabels[table] : undefined
+  const own = systemLabels[`${schema}.${table}`]
   if (own && columns.some((c) => c.name === own)) return own
   const preferred = columns.find((c) => ['name', 'title', 'full_name', 'label'].includes(c.name))
   if (preferred) return preferred.name

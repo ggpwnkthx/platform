@@ -12,7 +12,6 @@ import {
   type FieldSpec,
   ident,
   indexFieldStatement,
-  metadataSetupStatement,
   qualified,
   relationStatement,
   systemFields,
@@ -159,8 +158,6 @@ export async function applyModel(q: pg.Client, raw: unknown) {
   await requireInstalledVersion(q)
   return transaction(q, async () => {
     await q.query(`CREATE SCHEMA IF NOT EXISTS ${ident(schema)}`)
-    // A workspace keeps its own metadata: the collection is made with it, or left as it is.
-    await q.query(metadataSetupStatement(schema))
     await applyCollections(q, schema, model.collections, model.relations)
     return { schema, collections: model.collections.length }
   })

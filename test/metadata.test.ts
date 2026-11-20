@@ -92,8 +92,6 @@ beforeAll(async () => {
   await owner.query(
     "CREATE SCHEMA newsroom; SELECT platform.create_collection('newsroom','articles')"
   )
-  // A workspace keeps its own metadata: its owner gives it the collection it is kept in.
-  await owner.query("SELECT platform.create_metadata('newsroom')")
   await owner.query('ALTER TABLE newsroom.articles ADD COLUMN title text')
   // A second column that nobody is granted: the field nobody may reach.
   await owner.query('ALTER TABLE newsroom.articles ADD COLUMN summary text')
@@ -150,7 +148,6 @@ describe('metadata of a workspace and of a collection', () => {
 
   test('the same key in another workspace is another key', async () => {
     await admin.query('CREATE SCHEMA IF NOT EXISTS other')
-    await admin.query("SELECT platform.create_metadata('other')")
     await as('owner', async (db) => {
       expect(
         await refusal(setMetadata(db, workspaceTarget('other'), 'description', 'Somewhere else'))
@@ -212,14 +209,14 @@ describe('metadata of a workspace and of a collection', () => {
 
   test('the rules are PostgreSQL’s, so a direct session sees the same thing', async () => {
     const rows = await reader.query(
-      'SELECT key FROM newsroom.item_metadata WHERE scope=$1 ORDER BY key',
+      'SELECT key FROM platform.item_metadata WHERE scope=$1 ORDER BY key',
       ['collection']
     )
     expect(rows.rows.map((one: { key: string }) => one.key)).toEqual(['display_field', 'rules'])
     await expect(
       reader.query(
-        `INSERT INTO newsroom.item_metadata (scope,table_name,key,value)
-         VALUES ('collection','articles','mine','1')`
+        `INSERT INTO platform.item_metadata (scope,schema_name,table_name,key,value)
+         VALUES ('collection','newsroom','articles','mine','1')`
       )
     ).rejects.toMatchObject({ code: '42501' })
   })
@@ -256,7 +253,6 @@ describe('metadata of a workspace and of a collection', () => {
   test('an owner may not write the metadata of a workspace they do not own', async () => {
     // A workspace of somebody else's: the owner of newsroom has no right on it.
     await admin.query('CREATE SCHEMA IF NOT EXISTS other')
-    await admin.query("SELECT platform.create_metadata('other')")
     await as('owner', async (db) => {
       expect(await refusal(setMetadata(db, workspaceTarget('other'), 'mine', 'mine'))).toBe('42501')
       expect(await metadata(db, workspaceTarget('other'))).toEqual([])
@@ -411,9 +407,7 @@ describe('the presentation of an item', () => {
         await setMetadata(db, collectionTarget('newsroom', 'articles'), 'icon', 'file-text')
       ).toBe(1)
     })
-    // Every workspace keeps its own, so the question names the workspaces the reader reaches.
-    const shown = (db: Connection) => presentations(db, ['newsroom'])
-    const rows = await as('owner', shown)
+    const rows = await as('owner', presentations)
     expect(
       rows
         .filter((row) => row.key === 'display_name')
@@ -421,11 +415,10 @@ describe('the presentation of an item', () => {
         .sort()
     ).toEqual(['newsroom.', 'newsroom.articles'])
     // One who may use the workspace alone reads the workspace, and no collection.
-    const blind = await as('blind', shown)
+    const blind = await as('blind', presentations)
     expect(blind.map((row) => row.key).sort()).toEqual(['color', 'display_name', 'icon'])
     expect(blind.every((row) => row.table_name === null)).toBe(true)
     // A stranger reaches nothing at all.
-    // A stranger reaches no workspace, so there is none to ask of.
-    expect(await as('outsider', (db) => presentations(db, []))).toEqual([])
+    expect(await as('outsider', presentations)).toEqual([])
   })
 })

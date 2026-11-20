@@ -1,4 +1,4 @@
-import { type DataSource, metadataTable } from '@platform/vocabulary'
+import type { DataSource } from '@platform/vocabulary'
 import { systemSchema } from './catalog.ts'
 import type { Catalog } from './types.ts'
 
@@ -10,23 +10,12 @@ import type { Catalog } from './types.ts'
  * The platform's own schema is in the answer, marked as what it is: a system workspace,
  * whose tables are collections like any other — read under their own row security — and
  * whose model is not the reader's to change. PostgreSQL's own schemas, and `public`, are not.
- *
- * A workspace's metadata collection is a system collection too, though it is the
- * workspace's own: its rows are their owners' to change, and its model is the platform's.
  */
 
 const held = `n.nspname NOT LIKE 'pg\\_%' ESCAPE '\\' AND n.nspname NOT IN ('information_schema','public')`
 
 /** Is the schema the platform's own? */
 const system = `n.nspname = '${systemSchema}'`
-
-/**
- * Is the table a system collection: one of the platform's own, or the collection a
- * workspace keeps its metadata in — named as one, and carrying the policy the platform
- * gives one?
- */
-const systemTable = `(${system} OR (c.relname = '${metadataTable}' AND EXISTS (
-             SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'metadata_read')))`
 
 export async function catalog(db: DataSource): Promise<Catalog> {
   const schemas = await db.query(`
@@ -40,13 +29,13 @@ export async function catalog(db: DataSource): Promise<Catalog> {
     SELECT n.nspname::text AS schema, c.relname::text AS name, c.relkind::text AS kind,
            c.relrowsecurity AS rls, c.relforcerowsecurity AS force_rls,
            pg_get_userbyid(c.relowner)::text AS owner, obj_description(c.oid, 'pg_class') AS comment,
-           ${systemTable} AS system,
+           ${system} AS system,
            has_table_privilege(c.oid, 'SELECT') AS can_select,
            has_table_privilege(c.oid, 'INSERT') AS can_insert,
            has_table_privilege(c.oid, 'UPDATE') AS can_update,
            has_table_privilege(c.oid, 'DELETE') AS can_delete,
-           has_table_privilege(c.oid, 'TRUNCATE') AND NOT ${systemTable} AS can_truncate,
-           pg_has_role(current_user, c.relowner, 'USAGE') AND NOT ${systemTable} AS can_alter
+           has_table_privilege(c.oid, 'TRUNCATE') AND NOT ${system} AS can_truncate,
+           pg_has_role(current_user, c.relowner, 'USAGE') AND NOT ${system} AS can_alter
       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
      WHERE c.relkind IN ('r','p','v') AND ${held} AND has_schema_privilege(n.oid, 'USAGE')
        AND (has_any_column_privilege(c.oid, 'SELECT,INSERT,UPDATE')

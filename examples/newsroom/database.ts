@@ -23,7 +23,7 @@ import seed from './seed.sql' with { type: 'text' }
  */
 
 /** Where the in-page database is kept, between reloads. */
-const storageKey = 'platform-dev-v4'
+const storageKey = 'platform-dev-v5'
 
 /**
  * Signing in without an issuer: the example people, who choose themselves in the page.

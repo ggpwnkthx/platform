@@ -6,8 +6,7 @@ export const VERSION = '2.3.0'
 /**
  * The version the installation holds, and the check that it is the one these tools know.
  * The database holds the truth about its own version; a schema of another version is not
- * one these tools know — a workspace's own metadata collection, for instance, is one the
- * platform added in 2.3.0.
+ * one these tools know.
  */
 export async function requireInstalledVersion(q: pg.Client): Promise<string> {
   const found = await q.query('SELECT version FROM platform.installation')
