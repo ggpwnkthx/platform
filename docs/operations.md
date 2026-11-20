@@ -151,6 +151,13 @@ fail nothing, what the deployment has left open: TLS that is off or a `host` rul
 a token without it, role catalogs every connection reads (`harden`), collections owned by a
 person rather than a group, and tables that write no revisions.
 
+`bun run cli lock ROLE` takes a role's login away and ends its open sessions; `unlock` gives
+it back. It is how a person is locked out at once, and how the administrator is kept shut
+between the times it is used: a locked role is logged in by no token. A superuser's login is
+changed by a superuser, so the administrator is unlocked from beside the server
+(`bun run cli deploy local admin unlock ROLE`, or the same command run in the server's
+container with DATABASE_HOST naming the socket's directory).
+
 A role and its sign-in are matched by name: the token's `email` claim must equal the role name
 exactly, so alice@example.com logs in as the role `"alice@example.com"`. Nothing is mapped or
 created automatically; a person with no role cannot log in. Role names are at most 63 bytes.
@@ -355,7 +362,7 @@ starts the relay and waits for http://api.localhost:8081/health. The installer i
 credentials, because there are none: it shares the volume PostgreSQL's socket is on, where
 PostgreSQL lets its own superuser in, has no network, and is removed when it exits.
 `bun run cli deploy local admin <command>` runs any other operator command the same way
-(`admin doctor`, `admin harden k8s`); it reads no file of yours, so apply your own manifests
+(`admin doctor`, `admin harden k8s`, `admin lock ROLE`, `admin unlock ROLE`); it reads no file of yours, so apply your own manifests
 with a token. The relay has no PostgreSQL credentials. PostgreSQL and the relay share the
 network `relay` (10.89.71.0/24). A build or install failure returns that
 tool's exit status and stops the sequence before the relay starts. `init` runs the

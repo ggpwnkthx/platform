@@ -5,11 +5,13 @@ import type pg from 'pg'
 import { applyManifest } from '../../../packages/cli/src/apply.ts'
 import { postureNotes } from '../../../packages/cli/src/database/requirements.ts'
 import { hardenSql } from '../../../packages/cli/src/harden.ts'
+import { setLogin } from '../../../packages/cli/src/login.ts'
 
 /**
  * The operator's own questions and switches, asked of the real thing: PostgreSQL, installed
  * with the platform's own script and seeded with the example. What doctor says the deployment
- * has left open, and the limit a manifest puts on a role's sessions.
+ * has left open, the limit a manifest puts on a role's sessions, and the login a role loses
+ * and is given back.
  */
 const text = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
@@ -86,5 +88,22 @@ describe('the sessions a role may hold', () => {
       'lift the connection limit of carol@example.com',
     ])
     expect((await attributes('carol@example.com'))?.connection_limit).toBe(-1)
+  })
+})
+
+describe('a role’s login', () => {
+  test('is taken away and given back', async () => {
+    expect((await setLogin(q, 'lock', 'alice@example.com'))[0]).toContain('can no longer log in')
+    expect((await attributes('alice@example.com'))?.login).toBe(false)
+    expect((await setLogin(q, 'lock', 'alice@example.com'))[0]).toContain('already had no login')
+    expect((await setLogin(q, 'unlock', 'alice@example.com'))[0]).toContain('may log in again')
+    expect((await attributes('alice@example.com'))?.login).toBe(true)
+  })
+
+  test('is not taken from the server’s own superuser, from oneself, or from nobody', async () => {
+    await expect(setLogin(q, 'lock', 'postgres')).rejects.toThrow()
+    await expect(setLogin(q, 'lock', 'nobody@example.com')).rejects.toThrow('no role')
+    await expect(setLogin(q, 'lock', undefined)).rejects.toThrow('needs a role')
+    expect((await attributes('postgres'))?.login).toBe(true)
   })
 })

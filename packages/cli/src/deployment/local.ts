@@ -244,7 +244,8 @@ async function stack(
       { env, task }
     )
   if (action === 'admin') {
-    if (!args.length) throw new Error('admin needs a command, such as doctor or harden k8s')
+    if (!args.length)
+      throw new Error('admin needs a command, such as doctor, harden k8s or unlock ROLE')
     return beside(args)
   }
   // The installer's image is built with the rest: its service sits behind the install profile.

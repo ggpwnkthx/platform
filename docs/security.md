@@ -90,7 +90,8 @@ trust boundary:
 
 - A token is a bearer credential. Whoever holds one is that person until it expires (one hour
   as shipped). Removing someone upstream stops new tokens, not ones already issued: use NOLOGIN
-  to lock a person out at once. There is no token revocation list.
+  to lock a person out at once (`bun run cli lock ROLE`, which also ends the sessions they
+  hold). There is no token revocation list.
 - The validator, pg_oidc_validator, checks signature, issuer and expiry. It does not check the
   audience, so a token Dex issues to any of its clients is accepted. Run a Dex for Platform
   alone and register no other clients with it.
@@ -113,6 +114,12 @@ trust boundary:
   and it is refused from everywhere else as well: without that, a token for the administrator
   is good from any network that reaches PostgreSQL and is not listed. The server's own superuser (`postgres`) has no login
   over the network at all.
+- An administrator that is reached from anywhere need not be reachable all the time. Locked
+  (`lock`), no token logs it in, whoever issued it and wherever it comes from; it is unlocked
+  from beside the server, through the socket, for as long as it is needed
+  (`bun run cli deploy local admin unlock ROLE`, or the same command in the server's own
+  container). A superuser's login is a superuser's to change, so nothing over the network
+  gives it back.
 - The one way in without a token is the server's own socket, inside its container: it makes
   the cluster, and it is what remains when Dex is unavailable. It needs a shell beside the
   server, which is the host's trust and not a credential. Guard that access as you would have

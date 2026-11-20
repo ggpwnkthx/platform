@@ -6,7 +6,8 @@ export const DEPLOY_HELP = `platform deploy <local|k8s> <action> [options]
                 The interface is not a container: it is a static site, published to a CDN.
     init        Build/start PostgreSQL and Dex and run the idempotent database installer only.
     admin CMD   Run an operator command beside PostgreSQL, through its own socket, as the
-                server's superuser: admin doctor, admin harden k8s. It reads no file of yours.
+                server's superuser: admin doctor, admin harden k8s, admin lock ROLE, admin
+                unlock ROLE. It reads no file of yours.
     ui          Build the static interface into packages/ui/dist and print what to publish.
     validate    Validate the Compose configuration without printing its secrets.
     build       Build the PostgreSQL, relay and installer images.

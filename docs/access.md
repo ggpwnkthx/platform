@@ -76,6 +76,8 @@ ALTER ROLE "alice@example.com" NOLOGIN;
 
 Removing someone from an upstream sign-in system stops new tokens; a token already issued works
 until it expires (an hour, as shipped). NOLOGIN is what locks a person out at once.
+`bun run cli lock alice@example.com` does that and ends the sessions the role holds;
+`unlock` gives the login back.
 
 Committed grants, revokes and policy changes affect subsequent PostgreSQL statements under
 PostgreSQL's transaction/locking semantics. There is no application access-version cache to

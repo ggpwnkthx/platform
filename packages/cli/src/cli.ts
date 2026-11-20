@@ -8,6 +8,7 @@ import { loadConfig } from './database/config.ts'
 import { bearer, clientConfig, TokenClient, transaction } from './database/db.ts'
 import { deploy, localDatabase } from './deployment/index.ts'
 import { hardenNotes, hardenSql, type HardenMode } from './harden.ts'
+import { setLogin } from './login.ts'
 import { authenticationProblems, postureNotes, requirePostgres18 } from './database/requirements.ts'
 import { Cancelled, close, note, type Waiting, waiting } from './terminal.ts'
 import { deviceToken } from './token.ts'
@@ -197,6 +198,8 @@ async function main() {
       'model:apply',
       'sql',
       'doctor',
+      'lock',
+      'unlock',
       'harden',
       'relay',
     ].includes(command ?? '')
@@ -219,6 +222,11 @@ async function main() {
   doctor            Check the server version, how it lets people in, and the installation, and
                     say what the deployment has left open: TLS, the role catalogs, collections
                     owned by a person, tables that write no revisions.
+  lock ROLE         Take a role's login away (NOLOGIN) and end its open sessions: no token
+                    logs it in until it is unlocked. For a person who has left, and for the
+                    administrator between the times it is used.
+  unlock ROLE       Give a role its login back. A superuser's is a superuser's to change: run
+                    it beside the server, as \`deploy local admin unlock ROLE\` does.
   token             Sign in through OIDC_ISSUER in a browser and print a token for PGTOKEN,
                     psql or an Authorization: Bearer header.
   deploy            Deploy locally with Docker/Podman or to Kubernetes. Run deploy help.
@@ -285,6 +293,8 @@ directory is the server's own socket, for a command that runs beside the server.
         process.exitCode = 1
       } else console.log('Authentication rules: network logins are by token.')
       for (const said of await postureNotes(q)) console.log(`Note: ${said}`)
+    } else if (command === 'lock' || command === 'unlock') {
+      for (const said of await setLogin(q, command, process.argv[3])) console.log(said)
     } else {
       const file = process.argv[3]
       if (!file) throw new Error(`${command} needs a file path`)
