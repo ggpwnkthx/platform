@@ -1,8 +1,13 @@
+# The base images are named by digest as well as by tag: a tag can be moved to other content,
+# a digest cannot. The digests are the multi-platform indexes of the tags beside them; a new
+# BUN_VERSION needs both of its digests.
 ARG BUN_VERSION=1.4.4
+ARG BUN_DIGEST=sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d
+ARG BUN_DISTROLESS_DIGEST=sha256:153a951ae40106e125898103e6e990ee0f38e6aee7f561029e26cf9fbed23470
 
 # The interface is a static site: every page and the client bundle are generated here.
 # The result is a directory of files, published to a CDN. It is not a container.
-FROM docker.io/oven/bun:${BUN_VERSION} AS build-ui
+FROM docker.io/oven/bun:${BUN_VERSION}@${BUN_DIGEST} AS build-ui
 WORKDIR /app
 COPY package.json bun.lock tsconfig.json ./
 COPY packages/cli/package.json ./packages/cli/package.json
@@ -21,7 +26,7 @@ COPY migrations ./migrations
 RUN bun run build:ui
 
 # The operator's tools: the installer, apply, harden. Never part of serving the interface.
-FROM docker.io/oven/bun:${BUN_VERSION} AS dependencies
+FROM docker.io/oven/bun:${BUN_VERSION}@${BUN_DIGEST} AS dependencies
 WORKDIR /app
 COPY package.json bun.lock ./
 COPY packages/cli/package.json ./packages/cli/package.json
@@ -32,7 +37,7 @@ COPY packages/vocabulary/package.json ./packages/vocabulary/package.json
 COPY packages/ui/package.json ./packages/ui/package.json
 RUN bun install --frozen-lockfile --production
 
-FROM docker.io/oven/bun:${BUN_VERSION}-distroless AS cli
+FROM docker.io/oven/bun:${BUN_VERSION}-distroless@${BUN_DISTROLESS_DIGEST} AS cli
 WORKDIR /app
 # Bun keeps the packages themselves in the root store and links each workspace to them, so the
 # store and the links travel together: the links alone would point at nothing.
@@ -53,7 +58,7 @@ ENTRYPOINT ["bun", "packages/cli/src/cli.ts"]
 
 # The relay: the WebSocket in front of PostgreSQL's port. It holds no credentials and reads
 # nothing it carries; the token inside the stream is PostgreSQL's to check.
-FROM docker.io/oven/bun:${BUN_VERSION}-distroless AS relay
+FROM docker.io/oven/bun:${BUN_VERSION}-distroless@${BUN_DISTROLESS_DIGEST} AS relay
 WORKDIR /app
 COPY --chown=65532:65532 packages/relay ./packages/relay
 USER 65532:65532

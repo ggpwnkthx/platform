@@ -40,7 +40,8 @@ services:
   # developer's machine that is localhost, so Dex joins PostgreSQL's network namespace, where
   # localhost reaches it too. A real deployment gives Dex an HTTPS name instead.
   dex:
-    image: ghcr.io/dexidp/dex:v2.46.1
+    # By digest as well as by tag: a tag can be moved to other content, a digest cannot.
+    image: ghcr.io/dexidp/dex:v2.46.1@sha256:65b72ca0f4b0bf6d4ada84ec21da8851782563404ac7b8f926923d27ceced9ab
     command: [dex, serve, /etc/dex/config.yaml]
     network_mode: service:postgres
     environment:
@@ -114,7 +115,7 @@ services:
   # shares PostgreSQL's network namespace, where Dex lives too, so that the issuer's name
   # is the loopback there and PostgreSQL fetches the issuer's keys through the edge.
   edge:
-    image: docker.io/library/traefik:v3.5
+    image: docker.io/library/traefik:v3.5@sha256:16acb89c6db341182970d6fdafece31303b0a380a8ed7aa51682e225229bf1d2
     network_mode: service:postgres
     command:
       # The same port inside and out, so that one address is the same everywhere.

@@ -1,8 +1,11 @@
 # PostgreSQL 18 with the OAuth token validator that Platform's logins depend on.
 # PostgreSQL ships the oauth authentication method but no validator; this adds
 # https://github.com/percona/pg_oidc_validator, built from a pinned, checksummed release.
+# The base image is named by digest as well as by tag: the tag follows every minor release,
+# the digest is one build of it. A newer PostgreSQL 18 is a new digest here.
 ARG POSTGRES_VERSION=18
-FROM docker.io/library/postgres:${POSTGRES_VERSION} AS validator
+ARG POSTGRES_DIGEST=sha256:eb63372c1e05c755f55fa30cbd07aecc443676fc6c0fa90b9002d01537841e1a
+FROM docker.io/library/postgres:${POSTGRES_VERSION}@${POSTGRES_DIGEST} AS validator
 ARG VALIDATOR_VERSION=1.1.0
 ARG VALIDATOR_SHA256=6e2fc7f6b15dae6a006a32665426bb9f5ccce22890c684ccb078c35b0fc9d578
 # APT::Sandbox::User=root: apt's unprivileged download user does not exist in a rootless build
@@ -19,7 +22,7 @@ RUN curl -fsSL -o validator.tar.gz \
  && make USE_PGXS=1 with_llvm=no -j"$(nproc)" \
  && make USE_PGXS=1 with_llvm=no install DESTDIR=/out
 
-FROM docker.io/library/postgres:${POSTGRES_VERSION}
+FROM docker.io/library/postgres:${POSTGRES_VERSION}@${POSTGRES_DIGEST}
 RUN apt-get -o APT::Sandbox::User=root update \
  && apt-get -o APT::Sandbox::User=root install -y --no-install-recommends ca-certificates libcurl4t64 \
  && rm -rf /var/lib/apt/lists/* \
