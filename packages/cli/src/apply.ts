@@ -37,6 +37,11 @@ const userSchema = z.strictObject({
    */
   connections: z.number().int().min(-1).optional(),
   groups: z.array(name).default([]),
+  /**
+   * The groups the user may admit others to, and take them out of: PostgreSQL's own ADMIN
+   * OPTION on the membership. The user is a member of each as well.
+   */
+  admits: z.array(name).default([]),
 })
 const groupSchema = z.strictObject({ name, state })
 /** The privileges a grant may name: those of a collection and those of a workspace. */
@@ -137,6 +142,18 @@ class Run implements Report {
     await this.q.query(membershipStatement({ role: group, member: role, admin: adminOption }))
     this.changed(`add ${role} to ${group}`)
   }
+  /** The right to admit others to a group, and to take them out again. */
+  async admits(role: string, group: string) {
+    if (reserved(group)) throw new Error(`${group} is a reserved role and is not managed here`)
+    // PostgreSQL answers for the role itself, whoever asks: no catalog is read.
+    const found = await this.q.query(
+      "SELECT pg_has_role($1,$2,'MEMBER WITH ADMIN OPTION') AS admits",
+      [role, group]
+    )
+    if (found.rows[0]?.admits) return this.same()
+    await this.q.query(membershipStatement({ role: group, member: role, admin: true }))
+    this.changed(`let ${role} admit others to ${group}`)
+  }
   /** A user is a role and nothing else: who may claim it is the identity provider's business. */
   async user(user: z.infer<typeof userSchema>, database: string) {
     const q = this.q
@@ -165,6 +182,7 @@ class Run implements Report {
     }
     // Membership of platform_users is what lets a login connect to this database at all.
     for (const group of ['platform_users', ...user.groups]) await this.member(user.name, group)
+    for (const group of user.admits) await this.admits(user.name, group)
     if (user.admin === undefined) return
     const rights = await q.query(
       `SELECT a.create_role AS roles, has_database_privilege(a.name, current_database(), 'CREATE') AS creates,
