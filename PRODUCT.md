@@ -116,7 +116,10 @@ the interface alike.
   links carry them, and every module presents that workspace alone.
 - An access module that reads only what the caller may see (the roles they may use, their
   memberships, the cluster's policies, the grants in the workspace) and composes the GRANT,
-  CREATE POLICY, membership and role statements for the caller to run. Every statement that
+  CREATE POLICY, membership and role statements for the caller to run. Access is read from a
+  role, from a workspace, from a collection and from a field, and changed from any of them:
+  one editor writes the difference between what an ACL records and what is asked for, down to
+  the fields a privilege is limited to. Every statement that
   changes the model or access is shown before it runs, then runs as the caller's own role in one
   transaction; the interface grants nothing, and PostgreSQL refuses it if they lack the
   authority. Refusals are shown with their SQLSTATE; withheld fields are marked hidden,

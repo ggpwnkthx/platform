@@ -21,13 +21,14 @@ token in memory.
 | `/content/records`    | Content    | The records of a collection: search, filters, sort, pages, count |
 | `/content/item`       | Content    | One record: read it, edit it, delete it, or write a new one      |
 | `/model`              | Data model | The collections of the workspace and their shape                 |
-| `/model/collection`   | Data model | One collection: its fields; its description, RLS and metadata    |
+| `/model/collection`   | Data model | One collection: its fields, its metadata, and its access         |
 | `/model/new`          | Data model | A new collection, with its fields                                |
 | `/workspace/new`      |            | A new workspace (a schema)                                       |
-| `/workspace/settings` |            | The workspace in view: its metadata and the rights on its schema |
+| `/workspace/settings` |            | The workspace in view: its metadata and who may use it           |
 | `/access`             | Access     | The roles the reader may see, and a new role                     |
-| `/access/role`        | Access     | One role: memberships, its rights in the workspace, its policies |
-| `/access/policies`    | Access     | The row policies of the workspace's collections, and a new one   |
+| `/access/role`        | Access     | One role: memberships, what it may do in the workspace, policies |
+| `/access/grants`      | Access     | The workspace's permissions: who may use it, and every grant     |
+| `/access/policies`    | Access     | The row policies of the workspace's collections: new, changed    |
 | `/activity`           | Activity   | The revisions the reader may read, under the audit table's RLS   |
 | `/sql`                | SQL        | One statement at a time, run as the reader                       |
 
@@ -118,6 +119,9 @@ thing:
   decides which rows reach the reader, and the catalog never says the reader may change its
   model, whoever they are: that is the migrations' to do. Nobody lands in it; it is in view
   when it is chosen.
+- What a role may do (`reach`, `schemaReach` in `packages/data/src/access/`): PostgreSQL's
+  privilege functions asked of that role, for the roles the reader may see and the ones the
+  workspace's ACLs name.
 - Roles and memberships (`packages/data/src/access/`) through `platform.visible_roles()` and
   `platform.visible_memberships()`, which answer for the reader alone; row policies from
   `pg_policies`; grants from the ACLs through `aclexplode`; the revisions
@@ -135,6 +139,52 @@ thing:
   collections, fields, grants, row policies, memberships and roles. The statements
   themselves are the platform's own, in `packages/vocabulary`, so that the operator's tools and
   the interface grant the same rights the same way.
+
+## Access, from wherever it is asked about
+
+Access is one thing — PostgreSQL's ACLs, memberships and row policies — read from four places,
+and drawn the same way in each: a privilege is PostgreSQL's own name with a full, half or empty
+mark, and a half mark says how many fields it covers.
+
+- **A role** (`/access/role`). What the role may do in the workspace in view is PostgreSQL's own
+  answer for it (`has_table_privilege`, `has_any_column_privilege`, `has_schema_privilege`, asked
+  of that role), so a right held through a group or through PUBLIC counts, and a last column says
+  where each comes from: its own grants, or the groups it inherits from. The row policies listed
+  are the ones that apply to it by name, through a group, or as PUBLIC.
+- **A workspace** (`/access/grants`, and the same panel in `/workspace/settings`). Who holds
+  USAGE and CREATE on the schema, and for every collection the roles its ACL names and what each
+  holds. A row is one role on one collection, and opens the grant it draws.
+- **A collection** (`/model/collection?tab=access`). The roles its ACL names; the roles that
+  reach it through one of those without being named; who reads and writes each field; and its
+  row security, with its policies. A policy is written, changed and dropped here, and row
+  security is turned on and off here.
+- **A field** (the key beside it, in the collection's Fields and Access tabs). The roles that
+  hold SELECT, INSERT and UPDATE on the field, whether through the whole collection or by name.
+
+The grant editor is the same wherever it is opened: one role on one collection, each privilege
+not held, held on the whole collection, or held on chosen fields. What runs is the difference
+between what the ACL records and what was asked for (`grantChangeStatements` in
+`packages/vocabulary`). PostgreSQL's two levels do not mirror each other, and the editor writes
+what they need: a privilege narrowed from the whole collection to fields is revoked on the
+collection and granted on those fields by name; one widened from fields to the whole collection
+gives its field grants up; one taken away is revoked on the collection, which takes its fields
+with it. Taking one field away from a role that holds the whole collection — from the field's
+own drawer — is the first of those, and the drawer says that a field added later will not be
+among the ones named.
+
+A grant on a collection is of no use without USAGE on the workspace, so the editor asks
+PostgreSQL whether the role holds it and, when it does not, offers the workspace's owner the
+`GRANT USAGE` in the same transaction; anyone else is told who grants it. A role is chosen by
+name: the roles the reader may see are offered, and any other may be typed, since a collection's
+owner may grant to a role PostgreSQL does not list for them.
+
+A row policy that is changed is dropped and made again, in the one transaction every change
+runs in: PostgreSQL alters a policy's roles and expressions in place but not what it is for, and
+no statement ever sees the collection without the policy.
+
+Nothing here is the interface's own answer. Whether the reader may change a grant is PostgreSQL's
+to say when the statement runs; the interface offers the editors to a collection's owner, and
+shows everyone else what the catalog shows them.
 
 ## Shown before it runs
 

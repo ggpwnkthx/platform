@@ -439,6 +439,16 @@ Header row on Subdued Grey (42px, label type), body rows 46px with soft hairline
 ### Privilege Marks (signature)
 A privilege is drawn the same way everywhere: a 16px circle that is solid orange (held on the whole collection), half orange / half Orange Wash Deep (held on some fields), or an empty Palette Grey ring (not held), beside its PostgreSQL name in mono. A legend of the three marks appears wherever they do. Compact rows shrink the mark to 11px; the matrix uses one mark per privilege per collection. Owning a collection is a separate dark ink "owner" pill.
 
+In a table of marks a half mark carries its count beside it — `11/12`, the fields it covers of
+the fields there are — set in mono and placed so that the marks stay in one column. Where the
+question is who holds a field, the answer is the roles by name: small hairline tags in mono, a
+role that holds the whole collection quieter than one granted the field by name. A role is drawn
+the same wherever access is read: a person, a group or everyone as its icon, and its name in mono.
+
+The marks describe; they do not edit. A grant is changed in a drawer, where each privilege is
+chosen as not held, the whole collection or chosen fields, and fields are ticked — and the mark
+beside the privilege follows the choice, so the drawer reads like the table it came from.
+
 **The One Rights Vocabulary Rule.** Rights are named only by PostgreSQL's privileges (SELECT, INSERT, UPDATE, DELETE, TRUNCATE) and drawn only with the full / half / empty mark; never with checkmarks, toggles or invented role words.
 
 ### Statement (signature)
