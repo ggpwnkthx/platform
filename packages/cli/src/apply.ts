@@ -22,6 +22,12 @@ const userSchema = z.strictObject({
   login: z.boolean().default(true),
   /** The bootstrap administrator's rights: create roles, create workspaces, admit users. */
   admin: z.boolean().optional(),
+  /**
+   * The most sessions the role may hold at once, on the whole server: PostgreSQL's own
+   * CONNECTION LIMIT, which every relay together cannot exceed. -1 is no limit; omitted
+   * leaves the role's as it is.
+   */
+  connections: z.number().int().min(-1).optional(),
   groups: z.array(name).default([]),
 })
 const groupSchema = z.strictObject({ name, state })
@@ -104,7 +110,7 @@ class Run implements Report {
     if ((await read()) === before) this.same()
     else this.changed(what)
   }
-  async role(role: string): Promise<{ login: boolean } | undefined> {
+  async role(role: string): Promise<{ login: boolean; connection_limit: number } | undefined> {
     if (reserved(role)) throw new Error(`${role} is a reserved role and is not managed here`)
     // The platform answers for itself: the role catalog is not readable by ordinary sessions.
     const found = await this.q.query('SELECT * FROM platform.role_attributes($1)', [role])
@@ -131,6 +137,20 @@ class Run implements Report {
       await q.query(`ALTER ROLE ${role} ${user.login ? 'LOGIN' : 'NOLOGIN'}`)
       this.changed(`${user.login ? 'enable' : 'disable'} login of ${user.name}`)
     } else this.same()
+    // A session's own settings are the session's to change, statement_timeout among them;
+    // how many sessions a role may hold is not. PostgreSQL counts them itself.
+    if (user.connections !== undefined) {
+      const held = found ? found.connection_limit : -1
+      if (held === user.connections) this.same()
+      else {
+        await q.query(`ALTER ROLE ${role} CONNECTION LIMIT ${user.connections}`)
+        this.changed(
+          user.connections < 0
+            ? `lift the connection limit of ${user.name}`
+            : `limit ${user.name} to ${user.connections} connections`
+        )
+      }
+    }
     // Membership of platform_users is what lets a login connect to this database at all.
     for (const group of ['platform_users', ...user.groups]) await this.member(user.name, group)
     if (user.admin === undefined) return

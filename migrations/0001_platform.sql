@@ -229,10 +229,12 @@ LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, pg_temp STABLE AS $$
 $$;
 
 -- The attributes of a role. An operator reads the truth; anyone else reads only their own.
+-- The connection limit is PostgreSQL's own: how many sessions the role may hold at once on
+-- this server, through every relay together, and -1 where there is none.
 CREATE FUNCTION platform.role_attributes(role_name text) RETURNS TABLE(
-  name text, login boolean, create_role boolean)
+  name text, login boolean, create_role boolean, connection_limit integer)
 LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, pg_temp STABLE AS $$
-  SELECT r.rolname::text, r.rolcanlogin, r.rolcreaterole
+  SELECT r.rolname::text, r.rolcanlogin, r.rolcreaterole, r.rolconnlimit
     FROM pg_roles r
    WHERE r.rolname = role_name
      AND (platform.is_operator() OR r.rolname = session_user)

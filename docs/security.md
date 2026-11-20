@@ -174,7 +174,10 @@ relay's own, not the fleet's.
 The role is the one PostgreSQL reports, so a client cannot claim a role it has not been signed
 in as, and a session that never signs in counts against nobody's role.
 Each login asks for STATEMENT_TIMEOUT_MS as `statement_timeout`,
-which a reader may change on their own session. See [interface](interface.md) for the whole
+which a reader may change on their own session: PostgreSQL lets every role set it, so an
+`ALTER ROLE ... SET` is a default too, and not a ceiling. What a reader cannot change is how
+many sessions their role holds: a role's CONNECTION LIMIT (`connections` in a manifest's
+`users[]`) is PostgreSQL's own count, across every relay. See [interface](interface.md) for the whole
 browser surface.
 
 The relay never reads PGTOKEN or an administrator URL, and

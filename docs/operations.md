@@ -234,6 +234,8 @@ with anything else is refused, and one that has not logged in within RELAY_LOGIN
 closed, so clients that never sign in cannot hold the database's connections for long. A
 client that sends a startup packet and then stalls does hold one until that time is up: keep
 RELAY_SESSIONS_LOGGING_IN, times the number of relays, well under `max_connections`. The caps are each relay's own: with two replicas, each counts for itself.
+A role's own CONNECTION LIMIT is the server's, and counts for all of them: a manifest sets it
+with `connections` on a user ([apply](apply.md)).
 
 Behind a proxy every client arrives from the proxy's address, and shares one budget of logins.
 Name the proxy in RELAY_TRUSTED_PROXIES (the ingress controller's pods, a load balancer's
