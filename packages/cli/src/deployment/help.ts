@@ -72,7 +72,9 @@ export const DEPLOY_HELP = `platform deploy <local|k8s> <action> [options]
     are made of them every time.
     Each pod runs the relay that forwards to DATABASE_HOST:DATABASE_PORT; set
     PLATFORM_TOKEN_ONLY_FROM (or your own pg_hba rule) to the pods' address range, so that
-    the administrator has no login through the relay. Behind an ingress, set
+    the administrator has no login through the relay, and PLATFORM_ADMIN_FROM to your
+    operators' networks, so that it has none from anywhere else. The manifest reaches
+    PostgreSQL in TLS (RELAY_UPSTREAM_TLS=verify). Behind an ingress, set
     RELAY_TRUSTED_PROXIES on the Deployment to the ingress controller's addresses, so that each
     reader's logins are counted against their own address. The interface is a static site you
     publish to a CDN; deploy/k8s/ingress.yaml is an example of the address it reaches the

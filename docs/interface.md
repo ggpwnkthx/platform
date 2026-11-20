@@ -433,7 +433,7 @@ interface's path that answers on the network. It is configured from the environm
 | RELAY_SESSIONS_LOGGING_IN  | 64             | Logins all addresses may have signing in at once      |
 | RELAY_LOGIN_SECONDS        | 30             | How long a session has to log in                      |
 | RELAY_TRUSTED_PROXIES      | none           | Proxies whose X-Forwarded-For names the client        |
-| RELAY_UPSTREAM_TLS         | off            | `verify` reaches PostgreSQL in TLS                    |
+| RELAY_UPSTREAM_TLS         | see below      | `verify` or `off`; required unless on this machine    |
 | RELAY_UPSTREAM_CA          | the system's   | The authority PostgreSQL's certificate must come from |
 | RELAY_TLS_CERT             | none           | The certificate the relay serves TLS with             |
 | RELAY_TLS_KEY              | none           | Its key                                               |
@@ -458,7 +458,11 @@ balancer, a tunnel, or the relay itself with a certificate.
   written by `packages/ui/src/headers.ts`, in the `_headers` file a CDN reads.
 - **Origin check.** The relay refuses a handshake whose Origin is not one of
   `RELAY_ORIGINS`, so another site's page cannot open a database session through a visitor's
-  browser. A handshake with no Origin at all is refused too when the list is not empty.
+  browser. A handshake with no Origin at all is refused too when the list is not empty. Unset
+  (or `*`), the relay checks no origin, which is right where what is in front of it does. A
+  platform's CORS settings are not that: a browser sends a WebSocket handshake from any page
+  without asking, so only something that refuses the handshake by its Origin stands in for
+  the list.
 - **Session cap.** One open WebSocket is one database session. The relay caps how many open
   sessions one role may hold (RELAY_SESSIONS_PER_ROLE), and how many logins one client address
   may have signing in at once (RELAY_SESSIONS_PER_ADDRESS), and all addresses together
@@ -467,9 +471,11 @@ balancer, a tunnel, or the relay itself with a certificate.
   proxy names in X-Forwarded-For. The role is the one PostgreSQL reports, so a client cannot
   claim a role it has not been signed in as. Size PostgreSQL's `max_connections` and per-role
   connection limits accordingly.
-- **Logins that do not finish.** A session that has sent nothing has no connection to
-  PostgreSQL. One that has not logged in within RELAY_LOGIN_SECONDS is closed, and so is one
-  that sends more than a login takes before it has logged in.
+- **Logins that do not finish.** A session has no connection to PostgreSQL until it has sent
+  a whole startup packet of protocol 3. One that opens with anything else is refused: a
+  request for TLS inside the stream, for GSSAPI or to cancel a statement is not a login. One
+  that has not logged in within RELAY_LOGIN_SECONDS is closed, and so is one that sends more
+  than a login takes before it has logged in.
 - **A side that falls behind.** When the browser reads slowly the relay stops reading
   PostgreSQL, and when PostgreSQL reads slowly it stops reading the browser, so a large result
   or a large write waits in the sender instead of filling the relay's memory.
@@ -478,16 +484,21 @@ balancer, a tunnel, or the relay itself with a certificate.
   database defaults and connection limits in PostgreSQL where it matters.
 - **What the relay can see.** The relay carries the whole protocol stream: the token in
   the login, every statement and every row. Between the browser and the relay the stream is
-  inside the deployment's WSS. Between the relay and PostgreSQL it is plain TCP unless
+  inside the deployment's WSS. Between the relay and PostgreSQL it is TLS with
   RELAY_UPSTREAM_TLS=verify, with which the relay opens that connection in TLS and checks
-  PostgreSQL's certificate. Without it the relay must run next to PostgreSQL or on a private
+  PostgreSQL's certificate, and plain TCP with RELAY_UPSTREAM_TLS=off. The relay has to be
+  told which, unless PostgreSQL is on its own machine. In the clear the relay must run next to
+  PostgreSQL or on a private
   network you trust: the same host, the same pod network, a service mesh with mTLS, or a
   tunnel. Whoever controls the relay, or that network when it is in the clear, can read tokens
   in flight and use them until they expire.
 - **No administrator through the relay.** PostgreSQL's image takes PLATFORM_TOKEN_ONLY_FROM, a
   list of CIDR blocks from which the administrator (PLATFORM_ADMIN) is refused outright. Set
   it to the relay's addresses, so that a token that names the administrator is not a way in
-  through the relay. Nobody logs in with a password from anywhere: no login has one.
+  through the relay. PLATFORM_ADMIN_FROM names the operators' networks instead, and the
+  administrator is then refused from everywhere else. PLATFORM_HBA_DATABASES names the
+  databases a token opens, so the relay reaches no other database of the same server.
+  Nobody logs in with a password from anywhere: no login has one.
 
 ## Dev mode
 

@@ -63,7 +63,10 @@ PostgreSQL metadata normally exposes role and policy names/expressions to connec
 The platform does not publish the role graph through its own functions:
 `platform.visible_roles()` and `platform.visible_memberships()` return the roles and memberships
 the caller may use, and the interface reads roles through them alone, so an ordinary session in
-the interface is never shown who belongs to which group. The raw catalogs are PostgreSQL's,
+the interface is never shown who belongs to which group. Where it must know whether a name in
+an ACL or a policy is still a role, it asks PostgreSQL for the role (`to_regrole`) and reads no
+catalog, and the policy on the revisions does the same, so the interface keeps working once the
+catalogs are hidden. The raw catalogs are PostgreSQL's,
 and hiding them from psql is a separate, deliberate step: `bun run cli harden <deployment>`,
 run as the cluster superuser. It revokes the public read of `pg_auth_members`, `pg_roles` and
 `pg_user`; operators keep them through `platform_admins` and `platform_core`. Policy names and
@@ -98,7 +101,9 @@ trust boundary:
   server names in PLATFORM_ADMIN, a superuser who signs in with a token like anyone else: so
   whoever can make Dex issue a token for that address administers the server. From the relay's
   network (PLATFORM_TOKEN_ONLY_FROM) that login is refused outright, so a token that names it
-  is not a way in through the interface. The server's own superuser (`postgres`) has no login
+  is not a way in through the interface. Name the operators' networks (PLATFORM_ADMIN_FROM)
+  and it is refused from everywhere else as well: without that, a token for the administrator
+  is good from any network that reaches PostgreSQL and is not listed. The server's own superuser (`postgres`) has no login
   over the network at all.
 - The one way in without a token is the server's own socket, inside its container: it makes
   the cluster, and it is what remains when Dex is unavailable. It needs a shell beside the
@@ -118,10 +123,12 @@ HTTPS for the interface and for Dex, and expose the interface only through an HT
 proxy or ingress; PUBLIC_URL itself does not enable an HTTPS listener. Do not log WebSocket
 payloads or proxy request bodies: the `/pg` stream carries tokens, statements and rows.
 
-The relay connects to PostgreSQL in plain TCP unless RELAY_UPSTREAM_TLS=verify, with which it
-opens that connection in TLS from its first byte and checks PostgreSQL's certificate. The
+The relay connects to PostgreSQL in TLS with RELAY_UPSTREAM_TLS=verify, with which it opens
+that connection in TLS from its first byte and checks PostgreSQL's certificate, and in plain
+TCP with RELAY_UPSTREAM_TLS=off. Unless PostgreSQL is on the relay's own machine the relay
+does not start until it is told which. The
 browser cannot negotiate PostgreSQL's TLS inside the stream, so DATABASE_SSL does not apply to
-the interface's connections: the relay's own setting does. Without it, run the relay next to
+the interface's connections: the relay's own setting does. In the clear, run the relay next to
 PostgreSQL or on a private network you trust: the same host, the same pod network, a service
 mesh with mTLS, or a tunnel. The encryption between the browser and the relay is the
 deployment's WSS. CLI connections are unaffected and still require verified PostgreSQL TLS in
@@ -144,12 +151,18 @@ bundled application. The interface sets its own faces from fonts bundled into th
 asks no third party for anything at runtime.
 
 A WebSocket from any Origin but the site's own is refused with 403, so another site's page
-cannot open a database session through a visitor's browser. Each open WebSocket is one database
+cannot open a database session through a visitor's browser. That is with RELAY_ORIGINS set:
+unset, the relay checks no origin and leaves it to the deployment. A CORS policy does not do
+it, because a WebSocket handshake is not subject to one. What an unchecked origin gives another
+site is small: the token lives in the page's memory and not in a cookie, so a session opened
+from elsewhere has nothing to log in with. Each open WebSocket is one database
 session; the relay caps how many open sessions one role may hold (RELAY_SESSIONS_PER_ROLE, 20)
 and how many logins one client address may have signing in at once (RELAY_SESSIONS_PER_ADDRESS,
-20), and all addresses together (RELAY_SESSIONS_LOGGING_IN, 64). A session that has sent
-nothing has no PostgreSQL connection, and one that does not log in within RELAY_LOGIN_SECONDS
-(30) is closed. Behind a proxy the client's address is the one a proxy named in
+20), and all addresses together (RELAY_SESSIONS_LOGGING_IN, 64). A session has no PostgreSQL
+connection until it has sent a whole startup packet, one that opens with anything else (a
+request for TLS inside the stream, a cancel) is refused, and one that does not log in within
+RELAY_LOGIN_SECONDS (30) is closed. A client that sends a startup packet and stalls holds a
+connection for that long, so the cap on logins belongs well under `max_connections`. Behind a proxy the client's address is the one a proxy named in
 RELAY_TRUSTED_PROXIES reports; from anyone else X-Forwarded-For is ignored. The counts are each
 relay's own, not the fleet's.
 The role is the one PostgreSQL reports, so a client cannot claim a role it has not been signed

@@ -104,7 +104,9 @@ The database server needs three things, all of which deploy/postgres provides as
    local   all  all                trust      # the container's own socket, as upstream ships it
    host    all  "postgres"    all  reject     # the server's own superuser: the socket alone
    host    all  "admin@example.com"  10.89.71.0/24  reject   # the administrator, never from the relay
-   host    all  all           all  oauth issuer="https://idp.platform.example.com" scope=""
+   host    all  "admin@example.com"  10.1.0.0/16    oauth issuer="https://idp.platform.example.com" scope=""
+   host    all  "admin@example.com"  all            reject   # and from nowhere but the operators' network
+   host    "platform"  all    all  oauth issuer="https://idp.platform.example.com" scope=""
    ```
 
    No login has a password. The image refuses POSTGRES_PASSWORD, and a new cluster's own
@@ -126,6 +128,16 @@ The database server needs three things, all of which deploy/postgres provides as
    matching rule decides, so from there the administrator does not log in at all. A token
    that names the administrator is not a way in through the interface. The local stack sets
    it to the relay network's 10.89.71.0/24.
+   PLATFORM_ADMIN_FROM (comma-separated CIDR blocks, the fourth and fifth lines above) turns
+   that around: it names the operators' own networks, and the administrator logs in from
+   those and from nowhere else. Without it the administrator is refused only from the
+   networks PLATFORM_TOKEN_ONLY_FROM lists, and a network nobody thought of lets that role
+   in; set it wherever you know where your operators connect from.
+   PLATFORM_HBA_DATABASES (comma-separated names) is the databases a token opens over the
+   network, in the last line: POSTGRES_DB when the cluster is made with one, and otherwise
+   all. The relay carries whichever database a client names, so a database that is not
+   listed is not reached through it. The administrator, from PLATFORM_ADMIN_FROM, reaches
+   them all.
 
    The image also starts PostgreSQL with `log_connections=on` and `log_statement=ddl`, so the
    server's log says who connected and as whom, and holds every statement that changes a
@@ -195,13 +207,13 @@ part of the path that answers on the network.
 | PLATFORM_STATEMENT_TIMEOUT_MS  | 15000                     | `statement_timeout` sent with each login                                          |
 | RELAY_UPSTREAM                 | 127.0.0.1:5432            | host:port of PostgreSQL, for the relay                                            |
 | RELAY_PORT                     | 8081                      | The port the relay listens on                                                     |
-| RELAY_ORIGINS                  | any                       | Comma-separated origins allowed to open a session                                 |
+| RELAY_ORIGINS                  | any                       | Comma-separated origins allowed to open a session; unset or `*` checks none       |
 | RELAY_SESSIONS_PER_ADDRESS     | 20                        | Logins one client address may have signing in at once                             |
 | RELAY_SESSIONS_PER_ROLE        | 20                        | Open database sessions one role may hold                                          |
 | RELAY_SESSIONS_LOGGING_IN      | 64                        | Logins every address together may have signing in at once                         |
 | RELAY_LOGIN_SECONDS            | 30                        | How long a session has to log in before it is closed                              |
 | RELAY_TRUSTED_PROXIES          | none                      | Addresses or CIDR blocks whose X-Forwarded-For names a client                     |
-| RELAY_UPSTREAM_TLS             | off                       | `verify` reaches PostgreSQL in TLS and checks its certificate                     |
+| RELAY_UPSTREAM_TLS             | off, on this machine only | `verify` reaches PostgreSQL in TLS and checks its certificate; required otherwise |
 | RELAY_UPSTREAM_CA              | the system's              | The authority that certificate must come from, as a PEM file                      |
 | RELAY_TLS_CERT / RELAY_TLS_KEY | none                      | The certificate the relay serves TLS with                                         |
 
@@ -217,9 +229,11 @@ reach the platform's work. Every open WebSocket is one PostgreSQL connection: si
 `max_connections` and per-role connection limits for the people who use the interface at once.
 The relay caps the open sessions per role (RELAY_SESSIONS_PER_ROLE) and the logins signing in,
 per client address (RELAY_SESSIONS_PER_ADDRESS) and in all (RELAY_SESSIONS_LOGGING_IN). A
-session that has sent nothing has no PostgreSQL connection, and one that has not logged in
-within RELAY_LOGIN_SECONDS is closed, so clients that never sign in cannot hold the database's
-connections. The caps are each relay's own: with two replicas, each counts for itself.
+session has no PostgreSQL connection until it has sent a whole startup packet, one that opens
+with anything else is refused, and one that has not logged in within RELAY_LOGIN_SECONDS is
+closed, so clients that never sign in cannot hold the database's connections for long. A
+client that sends a startup packet and then stalls does hold one until that time is up: keep
+RELAY_SESSIONS_LOGGING_IN, times the number of relays, well under `max_connections`. The caps are each relay's own: with two replicas, each counts for itself.
 
 Behind a proxy every client arrives from the proxy's address, and shares one budget of logins.
 Name the proxy in RELAY_TRUSTED_PROXIES (the ingress controller's pods, a load balancer's
@@ -227,7 +241,11 @@ range) and the relay counts a session against the client the proxy names in X-Fo
 instead. Only a named proxy is believed, and only for this count: the header is never an
 identity, and from any other address it is ignored.
 
-The relay connects to PostgreSQL in plain TCP unless RELAY_UPSTREAM_TLS=verify. With it the
+The relay connects to PostgreSQL in TLS with RELAY_UPSTREAM_TLS=verify and in plain TCP with
+RELAY_UPSTREAM_TLS=off. It has to be told which unless PostgreSQL is on the relay's own
+machine (127.0.0.1, localhost): the stream carries every reader's token, so sending it across
+a network in the clear is a choice the deployment makes, and the relay does not start without
+it. With `verify` the
 relay opens that connection in TLS from its first byte, the way PostgreSQL 17 and later accept
 it (libpq's `sslnegotiation=direct`), checks the server's certificate against
 RELAY_UPSTREAM_CA or the system's authorities, and checks that it names the host in
@@ -416,12 +434,15 @@ address, and the only origin the relay allows; it is not an HTTPS listener. Supp
 HTTPS ingress or tunnel: deploy/k8s/ingress.yaml is an example of one, and the address it
 names is the one the site's `config.json` must carry (PLATFORM_RELAY_URL).
 
-The relay reaches PostgreSQL in plain TCP unless you set RELAY_UPSTREAM_TLS=verify on the
-Deployment, so without it the pods must reach it over a network you trust: the same cluster
-network with network policies, a service mesh with mTLS, or a tunnel. Behind an ingress, set
+The manifest sets RELAY_UPSTREAM_TLS=verify: the relay reaches PostgreSQL in TLS and checks its
+certificate, so PostgreSQL needs `ssl=on` and a certificate for the name the relay is given.
+Set it to `off` only where the pods reach PostgreSQL over a network you trust with a token:
+the same cluster network with network policies, a service mesh with mTLS, or a tunnel. Behind an ingress, set
 RELAY_TRUSTED_PROXIES to the ingress controller's addresses, or every reader shares one budget
 of logins. Name the pods' address range to PostgreSQL with PLATFORM_TOKEN_ONLY_FROM or your
-own pg_hba rule, so that the administrator has no login through the relay. For Azure or another
+own pg_hba rule, so that the administrator has no login through the relay, and name your
+operators' networks with PLATFORM_ADMIN_FROM, so that the administrator has none from anywhere
+else. For Azure or another
 hosting platform, provision the same endpoint and separate operator installation through that
 platform's normal infrastructure tooling.
 
