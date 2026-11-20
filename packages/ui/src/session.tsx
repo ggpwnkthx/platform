@@ -255,6 +255,17 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
         }
         const signed = await completeSignIn(cfg)
         if (!signed) {
+          // A link may ask for the sign-in to begin at once, by ending in `#signin`. It names
+          // nobody and carries nothing: it only saves the click that sends the reader to the
+          // issuer, where they sign in as they always do.
+          // The page's own address: `location` here is the router's.
+          const here = window.location
+          if (here.hash === '#signin') {
+            history.replaceState(null, '', here.pathname + here.search)
+            setPhase('signing-in')
+            await beginSignIn(cfg, here.pathname === '/' ? '/content' : here.pathname + here.search)
+            return
+          }
           setPhase('signed-out')
           return
         }
