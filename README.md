@@ -209,6 +209,7 @@ bun run cli deploy local admin harden k8s  # hide the role catalogs from ordinar
 bun run cli deploy local admin doctor      # the same checks, as the stack's own superuser
 bun run cli doctor     # server version, authentication rules, installation, what is left open
 bun run cli token      # sign in through Dex from a terminal; prints a token
+bun run cli token --out=$HOME/.platform-token  # the same, into a file of your own (0600), for PGTOKEN_FILE
 bun run cli lock alice@example.com    # no login, whatever token names it; unlock gives it back
 bun run cli apply local --example --dry-run  # users, groups, workspaces, grants
 bun run cli apply local --example deploy/models/crm.json

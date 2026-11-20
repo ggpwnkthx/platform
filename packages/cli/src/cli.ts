@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { chmodSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import pg from 'pg'
 import { ZodError, z } from 'zod'
@@ -174,7 +174,14 @@ async function main() {
   if (command === 'token') {
     const config = loadConfig()
     if (!config.oidcIssuer) throw new Error('OIDC_ISSUER is required')
-    // The token is the only thing on stdout, so that it can be captured.
+    // The token is the only thing on stdout, so that it can be captured. With --out it is
+    // not on stdout at all: it is written to a file of the caller's own, for PGTOKEN_FILE,
+    // and never passes through a terminal's scrollback, a pipe or a CI log.
+    const options = process.argv.slice(3)
+    const unknown = options.find((a) => !a.startsWith('--out='))
+    if (unknown) throw new Error(`Unknown option: ${unknown}`)
+    const out = options.at(-1)?.slice('--out='.length)
+    if (out === '') throw new Error('--out needs a file path')
     let signingIn: Waiting | undefined
     const token = await deviceToken(
       config.oidcIssuer,
@@ -188,7 +195,12 @@ async function main() {
       throw error
     })
     signingIn?.done('Signed in')
-    console.log(token)
+    if (out) {
+      writeFileSync(out, `${token}\n`, { mode: 0o600 })
+      // The mode above is for a file that was not there: one that was keeps its own.
+      chmodSync(out, 0o600)
+      note(`The token is in ${out}, readable by you alone: pass it as PGTOKEN_FILE=${out}`)
+    } else console.log(token)
     return
   }
   if (
@@ -227,8 +239,10 @@ async function main() {
                     administrator between the times it is used.
   unlock ROLE       Give a role its login back. A superuser's is a superuser's to change: run
                     it beside the server, as \`deploy local admin unlock ROLE\` does.
-  token             Sign in through OIDC_ISSUER in a browser and print a token for PGTOKEN,
-                    psql or an Authorization: Bearer header.
+  token [--out=FILE]
+                    Sign in through OIDC_ISSUER in a browser and print a token for PGTOKEN,
+                    psql or an Authorization: Bearer header. --out writes it to a file of
+                    your own (mode 0600) for PGTOKEN_FILE, and prints nothing.
   deploy            Deploy locally with Docker/Podman or to Kubernetes. Run deploy help.
   ui                Build the interface as a static site, and serve it while it is worked on.
                     Run ui help.
