@@ -3,11 +3,13 @@ import { readFileSync } from 'node:fs'
 import { PGlite } from '@electric-sql/pglite'
 import type pg from 'pg'
 import { applyManifest } from '../../../packages/cli/src/apply.ts'
+import { postureNotes } from '../../../packages/cli/src/database/requirements.ts'
+import { hardenSql } from '../../../packages/cli/src/harden.ts'
 
 /**
  * The operator's own questions and switches, asked of the real thing: PostgreSQL, installed
- * with the platform's own script and seeded with the example. The limit a manifest puts on a
- * role's sessions, which is PostgreSQL's own count, across every relay together.
+ * with the platform's own script and seeded with the example. What doctor says the deployment
+ * has left open, and the limit a manifest puts on a role's sessions.
  */
 const text = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
@@ -32,6 +34,37 @@ beforeAll(async () => {
   lite = await PGlite.create()
   await lite.exec(text('../../../migrations/0001_platform.sql'))
   await lite.exec(text('../seed.sql'))
+})
+
+describe('what doctor says a deployment has left open', () => {
+  const said = async (about: string) => (await postureNotes(q)).filter((n) => n.includes(about))
+
+  test('the role catalogs, until they are hardened', async () => {
+    expect(await said('role catalogs')).toHaveLength(1)
+    await lite.exec(hardenSql('strict'))
+    expect(await said('role catalogs')).toEqual([])
+    await lite.exec(hardenSql('restore'))
+  })
+
+  test('the collections a person owns, and not those a group owns', async () => {
+    const [owned] = await said('Owned by a person')
+    expect(owned).toContain('newsroom.articles (admin@example.com)')
+    expect(owned).not.toContain('crm.accounts')
+  })
+
+  test('a table that writes no revisions, made by hand or switched off', async () => {
+    expect(await said('no revision')).toEqual([])
+    await lite.exec(`CREATE TABLE crm.by_hand (id integer);
+      ALTER TABLE crm.deals DISABLE TRIGGER platform_audit`)
+    try {
+      expect((await said('No audit trigger'))[0]).toContain('crm.by_hand')
+      expect((await said('audit trigger is disabled'))[0]).toContain('crm.deals')
+    } finally {
+      await lite.exec(`DROP TABLE crm.by_hand;
+        ALTER TABLE crm.deals ENABLE TRIGGER platform_audit`)
+    }
+    expect(await said('no revision')).toEqual([])
+  })
 })
 
 describe('the sessions a role may hold', () => {

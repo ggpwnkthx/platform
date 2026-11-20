@@ -8,7 +8,7 @@ import { loadConfig } from './database/config.ts'
 import { bearer, clientConfig, TokenClient, transaction } from './database/db.ts'
 import { deploy, localDatabase } from './deployment/index.ts'
 import { hardenNotes, hardenSql, type HardenMode } from './harden.ts'
-import { authenticationProblems, requirePostgres18 } from './database/requirements.ts'
+import { authenticationProblems, postureNotes, requirePostgres18 } from './database/requirements.ts'
 import { Cancelled, close, note, type Waiting, waiting } from './terminal.ts'
 import { deviceToken } from './token.ts'
 import { VERSION, requireInstalledVersion } from './version.ts'
@@ -191,7 +191,15 @@ async function main() {
     return
   }
   if (
-    !['migrate', 'apply', 'model:apply', 'sql', 'doctor', 'harden', 'relay'].includes(command ?? '')
+    ![
+      'migrate',
+      'apply',
+      'model:apply',
+      'sql',
+      'doctor',
+      'harden',
+      'relay',
+    ].includes(command ?? '')
   ) {
     console.log(`platform <command>
   migrate           Install or upgrade Platform ${VERSION} in a dedicated PostgreSQL 18 database.
@@ -208,7 +216,9 @@ async function main() {
                     settings below. Both need a token.
   model:apply FILE  Apply an additive JSON model using the caller's own DDL rights.
   sql FILE          Run a SQL file using the caller's own rights. Use BEGIN/COMMIT for atomic scripts.
-  doctor            Check the server version, how it lets people in, and the installation.
+  doctor            Check the server version, how it lets people in, and the installation, and
+                    say what the deployment has left open: TLS, the role catalogs, collections
+                    owned by a person, tables that write no revisions.
   token             Sign in through OIDC_ISSUER in a browser and print a token for PGTOKEN,
                     psql or an Authorization: Bearer header.
   deploy            Deploy locally with Docker/Podman or to Kubernetes. Run deploy help.
@@ -274,6 +284,7 @@ directory is the server's own socket, for a command that runs beside the server.
         for (const problem of problems) console.error(problem)
         process.exitCode = 1
       } else console.log('Authentication rules: network logins are by token.')
+      for (const said of await postureNotes(q)) console.log(`Note: ${said}`)
     } else {
       const file = process.argv[3]
       if (!file) throw new Error(`${command} needs a file path`)

@@ -146,7 +146,10 @@ The database server needs three things, all of which deploy/postgres provides as
    somewhere the database's own administrators cannot rewrite it.
 
 `bun run cli doctor`, run as a superuser, reads the live rules and fails if any network rule
-lets a login in without a token: only `oauth` and `reject` pass.
+lets a login in without a token: only `oauth` and `reject` pass. It then says, as notes that
+fail nothing, what the deployment has left open: TLS that is off or a `host` rule that takes
+a token without it, role catalogs every connection reads (`harden`), collections owned by a
+person rather than a group, and tables that write no revisions.
 
 A role and its sign-in are matched by name: the token's `email` claim must equal the role name
 exactly, so alice@example.com logs in as the role `"alice@example.com"`. Nothing is mapped or

@@ -64,6 +64,8 @@ PostgreSQL image writes connections and DDL/DCL statements to the server's log
 the server can change what it holds. Use pgAudit and an external protected log destination
 when more of those events or tamper-resistant retention are required. Tables created manually need the audit/stamp triggers installed by
 an owner; the project does not install a superuser event trigger to intercept all DDL.
+`bun run cli doctor` names the tables that write no revisions, because they have no audit
+trigger or it has been disabled, and the collections owned by a person rather than a group.
 
 PostgreSQL metadata normally exposes role and policy names/expressions to connected users.
 The platform does not publish the role graph through its own functions:
@@ -74,7 +76,7 @@ an ACL or a policy is still a role, it asks PostgreSQL for the role (`to_regrole
 catalog, and the policy on the revisions does the same, so the interface keeps working once the
 catalogs are hidden. The raw catalogs are PostgreSQL's,
 and hiding them from psql is a separate, deliberate step: `bun run cli harden <deployment>`,
-run as the cluster superuser. It revokes the public read of `pg_auth_members`, `pg_roles` and
+run as the cluster superuser; `doctor` says when it has not been taken. It revokes the public read of `pg_auth_members`, `pg_roles` and
 `pg_user`; operators keep them through `platform_admins` and `platform_core`. Policy names and
 expressions stay visible, as PostgreSQL publishes them, and so do schema and table names:
 hiding the object catalogs is a separate and much wider change that breaks psql's `\d`,
@@ -138,7 +140,8 @@ the interface's connections: the relay's own setting does. In the clear, run the
 PostgreSQL or on a private network you trust: the same host, the same pod network, a service
 mesh with mTLS, or a tunnel. The encryption between the browser and the relay is the
 deployment's WSS. CLI connections are unaffected and still require verified PostgreSQL TLS in
-production.
+production. `doctor` says when the server's TLS is off, and when a rule takes a token with or
+without it (`host`, where `hostssl` would refuse one sent in the clear).
 
 The interface signs in with the authorization code flow and PKCE, as a public client: it has no
 client secret. It keeps the token only in JavaScript memory and hands it to PostgreSQL inside

@@ -207,7 +207,7 @@ bun run cli --version  # 2.3.0
 bun run cli migrate    # installs what is missing, upgrades what is behind; needs a token
 bun run cli deploy local admin harden k8s  # hide the role catalogs from ordinary connections
 bun run cli deploy local admin doctor      # the same checks, as the stack's own superuser
-bun run cli doctor     # server version, authentication rules, installation
+bun run cli doctor     # server version, authentication rules, installation, what is left open
 bun run cli token      # sign in through Dex from a terminal; prints a token
 bun run cli apply local --example --dry-run  # users, groups, workspaces, grants
 bun run cli apply local --example deploy/models/crm.json
