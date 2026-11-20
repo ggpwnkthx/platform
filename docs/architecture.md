@@ -129,7 +129,7 @@ SQLSTATE.
 The interface reaches the database through one seam, `packages/ui/src/pg/connect.ts`. A production
 build leaves it alone, and the page opens a WebSocket to the relay. A dev-mode build
 (`bun run examples:newsroom:dev`) resolves the same seam to the module the example's
-configuration names — `examples/newsroom/database.ts` — PostgreSQL 18 running
+configuration names — `examples/newsroom/install.ts` — PostgreSQL 18 running
 inside the page (PGlite) and installed with the real migrations, so the interface can be built
 without a server, an issuer or a relay. The swap happens while the bundle is built, so PGlite
 never reaches a production bundle. The seam carries more than the connection: it says who may
@@ -217,7 +217,7 @@ deployment files, the documentation and the integration tests that cross the pac
   runs inside the page lives too.
 - `examples/newsroom` — the newsroom example, running. It imports the interface and the
   builder, and it is the only thing that knows PostgreSQL runs inside the page: the in-page
-  database, the seed it installs, the people who sign in without an issuer, the dev-mode
+  database, the files it installs (`models.json`, `migration.sql`, `demo.sql`), the people who sign in without an issuer, the dev-mode
   build and the server that serves it.
 
 `migrations/` holds the installation scripts the CLI applies and the dev-mode build

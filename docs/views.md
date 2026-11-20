@@ -87,10 +87,7 @@ own is laid over it: the three situations are always there.
 
 1. Edit `defaultViews` in `packages/vocabulary/src/core.ts`. Nothing else in the interface or the
    CLI has to change — both build their statements from it.
-2. The seed of the dev-mode build carries the same saying, written out in
-   `examples/newsroom/seed.sql`. Update the rows there too: the test
-   `examples/newsroom/test/seed.test.ts` holds the seed to the default and fails until you do.
-3. Fields that already carry a saying keep it. The default is what a field is _given_, not
+2. Fields that already carry a saying keep it. The default is what a field is _given_, not
    what it is _held to_.
 
 ### Applying a new default to the fields that carry the old one

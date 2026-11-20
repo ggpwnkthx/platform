@@ -93,7 +93,9 @@ The dev mode is the example: `examples/newsroom/platform.json` says how it is bu
 mode, the module that is the database, the module that holds its own renderers, and where the
 site is written — and the CLI reads it.
 The dev mode runs **PostgreSQL 18 inside the page** (PGlite), installed with the real
-`migrations/*.sql` and seeded by `examples/newsroom/seed.sql`: the newsroom workspace with its
+`migrations/*.sql` and then with the example's own three files, as a deployment installs
+them — `models.json` (the schema), `migration.sql` (what a manifest cannot say) and `demo.sql`
+(records and their history): the newsroom workspace with its
 sections, articles and corrections, the crm workspace owned by the group `sales` with its
 accounts, contacts and deals, and their grants, policies, revisions and metadata. The sign-in
 page offers the three example people, admin, alice and bob; choosing one logs that role in,
@@ -183,7 +185,7 @@ reaches the database — and the root of `packages/ui/src` holds the shell of th
 application: the router, the session, the layout, the routes, the configuration, the address
 and the formatting. The PostgreSQL that runs inside the page in dev mode is an example, not
 a part of the interface: it is the package `examples/newsroom`, which depends on the interface
-through its published entry points and owns the seed it installs and the people who sign in.
+through its published entry points and owns the files it installs and the people who sign in.
 
 ## Commands
 
@@ -211,8 +213,8 @@ bun run cli doctor     # server version, authentication rules, installation, wha
 bun run cli token      # sign in through Dex from a terminal; prints a token
 bun run cli token --out=$HOME/.platform-token  # the same, into a file of your own (0600), for PGTOKEN_FILE
 bun run cli lock alice@example.com    # no login, whatever token names it; unlock gives it back
-bun run cli apply local --example --dry-run  # users, groups, workspaces, grants
-bun run cli apply local --example deploy/models/crm.json
+bun run cli apply local --example=newsroom --dry-run  # users, groups, workspaces, grants
+bun run cli apply local team.json                    # a manifest of your own
 bun run cli model:apply deploy/models/crm.json
 bun run cli sql model.sql
 ```

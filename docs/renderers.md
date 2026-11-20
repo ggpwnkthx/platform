@@ -191,7 +191,7 @@ in its `platform.json`, and the build puts it in the seam's place — in the pre
 and in the bundle alike, in a development build and a production one:
 
 ```json
-{ "mode": "development", "database": "database.ts", "extensions": "extensions.tsx", "out": ".dist" }
+{ "mode": "development", "database": "install.ts", "extensions": "extensions.tsx", "out": ".dist" }
 ```
 
 The module is the site's: it is kept beside the site's configuration, it is compiled as the
@@ -200,7 +200,8 @@ example does), and it registers with what `@platform/ui` publishes —
 `@platform/ui/fields/renderers.tsx` and `@platform/ui/fields/registry.ts`, with the types in
 `@platform/ui/fields/types.ts` and the shared helpers in `@platform/ui/fields/text.ts` and
 `@platform/ui/fields/inputs.tsx`. A site that draws with JSX depends on `preact` itself. The
-example's renderer is said of `newsroom.articles.word_count` in the grid by the seed.
+example's renderer is said of `newsroom.articles.word_count` in the grid by the example's
+`models.json`.
 
 ### Icons and colours
 

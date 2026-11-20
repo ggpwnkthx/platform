@@ -512,7 +512,7 @@ example says what it is: the mode it is built in, the module that is the databas
 that holds its own field types and renderers, and where the site is written.
 
 ```json
-{ "mode": "development", "database": "database.ts", "extensions": "extensions.tsx", "out": ".dist" }
+{ "mode": "development", "database": "install.ts", "extensions": "extensions.tsx", "out": ".dist" }
 ```
 
 `extensions` is optional, and it is read in either mode: the build puts the module it names
@@ -526,18 +526,24 @@ relay and the issuer.
 
 In it, PostgreSQL 18 runs inside the page: PGlite (`@electric-sql/pglite`, a dependency of the
 example package),
-installed with the real `migrations/*.sql` and seeded by `examples/newsroom/seed.sql`. The seed is
-what the example manifest and the CRM model would leave behind, with rows: the newsroom
+installed with the real `migrations/*.sql` (the list `migrate` runs,
+`packages/cli/src/migrations.ts`) and then with the example's own files, through the
+same code a deployment applies them with (`examples/newsroom/install.ts`, the example's one
+module: the installation, and the database the build puts in the seam): `models.json` is
+the schema, `migration.sql` is what a manifest cannot say, and `demo.sql` is the records and
+their history. Together they leave the newsroom
 workspace with sections, articles and corrections and its grants and policies; the crm
 workspace, owned by the group `sales`, with accounts, contacts and deals and real foreign
 keys; revisions and metadata. The sign-in page offers the three example people, admin, alice
 and bob. Choosing one logs that role in with `SET SESSION AUTHORIZATION`, so grants, row
 policies and triggers apply as they would on a server. Signing in as someone else reloads the
-page, and the database is kept in IndexedDB across reloads. Clearing the site's storage
-forgets it: the next load starts from the seed again.
+page, and the database is kept in IndexedDB across reloads, under a name made from the
+installation scripts and the example's three files. A change to any of them is another name:
+the next load installs the example again, forgets the database of the earlier build, and with
+it what was written in the page. Clearing the site's storage does the same.
 
 The swap happens at build time: a Bun plugin replaces `packages/ui/src/pg/connect.ts` with
-`examples/newsroom/database.ts`, so PGlite never reaches the production bundle. The example is a
+`examples/newsroom/install.ts`, so PGlite never reaches the production bundle. The example is a
 package of its own (`examples/newsroom/package.json`): it depends on `@platform/ui`, and it is the
 only thing that knows PostgreSQL runs in the page. What it holds is its configuration
 (`platform.json`): the mode it is built in, the module that is the database, the module that

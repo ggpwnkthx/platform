@@ -22,7 +22,9 @@ rather than modified.
 There is one installation script, `migrations/0001_platform.sql`, and it installs 2.3.0 in
 an empty database. The platform has not been released, so nothing earlier is brought
 forward: a database that holds a development version from before 2.3.0 is refused, and is
-made again. The next change to the schema is the next file in `migrations/`.
+made again. The next change to the schema is the next file in `migrations/`, named in
+`packages/cli/src/migrations.ts`: the one list `migrate` runs, and the one a PostgreSQL in a
+page or in a test is installed from.
 
 The interface and the installation are one version. The interface reads the platform's
 schema, and a schema of another version is not one it knows. So an interface built for
@@ -357,7 +359,8 @@ own edge — has no such port in its names at all: `https://idp.<domain>` and
 
 `up` builds the PostgreSQL, relay and installer images, starts PostgreSQL 18 and Dex, waits
 for both, runs the idempotent database installer in a one-off container (`migrate`, image
-`platform-cli:local`, Dockerfile target `cli`), applies the example manifest the same way, then
+`platform-cli:local`, Dockerfile target `cli`), installs the example the deployment chose the same way (`apply k8s --example=NAME`, or
+`--administrator` when it chose none), then
 starts the relay and waits for http://api.localhost:8081/health. The installer is given no
 credentials, because there are none: it shares the volume PostgreSQL's socket is on, where
 PostgreSQL lets its own superuser in, has no network, and is removed when it exits.
