@@ -2,6 +2,8 @@ import type pg from 'pg'
 import { z } from 'zod'
 import {
   addFieldStatement,
+  commentCollectionStatement,
+  collectionTarget,
   commentFieldStatement,
   constraintName,
   fieldColumnSql,
@@ -12,11 +14,16 @@ import {
   type FieldSpec,
   ident,
   indexFieldStatement,
+  type MetadataTarget,
   qualified,
+  renderersKey,
   relationStatement,
   systemFields,
+  transaction,
+  viewsKey,
 } from '@platform/vocabulary'
-import { InputError, transaction } from './database/db.ts'
+// Not the database's own module: a manifest is applied in a page too, where there is no client.
+import { InputError } from './input.ts'
 import { requireInstalledVersion } from './version.ts'
 
 /**
@@ -34,6 +41,12 @@ const typeName = z
   .refine((name) => /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/.test(name), {
     message: 'A type is a name, or a name qualified with the schema it lives in.',
   })
+/**
+ * What an item says of itself: the keys of its own metadata and their values, as they are
+ * kept in `platform.item_metadata`. `display_name`, `icon` and `color` are the ones the
+ * platform reads; any other key is kept and handed back.
+ */
+export const metadataSchema = z.record(z.string().min(1), z.unknown()).default({})
 export const fieldSchema = z.object({
   name: z.string().min(1),
   type: typeName,
@@ -59,6 +72,11 @@ export const fieldSchema = z.object({
    * platform draws it.
    */
   renderers: z.record(z.string(), z.unknown()).optional().default({}),
+  /** What the field says of itself, beside where it appears and how it is drawn. */
+  metadata: metadataSchema.refine(
+    (metadata) => !(viewsKey in metadata) && !(renderersKey in metadata),
+    { message: 'A field says where it appears in `views` and how it is drawn in `renderers`.' }
+  ),
   relation: z
     .object({
       collection: z.string(),
@@ -78,7 +96,15 @@ export const collectionSchema = z.object({
   name: z.string().min(1),
   fields: z.array(fieldSchema).default([]),
   label: z.string().optional(),
+  /** What the collection is for: the comment PostgreSQL keeps on the table. */
   note: z.string().optional(),
+  /**
+   * Whether the collection asks for row policies. A collection is made asking for them;
+   * false is one everybody who may read it reads whole. Omitted leaves it as it is.
+   */
+  row_security: z.boolean().optional(),
+  /** What the collection says of itself. */
+  metadata: metadataSchema,
 })
 export type Field = z.infer<typeof fieldSchema>
 export function fieldSql(field: Field): string {
@@ -142,6 +168,71 @@ export const relationSchema = z.object({
 /** Told what an additive apply did, and what it found already in place. */
 export type Report = { changed(what: string): void; same(): void }
 const silent: Report = { changed: () => undefined, same: () => undefined }
+
+/**
+ * Gives an item the metadata it does not have yet. A key that is already there is left
+ * alone: its owner may have changed it since, and a manifest is applied again and again.
+ */
+export async function describeItem(
+  q: pg.Client,
+  target: MetadataTarget,
+  metadata: Record<string, unknown>,
+  report: Report = silent
+) {
+  const said: string[] = []
+  for (const [key, value] of Object.entries(metadata)) {
+    const written = await q.query(
+      `INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value)
+      VALUES ($1,$2,$3,$4,$5,$6::jsonb)
+      ON CONFLICT (scope, schema_name, coalesce(table_name, ''), coalesce(column_name, ''), key)
+      DO NOTHING`,
+      [target.scope, target.schema, target.table, target.column, key, JSON.stringify(value ?? null)]
+    )
+    if (written.rowCount) said.push(key)
+    else report.same()
+  }
+  if (!said.length) return
+  const item = [target.schema, target.table, target.column].filter(Boolean).join('.')
+  report.changed(`describe ${target.scope} ${item}: ${said.join(', ')}`)
+}
+
+/** What a collection says beside its fields: its comment, its row security, its metadata. */
+async function applyCollectionSettings(
+  q: pg.Client,
+  schema: string,
+  c: z.infer<typeof collectionSchema>,
+  report: Report
+) {
+  const table = qualified(schema, c.name)
+  const held = (
+    await q.query(
+      `SELECT obj_description(oid, 'pg_class') AS note, relrowsecurity AS secured
+        FROM pg_class WHERE oid = to_regclass($1)`,
+      [table]
+    )
+  ).rows[0]
+  if (c.note !== undefined) {
+    if ((held.note ?? '') === c.note.trim()) report.same()
+    else {
+      await q.query(commentCollectionStatement(schema, c.name, c.note))
+      report.changed(`say what ${schema}.${c.name} is for`)
+    }
+  }
+  if (c.row_security !== undefined) {
+    if (held.secured === c.row_security) report.same()
+    else {
+      await q.query(
+        `ALTER TABLE ${table} ${c.row_security ? 'ENABLE' : 'DISABLE'} ROW LEVEL SECURITY`
+      )
+      report.changed(
+        `${c.row_security ? 'ask' : 'stop asking'} ${schema}.${c.name} for row policies`
+      )
+    }
+  }
+  await describeItem(q, collectionTarget(schema, c.name), c.metadata, report)
+  for (const f of c.fields)
+    await describeItem(q, fieldTarget(schema, c.name, f.name), f.metadata, report)
+}
 /** Additive JSON model import. Existing columns are not silently retyped. */
 export async function applyModel(q: pg.Client, raw: unknown) {
   const model = z
@@ -193,6 +284,7 @@ export async function applyCollections(
         if (exists.rows[0].t) report.changed(`add field ${schema}.${c.name}.${f.name}`)
       }
     }
+    await applyCollectionSettings(q, schema, c, report)
   }
   const all = [
     ...relations,

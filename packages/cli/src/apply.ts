@@ -11,8 +11,16 @@ import {
   schemaPrivilegeNames,
   schemaStatement,
   tablePrivilegeNames,
+  workspaceTarget,
 } from '@platform/vocabulary'
-import { applyCollections, collectionSchema, type Report, relationSchema } from './model.ts'
+import {
+  applyCollections,
+  collectionSchema,
+  describeItem,
+  metadataSchema,
+  type Report,
+  relationSchema,
+} from './model.ts'
 
 const name = z.string().min(1)
 const state = z.enum(['present', 'absent']).default('present')
@@ -58,6 +66,8 @@ const workspaceSchema = z.strictObject({
   slug: name,
   name: z.string().optional(),
   owner: name.optional(),
+  /** What the workspace says of itself: the name it is shown under, its icon, its colour. */
+  metadata: metadataSchema,
   collections: z.array(collectionSchema).default([]),
   relations: z.array(relationSchema).default([]),
   grants: z.array(grantSchema).default([]),
@@ -70,7 +80,9 @@ const manifestSchema = z
     groups: z.array(groupSchema).default([]),
     workspaces: z.array(workspaceSchema).default([]),
     // A model file is a manifest of one workspace, written with its contents at the top level.
-    workspace: workspaceSchema.pick({ slug: true, name: true, owner: true }).optional(),
+    workspace: workspaceSchema
+      .pick({ slug: true, name: true, owner: true, metadata: true })
+      .optional(),
     collections: z.array(z.unknown()).optional(),
     relations: z.array(z.unknown()).optional(),
     grants: z.array(z.unknown()).optional(),
@@ -282,6 +294,7 @@ class Run implements Report {
     }
     // Everything inside is made as the owner, so that it owns it and its grants are its own.
     if (w.owner) await q.query(`SET LOCAL ROLE ${ident(w.owner)}`)
+    await describeItem(q, workspaceTarget(w.slug), w.metadata, this)
     await applyCollections(q, w.slug, w.collections, w.relations, this)
     for (const grant of w.grants) await this.grant(w.slug, grant)
     for (const policy of w.policies) await this.policy(w.slug, policy)

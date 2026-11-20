@@ -1,19 +1,13 @@
 import pg from 'pg'
 import { roleOf, transaction } from '@platform/vocabulary'
+import { InputError } from '../input.ts'
 import type { Config } from './config.ts'
 
 /** The transaction the operator's tools run their statements in, written once. */
-export { transaction }
+export { InputError, transaction }
 
 pg.types.setTypeParser(1082, (v) => v)
 pg.types.setTypeParser(1114, (v) => v)
-/** Input the command refuses before PostgreSQL sees it: a malformed token, name or value. */
-export class InputError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'InputError'
-  }
-}
 /** Who a request says it is, and the token PostgreSQL will check that claim against. */
 export type Login = { username: string; token: string }
 /**
