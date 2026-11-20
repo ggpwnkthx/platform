@@ -165,8 +165,11 @@ export function siteOrigins(
   }
 }
 
-/** PostgreSQL in the page, and what makes the seam's database of an example. */
+/** PostgreSQL in the page, and what makes the seam's database of what a folder applies. */
 const inPageModule = join(import.meta.dir, '..', 'in-page.ts')
+
+/** What tells the manifest's schemas not to compile themselves: see the module. */
+const noEvalModule = join(import.meta.dir, '..', 'no-eval.ts')
 
 /**
  * The seam: the interface's own database, replaced by a PostgreSQL that runs in the page,
@@ -182,6 +185,8 @@ export function seamPlugin(files: ApplyFiles): Bun.BunPlugin {
       ? `const ${name} = undefined`
       : `import ${name} from ${JSON.stringify(path)} with { type: 'text' }`
   const contents = [
+    // First, so that it has run before the in-page module's schemas are made.
+    `import ${JSON.stringify(noEvalModule)}`,
     `import { inPage } from ${JSON.stringify(inPageModule)}`,
     `import models from ${JSON.stringify(files.models)}`,
     text('migration', files.migration),
