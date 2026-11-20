@@ -190,6 +190,7 @@ UPDATE crm.deals SET created_by = 'bob@example.com', updated_by = 'bob@example.c
 DELETE FROM platform.activity;
 CREATE TEMP TABLE seed_activity (LIKE platform.activity INCLUDING DEFAULTS);
 ALTER TABLE seed_activity ALTER COLUMN id DROP NOT NULL;
+ALTER TABLE seed_activity ALTER COLUMN relation DROP NOT NULL;
 INSERT INTO seed_activity (at, actor, actor_oid, workspace_owner, schema_name, table_name, operation, after_row)
 SELECT r.created_at, r.created_by, (SELECT oid FROM pg_roles WHERE rolname = r.created_by),
        (SELECT nspowner FROM pg_namespace WHERE nspname = r.s), r.s, r.t, 'INSERT', r.doc
@@ -222,8 +223,11 @@ SELECT now() - (n || ' hours')::interval, who, (SELECT oid FROM pg_roles WHERE r
   FROM (VALUES (5, 'alice@example.com', 'Draft: river crossing timeline'),
                (29, 'bob@example.com', 'Notes for the hustings live blog')) AS w(n, who, title);
 -- In the order they happened, so the newest revision has the highest id, as a trigger would leave it.
-INSERT INTO platform.activity (at, actor, actor_oid, workspace_owner, schema_name, table_name, operation, before_row, after_row)
-SELECT at, actor, actor_oid, workspace_owner, schema_name, table_name, operation, before_row, after_row
+INSERT INTO platform.activity (at, actor, actor_oid, workspace_owner, relation, schema_name, table_name, operation, before_row, after_row)
+SELECT at, actor, actor_oid, workspace_owner,
+       (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = schema_name AND c.relname = table_name),
+       schema_name, table_name, operation, before_row, after_row
   FROM seed_activity ORDER BY at;
 ALTER TABLE newsroom.articles ENABLE TRIGGER USER;
 ALTER TABLE newsroom.corrections ENABLE TRIGGER USER;

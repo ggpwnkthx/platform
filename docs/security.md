@@ -24,7 +24,7 @@ network and the browser assets accordingly.
 | Validation            | PostgreSQL types and CHECK/NOT NULL/UNIQUE/FK constraints                                                                |
 | Write-only clients    | Writes return counts rather than RETURNING *                                                                             |
 | Revisions             | Database triggers log every write, from the interface or any client, in the same transaction                             |
-| Audit confidentiality | Full revisions are readable only by workspace-owner members                                                              |
+| Audit confidentiality | Revisions are readable only by workspace-owner members, and in each row only the columns the reader may SELECT           |
 | Audit integrity       | Normal users cannot write/delete/truncate audit records or disable table triggers                                        |
 | SQL construction      | Quoted identifiers; bound data values; escaped DDL literals                                                              |
 | Protocol              | The page's wire client logs in by OAUTHBEARER and runs one bound statement per query, directly and through the relay     |
@@ -32,7 +32,10 @@ network and the browser assets accordingly.
 
 The only SECURITY DEFINER helper that acts on the database appends real trigger records to
 platform.activity. Its owner is platform_core, with no login or role-administration
-privileges. Public execution is revoked on the functions that act; the read-only helpers
+privileges. The logged rows are read through one view of the same owner, platform.revisions,
+which shows a workspace's owners its history and cuts each row down to the columns the reader
+holds SELECT on in the table it was logged from (`platform.readable_row`); the rows in
+platform.activity itself are granted to nobody. Public execution is revoked on the functions that act; the read-only helpers
 that answer questions about the caller may be executed by anyone who may connect, and each
 answers about the caller alone. Neither application settings nor a user-supplied actor become
 identity inputs. Actor names and role OIDs are recorded; PostgreSQL role renaming does not
@@ -42,8 +45,11 @@ rewrite historical labels.
 
 Superusers, BYPASSRLS roles and object owners are trusted administrators, as in native
 PostgreSQL. Table owners can alter policies, disable/drop triggers, replace tables and change
-ownership. A workspace owner can read its full revision history, including private columns.
-The audit table is append-only for ordinary roles, not tamper-proof against database owners,
+ownership. A workspace owner reads its revision history, but owning the workspace is not a
+right on a column: a column withheld from them in a collection is withheld in its revisions
+too, and the revisions of a table that has been dropped, or of a column that has been dropped
+or renamed, show nothing of it to anyone but an operator reading the log itself. The owner of
+a table holds every column of it, and reads them all. The audit table is append-only for ordinary roles, not tamper-proof against database owners,
 platform_core members or superusers. RLS is not a substitute for withholding table ownership.
 
 Raw SQL executes with the caller's native authority. There is no SQL sandbox or allowlist.

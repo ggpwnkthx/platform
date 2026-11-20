@@ -192,9 +192,8 @@ export function Activity() {
     >
       {!owner && (
         <Notice tone="info" title="Revisions are read by the workspace's owners">
-          Row security on <span class="mono">platform.activity</span> shows a revision only to
-          members of the role that owns its workspace, so the log can never reveal a field your
-          grants hide.
+          <span class="mono">platform.revisions</span> shows a revision only to members of the role
+          that owns its workspace, and in each row only the fields their grants let them read.
         </Notice>
       )}
       {found.error ? (

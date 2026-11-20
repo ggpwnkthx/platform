@@ -38,6 +38,7 @@ export const isSystemWorkspace = (catalog: Catalog, schema: string): boolean =>
 const systemLabels: Record<string, string> = {
   [`${systemSchema}.item_metadata`]: 'key',
   [`${systemSchema}.activity`]: 'operation',
+  [`${systemSchema}.revisions`]: 'operation',
   [`${systemSchema}.installation`]: 'version',
 }
 

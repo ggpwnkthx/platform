@@ -594,7 +594,7 @@ describe('audit and the page’s client', () => {
     ).toBe(1)
     const rows = (
       await owner.query(
-        "SELECT actor,after_row FROM platform.activity WHERE table_name='articles' AND after_row->>'title' IN ('Direct audit','Page audit')"
+        "SELECT actor,after_row FROM platform.revisions WHERE table_name='articles' AND after_row->>'title' IN ('Direct audit','Page audit')"
       )
     ).rows
     expect(rows).toHaveLength(2)
@@ -627,7 +627,9 @@ describe('audit and the page’s client', () => {
     }
   })
   test('readers cannot read full revisions, forge logs or disable audit triggers', async () => {
-    expect((await alice.query('SELECT * FROM platform.activity')).rows).toEqual([])
+    expect((await alice.query('SELECT * FROM platform.revisions')).rows).toEqual([])
+    // The log's own rows are nobody's to read past the revisions: they hold every column.
+    await deny(alice, 'SELECT after_row FROM platform.activity')
     expect(await as('alice', (db) => pageActivity.activity(db, { schema: 'newsroom' }))).toEqual([])
     for (const s of [
       'DELETE FROM platform.activity',
@@ -643,8 +645,11 @@ describe('audit and the page’s client', () => {
       "BEGIN; INSERT INTO newsroom.articles(title) VALUES ('Rolled back'); ROLLBACK"
     )
     expect(
-      (await owner.query("SELECT 1 FROM platform.activity WHERE after_row->>'title'='Rolled back'"))
-        .rowCount
+      (
+        await owner.query(
+          "SELECT 1 FROM platform.revisions WHERE after_row->>'title'='Rolled back'"
+        )
+      ).rowCount
     ).toBe(0)
   })
   test('DELETE and TRUNCATE are recorded', async () => {
@@ -760,7 +765,7 @@ describe('additional database boundaries', () => {
         for (const schema of ['retired_workspace', 'newsroom'])
           expect(Array.isArray(await pageActivity.activity(db, { schema }))).toBe(true)
         // The whole history the reader may see is still readable, with its row security.
-        await pageSql.run(db, 'SELECT * FROM platform.activity')
+        await pageSql.run(db, 'SELECT * FROM platform.revisions')
       })
   })
 })

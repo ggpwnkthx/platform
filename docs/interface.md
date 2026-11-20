@@ -125,7 +125,8 @@ thing:
 - Roles and memberships (`packages/data/src/access/`) through `platform.visible_roles()` and
   `platform.visible_memberships()`, which answer for the reader alone; row policies from
   `pg_policies`; grants from the ACLs through `aclexplode`; the revisions
-  (`packages/data/src/activity/`) from `platform.activity`.
+  (`packages/data/src/activity/`) from `platform.revisions`, where each logged row holds
+  the columns the reader may read and no others.
 - Records (`packages/data/src/content/`) with filters, search, sort, `LIMIT`/`OFFSET` and a
   `count(*)` under the same predicate.
 - Inserts, updates and deletes without RETURNING: the right to write a column is not a right

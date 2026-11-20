@@ -67,6 +67,13 @@ inserts the trigger's OLD/NEW rows and actual session_user into platform.activit
 search_path and qualified audit target avoid object substitution. It accepts no arbitrary SQL
 or actor argument. It can only be invoked as a trigger.
 
+The rows it logs hold every column of a collection, so nobody is granted them. They are read
+through `platform.revisions`, a view of platform_core's with the log's own rule in it: a
+workspace's owners read its revisions, and `platform.readable_row` cuts each logged row down
+to the columns the reader holds SELECT on in the table it came from, which the log names by
+OID. What happened — who, when, to which collection — is readable in platform.activity under
+the same rule.
+
 A collection receives UUID identity, creation/update timestamps, actor role names and a
 monotonic version. BEFORE triggers stamp metadata; AFTER triggers record revisions in the
 same transaction. Failed and rolled-back changes leave no committed revision.
@@ -101,7 +108,7 @@ questions themselves are the platform's own, and they are asked of PostgreSQL in
 `packages/data`: the catalog is read with PostgreSQL's privilege functions; the roles and
 memberships through `platform.visible_roles()` and `platform.visible_memberships()`, policies
 from `pg_policies`, grants from the ACLs through `aclexplode`; the revisions from
-`platform.activity`; the records with filters, search, sort, paging and a row count, written
+`platform.revisions`; the records with filters, search, sort, paging and a row count, written
 without RETURNING, and guarded on update by the version the reader saw
 (`WHERE id = $n AND version = $m`). The DDL and the DCL — collections, fields, grants,
 policies, memberships and roles — are the vocabulary's own, in `packages/vocabulary`, and the

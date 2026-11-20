@@ -96,6 +96,7 @@ describe('the platform’s own workspace', () => {
       'activity',
       'installation',
       'item_metadata',
+      'revisions',
     ])
     for (const table of read.tables) expect(table.system).toBe(table.schema === 'platform')
   })
@@ -123,7 +124,10 @@ describe('the platform’s own workspace', () => {
     )
     // Metadata is written by whoever may write its item; the rest is read, and no more.
     expect(rights.item_metadata).toEqual([true, true, true, true])
-    expect(rights.activity).toEqual([true, false, false, false])
+    // The log itself is not read whole: its rows hold every column of a collection, so they
+    // are read through the revisions, cut down to the columns the reader may read.
+    expect(rights.activity).toEqual([false, false, false, false])
+    expect(rights.revisions).toEqual([true, false, false, false])
     expect(rights.installation).toEqual([true, false, false, false])
   })
 
@@ -131,6 +135,7 @@ describe('the platform’s own workspace', () => {
     const read = await as('alice@example.com', () => catalog(db))
     expect(labelColumn(read, 'platform', 'item_metadata')).toBe('key')
     expect(labelColumn(read, 'platform', 'activity')).toBe('operation')
+    expect(labelColumn(read, 'platform', 'revisions')).toBe('operation')
     expect(labelColumn(read, 'platform', 'installation')).toBe('version')
   })
 })
@@ -155,6 +160,8 @@ describe('the rows of a system collection', () => {
     // Revisions reach a workspace's owners: alice owns none, bob is one of the crm's.
     expect(await count('alice@example.com', 'activity')).toBe(0)
     expect(await count('bob@example.com', 'activity')).toBeGreaterThan(0)
+    expect(await count('alice@example.com', 'revisions')).toBe(0)
+    expect(await count('bob@example.com', 'revisions')).toBeGreaterThan(0)
     // Metadata reaches whoever may reach its item, so not everyone reads the same rows.
     const alice = await count('alice@example.com', 'item_metadata')
     const bob = await count('bob@example.com', 'item_metadata')

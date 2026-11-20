@@ -92,8 +92,8 @@ describe('a hardened database, asked by someone who is not an operator', () => {
 
   test('a revision whose workspace has lost its owner reaches nobody', async () => {
     await pg.exec(`INSERT INTO platform.activity
-      (actor, actor_oid, workspace_owner, schema_name, table_name, operation)
-      VALUES ('gone@example.com', 0, 4000000000, 'gone', 'things', 'INSERT')`)
+      (actor, actor_oid, workspace_owner, relation, schema_name, table_name, operation)
+      VALUES ('gone@example.com', 0, 4000000000, 0, 'gone', 'things', 'INSERT')`)
     const orphans = "SELECT count(*)::int AS n FROM platform.activity WHERE schema_name = 'gone'"
     expect(await count(orphans)).toBe(1)
     expect(await as('bob@example.com', () => count(orphans))).toBe(0)

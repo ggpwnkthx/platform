@@ -61,6 +61,9 @@ CREATE TABLE platform.activity (
   actor text NOT NULL,
   actor_oid oid NOT NULL,
   workspace_owner oid NOT NULL,
+  -- The table the row was in, as PostgreSQL knows it: a name can be given to another table,
+  -- and the rights on a row's columns are the rights on this one.
+  relation oid NOT NULL,
   schema_name text NOT NULL,
   table_name text NOT NULL,
   operation text NOT NULL,
@@ -69,13 +72,48 @@ CREATE TABLE platform.activity (
 );
 CREATE INDEX ON platform.activity(schema_name,table_name,at);
 ALTER TABLE platform.activity ENABLE ROW LEVEL SECURITY;
-GRANT SELECT ON platform.activity TO platform_users;
--- Only workspace owners (or members inheriting the owner's rights) see full revisions.
+-- What happened, to whom it may be told: every column but the rows themselves. The rows hold
+-- every column of the collection, whatever its column grants say, so they are read through
+-- platform.revisions, below, and from this table by its owner's members alone.
+GRANT SELECT (id,at,transaction_id,actor,actor_oid,workspace_owner,relation,schema_name,table_name,operation)
+  ON platform.activity TO platform_users;
+-- Only workspace owners (or members inheriting the owner's rights) see revisions.
 -- Letting all actors read their own entries would leak columns hidden by column GRANTs.
 -- The policy runs as the reader, so it asks PostgreSQL and reads no catalog: pg_roles may be
 -- hidden from the reader (`cli harden`). An owner that has been dropped is nobody's role.
 CREATE POLICY owner_reads ON platform.activity FOR SELECT TO platform_users
   USING (pg_has_role(session_user,workspace_owner,'USAGE'));
+
+-- A logged row, as the reader may read it: the columns they hold SELECT on, in the table the
+-- row was in, and no others. Owning the workspace is not a right on a column: a field that is
+-- withheld from a reader in the collection is withheld from them in its history too. The
+-- table is the one the row was logged from, by its OID: a table that has been dropped has no
+-- columns anybody may read, and another table given its name is another table. A column that
+-- has been dropped or renamed is not a column of it any more, and is not shown.
+CREATE FUNCTION platform.readable_row(p_relation oid, p_row jsonb) RETURNS jsonb
+LANGUAGE sql STABLE SET search_path = pg_catalog, pg_temp AS $$
+  SELECT CASE WHEN p_row IS NOT NULL THEN coalesce((
+    SELECT jsonb_object_agg(e.key, e.value)
+      FROM jsonb_each(p_row) e
+      JOIN pg_attribute a ON a.attrelid = p_relation AND a.attname = e.key
+       AND a.attnum > 0 AND NOT a.attisdropped
+     WHERE has_column_privilege(session_user, p_relation, a.attnum, 'SELECT')
+  ), '{}'::jsonb) END
+$$;
+GRANT EXECUTE ON FUNCTION platform.readable_row(oid, jsonb) TO platform_users;
+
+-- The revisions a reader may read, with the rows cut down to the columns they may read. It
+-- reads the log with its owner's rights, so it carries the log's own rule: a workspace's
+-- owners, asked of PostgreSQL as the policy above asks. A barrier, so that nothing the
+-- reader writes into a query is run on a row before that rule has passed it.
+CREATE VIEW platform.revisions WITH (security_barrier) AS
+  SELECT a.id, a.at, a.transaction_id, a.actor, a.actor_oid, a.workspace_owner, a.relation,
+         a.schema_name, a.table_name, a.operation,
+         platform.readable_row(a.relation, a.before_row) AS before_row,
+         platform.readable_row(a.relation, a.after_row) AS after_row
+    FROM platform.activity a
+   WHERE pg_has_role(session_user, a.workspace_owner, 'USAGE');
+GRANT SELECT ON platform.revisions TO platform_users;
 
 CREATE FUNCTION platform.stamp() RETURNS trigger
 LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog AS $$
@@ -105,8 +143,8 @@ DECLARE owner_oid oid;
 BEGIN
   SELECT n.nspowner INTO STRICT owner_oid FROM pg_class c
     JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.oid=TG_RELID;
-  INSERT INTO platform.activity(actor,actor_oid,workspace_owner,schema_name,table_name,operation,before_row,after_row)
-  VALUES (session_user,(SELECT oid FROM pg_roles WHERE rolname=session_user),owner_oid,
+  INSERT INTO platform.activity(actor,actor_oid,workspace_owner,relation,schema_name,table_name,operation,before_row,after_row)
+  VALUES (session_user,(SELECT oid FROM pg_roles WHERE rolname=session_user),owner_oid,TG_RELID,
           TG_TABLE_SCHEMA,TG_TABLE_NAME,TG_OP,
           CASE WHEN TG_OP IN ('UPDATE','DELETE') THEN to_jsonb(OLD) END,
           CASE WHEN TG_OP IN ('INSERT','UPDATE') THEN to_jsonb(NEW) END);
