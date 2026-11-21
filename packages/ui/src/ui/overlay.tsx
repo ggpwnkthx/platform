@@ -5,6 +5,21 @@ import { Button } from './button.tsx'
 import { CloseIcon } from './icons.tsx'
 
 /**
+ * The native dialog element, opened and closed as it should be: shown as a modal when it is
+ * to be open, closed when it is not.
+ */
+function useDialog(open: boolean) {
+  const ref = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    const dialog = ref.current
+    if (!dialog) return
+    if (open && !dialog.open) dialog.showModal()
+    if (!open && dialog.open) dialog.close()
+  }, [open])
+  return ref
+}
+
+/**
  * A drawer from the right, on the native dialog element: it traps focus, closes on Escape
  * and returns focus where it came from, as the platform does.
  */
@@ -25,13 +40,7 @@ export function Drawer({
   footer?: ComponentChildren
   wide?: boolean
 }) {
-  const ref = useRef<HTMLDialogElement>(null)
-  useEffect(() => {
-    const dialog = ref.current
-    if (!dialog) return
-    if (open && !dialog.open) dialog.showModal()
-    if (!open && dialog.open) dialog.close()
-  }, [open])
+  const ref = useDialog(open)
   // A click on the backdrop closes it; the keyboard closes it with Escape, through onCancel.
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: Escape closes it, through the dialog's cancel event
@@ -85,13 +94,7 @@ export function Confirm({
   onConfirm: () => void
   onClose: () => void
 }) {
-  const ref = useRef<HTMLDialogElement>(null)
-  useEffect(() => {
-    const dialog = ref.current
-    if (!dialog) return
-    if (open && !dialog.open) dialog.showModal()
-    if (!open && dialog.open) dialog.close()
-  }, [open])
+  const ref = useDialog(open)
   return (
     <dialog
       ref={ref}
