@@ -20,5 +20,61 @@
   ],
 
   // These two override node-postgres internals; it calls them, we never do.
-  "usedClassMembers": ["_handleAuthSASL*"]
+  "usedClassMembers": ["_handleAuthSASL*"],
+
+  // The packages are layers: vocabulary and pg-client are the bottom, data reads the
+  // database through vocabulary, ui is the interface over data, cli is the operator's
+  // tools over ui. A layer may use the ones below it and never the ones above.
+  "boundaries": {
+    "zones": [
+      // The tests are held apart from what they test: a test may reach where the code
+      // under it may not. The first pattern that matches a file is its zone.
+      { "name": "cli-test", "patterns": ["packages/cli/test/**", "test/**"] },
+      { "name": "ui-test", "patterns": ["packages/ui/test/**"] },
+      { "name": "data-test", "patterns": ["packages/data/test/**"] },
+      { "name": "vocabulary", "patterns": ["packages/vocabulary/**"] },
+      { "name": "pg-client", "patterns": ["packages/pg-client/**"] },
+      { "name": "data", "patterns": ["packages/data/**"] },
+      { "name": "ui", "patterns": ["packages/ui/**"] },
+      { "name": "cli", "patterns": ["packages/cli/src/**"] },
+      { "name": "relay", "patterns": ["packages/relay/**"] },
+      { "name": "examples", "patterns": ["examples/**"] }
+    ],
+    "rules": [
+      // The bottom two know nothing of the rest: they are what the rest is written on.
+      { "from": "vocabulary", "allow": [] },
+      { "from": "pg-client", "allow": [] },
+      // data reads the database; it writes SQL through vocabulary and speaks no UI.
+      { "from": "data", "allow": ["vocabulary"] },
+      // ui is the interface: it reads through data and speaks to the wire itself.
+      { "from": "ui", "allow": ["data", "pg-client", "vocabulary"] },
+      // cli is the operator's tools: they build the interface and write the manifest.
+      { "from": "cli", "allow": ["ui", "pg-client", "vocabulary"] },
+      // The relay stands alone: it is the server, and it reaches nothing of the rest.
+      { "from": "relay", "allow": [] },
+      // A folder is applied by the operator's tools, so an example reaches for them;
+      // the example's own files are the ones a deployment applies.
+      { "from": "examples", "allow": ["cli", "ui", "data", "vocabulary"] },
+      // A test may reach the code it holds, and the example is the fixture the
+      // operator's own tests are written against.
+      { "from": "cli-test", "allow": ["cli", "ui", "data", "pg-client", "vocabulary", "examples"] },
+      { "from": "ui-test", "allow": ["ui", "data", "pg-client", "vocabulary"] },
+      { "from": "data-test", "allow": ["data", "vocabulary"] }
+    ]
+  },
+
+  // The house rules, kept as data so they are checked on every run.
+  "rulePacks": ["./fallow/platform-policy.json"],
+
+  // The complexity of the code that is already written is a fact, not a failure of the
+  // change in front of you: it is reported, and it does not fail the build. The rules
+  // that are about a change — a boundary crossed, a house rule broken — do fail it.
+  "rules": {
+    "complexity-cyclomatic": "warn",
+    "complexity-cognitive": "warn",
+    "complexity-crap": "warn",
+    "complexity-file-lines": "warn",
+    "boundary-violation": "error",
+    "policy-violation": "error"
+  }
 }
