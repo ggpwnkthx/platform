@@ -12,7 +12,8 @@
       "!packages/ui/dist",
       "!examples/newsroom/.dist",
       "!**/.impeccable",
-      "!deploy/dex/password.html"
+      "!deploy/dex/password.html",
+      "!fallow-baselines"
     ]
   },
   "linter": {

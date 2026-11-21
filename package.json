@@ -22,7 +22,8 @@
     "lint": "biome lint .",
     "format": "biome format --write .",
     "format:check": "biome format .",
-    "check": "bun run build:ui && bun run examples:newsroom:build && bun run typecheck && bun run lint && bun run format:check && bun test"
+    "check": "bun run build:ui && bun run examples:newsroom:build && bun run typecheck && bun run lint && bun run format:check && bun test",
+    "fallow:baseline": "npx --yes fallow@3.45.0 dead-code --save-baseline fallow-baselines/dead-code.json && npx --yes fallow@3.45.0 dupes --save-baseline fallow-baselines/dupes.json"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.8",
