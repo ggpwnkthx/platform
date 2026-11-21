@@ -2,10 +2,16 @@ import { describe, expect, test } from 'bun:test'
 import { render } from 'preact-render-to-string'
 import type { Catalog, ColumnInfo } from '@platform/data'
 import { fieldText, fieldValue, filterStart, filterValue, isWide } from '../src/fields/edit.ts'
-import { fieldTypeFor, fieldTypeNamed, registerFieldType } from '../src/fields/registry.ts'
+import { placeholderOf } from '../src/fields/inputs.tsx'
+import {
+  fieldTypeFor,
+  fieldTypeNamed,
+  knownFieldTypes,
+  registerFieldType,
+} from '../src/fields/registry.ts'
 import { Value } from '../src/fields/renderers.tsx'
 import { describeField, resolveFields } from '../src/fields/resolve.ts'
-import type { Field } from '../src/fields/types.ts'
+import type { Field, InputProps } from '../src/fields/types.ts'
 
 /**
  * What a field is. A field's type owns everything the interface does with it — the cell, the
@@ -328,5 +334,33 @@ describe('A field, in the filters', () => {
     expect(filterValue(named('title'), 'contains', 'news')).toBe('news')
     expect(filterValue(named('status'), 'in', 'draft, published,')).toEqual(['draft', 'published'])
     expect(filterValue(named('title'), 'is_null', 'ignored')).toBeNull()
+  })
+})
+
+describe('The types the interface holds', () => {
+  test('every type it holds is named, and the text type is one of them', () => {
+    const names = knownFieldTypes().map((type) => type.name)
+    expect(names).toContain('text')
+    expect(new Set(names).size).toBe(names.length)
+  })
+
+  test('an empty input says what the database will write, or what the type expects', () => {
+    const withDefault = {
+      ...named('title'),
+      column: { ...named('title').column, default: "'draft'::text" },
+    }
+    const input = (field: Field, creating: boolean): InputProps => ({
+      field,
+      id: `field-${field.name}`,
+      text: '',
+      onChange: () => {},
+      disabled: false,
+      creating,
+      wide: false,
+    })
+    expect(placeholderOf(input(withDefault, true))).toBe('Default: draft')
+    // What is stored is not what a new record starts with.
+    expect(placeholderOf(input(withDefault, false), 'A title')).toBe('A title')
+    expect(placeholderOf(input(named('title'), true), 'A title')).toBe('A title')
   })
 })
