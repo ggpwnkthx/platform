@@ -23,7 +23,7 @@ import {
   situations,
 } from '@platform/vocabulary'
 import { useLoad, useSession } from '../session.tsx'
-import { Page, useWorkspace } from '../shell.tsx'
+import { Page, useWorkspace, useWorkspaceView } from '../shell.tsx'
 import { shortType } from '../format.ts'
 import {
   choicesOf,
@@ -41,6 +41,7 @@ import { href } from '../url.ts'
 import { Badge, Empty, Notice, Statement } from '../ui/bits.tsx'
 import { Action, Button } from '../ui/button.tsx'
 import { Checkbox, Field, Input, Select, TextArea } from '../ui/form.tsx'
+import { Grid } from '../ui/grid.tsx'
 import {
   BooleanIcon,
   ChevronRightIcon,
@@ -87,7 +88,7 @@ const typeIcons: Record<string, typeof TextIcon> = {
 const iconOfType = (type: string): typeof TextIcon => typeIcons[type] ?? TagIcon
 
 /** Builds one field: its type, its name and the constraints the database will hold it to. */
-export function FieldEditor({
+function FieldEditor({
   field,
   onChange,
   collections,
@@ -346,10 +347,7 @@ function usePreview(
 }
 
 export function ModelHome() {
-  const { catalog, presentations } = useSession()
-  const ws = useWorkspace()
-  const schema = catalog.schemas.find((s) => s.name === ws)
-  const shown = presentationOf(presentations, ws)
+  const { ws, schema, shown, catalog } = useWorkspaceView()
   const tables = tablesIn(catalog, ws)
   return (
     <Page
@@ -368,57 +366,45 @@ export function ModelHome() {
       }
     >
       {tables.length ? (
-        <div class="grid-wrap">
-          <table class="grid">
-            <thead>
-              <tr>
-                <th>Collection</th>
-                <th>Fields</th>
-                <th>Relations</th>
-                <th>Owner</th>
-                <th>Row security</th>
-                <th>Your rights</th>
-                <th>Note</th>
+        <Grid
+          head={[
+            'Collection',
+            'Fields',
+            'Relations',
+            'Owner',
+            'Row security',
+            'Your rights',
+            'Note',
+          ]}
+        >
+          {tables.map((t) => {
+            const columns = columnsOf(catalog, ws, t.name)
+            const relations = catalog.relations.filter((r) => r.schema === ws && r.table === t.name)
+            return (
+              <tr key={t.name}>
+                <td>
+                  <a class="grid-open strong" href={href('/model/collection', { ws, c: t.name })}>
+                    <CollectionIcon size={16} aria-hidden="true" /> {t.name}
+                  </a>
+                </td>
+                <td class="is-number mono">
+                  {columns.filter((c) => !systemColumns.includes(c.name)).length}
+                </td>
+                <td class="cell-muted">{relations.map((r) => r.target_table).join(', ') || '—'}</td>
+                <td class="mono">{t.owner}</td>
+                <td>{t.rls ? <Badge tone="primary">On</Badge> : <Badge>Off</Badge>}</td>
+                <td>
+                  <Rights table={t} columns={columns} compact />
+                </td>
+                <td class="cell-muted">
+                  <span class="clip clip-narrow" title={t.comment ?? undefined}>
+                    {t.comment}
+                  </span>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {tables.map((t) => {
-                const columns = columnsOf(catalog, ws, t.name)
-                const relations = catalog.relations.filter(
-                  (r) => r.schema === ws && r.table === t.name
-                )
-                return (
-                  <tr key={t.name}>
-                    <td>
-                      <a
-                        class="grid-open strong"
-                        href={href('/model/collection', { ws, c: t.name })}
-                      >
-                        <CollectionIcon size={16} aria-hidden="true" /> {t.name}
-                      </a>
-                    </td>
-                    <td class="is-number mono">
-                      {columns.filter((c) => !systemColumns.includes(c.name)).length}
-                    </td>
-                    <td class="cell-muted">
-                      {relations.map((r) => r.target_table).join(', ') || '—'}
-                    </td>
-                    <td class="mono">{t.owner}</td>
-                    <td>{t.rls ? <Badge tone="primary">On</Badge> : <Badge>Off</Badge>}</td>
-                    <td>
-                      <Rights table={t} columns={columns} compact />
-                    </td>
-                    <td class="cell-muted">
-                      <span class="clip clip-narrow" title={t.comment ?? undefined}>
-                        {t.comment}
-                      </span>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+            )
+          })}
+        </Grid>
       ) : (
         <Empty icon={<CollectionIcon size={28} />} title="No collection here yet">
           {schema?.can_create
@@ -466,7 +452,10 @@ export function CollectionModel() {
   if (!info)
     return (
       <Page title={table || 'Collection'} icon={<CollectionIcon size={22} />}>
-        <Notice tone="warning" title={`The database shows you no collection named ${ws}.${table}`} />
+        <Notice
+          tone="warning"
+          title={`The database shows you no collection named ${ws}.${table}`}
+        />
       </Page>
     )
   const constraintsOf = (column: string) =>
@@ -773,8 +762,8 @@ export function CollectionModel() {
             </table>
             {!owner && (
               <p class="grid-note">
-                <LockIcon size={14} aria-hidden="true" /> The database gives ALTER TABLE to the owner,{' '}
-                {info.owner}, and its members.
+                <LockIcon size={14} aria-hidden="true" /> The database gives ALTER TABLE to the
+                owner, {info.owner}, and its members.
               </p>
             )}
           </div>

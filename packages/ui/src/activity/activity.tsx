@@ -3,12 +3,12 @@ import { useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import { activity, type ActivityInfo } from '@platform/data'
 import { ago, display, moment } from '../format.ts'
-import { describe, useLoad, useSession } from '../session.tsx'
-import { Page, useWorkspace } from '../shell.tsx'
-import { presentationOf } from '@platform/data'
+import { describe, useLoad } from '../session.tsx'
+import { Page, useWorkspaceView } from '../shell.tsx'
 import { href } from '../url.ts'
 import { Badge, type BadgeTone, Empty, Loading, Notice } from '../ui/bits.tsx'
 import { Button } from '../ui/button.tsx'
+import { Grid } from '../ui/grid.tsx'
 import { ActivityIcon, HistoryIcon } from '../ui/icons.tsx'
 import { Drawer } from '../ui/overlay.tsx'
 
@@ -20,7 +20,7 @@ const operations: Record<string, { label: string; tone: BadgeTone }> = {
 }
 
 /** What a revision's row is called: its title or name, else the start of its id. */
-export function recordLabel(entry: ActivityInfo): string {
+function recordLabel(entry: ActivityInfo): string {
   const row = entry.after_row ?? entry.before_row ?? {}
   for (const key of ['title', 'name', 'full_name', 'label', 'wording']) {
     const value = row[key]
@@ -33,7 +33,7 @@ export function recordLabel(entry: ActivityInfo): string {
 const rowId = (entry: ActivityInfo) => display(entry.after_row?.id ?? entry.before_row?.id ?? '')
 
 /** The fields a revision changed: every field, for a creation or a deletion. */
-export function changes(entry: ActivityInfo): { field: string; before: unknown; after: unknown }[] {
+function changes(entry: ActivityInfo): { field: string; before: unknown; after: unknown }[] {
   const before = entry.before_row ?? {}
   const after = entry.after_row ?? {}
   const fields = [...new Set([...Object.keys(before), ...Object.keys(after)])]
@@ -45,13 +45,7 @@ export function changes(entry: ActivityInfo): { field: string; before: unknown; 
     .map((field) => ({ field, before: before[field], after: after[field] }))
 }
 
-export function RevisionDrawer({
-  entry,
-  onClose,
-}: {
-  entry: ActivityInfo | null
-  onClose: () => void
-}) {
+function RevisionDrawer({ entry, onClose }: { entry: ActivityInfo | null; onClose: () => void }) {
   return (
     <Drawer
       open={entry !== null}
@@ -160,18 +154,16 @@ export function RevisionList({
 }
 
 export function Activity() {
-  const { catalog, presentations } = useSession()
   const location = useLocation()
-  const ws = useWorkspace()
+  const { ws, schema, shown } = useWorkspaceView()
   const table = location.query.c
-  const shown = presentationOf(presentations, ws)
   const [before, setBefore] = useState<number | undefined>(undefined)
   const [open, setOpen] = useState<ActivityInfo | null>(null)
   const found = useLoad(
     ws ? (db) => activity(db, { schema: ws, table, before, limit: 100 }) : null,
     [ws, table, before]
   )
-  const owner = catalog.schemas.find((s) => s.name === ws)?.can_alter
+  const owner = schema?.can_alter
   const entries = found.data ?? []
   return (
     <Page
@@ -202,59 +194,41 @@ export function Activity() {
         <Loading />
       ) : entries.length ? (
         <>
-          <div class="grid-wrap">
-            <table class="grid">
-              <thead>
-                <tr>
-                  <th>Action</th>
-                  <th>Collection</th>
-                  <th>Record</th>
-                  <th>Changed</th>
-                  <th>By</th>
-                  <th>When</th>
+          <Grid head={['Action', 'Collection', 'Record', 'Changed', 'By', 'When']}>
+            {entries.map((entry) => {
+              const op = operations[entry.operation] ?? {
+                label: entry.operation,
+                tone: 'neutral' as BadgeTone,
+              }
+              const changed = changes(entry)
+              return (
+                <tr key={entry.id} class="is-link" onClick={() => setOpen(entry)}>
+                  <td>
+                    <Badge tone={op.tone}>{op.label}</Badge>
+                  </td>
+                  <td class="mono">{entry.table_name}</td>
+                  <td>
+                    <button type="button" class="link-button clip" onClick={() => setOpen(entry)}>
+                      {recordLabel(entry) || '—'}
+                    </button>
+                  </td>
+                  <td class="cell-muted">
+                    {entry.operation === 'UPDATE'
+                      ? changed.map((c) => c.field).join(', ')
+                      : entry.operation === 'TRUNCATE'
+                        ? 'every row'
+                        : `${changed.length} fields`}
+                  </td>
+                  <td class="mono">{entry.actor}</td>
+                  <td>
+                    <time dateTime={entry.at} title={moment(entry.at)}>
+                      {ago(entry.at)}
+                    </time>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {entries.map((entry) => {
-                  const op = operations[entry.operation] ?? {
-                    label: entry.operation,
-                    tone: 'neutral' as BadgeTone,
-                  }
-                  const changed = changes(entry)
-                  return (
-                    <tr key={entry.id} class="is-link" onClick={() => setOpen(entry)}>
-                      <td>
-                        <Badge tone={op.tone}>{op.label}</Badge>
-                      </td>
-                      <td class="mono">{entry.table_name}</td>
-                      <td>
-                        <button
-                          type="button"
-                          class="link-button clip"
-                          onClick={() => setOpen(entry)}
-                        >
-                          {recordLabel(entry) || '—'}
-                        </button>
-                      </td>
-                      <td class="cell-muted">
-                        {entry.operation === 'UPDATE'
-                          ? changed.map((c) => c.field).join(', ')
-                          : entry.operation === 'TRUNCATE'
-                            ? 'every row'
-                            : `${changed.length} fields`}
-                      </td>
-                      <td class="mono">{entry.actor}</td>
-                      <td>
-                        <time dateTime={entry.at} title={moment(entry.at)}>
-                          {ago(entry.at)}
-                        </time>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+              )
+            })}
+          </Grid>
           <footer class="pager">
             <span>{entries.length} revisions</span>
             <span class="pager-nav">
