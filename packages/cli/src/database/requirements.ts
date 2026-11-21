@@ -56,10 +56,13 @@ const auditTrigger = `NOT t.tgisinternal AND t.tgfoid = to_regprocedure('platfor
 /** The schemas that hold an installation's own collections: not PostgreSQL's, not the platform's. */
 const ownSchemas = `n.nspname NOT IN ('platform','information_schema') AND n.nspname !~ '^pg_'`
 
+/** How many names a note names before it says how many more there are. */
+const mostNamed = 10
+
 /** The first few of a list, and how many more there are. */
-const some = (names: string[], most = 10) =>
-  names.length > most
-    ? `${names.slice(0, most).join(', ')} and ${names.length - most} more`
+const some = (names: string[]) =>
+  names.length > mostNamed
+    ? `${names.slice(0, mostNamed).join(', ')} and ${names.length - mostNamed} more`
     : names.join(', ')
 
 /**

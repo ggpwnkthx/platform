@@ -80,7 +80,7 @@ export async function grants(db: DataSource, schema: string): Promise<GrantInfo[
  * for the role rather than pg_roles for a row: the catalog may be hidden from the reader
  * (`cli harden`), and the answer is the same.
  */
-const isRole = (name: string) => `to_regrole(quote_ident(${name})) IS NOT NULL`
+const isRole = `to_regrole(quote_ident(name)) IS NOT NULL`
 
 const asked = `
   SELECT r.name FROM platform.visible_roles() r WHERE r.name NOT LIKE 'pg\\_%' ESCAPE '\\'
@@ -120,7 +120,7 @@ export async function reach(
     `
     WITH w AS (SELECT name FROM (${asked}) known
                 WHERE ($2::text IS NULL OR name = $2)
-                  AND (name = 'public' OR ${isRole('name')}))
+                  AND (name = 'public' OR ${isRole}))
     SELECT w.name AS role, c.relname::text AS table,
            has_schema_privilege(w.name::name, n.oid, 'USAGE') AS usage,
            ${hold('SELECT')} AS select, ${hold('INSERT')} AS insert,
@@ -142,7 +142,7 @@ export async function schemaReach(db: DataSource, schema: string): Promise<Schem
   const result = await db.query<SchemaReachInfo>(
     `
     WITH w AS (SELECT name FROM (${asked}) known
-                WHERE name = 'public' OR ${isRole('name')})
+                WHERE name = 'public' OR ${isRole})
     SELECT w.name AS role,
            has_schema_privilege(w.name::name, n.oid, 'USAGE') AS usage,
            has_schema_privilege(w.name::name, n.oid, 'CREATE') AS create

@@ -1,4 +1,4 @@
-import type { LucideIcon, LucideProps } from 'lucide-preact'
+import type { LucideIcon } from 'lucide-preact'
 import {
   AudioLines,
   Bell,
@@ -102,7 +102,6 @@ export {
   Users as GroupIcon,
   X as CloseIcon,
 } from 'lucide-preact'
-export type { LucideProps }
 
 /**
  * The icons a workspace or a collection may carry. One set, one stroke and one weight, so a
