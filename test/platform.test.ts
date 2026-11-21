@@ -26,17 +26,16 @@ import * as pageIdentity from '../packages/data/src/identity/query.ts'
 import { transaction as pageTransaction } from '../packages/vocabulary/src/index.ts'
 import * as pageSql from '../packages/ui/src/sql/query.ts'
 import type { Connection } from '../packages/pg-client/src/wire.ts'
-import { administrator, adminRole, adminUrl, serverSuperuser } from './administrator.ts'
-import { startIssuer } from './issuer.ts'
-import { openPage, refusal } from './page.ts'
+import { adminRole, adminUrl, serverSuperuser } from './administrator.ts'
+import { refusal } from './page.ts'
+import { prefix, world, type World } from './world.ts'
 
 const url = new URL(adminUrl)
-const prefix = `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
-const dbName = `${prefix}_db`
-const role = (name: string) => `${prefix}_${name}`
+let w: World
+/** The name of a role in this world: one person among the others. */
+const role = (name: string) => w.role(name)
 // The test server is started trusting this issuer: see docs/operations.md.
 const issuerUrl = process.env.TEST_OIDC_ISSUER ?? 'http://127.0.0.1:54330'
-const issuer = startIssuer(issuerUrl)
 const roles = [
   'owner',
   'alice',
@@ -50,42 +49,26 @@ const roles = [
 ]
 /** Roles that only the declarative apply tests create. */
 const applied = ['ap_admin', 'ap_ann', 'ap_editors', 'ap_new']
-let root: pg.Client, admin: pg.Client, owner: pg.Client, alice: pg.Client, bob: pg.Client
+let owner: pg.Client, alice: pg.Client, bob: pg.Client
 let aliceId: string, bobId: string
-let started = false
 /** What the CLI reads from its environment to reach the test database. */
 const cliEnv = {
   APP_ENV: 'test',
   OIDC_ISSUER: issuerUrl,
   DATABASE_HOST: url.hostname,
   DATABASE_PORT: url.port || '5432',
-  DATABASE_NAME: dbName,
+  DATABASE_NAME: '',
   DATABASE_SSL: process.env.TEST_DATABASE_SSL ?? 'disable',
 }
-const endpoint = {
-  host: url.hostname,
-  port: Number(url.port || 5432),
-  database: dbName,
-  ssl: process.env.TEST_DATABASE_SSL === 'require' ? { rejectUnauthorized: true } : false,
-}
+/** The issuer whose tokens the roles sign in with. */
+const issuer = () => w.issuer
 /** A direct connection, as psql would make it: the role, and a token that names it. */
-async function connect(name: string, token = issuer.mint(role(name))) {
-  const q = new TokenClient({ ...endpoint, user: role(name) }, token)
-  q.on('error', () => undefined)
-  await q.connect()
-  return q
-}
+const connect = (name: string, token?: string) => w.connect(name, token)
 /** The page's own client, signed in as this person with a token the issuer minted for them. */
-const signIn = (name: string, token = issuer.mint(role(name))) =>
-  openPage(url, role(name), dbName, token)
+const signIn = (name: string, token?: string) => w.signIn(name, token)
 /** Runs some work in the page's client as this person, then signs them out. */
 async function as<T>(name: string, work: (db: Connection) => Promise<T>): Promise<T> {
-  const db = await signIn(name)
-  try {
-    return await work(db)
-  } finally {
-    db.close()
-  }
+  return w.as(name, work)
 }
 /** The columns of a collection this reader may read, as the catalog reports them. */
 async function readable(db: Connection, schema: string, table: string) {
@@ -126,26 +109,12 @@ async function deny(q: pg.Client, text: string, code = '42501') {
   }
 }
 beforeAll(async () => {
-  root = administrator(issuer)
-  await root.connect()
-  await root.query(`CREATE DATABASE ${ident(dbName)}`)
-  started = true
-  admin = administrator(issuer, dbName)
-  await admin.connect()
-  await transaction(admin, async () => {
-    await admin.query(
-      readFileSync(new URL('../migrations/0001_platform.sql', import.meta.url), 'utf8')
-    )
-  })
-  for (const n of roles) {
-    await admin.query(
-      `CREATE ROLE ${ident(role(n))} ${['writer', 'reader'].includes(n) ? 'NOLOGIN' : 'LOGIN'} NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS`
-    )
-    await admin.query(`GRANT platform_users TO ${ident(role(n))}`)
-  }
-  await admin.query(`GRANT CREATE ON DATABASE ${ident(dbName)} TO ${ident(role('owner'))}`)
-  await admin.query(
-    `GRANT ${ident(role('writer'))},${ident(role('reader'))} TO ${ident(role('alice'))},${ident(role('bob'))}`
+  w = await world(prefix('t'), adminUrl)
+  cliEnv.DATABASE_NAME = w.dbName
+  await w.makeRoles(roles, (n) => !['writer', 'reader'].includes(n))
+  await w.admin.query(`GRANT CREATE ON DATABASE ${ident(w.dbName)} TO ${ident(w.role('owner'))}`)
+  await w.admin.query(
+    `GRANT ${ident(w.role('writer'))},${ident(w.role('reader'))} TO ${ident(w.role('alice'))},${ident(w.role('bob'))}`
   )
   owner = await connect('owner')
   alice = await connect('alice')
@@ -174,14 +143,8 @@ beforeAll(async () => {
   bobId = (await bob.query('SELECT id FROM newsroom.articles')).rows[0].id
 }, 30000)
 afterAll(async () => {
-  await Promise.all([owner?.end(), alice?.end(), bob?.end(), admin?.end()])
-  if (started) {
-    await root.query(`DROP DATABASE ${ident(dbName)} WITH(FORCE)`)
-    for (const n of [...roles, ...applied])
-      await root.query(`DROP ROLE IF EXISTS ${ident(role(n))}`)
-  }
-  await root?.end()
-  issuer.stop()
+  await Promise.all([owner?.end(), alice?.end(), bob?.end()])
+  if (w) await w.drop([...roles, ...applied])
 }, 30000)
 
 describe('native identity', () => {
@@ -190,16 +153,16 @@ describe('native identity', () => {
     expect(me).toMatchObject({
       username: role('alice'),
       effective_role: role('alice'),
-      database: dbName,
+      database: w.dbName,
       platform_version: '2.2.0',
     })
   })
   test('forged, expired, foreign and NOLOGIN sign-ins are refused at login', async () => {
-    const tokenFor = (claims: Record<string, unknown> = {}) => issuer.mint(role('alice'), claims)
+    const tokenFor = (claims: Record<string, unknown> = {}) => issuer().mint(role('alice'), claims)
     const me = await as('alice', pageIdentity.identity)
     expect(me.username).toBe(role('alice'))
     for (const token of [
-      issuer.mint(role('alice'), {}, issuer.strangerKey()),
+      issuer().mint(role('alice'), {}, issuer().strangerKey()),
       tokenFor({ exp: Math.floor(Date.now() / 1000) - 60 }),
       tokenFor({ iss: 'https://elsewhere.example' }),
       tokenFor({ email: undefined }),
@@ -211,16 +174,16 @@ describe('native identity', () => {
     expect(await refusal(signIn('writer'))).toBe('28000')
   })
   test('a token logs in only the role it names', async () => {
-    await expect(connect('bob', issuer.mint(role('alice')))).rejects.toMatchObject({
+    await expect(connect('bob', issuer().mint(role('alice')))).rejects.toMatchObject({
       code: '28000',
     })
-    expect(await refusal(signIn('bob', issuer.mint(role('alice'))))).toBe('28000')
+    expect(await refusal(signIn('bob', issuer().mint(role('alice'))))).toBe('28000')
     // The server's own superuser is no login over the network: a token that names it is
     // refused like any other way in.
     await expect(
       new TokenClient(
-        { ...endpoint, user: serverSuperuser },
-        issuer.mint(serverSuperuser)
+        { ...w.endpoint, user: serverSuperuser },
+        issuer().mint(serverSuperuser)
       ).connect()
     ).rejects.toMatchObject({ code: '28000' })
   })
@@ -238,27 +201,27 @@ describe('native identity', () => {
     await alice.query('RESET app.user_id')
   })
   test('NOLOGIN immediately prevents the next sign-in of the page’s client', async () => {
-    await admin.query(`ALTER ROLE ${ident(role('alice'))} NOLOGIN`)
+    await w.admin.query(`ALTER ROLE ${ident(role('alice'))} NOLOGIN`)
     try {
       expect(await refusal(signIn('alice'))).toBe('28000')
     } finally {
-      await admin.query(`ALTER ROLE ${ident(role('alice'))} LOGIN`)
+      await w.admin.query(`ALTER ROLE ${ident(role('alice'))} LOGIN`)
     }
   })
   test('a role password is not a login', async () => {
-    await admin.query(`ALTER ROLE ${ident(role('alice'))} PASSWORD 'a-real-password'`)
+    await w.admin.query(`ALTER ROLE ${ident(role('alice'))} PASSWORD 'a-real-password'`)
     try {
-      const q = new pg.Client({ ...endpoint, user: role('alice'), password: 'a-real-password' })
+      const q = new pg.Client({ ...w.endpoint, user: role('alice'), password: 'a-real-password' })
       q.on('error', () => undefined)
       await expect(q.connect()).rejects.toThrow()
       await q.end().catch(() => undefined)
     } finally {
-      await admin.query(`ALTER ROLE ${ident(role('alice'))} PASSWORD NULL`)
+      await w.admin.query(`ALTER ROLE ${ident(role('alice'))} PASSWORD NULL`)
     }
   })
   test('the server is PostgreSQL 18 and lets people in over the network by token only', async () => {
-    await requirePostgres18(admin)
-    expect(await authenticationProblems(admin)).toEqual([])
+    await requirePostgres18(w.admin)
+    expect(await authenticationProblems(w.admin)).toEqual([])
     expect(await authenticationProblems(alice)).toBe('unchecked')
   })
 })
@@ -319,14 +282,14 @@ describe('native access control', () => {
     }
   })
   test('REVOKE changes direct SQL and the page’s client without compiling application policies', async () => {
-    await admin.query(`REVOKE ${ident(role('reader'))} FROM ${ident(role('alice'))}`)
+    await w.admin.query(`REVOKE ${ident(role('reader'))} FROM ${ident(role('alice'))}`)
     try {
       await deny(alice, 'SELECT title FROM newsroom.articles')
       expect(
         await as('alice', (db) => refusal(records(db, 'articles', { columns: ['title'] })))
       ).toBe('42501')
     } finally {
-      await admin.query(`GRANT ${ident(role('reader'))} TO ${ident(role('alice'))}`)
+      await w.admin.query(`GRANT ${ident(role('reader'))} TO ${ident(role('alice'))}`)
     }
   })
   test('schema boundaries and DDL rights are native', async () => {
@@ -344,14 +307,16 @@ describe('native access control', () => {
   test('PostgreSQL ADMIN OPTION controls role delegation', async () => {
     const grant = `GRANT ${ident(role('reader'))} TO ${ident(role('outsider'))}`
     expect(await as('alice', (db) => refusal(pageSql.run(db, grant)))).toBe('42501')
-    await admin.query(`GRANT ${ident(role('reader'))} TO ${ident(role('alice'))} WITH ADMIN OPTION`)
+    await w.admin.query(
+      `GRANT ${ident(role('reader'))} TO ${ident(role('alice'))} WITH ADMIN OPTION`
+    )
     try {
       expect((await as('alice', (db) => pageSql.run(db, grant))).command).toBe('GRANT ROLE')
     } finally {
-      await admin.query(
+      await w.admin.query(
         `REVOKE ADMIN OPTION FOR ${ident(role('reader'))} FROM ${ident(role('alice'))} CASCADE`
       )
-      await admin.query(`REVOKE ${ident(role('reader'))} FROM ${ident(role('outsider'))}`)
+      await w.admin.query(`REVOKE ${ident(role('reader'))} FROM ${ident(role('outsider'))}`)
     }
   })
   test('SQL GRANT immediately opens a projection in the page’s client', async () => {
@@ -395,13 +360,13 @@ describe('role catalogs', () => {
     expect(bobs.roles.map((r) => r.name)).not.toContain(role('alice'))
   })
   test('an operator sees every membership, because it administers roles', async () => {
-    await admin.query(`GRANT platform_admins TO ${ident(role('owner'))}`)
+    await w.admin.query(`GRANT platform_admins TO ${ident(role('owner'))}`)
     try {
       const data = await as('owner', pageAccess.roles)
       expect(data.roles.map((r) => r.name)).toContain(role('bob'))
       expect(data.memberships.some((m) => m.member === role('bob'))).toBe(true)
     } finally {
-      await admin.query(`REVOKE platform_admins FROM ${ident(role('owner'))}`)
+      await w.admin.query(`REVOKE platform_admins FROM ${ident(role('owner'))}`)
     }
   })
   test('the platform answers membership questions without exposing the catalog', async () => {
@@ -419,7 +384,7 @@ describe('role catalogs', () => {
     ).toEqual([])
   })
   test('hardening hides the role catalogs from ordinary connections', async () => {
-    await admin.query(hardenSql('strict'))
+    await w.admin.query(hardenSql('strict'))
     try {
       await deny(alice, 'SELECT * FROM pg_auth_members')
       await deny(alice, 'SELECT rolname FROM pg_roles')
@@ -435,16 +400,16 @@ describe('role catalogs', () => {
       expect(data.roles.map((r) => r.name)).toContain(role('alice'))
       expect(data.memberships.every((m) => m.member === role('alice'))).toBe(true)
       // An operator keeps the catalog.
-      await admin.query(`GRANT platform_admins TO ${ident(role('owner'))}`)
+      await w.admin.query(`GRANT platform_admins TO ${ident(role('owner'))}`)
       try {
         expect(
           (await owner.query('SELECT count(*)::int AS n FROM pg_auth_members')).rows[0].n
         ).toBeGreaterThan(0)
       } finally {
-        await admin.query(`REVOKE platform_admins FROM ${ident(role('owner'))}`)
+        await w.admin.query(`REVOKE platform_admins FROM ${ident(role('owner'))}`)
       }
     } finally {
-      await admin.query(hardenSql('restore'))
+      await w.admin.query(hardenSql('restore'))
     }
     expect(
       (await alice.query('SELECT count(*)::int AS n FROM pg_auth_members')).rows[0].n
@@ -520,11 +485,11 @@ describe('modeling and integrity', () => {
     expect(me.can_create_workspace).toBe(true)
     expect(me.is_operator).toBe(false)
     // An operator may administer every role: the platform's own answer.
-    await admin.query(`GRANT platform_admins TO ${ident(role('owner'))}`)
+    await w.admin.query(`GRANT platform_admins TO ${ident(role('owner'))}`)
     try {
       expect((await as('owner', pageIdentity.identity)).is_operator).toBe(true)
     } finally {
-      await admin.query(`REVOKE platform_admins FROM ${ident(role('owner'))}`)
+      await w.admin.query(`REVOKE platform_admins FROM ${ident(role('owner'))}`)
     }
   })
   test('the roles answer who may admit others to them', async () => {
@@ -533,22 +498,24 @@ describe('modeling and integrity', () => {
     // Alice belongs to the writers, but holds no admin option on them.
     expect(roles.roles.find((r) => r.name === role('writer'))?.admits).toBe(false)
     // PostgreSQL's ADMIN OPTION is what lets her admit others.
-    await admin.query(`GRANT ${ident(role('writer'))} TO ${ident(role('alice'))} WITH ADMIN OPTION`)
+    await w.admin.query(
+      `GRANT ${ident(role('writer'))} TO ${ident(role('alice'))} WITH ADMIN OPTION`
+    )
     try {
       const withOption = await as('alice', pageAccess.roles)
       expect(withOption.roles.find((r) => r.name === role('writer'))?.admits).toBe(true)
     } finally {
-      await admin.query(
+      await w.admin.query(
         `REVOKE ADMIN OPTION FOR ${ident(role('writer'))} FROM ${ident(role('alice'))} CASCADE`
       )
     }
     // An operator may administer every role.
-    await admin.query(`GRANT platform_admins TO ${ident(role('owner'))}`)
+    await w.admin.query(`GRANT platform_admins TO ${ident(role('owner'))}`)
     try {
       const operator = await as('owner', pageAccess.roles)
       expect(operator.roles.every((r) => r.admits)).toBe(true)
     } finally {
-      await admin.query(`REVOKE platform_admins FROM ${ident(role('owner'))}`)
+      await w.admin.query(`REVOKE platform_admins FROM ${ident(role('owner'))}`)
     }
   })
   test('bundled CRM model imports twice with real foreign keys', async () => {
@@ -736,20 +703,20 @@ describe('additional database boundaries', () => {
     ).toBe('23503')
   })
   test('installer refuses existing sys schemas before making changes', async () => {
-    await admin.query('BEGIN; CREATE SCHEMA sys')
+    await w.admin.query('BEGIN; CREATE SCHEMA sys')
     try {
       await deny(
-        admin,
+        w.admin,
         readFileSync(new URL('../migrations/0001_platform.sql', import.meta.url), 'utf8'),
         'P0001'
       )
     } finally {
-      await admin.query('ROLLBACK')
+      await w.admin.query('ROLLBACK')
     }
-    expect((await admin.query("SELECT to_regnamespace('sys') AS n")).rows[0].n).toBeNull()
+    expect((await w.admin.query("SELECT to_regnamespace('sys') AS n")).rows[0].n).toBeNull()
   })
   test('audit visibility remains valid after an old workspace owner is dropped', async () => {
-    await admin.query(`GRANT CREATE ON DATABASE ${ident(dbName)} TO ${ident(role('retired'))}`)
+    await w.admin.query(`GRANT CREATE ON DATABASE ${ident(w.dbName)} TO ${ident(role('retired'))}`)
     const q = await connect('retired')
     try {
       await q.query(
@@ -758,8 +725,10 @@ describe('additional database boundaries', () => {
     } finally {
       await q.end()
     }
-    await admin.query(`REVOKE CREATE ON DATABASE ${ident(dbName)} FROM ${ident(role('retired'))}`)
-    await admin.query(`DROP ROLE ${ident(role('retired'))}`)
+    await w.admin.query(
+      `REVOKE CREATE ON DATABASE ${ident(w.dbName)} FROM ${ident(role('retired'))}`
+    )
+    await w.admin.query(`DROP ROLE ${ident(role('retired'))}`)
     for (const name of ['owner', 'alice'])
       await as(name, async (db) => {
         for (const schema of ['retired_workspace', 'newsroom'])
@@ -807,7 +776,7 @@ describe('declarative apply', () => {
       },
     ],
   })
-  const apply = (raw: unknown) => transaction(admin, () => applyManifest(admin, raw))
+  const apply = (raw: unknown) => transaction(w.admin, () => applyManifest(w.admin, raw))
   test('one manifest provisions users, groups, a workspace, grants and policies, and repeats as a no-op', async () => {
     const first = await apply(manifest())
     expect(first.changes).toContain(`create user ${role('ap_ann')}`)
@@ -815,7 +784,7 @@ describe('declarative apply', () => {
     expect(first.changes).toContain('create collection desk.notes')
     expect(first.changes).toContain(`make ${role('ap_admin')} an administrator`)
     expect(await apply(manifest())).toMatchObject({ changes: [] })
-    const owned = await admin.query(
+    const owned = await w.admin.query(
       "SELECT tableowner FROM pg_tables WHERE schemaname='desk' AND tablename='notes'"
     )
     expect(owned.rows[0].tableowner).toBe(role('ap_admin'))
@@ -845,7 +814,7 @@ describe('declarative apply', () => {
     broken.workspaces[0]!.policies[0]!.using = 'no_such_column=session_user'
     broken.users.push({ name: role('ap_ghost'), groups: [] })
     await expect(apply(broken)).rejects.toMatchObject({ code: '42703' })
-    const ghost = await admin.query('SELECT 1 FROM pg_roles WHERE rolname=$1', [role('ap_ghost')])
+    const ghost = await w.admin.query('SELECT 1 FROM pg_roles WHERE rolname=$1', [role('ap_ghost')])
     expect(ghost.rowCount).toBe(0)
     const made = await apply({ users: [...manifest().users, { name: role('ap_new') }] })
     expect(made.changes).toEqual([
@@ -853,7 +822,7 @@ describe('declarative apply', () => {
       `add ${role('ap_new')} to platform_users`,
     ])
     await (await connect('ap_new')).end()
-    const secrets = await admin.query(
+    const secrets = await w.admin.query(
       'SELECT count(*)::int AS n FROM pg_authid WHERE rolname LIKE $1 AND rolpassword IS NOT NULL',
       [`${prefix}%`]
     )
@@ -892,7 +861,7 @@ describe('declarative apply', () => {
         env: {
           PATH: process.env.PATH,
           ...cliEnv,
-          ...(operator ?? { PGTOKEN: issuer.mint(adminRole) }),
+          ...(operator ?? { PGTOKEN: issuer().mint(adminRole) }),
         },
         stdout: 'pipe',
         stderr: 'pipe',
@@ -917,23 +886,23 @@ describe('declarative apply', () => {
       // A manifest about themselves converges; one about somebody else needs an operator.
       const own = join(dir, 'own.json')
       writeFileSync(own, JSON.stringify({ users: [{ name: role('alice') }] }))
-      const asAlice = await run(['k8s', own], { PGTOKEN: issuer.mint(role('alice')) })
+      const asAlice = await run(['k8s', own], { PGTOKEN: issuer().mint(role('alice')) })
       expect(asAlice.output).toContain('0 changed, 2 already in place.')
       const more = join(dir, 'more.json')
       writeFileSync(more, JSON.stringify({ users: [{ name: role('ap_denied') }] }))
-      const denied = await run(['k8s', more], { PGTOKEN: issuer.mint(role('alice')) })
+      const denied = await run(['k8s', more], { PGTOKEN: issuer().mint(role('alice')) })
       expect(denied).toMatchObject({ code: 1 })
       expect(denied.error).toContain('permission denied')
     } finally {
-      await root.query(`DROP ROLE IF EXISTS ${ident(role('ap_cli'))}`)
+      await w.root.query(`DROP ROLE IF EXISTS ${ident(role('ap_cli'))}`)
       rmSync(dir, { recursive: true })
     }
   })
 })
 
 test('CLI installs a new database at 2.2.0 and safely repeats the installation', async () => {
-  const name = dbName + '_cli'
-  await root.query(`CREATE DATABASE ${ident(name)}`)
+  const name = w.dbName + '_cli'
+  await w.root.query(`CREATE DATABASE ${ident(name)}`)
   try {
     for (let i = 0; i < 2; i++) {
       const child = Bun.spawn([process.execPath, 'packages/cli/src/cli.ts', 'migrate'], {
@@ -946,7 +915,7 @@ test('CLI installs a new database at 2.2.0 and safely repeats the installation',
           DATABASE_NAME: name,
           DATABASE_SSL: cliEnv.DATABASE_SSL,
           OIDC_ISSUER: issuerUrl,
-          PGTOKEN: issuer.mint(adminRole),
+          PGTOKEN: issuer().mint(adminRole),
         },
         stdout: 'pipe',
         stderr: 'pipe',
@@ -962,6 +931,6 @@ test('CLI installs a new database at 2.2.0 and safely repeats the installation',
       )
     }
   } finally {
-    await root.query(`DROP DATABASE ${ident(name)} WITH(FORCE)`)
+    await w.root.query(`DROP DATABASE ${ident(name)} WITH(FORCE)`)
   }
 })

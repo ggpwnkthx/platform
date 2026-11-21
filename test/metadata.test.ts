@@ -1,7 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
 import type pg from 'pg'
-import { TokenClient, transaction } from '../packages/cli/src/database/db.ts'
 import {
   ident,
   collectionTarget,
@@ -16,9 +14,9 @@ import {
   setMetadata,
 } from '../packages/data/src/metadata/query.ts'
 import type { Connection } from '../packages/pg-client/src/wire.ts'
-import { administrator, adminUrl } from './administrator.ts'
-import { startIssuer } from './issuer.ts'
-import { openPage, refusal } from './page.ts'
+import { adminUrl } from './administrator.ts'
+import { refusal } from './page.ts'
+import { prefix, world, type World } from './world.ts'
 
 /**
  * Metadata is stored in the platform schema and gated by PostgreSQL's own
@@ -27,37 +25,16 @@ import { openPage, refusal } from './page.ts'
  * signs in to the page's own client with a token, and row security decides.
  */
 
-const url = new URL(adminUrl)
-const prefix = `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
-const dbName = `${prefix}_db`
-const role = (name: string) => `${prefix}_${name}`
-const issuerUrl = process.env.TEST_OIDC_ISSUER ?? 'http://127.0.0.1:54330'
-const issuer = startIssuer(issuerUrl)
 const roles = ['owner', 'reader', 'writer', 'blind', 'outsider']
-let root: pg.Client, admin: pg.Client, owner: pg.Client, reader: pg.Client
-let started = false
-const endpoint = {
-  host: url.hostname,
-  port: Number(url.port || 5432),
-  database: dbName,
-  ssl: process.env.TEST_DATABASE_SSL === 'require' ? { rejectUnauthorized: true } : false,
-}
+let w: World
+let owner: pg.Client, reader: pg.Client
+
 /** A direct connection, as psql would make it: the role, and a token that names it. */
-async function connect(name: string) {
-  const q = new TokenClient({ ...endpoint, user: role(name) }, issuer.mint(role(name)))
-  q.on('error', () => undefined)
-  await q.connect()
-  return q
-}
+const connect = (name: string) => w.connect(name)
+/** The name of a role in this world: one person among the others. */
+const role = (name: string) => w.role(name)
 /** Runs some work in the page's client as this person, then signs them out. */
-async function as<T>(name: string, work: (db: Connection) => Promise<T>): Promise<T> {
-  const db = await openPage(url, role(name), dbName, issuer.mint(role(name)))
-  try {
-    return await work(db)
-  } finally {
-    db.close()
-  }
-}
+const as = <T>(name: string, work: (db: Connection) => Promise<T>) => w.as(name, work)
 /** The metadata of the newsroom workspace, or of its articles collection. */
 const workspace = (db: Connection) => metadata(db, workspaceTarget('newsroom'))
 const collection = (db: Connection) => metadata(db, collectionTarget('newsroom', 'articles'))
@@ -67,27 +44,12 @@ const field = (db: Connection, column: string) =>
 const keys = (entries: { key: string }[]) => entries.map((one) => one.key)
 
 beforeAll(async () => {
-  root = administrator(issuer)
-  await root.connect()
-  await root.query(`CREATE DATABASE ${ident(dbName)}`)
-  started = true
-  admin = administrator(issuer, dbName)
-  await admin.connect()
-  await transaction(admin, async () => {
-    await admin.query(
-      readFileSync(new URL('../migrations/0001_platform.sql', import.meta.url), 'utf8')
-    )
-  })
-  for (const name of roles) {
-    await admin.query(
-      `CREATE ROLE ${ident(role(name))} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS`
-    )
-    await admin.query(`GRANT platform_users TO ${ident(role(name))}`)
-  }
+  w = await world(prefix('m'), adminUrl)
+  await w.makeRoles(roles)
   owner = await connect('owner')
   reader = await connect('reader')
   // A workspace is made with CREATE on the database, so the owner holds it.
-  await admin.query(`GRANT CREATE ON DATABASE ${ident(dbName)} TO ${ident(role('owner'))}`)
+  await w.admin.query(`GRANT CREATE ON DATABASE ${ident(w.dbName)} TO ${ident(w.role('owner'))}`)
   // The owner builds the workspace and its collection, so it owns both.
   await owner.query(
     "CREATE SCHEMA newsroom; SELECT platform.create_collection('newsroom','articles')"
@@ -96,21 +58,16 @@ beforeAll(async () => {
   // A second column that nobody is granted: the field nobody may reach.
   await owner.query('ALTER TABLE newsroom.articles ADD COLUMN summary text')
   await owner.query(
-    `GRANT USAGE ON SCHEMA newsroom TO ${['reader', 'writer', 'blind'].map((n) => ident(role(n))).join(',')}`
+    `GRANT USAGE ON SCHEMA newsroom TO ${['reader', 'writer', 'blind'].map((n) => ident(w.role(n))).join(',')}`
   )
   // A reader of one column of the collection, a writer of rows, and a reader of the
   // workspace alone.
-  await owner.query(`GRANT SELECT (id,title) ON newsroom.articles TO ${ident(role('reader'))}`)
-  await owner.query(`GRANT INSERT (title) ON newsroom.articles TO ${ident(role('writer'))}`)
+  await owner.query(`GRANT SELECT (id,title) ON newsroom.articles TO ${ident(w.role('reader'))}`)
+  await owner.query(`GRANT INSERT (title) ON newsroom.articles TO ${ident(w.role('writer'))}`)
 }, 30000)
 afterAll(async () => {
-  await Promise.all([owner?.end(), reader?.end(), admin?.end()])
-  if (started) {
-    await root.query(`DROP DATABASE ${ident(dbName)} WITH(FORCE)`)
-    for (const name of roles) await root.query(`DROP ROLE IF EXISTS ${ident(role(name))}`)
-  }
-  await root?.end()
-  issuer.stop()
+  await Promise.all([owner?.end(), reader?.end()])
+  if (w) await w.drop(roles)
 }, 30000)
 
 describe('metadata of a workspace and of a collection', () => {
@@ -147,7 +104,7 @@ describe('metadata of a workspace and of a collection', () => {
   })
 
   test('the same key in another workspace is another key', async () => {
-    await admin.query('CREATE SCHEMA IF NOT EXISTS other')
+    await w.admin.query('CREATE SCHEMA IF NOT EXISTS other')
     await as('owner', async (db) => {
       expect(
         await refusal(setMetadata(db, workspaceTarget('other'), 'description', 'Somewhere else'))
@@ -252,7 +209,7 @@ describe('metadata of a workspace and of a collection', () => {
 
   test('an owner may not write the metadata of a workspace they do not own', async () => {
     // A workspace of somebody else's: the owner of newsroom has no right on it.
-    await admin.query('CREATE SCHEMA IF NOT EXISTS other')
+    await w.admin.query('CREATE SCHEMA IF NOT EXISTS other')
     await as('owner', async (db) => {
       expect(await refusal(setMetadata(db, workspaceTarget('other'), 'mine', 'mine'))).toBe('42501')
       expect(await metadata(db, workspaceTarget('other'))).toEqual([])

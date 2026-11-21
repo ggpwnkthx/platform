@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { connect as tcp } from 'node:net'
-import type pg from 'pg'
 import {
   Connection,
   PgError,
@@ -8,19 +7,16 @@ import {
   serialize,
   type Transport,
 } from '../packages/pg-client/src/wire.ts'
-import { administrator, adminUrl } from './administrator.ts'
-import { startIssuer } from './issuer.ts'
+import { adminUrl } from './administrator.ts'
+import { prefix, world, type World } from './world.ts'
 
 /**
  * The page's own PostgreSQL client, logging in with a token over a plain socket: the same
  * bytes the relay forwards from a browser.
  */
 const url = new URL(adminUrl)
-const prefix = `w${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
-const database = `${prefix}_db`
-const person = `${prefix}_person@example.com`
-const issuer = startIssuer(process.env.TEST_OIDC_ISSUER ?? 'http://127.0.0.1:54330')
-let root: pg.Client
+let w: World
+const person = () => w.role('person@example.com')
 
 function socket(): Promise<Transport> {
   return new Promise((resolve, reject) => {
@@ -38,21 +34,22 @@ function socket(): Promise<Transport> {
     s.once('error', reject)
   })
 }
-const login = async (token = issuer.mint(person), user = person) =>
-  Connection.open(await socket(), { user, database, token })
+const login = async (token?: string, user?: string) =>
+  Connection.open(await socket(), {
+    user: user ?? person(),
+    database: w.dbName,
+    token: token ?? w.issuer.mint(person()),
+  })
 
 beforeAll(async () => {
-  root = administrator(issuer)
-  await root.connect()
-  await root.query(`CREATE DATABASE "${database}"`)
-  await root.query(`CREATE ROLE "${person}" LOGIN`)
-  await root.query(`GRANT CONNECT ON DATABASE "${database}" TO "${person}"`)
+  // This world is PostgreSQL alone: the platform is not installed in it, and the person
+  // is a plain role that may connect.
+  w = await world(prefix('w'), adminUrl, { migrate: false })
+  await w.makeRole(person(), { member: false })
+  await w.root.query(`GRANT CONNECT ON DATABASE "${w.dbName}" TO "${person()}"`)
 })
 afterAll(async () => {
-  await root.query(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`)
-  await root.query(`DROP ROLE IF EXISTS "${person}"`)
-  await root.end()
-  issuer.stop()
+  if (w) await w.drop([person()])
 })
 
 describe('wire client', () => {
@@ -67,7 +64,7 @@ describe('wire client', () => {
     expect(result.command).toBe('SELECT')
     expect(result.affected).toBe(1)
     expect(result.rows[0]).toEqual({
-      who: person,
+      who: person(),
       one: 1,
       two: 2,
       yes: true,
@@ -104,13 +101,13 @@ describe('wire client', () => {
   })
 
   test('a token for someone else is refused by PostgreSQL', async () => {
-    const error = await login(issuer.mint('stranger@example.com')).catch((e) => e)
+    const error = await login(w.issuer.mint('stranger@example.com')).catch((e) => e)
     expect(error).toBeInstanceOf(PgError)
     expect(error.code).toBe('28000')
   })
 
   test('a token from a key the issuer never published is refused', async () => {
-    const error = await login(issuer.mint(person, {}, issuer.strangerKey())).catch((e) => e)
+    const error = await login(w.issuer.mint(person(), {}, w.issuer.strangerKey())).catch((e) => e)
     expect(error).toBeInstanceOf(PgError)
   })
 
@@ -129,13 +126,13 @@ describe('through the relay', () => {
   test('the browser transport logs in and runs a statement', async () => {
     const { openSocket } = await import('../packages/pg-client/src/socket.ts')
     const q = await Connection.open(await openSocket(relay), {
-      user: person,
-      database,
-      token: issuer.mint(person),
+      user: person(),
+      database: w.dbName,
+      token: w.issuer.mint(person()),
     })
     const big = 'x'.repeat(200000)
     const result = await q.query('SELECT session_user AS who, length($1::text) AS n', [big])
-    expect(result.rows[0]).toEqual({ who: person, n: 200000 })
+    expect(result.rows[0]).toEqual({ who: person(), n: 200000 })
     q.close()
   })
 })
