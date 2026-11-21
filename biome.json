@@ -6,6 +6,7 @@
       "!**/node_modules",
       "!**/.pg",
       "!**/.tofu",
+      "!**/.fallow",
       "!**/deploy/tofu/**/.terraform",
       "!DESIGN.md",
       "!packages/ui/dist",
