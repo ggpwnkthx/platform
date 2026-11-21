@@ -24,6 +24,7 @@ export async function setLogin(
   // The server's own superuser has no login over the network as it is; without a login it
   // has none through the socket either, and that is the way in when nothing else is.
   if (role.server) throw new Error(`${name} is the server's own superuser, and is left alone`)
+  // fallow-ignore-next-line security-sink -- the role name is quoted with ident(); the command is one of two words
   await q.query(`ALTER ROLE ${ident(name)} ${command === 'lock' ? 'NOLOGIN' : 'LOGIN'}`)
   if (command === 'unlock')
     return [

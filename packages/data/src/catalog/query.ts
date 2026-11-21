@@ -18,6 +18,7 @@ const held = `n.nspname NOT LIKE 'pg\\_%' ESCAPE '\\' AND n.nspname NOT IN ('inf
 const system = `n.nspname = '${systemSchema}'`
 
 export async function catalog(db: DataSource): Promise<Catalog> {
+  // fallow-ignore-next-line security-sink -- every name in this statement is the platform's own constant
   const schemas = await db.query(`
     SELECT n.nspname::text AS name, pg_get_userbyid(n.nspowner)::text AS owner,
            CASE WHEN ${system} THEN 'system' ELSE 'user' END AS kind,
@@ -25,6 +26,7 @@ export async function catalog(db: DataSource): Promise<Catalog> {
            pg_has_role(current_user, n.nspowner, 'USAGE') AND NOT ${system} AS can_alter
       FROM pg_namespace n
      WHERE ${held} AND has_schema_privilege(n.oid, 'USAGE') ORDER BY ${system}, 1`)
+  // fallow-ignore-next-line security-sink -- every name in this statement is the platform's own constant
   const tables = await db.query(`
     SELECT n.nspname::text AS schema, c.relname::text AS name, c.relkind::text AS kind,
            c.relrowsecurity AS rls, c.relforcerowsecurity AS force_rls,

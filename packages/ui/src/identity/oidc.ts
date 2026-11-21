@@ -50,6 +50,7 @@ export async function beginSignIn(config: RuntimeConfig, returnTo: string): Prom
     'SHA-256',
     new TextEncoder().encode(pending.verifier)
   )
+  // fallow-ignore-next-line security-sink -- the endpoint is the issuer's own, from its discovery document
   location.assign(
     `${endpoints.authorization_endpoint}?${new URLSearchParams({
       client_id: config.clientId,
@@ -89,6 +90,7 @@ export async function completeSignIn(config: RuntimeConfig): Promise<SignedIn | 
   if (!pending || pending.state !== answer.get('state'))
     throw new Error('That sign-in did not start on this page. Sign in again.')
   const endpoints = await discover(config)
+  // fallow-ignore-next-line security-sink -- the endpoint is the issuer's own, from its discovery document
   const response = await fetch(endpoints.token_endpoint, {
     method: 'POST',
     body: new URLSearchParams({

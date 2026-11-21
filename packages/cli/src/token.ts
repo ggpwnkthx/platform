@@ -11,6 +11,7 @@ export async function deviceToken(
   scope = 'openid email'
 ): Promise<string> {
   const post = async (url: string, body: Record<string, string>) => {
+    // fallow-ignore-next-line security-sink -- the endpoint is the issuer's own, from its discovery document
     const response = await fetch(url, { method: 'POST', body: new URLSearchParams(body) })
     return { ok: response.ok, json: (await response.json()) as Record<string, string | number> }
   }

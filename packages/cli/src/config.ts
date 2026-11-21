@@ -128,6 +128,7 @@ export function readApplied(config: FolderConfig): Applied {
       throw new Error(`${files.models} is not valid JSON: ${(error as Error).message}`)
     }
   } else {
+    // fallow-ignore-next-line security-sink -- the module is the one the operator's own folder configuration names
     const module = require(files.models) as { default?: unknown }
     if (module.default === undefined)
       throw new Error(`${files.models} exports no manifest: its default export is the models.`)

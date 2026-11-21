@@ -116,6 +116,7 @@ export async function reach(
   schema: string,
   only: { role?: string; table?: string } = {}
 ): Promise<ReachInfo[]> {
+  // fallow-ignore-next-line security-sink -- every name is the platform's own constant; every value is bound
   const result = await db.query<ReachInfo>(
     `
     WITH w AS (SELECT name FROM (${asked}) known

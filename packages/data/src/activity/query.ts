@@ -30,6 +30,7 @@ export async function activity(db: DataSource, query: ActivityQuery): Promise<Ac
     where.push(`id < $${values.length}`)
   }
   values.push(Math.min(query.limit ?? 100, 500))
+  // fallow-ignore-next-line security-sink -- every value is bound as a parameter
   const result = await db.query<ActivityInfo>(
     `SELECT id, at::text AS at, transaction_id, actor, schema_name, table_name, operation,
             before_row, after_row

@@ -48,6 +48,7 @@ export interface Issuer {
 
 /** The issuer's own account of itself, read from its discovery document. */
 export async function discoverIssuer(issuer: string): Promise<Issuer> {
+  // fallow-ignore-next-line security-sink -- the issuer is the one the deployment names; the path is the issuer's own
   const response = await fetch(`${issuer}/.well-known/openid-configuration`).catch(() => null)
   if (!response?.ok)
     throw new Error(
