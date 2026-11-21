@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.6.8/schema.json",
   "files": {
     "includes": [
       "**",
@@ -10,7 +10,8 @@
       "!DESIGN.md",
       "!packages/ui/dist",
       "!examples/newsroom/.dist",
-      "!**/.impeccable"
+      "!**/.impeccable",
+      "!deploy/dex/password.html"
     ]
   },
   "linter": {
@@ -54,6 +55,16 @@
         "rules": {
           "suspicious": {
             "noExplicitAny": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/ui/src/styles.css"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noDescendingSpecificity": "off"
           }
         }
       }

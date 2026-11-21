@@ -1780,7 +1780,7 @@ td .badge:first-child:not(:only-child) {
 }
 .grid-check {
   width: 44px;
-  padding-right: 0 !important;
+  padding-right: 0;
 }
 .grid-open {
   display: inline-flex;
@@ -2644,6 +2644,7 @@ td .badge:first-child:not(:only-child) {
 }
 
 .matrix-cell {
+  /* biome-ignore lint/complexity/noImportantStyles: a grid's heads are left-aligned, and a mark's head is centred among them */
   text-align: center !important;
   width: 110px;
 }
@@ -3256,7 +3257,9 @@ button.perm:hover:not(:disabled) {
   *,
   *::before,
   *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: the reset must beat every animation the interface declares */
     animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: the reset must beat every transition the interface declares */
     transition-duration: 0.01ms !important;
   }
 }
