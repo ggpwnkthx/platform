@@ -135,7 +135,7 @@ without a server, an issuer or a relay. The swap happens while the bundle is bui
 never reaches a production bundle. The seam carries more than the connection: it says who may
 sign in without an issuer, what they are told, and how their choice is kept. A production
 seam has none of that — there is an issuer — and the dev-mode seam reads it from the example:
-the people are the ones its `models.json` names.
+the people are the ones its `models.ts` names.
 
 There is a second seam, `packages/ui/src/extensions.ts`, for what a site adds to the interface:
 field types and renderers of its own. It is empty, and every build of a site puts the module
@@ -195,7 +195,7 @@ deployment files, the documentation and the integration tests that cross the pac
   `deployment/` runs the deployments, split into the local stack, Kubernetes, the help text
   and the runtime they share; `config.ts` reads `platform.json`, what a folder says of
   itself; `ui/` builds the interface as a static site and serves it while it is worked on;
-  `in-page.ts` is PostgreSQL in the process, which installs an example for its tests and is
+  `in-page.ts` is PostgreSQL in the process, which installs what a folder applies, for its tests, and is
   the database a dev-mode build puts in the seam.
 - `packages/relay` — the WebSocket in front of PostgreSQL's port: `relay.ts`, and nothing else.
   It holds no credentials, and it reads one setting: the role PostgreSQL reports, so that it
@@ -219,7 +219,7 @@ deployment files, the documentation and the integration tests that cross the pac
   server is not here either, and nor is the PostgreSQL that runs inside the page: both are
   the CLI's.
 - `examples/newsroom` — the newsroom example. It is content, and no machinery: `platform.json`
-  says what the folder is, `apply/` holds what it applies to a database (`models.json`,
+  says what the folder is, `apply/` holds what it applies to a database (`models.ts`,
   `migration.sql` and `demo.sql`), and `extensions.tsx` is what it adds to the interface. The same files are
   applied to a deployment, installed in the page of a dev-mode build, and asked questions of
   by the tests beside them.

@@ -307,19 +307,24 @@ for.
 
 The site is a question, not a default: the walkthrough asks whether one already exists, and
 a site of the operator's own is named by its full URL. Left empty, an interface is deployed
-instead: the examples the checkout carries are offered by name (there is one, `newsroom`), or
-the platform's own interface if none is chosen. It is deployed on a sub-domain of the
-deployment's own domain — `app` unless another is chosen — and the site's address follows
-from it. The example that was chosen is the one `deploy local ui` builds, and `deploy local up` builds it too and
-serves it from the stack itself: a `site` container runs `platform ui serve` over
-`examples/<name>/.dist`, and the edge routes `app.<domain>` to it, on the port the edge
-answers on (`http://app.localhost:8080`). Without an example nothing is served there. For Kubernetes it asks for the domain and the image;
+instead, from a folder: any folder that holds a `platform.json`, which is any site built with
+`@platform/ui`. PLATFORM_SITE names it, from the root of the checkout or in full
+(`PLATFORM_SITE=examples/newsroom`, `PLATFORM_SITE=/srv/sites/desk`). The walkthrough offers
+the examples the checkout carries (there is one, `newsroom`) and the platform's own interface
+if none is chosen; a folder of your own is named in `.env` or the environment, and is then
+not asked for. It is deployed on a sub-domain of the deployment's own domain — `app` unless
+another is chosen — and the site's address follows from it. The folder that was chosen is the
+one `deploy local ui` builds, and `deploy local up` builds it too and serves it from the stack
+itself: a `site` container runs `platform ui serve` over the folder's `.dist`, and the edge
+routes `app.<domain>` to it, on the port the edge answers on (`http://app.localhost:8080`).
+Without a site nothing is served there. A configuration written before this, which says
+`PLATFORM_EXAMPLE=newsroom`, is told to say `PLATFORM_SITE=examples/newsroom`. For Kubernetes it asks for the domain and the image;
 the issuer and the database's address follow from the domain. The one
 password there is, the break-glass administrator's, is never asked for: it is generated and
 saved. What the command line or the environment already gave is kept and not asked for again.
 The file holds the pieces the deployment is made of, and nothing else: the domain, the
-sub-domains, the ports, the example, and the site's address when the operator has a site of
-their own. The addresses — the issuer, the relay, the database, an example's — are made of
+sub-domains, the ports, the site's folder, and the site's address when one already exists.
+The addresses — the issuer, the relay, the database, the deployed site's — are made of
 those pieces at runtime, so they are never written down and never fall out of step with the
 domain: change the domain and every address follows. A file that holds such an address from
 an earlier run has it taken out, and the deployment is told which ones. The environment speaks
@@ -359,8 +364,8 @@ own edge — has no such port in its names at all: `https://idp.<domain>` and
 
 `up` builds the PostgreSQL, relay and installer images, starts PostgreSQL 18 and Dex, waits
 for both, runs the idempotent database installer in a one-off container (`migrate`, image
-`platform-cli:local`, Dockerfile target `cli`), installs the example the deployment chose the same way (`apply k8s --example=NAME`, or
-`--administrator` when it chose none), then
+`platform-cli:local`, Dockerfile target `cli`), installs what the deployment's site applies the same way (`apply k8s --dir=/app/site`, with the
+site's folder mounted there; `--administrator` when there is no site or it applies nothing), then
 starts the relay and waits for http://api.localhost:8081/health. The installer is given no
 credentials, because there are none: it shares the volume PostgreSQL's socket is on, where
 PostgreSQL lets its own superuser in, has no network, and is removed when it exits.

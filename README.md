@@ -94,7 +94,7 @@ files it applies to a database, and the module that holds its own renderers — 
 reads it.
 The dev mode runs **PostgreSQL 18 inside the page** (PGlite), installed with the real
 `migrations/*.sql` and then with the three files the example applies, as a deployment installs
-them — `models.json` (the schema), `migration.sql` (what a manifest cannot say) and `demo.sql`
+them — `models.ts` (the schema), `migration.sql` (what a manifest cannot say) and `demo.sql`
 (records and their history): the newsroom workspace with its
 sections, articles and corrections, the crm workspace owned by the group `sales` with its
 accounts, contacts and deals, and their grants, policies, revisions and metadata. The sign-in
@@ -213,7 +213,7 @@ bun run cli doctor     # server version, authentication rules, installation, wha
 bun run cli token      # sign in through Dex from a terminal; prints a token
 bun run cli token --out=$HOME/.platform-token  # the same, into a file of your own (0600), for PGTOKEN_FILE
 bun run cli lock alice@example.com    # no login, whatever token names it; unlock gives it back
-bun run cli apply local --example=newsroom --dry-run  # users, groups, workspaces, grants
+bun run cli apply local --dir=examples/newsroom --dry-run  # users, groups, workspaces, grants
 bun run cli apply local team.json                    # a manifest of your own
 bun run cli model:apply deploy/models/crm.json
 bun run cli sql model.sql

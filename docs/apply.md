@@ -6,8 +6,8 @@ Everything is native PostgreSQL, done with the operator's own rights, in one tra
 every file is applied or nothing is.
 
 ```bash
-bun run cli apply local --example=newsroom --dry-run   # what would change
-bun run cli apply local --example=newsroom
+bun run cli apply local --dir=examples/newsroom --dry-run   # what would change
+bun run cli apply local --dir=examples/newsroom
 bun run cli apply local team.json
 ```
 
@@ -21,36 +21,46 @@ its report is PostgreSQL's answer, including any permission it would refuse.
 ```json
 {
   "apply": {
-    "models": "apply/models.json",
+    "models": "apply/models.ts",
     "migration": "apply/migration.sql",
     "demo": "apply/demo.sql"
   }
 }
 ```
 
-`models` is required and the two SQL files are the example's to leave out. A folder is an
-example because its `platform.json` has `apply`. The newsroom keeps its three in
+`models` is required and the two SQL files are the folder's to leave out. Any folder whose
+`platform.json` has `apply` is applied this way, with `--dir`: the site of a deployment as
+much as an example of the checkout. The newsroom example keeps its three in
 `examples/newsroom/apply/`, and they are applied in this order:
 
 | File            | What it holds                                                                                                                    | When it runs                                          |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| `models.json`   | The schema, as a manifest: groups, people, workspaces, grants, row policies, and what each item says of itself                   | Every time, with the operator's own rights            |
+| `models.ts`     | The schema, as a manifest: groups, people, workspaces, grants, row policies, and what each item says of itself                   | Every time, with the operator's own rights            |
 | `migration.sql` | What a manifest cannot say: the edge cases, written to be run again. The newsroom's hands its metadata to the workspaces' owners | Every time, beside the server                         |
 | `demo.sql`      | Records, and the history they would have                                                                                         | Once, beside the server: when the workspaces are made |
 
 The two SQL files are the server's own superuser's: they hand rows to the people who would
 have written them and write the revisions a trigger would have. `deploy local up` runs them
-beside the server; an operator who applies an example with a token applies `models.json` and is
+beside the server; an operator who applies a folder with a token applies `models.ts` and is
 told the other two were not run. `demo.sql` is never run into workspaces that were already
 there.
 
-The files name their administrator `admin@example.com`. A deployment reads that name as its own
-administrator's (PLATFORM_ADMIN, or `admin` on PLATFORM_DOMAIN), in all three files. NAME is
-PLATFORM_EXAMPLE when it is not given. The example is applied before the files named beside it,
-so a manifest may name the example's administrator as the owner of a workspace.
+No file names an administrator of its own. What a deployment says of itself is passed to all
+three as variables, and each is named where it is used:
+
+| Variable | What it is                                                                                                         | In `models.ts` | In the SQL files                      |
+| -------- | ------------------------------------------------------------------------------------------------------------------ | -------------- | ------------------------------------- |
+| `admin`  | The deployment's administrator: PLATFORM_ADMIN, or `admin` on PLATFORM_DOMAIN. Without either, `admin@example.com` | `admin`        | `current_setting('deployment.admin')` |
+
+`models.ts` exports the manifest as a function of them, `export default ({ admin }) => ({ format: 1, … })`,
+and the SQL files read each as a setting of the transaction they run in. A models file that
+uses none may be JSON: the manifest itself. A new variable is added in one place,
+`DeploymentVariables` in `packages/cli/src/folder.ts`, and is then there in all three files. The
+folder is applied before the files named beside it, so a manifest may name the folder's
+administrator as the owner of a workspace.
 
 `--administrator` makes the deployment's administrator and nothing else: what a deployment
-that chose no example is given, so that there is somebody to sign in as.
+with no site, or whose site applies nothing, is given, so that there is somebody to sign in as.
 
 ## Deployments
 
@@ -63,8 +73,8 @@ The operator is a person: sign in and pass the token,
 `PGTOKEN=$(bun run --silent cli token) bun run cli apply local team.json`. No login has a
 password, so there is no other way to say who you are. PostgreSQL then decides what you may
 change: you manage the roles you created and the workspaces you own. On the local stack,
-`deploy local up` has already applied the example the deployment chose beside the server
-(or `--administrator`, when it chose none), so the deployment's
+`deploy local up` has already applied what the deployment's site applies beside the server
+(or `--administrator`, when it applies nothing), so the deployment's
 administrator (PLATFORM_ADMIN: admin@localhost unless another is named) is there to sign in as.
 
 ## Manifest

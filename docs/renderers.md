@@ -193,7 +193,7 @@ and in the bundle alike, in a development build and a production one:
 ```json
 {
   "apply": {
-    "models": "apply/models.json",
+    "models": "apply/models.ts",
     "migration": "apply/migration.sql",
     "demo": "apply/demo.sql"
   },
@@ -208,7 +208,7 @@ example does), and it registers with what `@platform/ui` publishes —
 `@platform/ui/fields/types.ts` and the shared helpers in `@platform/ui/fields/text.ts` and
 `@platform/ui/fields/inputs.tsx`. A site that draws with JSX depends on `preact` itself. The
 example's renderer is said of `newsroom.articles.word_count` in the grid by the example's
-`models.json`.
+`models.ts`.
 
 ### Icons and colours
 

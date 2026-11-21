@@ -514,7 +514,7 @@ it applies to a database, and the module that holds its own field types and rend
 ```json
 {
   "apply": {
-    "models": "apply/models.json",
+    "models": "apply/models.ts",
     "migration": "apply/migration.sql",
     "demo": "apply/demo.sql"
   },
@@ -522,7 +522,7 @@ it applies to a database, and the module that holds its own field types and rend
 }
 ```
 
-`apply` is what makes the folder an example. `apply --example` applies those files to a
+`apply` is what a folder brings a database to. `apply --dir` applies those files to a
 deployment ([apply](apply.md)), and a build of the folder installs them in a PostgreSQL that
 runs inside the page. `models` is required; the two SQL files are the folder's to leave out.
 
@@ -545,26 +545,26 @@ in `--dir=DIR`. Without one, the interface is built as it is published, in
 In it, PostgreSQL 18 runs inside the page: PGlite (`@electric-sql/pglite`, a dependency of the
 CLI, which builds the site),
 installed with the real `migrations/*.sql` (the list `migrate` runs,
-`packages/cli/src/migrations.ts`) and then with the example's own files, through the
+`packages/cli/src/migrations.ts`) and then with the folder's own files, through the
 same code a deployment applies them with (`packages/cli/src/in-page.ts`: the installation,
-and the database the build puts in the seam, made of whichever example it is handed): `models.json` is
+and the database the build puts in the seam, made of whichever folder's files it is handed): `models.ts` is
 the schema, `migration.sql` is what a manifest cannot say, and `demo.sql` is the records and
-their history. Together they leave the newsroom
+their history. In the newsroom example they leave the newsroom
 workspace with sections, articles and corrections and its grants and policies; the crm
 workspace, owned by the group `sales`, with accounts, contacts and deals and real foreign
-keys; revisions and metadata. The sign-in page offers the people `models.json` names — admin,
+keys; revisions and metadata. The sign-in page offers the people `models.ts` names — admin,
 alice and bob — each with what the manifest says of them: what they own, whether they
 administer roles, and their groups. Choosing one logs that role in with `SET SESSION AUTHORIZATION`, so grants, row
 policies and triggers apply as they would on a server. Signing in as someone else reloads the
 page, and the database is kept in IndexedDB across reloads, under a name made from the
-installation scripts and the example's three files. A change to any of them is another name:
-the next load installs the example again, forgets the database of the earlier build, and with
+installation scripts and the folder's three files. A change to any of them is another name:
+the next load installs them again, forgets the database of the earlier build, and with
 it what was written in the page. Clearing the site's storage does the same.
 
 The swap happens at build time: a Bun plugin loads `packages/ui/src/pg/connect.ts` as a module
 that imports the files `apply` names and hands them to `packages/cli/src/in-page.ts`, so
-PGlite never reaches the production bundle and nothing is written in the example to make it
-so. The example is a package of its own (`examples/newsroom/package.json`) so that its
+PGlite never reaches the production bundle and nothing is written in the folder to make it
+so. The newsroom example is a package of its own (`examples/newsroom/package.json`) so that its
 extensions and its tests are compiled as its own; it holds no code that knows PostgreSQL
 runs in the page. The interface asks the seam who may sign in and how — the people, the
 words the sign-in page says, and the storage that keeps the choice between reloads — and the
