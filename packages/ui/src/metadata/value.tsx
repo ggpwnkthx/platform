@@ -13,11 +13,11 @@ import type { FieldType } from '../fields/types.ts'
  */
 
 /** A value as the form holds it: a string as itself, anything else as JSON. */
-export const metadataText = (value: unknown): string =>
+const metadataText = (value: unknown): string =>
   typeof value === 'string' ? value : JSON.stringify(value, null, 2)
 
 /** What was typed, as the value it means: JSON where it reads as JSON, text where it does not. */
-export function metadataValueOf(text: string): unknown {
+function metadataValueOf(text: string): unknown {
   const trimmed = text.trim()
   if (/^[[{"]|^(true|false|null|-?\d+(\.\d+)?)$/.test(trimmed)) {
     try {

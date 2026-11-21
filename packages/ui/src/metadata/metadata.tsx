@@ -38,7 +38,7 @@ import { hasKeyEditor, keyEditorOf, keyEditorsFor } from './registry.ts'
 const { schema: metaSchema, table: metaTable } = metadataCollection
 
 /** May the reader change an item's metadata? The database gives that to the owner of the item. */
-export function ownsItem(catalog: Catalog, target: MetadataTarget): boolean {
+function ownsItem(catalog: Catalog, target: MetadataTarget): boolean {
   if (target.scope === 'workspace')
     return Boolean(catalog.schemas.find((s) => s.name === target.schema)?.can_alter)
   return Boolean(tableOf(catalog, target.schema, target.table ?? '')?.can_alter)

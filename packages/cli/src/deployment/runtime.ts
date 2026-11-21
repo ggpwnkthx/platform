@@ -270,7 +270,7 @@ export function saved(file: string, name: string): string | undefined {
   return value || undefined
 }
 /** Appends a value to the saved file, which is private to its owner. */
-export function save(name: string, value: string, r: DeployRuntime) {
+function save(name: string, value: string, r: DeployRuntime) {
   const text = existsSync(r.envFile) ? readFileSync(r.envFile, 'utf8') : ''
   appendFileSync(r.envFile, `${text && !text.endsWith('\n') ? '\n' : ''}${name}=${value}\n`, {
     mode: 0o600,

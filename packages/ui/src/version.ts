@@ -11,7 +11,7 @@ import { versionMismatch } from '@platform/vocabulary'
  * The comparison itself is the platform's own, written once for the operator's tools and
  * the interface alike.
  */
-export const builtVersion = process.env.PLATFORM_VERSION ?? ''
+const builtVersion = process.env.PLATFORM_VERSION ?? ''
 
 /**
  * What is wrong when the installation is not the version this interface was built for, or

@@ -136,13 +136,7 @@ function fieldSpec(field: Field): FieldSpec {
     renderers: field.renderers,
   }
 }
-export async function addField(
-  q: pg.Client,
-  schema: string,
-  table: string,
-  f: Field,
-  relations = true
-) {
+async function addField(q: pg.Client, schema: string, table: string, f: Field, relations = true) {
   const spec = fieldSpec(f)
   await q.query(addFieldStatement(schema, table, spec))
   const index = indexFieldStatement(schema, table, spec)

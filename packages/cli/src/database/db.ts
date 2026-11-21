@@ -4,7 +4,7 @@ import { InputError } from '../input.ts'
 import type { Config } from './config.ts'
 
 /** The transaction the operator's tools run their statements in, written once. */
-export { InputError, transaction }
+export { transaction }
 
 pg.types.setTypeParser(1082, (v) => v)
 pg.types.setTypeParser(1114, (v) => v)

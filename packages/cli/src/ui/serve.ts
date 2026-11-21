@@ -39,7 +39,7 @@ export function fileIn(dist: string, path: string): string | null {
 type Rule = { path: string; headers: Record<string, string> }
 
 /** The rules of a `_headers` file: a path, and the headers of what is under it. */
-export function headerRules(text: string): Rule[] {
+function headerRules(text: string): Rule[] {
   const rules: Rule[] = []
   for (const line of text.split(/\r?\n/)) {
     if (!line.trim() || line.trim().startsWith('#')) continue
@@ -56,7 +56,7 @@ export function headerRules(text: string): Rule[] {
 }
 
 /** The headers a path is served with: those of every rule it is under, the later ones last. */
-export function headersFor(rules: Rule[], path: string): Record<string, string> {
+function headersFor(rules: Rule[], path: string): Record<string, string> {
   const headers: Record<string, string> = {}
   for (const rule of rules) {
     const under = rule.path.endsWith('*')
@@ -68,7 +68,7 @@ export function headersFor(rules: Rule[], path: string): Record<string, string> 
 }
 
 /** Serves the site in a folder on a port, and returns the server. */
-export function serveSite(dir: string, port: number) {
+function serveSite(dir: string, port: number) {
   const dist = resolve(dir)
   if (!existsSync(join(dist, 'index.html')))
     throw new Error(`There is no built site in ${dist}: build it with ui build first`)

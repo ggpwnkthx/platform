@@ -41,7 +41,7 @@ export type DeploymentVariables = {
 }
 
 /** The administrator where there is no deployment to name one: a page, or a test. */
-export const defaultAdmin = 'admin@example.com'
+const defaultAdmin = 'admin@example.com'
 
 /**
  * The administrator of the deployment the tools run in: the one it names, or `admin` on its

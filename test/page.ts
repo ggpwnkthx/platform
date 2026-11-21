@@ -5,7 +5,7 @@ import { Connection, PgError, type Transport } from '../packages/pg-client/src/w
  * The page's own PostgreSQL client in a test: the same login and the same statements a
  * browser makes through the relay, over a plain socket to the server's port.
  */
-export function socket(host: string, port: number): Promise<Transport> {
+function socket(host: string, port: number): Promise<Transport> {
   return new Promise((resolve, reject) => {
     const s = tcp({ host, port })
     const transport: Transport = {

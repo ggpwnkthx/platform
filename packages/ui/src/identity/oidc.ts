@@ -1,5 +1,5 @@
 import type { RuntimeConfig } from '../config.ts'
-import { claims, discoverIssuer, expiresAt, roleOf } from '@platform/vocabulary'
+import { discoverIssuer, expiresAt, roleOf } from '@platform/vocabulary'
 
 /**
  * Sign-in: authorization code with PKCE against the one issuer the database trusts. The page
@@ -12,7 +12,7 @@ import { claims, discoverIssuer, expiresAt, roleOf } from '@platform/vocabulary'
  * login.
  */
 
-export { claims, expiresAt, roleOf }
+export { expiresAt, roleOf }
 
 interface Discovery {
   authorization_endpoint: string

@@ -22,12 +22,6 @@ export type { OnDelete }
  * the words it offers.
  */
 
-/**
- * A field's type: one of the platform's own, `relation` — which is a foreign key, not a
- * column type — or any type the database holds, named with the schema it lives in.
- */
-export type FieldType = string
-
 /** The types the platform offers itself, and what they are called. */
 export const fieldTypeLabels: Record<string, string> = {
   text: 'Text',
