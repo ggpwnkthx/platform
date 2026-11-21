@@ -6,9 +6,6 @@ import { applyFiles, extensionsModule, type FolderConfig, findConfig } from '../
 import { serveInterface } from './dev.ts'
 import { UI_HELP } from './help.ts'
 
-export { UI_HELP } from './help.ts'
-export { findConfig } from '../config.ts'
-
 const KNOWN = ['--dir=', '--production', '--relay=', '--port=']
 
 /**

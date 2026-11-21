@@ -6,7 +6,6 @@ import { local } from './local.ts'
 import { kubernetes } from './kubernetes.ts'
 import { type DeployRuntime, ROOT, runtime } from './runtime.ts'
 
-export { DEPLOY_HELP } from './help.ts'
 export { localDatabase } from './local.ts'
 export { renderKubernetes } from './kubernetes.ts'
 export type { DeployRuntime } from './runtime.ts'
