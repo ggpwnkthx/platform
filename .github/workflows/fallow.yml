@@ -1,0 +1,28 @@
+name: Fallow
+on: [push, pull_request]
+# The gate reads the repository and writes nothing to it.
+permissions:
+  contents: read
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # The gate reads the whole tree, and the changed files with it.
+          fetch-depth: 0
+      # The gate on the change in front of the review: dead code, a boundary crossed,
+      # a house rule broken, and complexity that got worse. What is already written is
+      # reported, not failed: the rules in .fallowrc.jsonc say which is which.
+      #
+      # The gate is `all` rather than `new-only` because the house rules live in a file
+      # this change adds, and the new-only gate reads the base of the branch to tell an
+      # inherited finding from an introduced one. A file the base does not have cannot
+      # be read there. Once the rules are on the main branch, `new-only` may be used.
+      - uses: fallow-rs/fallow@b802ddc49a09ad9df4e9894cdd465f5b51b1b0c8 # v3.45.0
+        with:
+          command: audit
+          gate: all
+          fail-on-issues: true
+          version: 3.45.0
+          annotations: true
