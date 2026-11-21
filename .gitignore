@@ -6,3 +6,4 @@ examples/newsroom/.dist/
 platform-threat-model.md
 /.*
 !/.github
+!/.fallowrc.jsonc

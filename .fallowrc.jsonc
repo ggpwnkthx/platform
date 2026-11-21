@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+
+  // The interface's client bundle: the build names it, and no manifest declares it.
+  "entry": ["packages/ui/src/main.tsx"],
+
+  // The build writes these as imports by path, so the static graph cannot see them.
+  "dynamicallyLoaded": ["packages/cli/src/no-eval.ts", "packages/cli/src/in-page.ts"],
+
+  // The stylesheet is copied to the built site, not imported by it.
+  "ignorePatterns": ["packages/ui/src/styles.css"],
+
+  // The fonts are copied out of these packages by path, at build time.
+  "ignoreDependencies": ["@fontsource-variable/inter", "@fontsource/jetbrains-mono"],
+
+  // `install` is one name in two places: the platform's own, and the newsroom's own.
+  "ignoreExports": [
+    { "file": "examples/newsroom/test/newsroom.ts", "exports": ["install"] },
+    { "file": "packages/cli/src/in-page.ts", "exports": ["install"] }
+  ],
+
+  // These two override node-postgres internals; it calls them, we never do.
+  "usedClassMembers": ["_handleAuthSASL*"]
+}
