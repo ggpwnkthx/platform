@@ -7,6 +7,8 @@
   "license": "MIT",
   "exports": {
     "./access/model.ts": "./src/access/model.ts",
+    "./access/policy.ts": "./src/access/policy.ts",
+    "./access/wishes.ts": "./src/access/wishes.ts",
     "./config.ts": "./src/config.ts",
     "./fields/inputs.tsx": "./src/fields/inputs.tsx",
     "./fields/registry.ts": "./src/fields/registry.ts",

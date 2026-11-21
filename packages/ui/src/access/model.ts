@@ -1,17 +1,11 @@
-import type { GrantInfo, Hold, MembershipInfo, PolicyInfo, ReachInfo } from '@platform/data'
-import {
-  type Held,
-  narrows,
-  type PolicyCommand,
-  type PolicyDraft,
-  policyCommands,
-  type Wanted,
-} from '@platform/vocabulary'
+import type { GrantInfo, Hold, MembershipInfo, ReachInfo } from '@platform/data'
+import type { Held, Wanted } from '@platform/vocabulary'
 
 /**
  * How the access pages read what the database said: an ACL turned into what each role holds,
- * and a membership list turned into where a right comes from. Nothing here decides a right;
- * it only arranges the answers so that the same grant reads the same way on every page.
+ * a membership list turned into where a right comes from, and the database's own answer for
+ * a role. Nothing here decides a right; it only arranges the answers so that the same grant
+ * reads the same way on every page.
  */
 
 /** The privileges every access table draws a mark for. */
@@ -141,53 +135,6 @@ export function throughOf(
   const groups = groupsOf(role, memberships).filter((group) => named.has(group))
   return named.has(everyone) ? [...groups, everyone] : groups
 }
-
-/** What a role is to hold once one privilege on one field is given or taken. */
-export function toggleField(
-  current: Wanted,
-  privilege: string,
-  column: string,
-  on: boolean,
-  every: string[]
-): Wanted {
-  if (!narrows(privilege)) return current
-  if (on) {
-    if (current === 'all') return current
-    const columns = current === 'none' ? [] : current
-    return columns.includes(column) ? columns : [...columns, column]
-  }
-  // Taking one field from the whole collection leaves the others, by name.
-  const columns = current === 'all' ? every : current === 'none' ? [] : current
-  const left = columns.filter((name) => name !== column)
-  return left.length ? left : 'none'
-}
-
-/** Are two wishes the same? */
-export const sameWanted = (a: Wanted, b: Wanted): boolean =>
-  typeof a === 'string' || typeof b === 'string'
-    ? a === b
-    : a.length === b.length && a.every((column) => b.includes(column))
-
-/** A policy as the editor starts from it: the database's own record, turned back into a draft. */
-export function draftOf(policy: PolicyInfo): PolicyDraft {
-  const command = policyCommands.includes(policy.command as PolicyCommand)
-    ? (policy.command as PolicyCommand)
-    : 'ALL'
-  return {
-    schema: policy.schema,
-    table: policy.table,
-    name: policy.name,
-    permissive: policy.permissive === 'PERMISSIVE',
-    command,
-    roles: policy.roles.filter((role) => role !== 'public'),
-    using: policy.using ?? '',
-    check: policy.check ?? '',
-  }
-}
-
-/** Does a policy apply to a role: by its name, through a group it inherits from, or as PUBLIC? */
-export const policyReaches = (policy: PolicyInfo, role: string, groups: string[]): boolean =>
-  policy.roles.some((named) => named === 'public' || named === role || groups.includes(named))
 
 /** "1 field", "3 fields". */
 export const count = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`

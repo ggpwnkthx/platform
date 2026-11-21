@@ -14,18 +14,16 @@ import { FieldAccessTable, HoldCell } from '../src/access/collection-access.tsx'
 import { FieldAccessDrawer, GrantDrawer, SchemaGrantDrawer } from '../src/access/grant-editor.tsx'
 import {
   alsoHeld,
-  draftOf,
   granteesOf,
   groupsOf,
   heldBy,
   holdOf,
-  policyReaches,
   reachesMore,
-  sameWanted,
   throughOf,
-  toggleField,
   wantedOf,
 } from '../src/access/model.ts'
+import { draftOf, policyReaches } from '../src/access/policy.ts'
+import { sameWanted, toggleField } from '../src/access/wishes.ts'
 import {
   CollectionPolicies,
   PolicyCard,

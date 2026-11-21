@@ -47,11 +47,11 @@ import {
   heldOf,
   holdsAny,
   others,
-  policyReaches,
   reaches,
   reachOf,
   throughOf,
 } from './model.ts'
+import { policyReaches } from './policy.ts'
 import { PolicyCard } from './policies.tsx'
 import { Legend, Mark, RoleLabel } from './rights.tsx'
 import { useRunner } from './runner.tsx'

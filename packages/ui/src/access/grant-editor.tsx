@@ -35,11 +35,10 @@ import {
   perField,
   reachesMore,
   reachOf,
-  sameWanted,
   throughOf,
-  toggleField,
   wantedOf,
 } from './model.ts'
+import { sameWanted, toggleField } from './wishes.ts'
 import { Legend, Mark, RoleLabel } from './rights.tsx'
 import { useRunner } from './runner.tsx'
 

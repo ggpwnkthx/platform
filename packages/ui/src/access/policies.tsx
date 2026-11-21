@@ -31,7 +31,7 @@ import { Checkbox, Field, Input, Select, TextArea } from '../ui/form.tsx'
 import { EditIcon, PlusIcon, PolicyIcon, TrashIcon } from '../ui/icons.tsx'
 import { Confirm, Drawer } from '../ui/overlay.tsx'
 import { RoleInput, useLast, useOpening } from './grant-editor.tsx'
-import { draftOf } from './model.ts'
+import { draftOf } from './policy.ts'
 import { useRunner } from './runner.tsx'
 
 const isSystemRole = (name: string) => name.startsWith('pg_')

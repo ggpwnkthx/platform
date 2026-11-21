@@ -2,15 +2,15 @@ import { beforeAll, describe, expect, test } from 'bun:test'
 import { PGlite } from '@electric-sql/pglite'
 import { grants, policies, reach, roles, schemaGrants, schemaReach } from '@platform/data'
 import {
-  draftOf,
   granteesOf,
   groupsOf,
   heldBy,
   reachOf,
   throughOf,
-  toggleField,
   wantedOf,
 } from '@platform/ui/access/model.ts'
+import { draftOf } from '@platform/ui/access/policy.ts'
+import { toggleField } from '@platform/ui/access/wishes.ts'
 import {
   type DataSource,
   dropPolicyStatement,
