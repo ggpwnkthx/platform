@@ -3,6 +3,7 @@ import type { ComponentChildren } from 'preact'
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import {
+  type ColumnInfo,
   type Condition,
   type Filter,
   type Operator,
@@ -19,7 +20,7 @@ import { qualified, inFilter, inList } from '@platform/vocabulary'
 import { operatorLabels } from './labels.ts'
 import { count, plural } from '../format.ts'
 import { describe, useLoad, useSession } from '../session.tsx'
-import { Page, SideGroup, useWorkspace } from '../shell.tsx'
+import { Page, SideGroup, useWorkspaceView } from '../shell.tsx'
 import { filterStart, filterValue } from '../fields/edit.ts'
 import { FilterLine } from '../fields/inputs.tsx'
 import { Value } from '../fields/renderers.tsx'
@@ -243,15 +244,294 @@ function FilterBuilder({
 
 const pageSizes = [25, 50, 100, 250]
 
+/**
+ * What the reader has chosen of the page they are on: the records they picked, and the text
+ * they are searching for. A new collection starts with nothing chosen.
+ */
+function useChosen(rows: Record<string, unknown>[], ws: string, table: string) {
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  useEffect(() => setSelected(new Set()), [ws, table])
+  const allSelected = rows.length > 0 && rows.every((r) => selected.has(String(r.id)))
+  const toggle = (id: string, checked: boolean) => {
+    const next = new Set(selected)
+    if (checked) next.add(id)
+    else next.delete(id)
+    setSelected(next)
+  }
+  const selectAll = (checked: boolean) =>
+    setSelected(checked ? new Set(rows.map((r) => String(r.id))) : new Set())
+  return { selected, allSelected, toggle, selectAll, setSelected }
+}
+
+/**
+ * The search the reader is typing, and the one the list is reading: the second follows the
+ * first, a moment after the last key.
+ */
+function useSearchBox(search: string, onSearch: (text: string) => void) {
+  const [draft, setDraft] = useState(search)
+  const ref = useRef<HTMLInputElement>(null)
+  useEffect(() => setDraft(search), [search])
+  // Search as you type, after a short pause.
+  useEffect(() => {
+    if (draft === search) return
+    const timer = setTimeout(() => onSearch(draft), 300)
+    return () => clearTimeout(timer)
+  }, [draft])
+  // '/' focuses the search, as in most data tools.
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if (
+        event.key === '/' &&
+        !(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
+      ) {
+        event.preventDefault()
+        ref.current?.focus()
+      }
+    }
+    document.addEventListener('keydown', key)
+    return () => document.removeEventListener('keydown', key)
+  }, [])
+  return { draft, setDraft, ref }
+}
+
+/** The head of the list: the fields, in the order they are read, and the hidden ones. */
+function RecordsHead({
+  fields,
+  hidden,
+  sort,
+  canDelete,
+  allSelected,
+  onSort,
+  onSelectAll,
+}: {
+  fields: Field[]
+  hidden: ColumnInfo[]
+  sort: string[]
+  canDelete: boolean
+  allSelected: boolean
+  onSort: (name: string) => void
+  onSelectAll: (checked: boolean) => void
+}) {
+  return (
+    <thead>
+      <tr>
+        {canDelete && (
+          <th class="grid-check sticky">
+            <input
+              type="checkbox"
+              aria-label="Select every record on this page"
+              checked={allSelected}
+              onChange={(e) => onSelectAll(e.currentTarget.checked)}
+            />
+          </th>
+        )}
+        {fields.map((field, i) => {
+          const direction =
+            sort[0] === field.name
+              ? 'ascending'
+              : sort[0] === `-${field.name}`
+                ? 'descending'
+                : 'none'
+          return (
+            <th
+              key={field.name}
+              aria-sort={direction}
+              class={clsx(
+                field.type.numeric && 'is-number',
+                i === 0 && 'sticky',
+                i === 0 && canDelete && 'sticky-2'
+              )}
+            >
+              <button type="button" class="grid-sort" onClick={() => onSort(field.name)}>
+                <span title={field.named ? field.name : undefined}>{field.label}</span>
+                {direction === 'ascending' ? (
+                  <ArrowUpIcon size={14} aria-hidden="true" />
+                ) : direction === 'descending' ? (
+                  <ArrowDownIcon size={14} aria-hidden="true" />
+                ) : null}
+              </button>
+            </th>
+          )
+        })}
+        {hidden.map((c) => (
+          <th
+            key={c.name}
+            class="grid-hidden"
+            title={`The database gives you no SELECT on ${c.name}`}
+          >
+            <span>
+              <LockIcon size={13} aria-hidden="true" /> {c.name}
+            </span>
+          </th>
+        ))}
+      </tr>
+    </thead>
+  )
+}
+
+/** One record of the list: its fields, and the way it is chosen. */
+function RecordRow({
+  row,
+  fields,
+  hidden,
+  labelOf,
+  open,
+  selected,
+  canDelete,
+  onSelect,
+  onOpen,
+}: {
+  row: Record<string, unknown>
+  fields: Field[]
+  hidden: ColumnInfo[]
+  labelOf: (field: Field, value: unknown) => string | undefined
+  open: string | undefined
+  selected: boolean
+  canDelete: boolean
+  onSelect: (id: string, checked: boolean) => void
+  onOpen: (href: string) => void
+}) {
+  const id = row.id === undefined ? null : String(row.id)
+  return (
+    <tr
+      class={clsx(open && 'is-link', id && selected && 'is-selected')}
+      onClick={(e) => {
+        if (!open || (e.target as HTMLElement).closest('input, a, button')) return
+        onOpen(open)
+      }}
+    >
+      {canDelete && (
+        <td class="grid-check sticky">
+          <input
+            type="checkbox"
+            aria-label="Select this record"
+            checked={Boolean(id && selected)}
+            onChange={(e) => onSelect(id!, e.currentTarget.checked)}
+          />
+        </td>
+      )}
+      {fields.map((field, i) => {
+        const cell = (
+          <Value
+            value={row[field.name]}
+            field={field}
+            situation="list"
+            label={labelOf(field, row[field.name])}
+          />
+        )
+        return (
+          <td
+            key={field.name}
+            class={clsx(
+              field.type.numeric && 'is-number',
+              i === 0 && 'sticky',
+              i === 0 && canDelete && 'sticky-2'
+            )}
+          >
+            {i === 0 && open ? (
+              <a href={open} class="grid-open clip clip-wide">
+                {cell}
+              </a>
+            ) : (
+              cell
+            )}
+          </td>
+        )
+      })}
+      {hidden.map((c) => (
+        <td key={c.name} class="grid-hidden" aria-label="hidden" />
+      ))}
+    </tr>
+  )
+}
+
+/** What the list has to say when it holds nothing. */
+function NoRecords({ filtered, rls }: { filtered: boolean; rls: boolean }) {
+  return (
+    <Empty
+      icon={<SearchIcon size={26} />}
+      title={filtered ? 'No record matches' : 'No record reaches you'}
+    >
+      {filtered
+        ? 'Change the search or remove a filter.'
+        : rls
+          ? 'The collection may hold rows that a row policy keeps from you. See the policies in the sidebar.'
+          : 'The collection is empty.'}
+    </Empty>
+  )
+}
+
+/** The pages of the list, and how many records each holds. */
+function RecordsPager({
+  total,
+  pageNumber,
+  limit,
+  pages,
+  onPage,
+  onLimit,
+}: {
+  total: number
+  pageNumber: number
+  limit: number
+  pages: number
+  onPage: (page: number) => void
+  onLimit: (limit: string) => void
+}) {
+  return (
+    <footer class="pager">
+      <span>
+        {total
+          ? `${count((pageNumber - 1) * limit + 1)}–${count(Math.min(total, pageNumber * limit))} of ${count(total)}`
+          : '0 records'}
+      </span>
+      <span class="pager-size">
+        <Select
+          value={String(limit)}
+          onChange={(e) => onLimit(e.currentTarget.value)}
+          aria-label="Records per page"
+        >
+          {pageSizes.map((n) => (
+            <option key={n} value={n}>
+              {n} per page
+            </option>
+          ))}
+        </Select>
+      </span>
+      <span class="pager-nav">
+        <button
+          type="button"
+          class="icon-button"
+          aria-label="Previous page"
+          disabled={pageNumber <= 1}
+          onClick={() => onPage(pageNumber - 1)}
+        >
+          <ChevronLeftIcon size={18} />
+        </button>
+        <span>
+          Page {pageNumber} of {pages}
+        </span>
+        <button
+          type="button"
+          class="icon-button"
+          aria-label="Next page"
+          disabled={pageNumber >= pages}
+          onClick={() => onPage(pageNumber + 1)}
+        >
+          <ChevronRightIcon size={18} />
+        </button>
+      </span>
+    </footer>
+  )
+}
+
 export function Records() {
   const { catalog, withDb, notify, presentations } = useSession()
   const location = useLocation()
   const { query } = location
-  const ws = useWorkspace()
+  const { ws, shown: workspace } = useWorkspaceView()
   const table = query.c ?? ''
   const info = tableOf(catalog, ws, table)
   const mark = presentationOf(presentations, ws, table)
-  const workspace = presentationOf(presentations, ws)
   const CollectionGlyph = iconFor(mark.icon) ?? CollectionIcon
   const columns = columnsOf(catalog, ws, table)
   const readable = columns.filter((c) => c.can_select)
@@ -269,40 +549,15 @@ export function Records() {
       : readable.some((c) => c.name === 'id')
         ? ['id']
         : []
-  const [selected, setSelected] = useState<Set<string>>(new Set())
   const [confirming, setConfirming] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [draftSearch, setDraftSearch] = useState(search)
-  const searchRef = useRef<HTMLInputElement>(null)
-  useEffect(() => setDraftSearch(search), [search])
-  useEffect(() => setSelected(new Set()), [ws, table])
 
   const place = (changes: Record<string, string | undefined>) => {
     const next = { ...query, ...changes }
     location.route(href('/content/records', next), true)
   }
 
-  // '/' focuses the search, as in most data tools.
-  useEffect(() => {
-    const key = (event: KeyboardEvent) => {
-      if (
-        event.key === '/' &&
-        !(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
-      ) {
-        event.preventDefault()
-        searchRef.current?.focus()
-      }
-    }
-    document.addEventListener('keydown', key)
-    return () => document.removeEventListener('keydown', key)
-  }, [])
-
-  // Search as you type, after a short pause.
-  useEffect(() => {
-    if (draftSearch === search) return
-    const timer = setTimeout(() => place({ q: draftSearch || undefined, p: undefined }), 300)
-    return () => clearTimeout(timer)
-  }, [draftSearch])
+  const searchBox = useSearchBox(search, (text) => place({ q: text || undefined, p: undefined }))
 
   const loaded = useLoad(
     info && readable.length
@@ -358,7 +613,8 @@ export function Records() {
   const total = loaded.data?.total ?? 0
   const pages = Math.max(1, Math.ceil(total / limit))
   const canDelete = Boolean(info?.can_delete && readable.some((c) => c.name === 'id'))
-  const allSelected = rows.length > 0 && rows.every((r) => selected.has(String(r.id)))
+  const chosen = useChosen(rows, ws, table)
+  const { selected, allSelected } = chosen
 
   const toggleSort = (name: string) => {
     const current = sort[0]
@@ -384,7 +640,7 @@ export function Records() {
             'The database deleted no row it would not let you reach: a row policy on this collection keeps the rest from you.',
         })
       else notify({ tone: 'success', title: `${plural(removed, 'record')} deleted` })
-      setSelected(new Set())
+      chosen.setSelected(new Set())
       setConfirming(false)
       loaded.reload()
     } catch (error) {
@@ -467,10 +723,10 @@ export function Records() {
             <SearchIcon size={16} aria-hidden="true" />
             <span class="sr-only">Search</span>
             <input
-              ref={searchRef}
+              ref={searchBox.ref}
               type="search"
-              value={draftSearch}
-              onInput={(e) => setDraftSearch(e.currentTarget.value)}
+              value={searchBox.draft}
+              onInput={(e) => searchBox.setDraft(e.currentTarget.value)}
               placeholder={`Search ${plural(readable.length, 'readable field')}`}
             />
             <kbd>/</kbd>
@@ -536,194 +792,49 @@ export function Records() {
         <>
           <div class={clsx('grid-wrap', loaded.loading && 'is-loading')}>
             <table class="grid">
-              <thead>
-                <tr>
-                  {canDelete && (
-                    <th class="grid-check sticky">
-                      <input
-                        type="checkbox"
-                        aria-label="Select every record on this page"
-                        checked={allSelected}
-                        onChange={(e) =>
-                          setSelected(
-                            e.currentTarget.checked
-                              ? new Set(rows.map((r) => String(r.id)))
-                              : new Set()
-                          )
-                        }
-                      />
-                    </th>
-                  )}
-                  {shown.map((field, i) => {
-                    const direction =
-                      sort[0] === field.name
-                        ? 'ascending'
-                        : sort[0] === `-${field.name}`
-                          ? 'descending'
-                          : 'none'
-                    return (
-                      <th
-                        key={field.name}
-                        aria-sort={direction}
-                        class={clsx(
-                          field.type.numeric && 'is-number',
-                          i === 0 && 'sticky',
-                          i === 0 && canDelete && 'sticky-2'
-                        )}
-                      >
-                        <button
-                          type="button"
-                          class="grid-sort"
-                          onClick={() => toggleSort(field.name)}
-                        >
-                          <span title={field.named ? field.name : undefined}>{field.label}</span>
-                          {direction === 'ascending' ? (
-                            <ArrowUpIcon size={14} aria-hidden="true" />
-                          ) : direction === 'descending' ? (
-                            <ArrowDownIcon size={14} aria-hidden="true" />
-                          ) : null}
-                        </button>
-                      </th>
-                    )
-                  })}
-                  {hidden.map((c) => (
-                    <th
-                      key={c.name}
-                      class="grid-hidden"
-                      title={`The database gives you no SELECT on ${c.name}`}
-                    >
-                      <span>
-                        <LockIcon size={13} aria-hidden="true" /> {c.name}
-                      </span>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
+              <RecordsHead
+                fields={shown}
+                hidden={hidden}
+                sort={sort}
+                canDelete={canDelete}
+                allSelected={allSelected}
+                onSort={toggleSort}
+                onSelectAll={chosen.selectAll}
+              />
               <tbody>
                 {rows.map((row, index) => {
                   const id = row.id === undefined ? null : String(row.id)
                   const open = id ? href('/content/item', { ws, c: table, id }) : undefined
                   return (
-                    <tr
+                    <RecordRow
                       key={id ?? index}
-                      class={clsx(open && 'is-link', id && selected.has(id) && 'is-selected')}
-                      onClick={(e) => {
-                        if (!open || (e.target as HTMLElement).closest('input, a, button')) return
-                        location.route(open)
-                      }}
-                    >
-                      {canDelete && (
-                        <td class="grid-check sticky">
-                          <input
-                            type="checkbox"
-                            aria-label="Select this record"
-                            checked={Boolean(id && selected.has(id))}
-                            onChange={(e) => {
-                              const next = new Set(selected)
-                              if (e.currentTarget.checked) next.add(id!)
-                              else next.delete(id!)
-                              setSelected(next)
-                            }}
-                          />
-                        </td>
-                      )}
-                      {shown.map((field, i) => {
-                        const cell = (
-                          <Value
-                            value={row[field.name]}
-                            field={field}
-                            situation="list"
-                            label={labelOf(field, row[field.name])}
-                          />
-                        )
-                        return (
-                          <td
-                            key={field.name}
-                            class={clsx(
-                              field.type.numeric && 'is-number',
-                              i === 0 && 'sticky',
-                              i === 0 && canDelete && 'sticky-2'
-                            )}
-                          >
-                            {i === 0 && open ? (
-                              <a href={open} class="grid-open clip clip-wide">
-                                {cell}
-                              </a>
-                            ) : (
-                              cell
-                            )}
-                          </td>
-                        )
-                      })}
-                      {hidden.map((c) => (
-                        <td key={c.name} class="grid-hidden" aria-label="hidden" />
-                      ))}
-                    </tr>
+                      row={row}
+                      fields={shown}
+                      hidden={hidden}
+                      labelOf={labelOf}
+                      open={open}
+                      selected={Boolean(id && selected.has(id))}
+                      canDelete={canDelete}
+                      onSelect={chosen.toggle}
+                      onOpen={(to) => location.route(to)}
+                    />
                   )
                 })}
               </tbody>
             </table>
             {!loaded.loading && loaded.data && !rows.length && (
-              <Empty
-                icon={<SearchIcon size={26} />}
-                title={
-                  Object.keys(filter).length || search
-                    ? 'No record matches'
-                    : 'No record reaches you'
-                }
-              >
-                {Object.keys(filter).length || search
-                  ? 'Change the search or remove a filter.'
-                  : info.rls
-                    ? 'The collection may hold rows that a row policy keeps from you. See the policies in the sidebar.'
-                    : 'The collection is empty.'}
-              </Empty>
+              <NoRecords filtered={Boolean(Object.keys(filter).length || search)} rls={info.rls} />
             )}
             {!loaded.data && loaded.loading && <Loading />}
           </div>
-          <footer class="pager">
-            <span>
-              {total
-                ? `${count((pageNumber - 1) * limit + 1)}–${count(Math.min(total, pageNumber * limit))} of ${count(total)}`
-                : '0 records'}
-            </span>
-            <span class="pager-size">
-              <Select
-                value={String(limit)}
-                onChange={(e) => place({ n: e.currentTarget.value, p: undefined })}
-                aria-label="Records per page"
-              >
-                {pageSizes.map((n) => (
-                  <option key={n} value={n}>
-                    {n} per page
-                  </option>
-                ))}
-              </Select>
-            </span>
-            <span class="pager-nav">
-              <button
-                type="button"
-                class="icon-button"
-                aria-label="Previous page"
-                disabled={pageNumber <= 1}
-                onClick={() => place({ p: String(pageNumber - 1) })}
-              >
-                <ChevronLeftIcon size={18} />
-              </button>
-              <span>
-                Page {pageNumber} of {pages}
-              </span>
-              <button
-                type="button"
-                class="icon-button"
-                aria-label="Next page"
-                disabled={pageNumber >= pages}
-                onClick={() => place({ p: String(pageNumber + 1) })}
-              >
-                <ChevronRightIcon size={18} />
-              </button>
-            </span>
-          </footer>
+          <RecordsPager
+            total={total}
+            pageNumber={pageNumber}
+            limit={limit}
+            pages={pages}
+            onPage={(page) => place({ p: String(page) })}
+            onLimit={(n) => place({ n, p: undefined })}
+          />
         </>
       )}
       <Confirm
@@ -736,8 +847,8 @@ export function Records() {
       >
         <p>
           Each runs as <span class="mono">DELETE FROM {qualified(ws, table)} WHERE id = …</span>{' '}
-          under your role. A row policy may keep the database from deleting some of them; you will be
-          told how many it deleted.
+          under your role. A row policy may keep the database from deleting some of them; you will
+          be told how many it deleted.
         </p>
       </Confirm>
     </Page>

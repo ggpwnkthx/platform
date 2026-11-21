@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import {
   activity,
+  type ColumnInfo,
   columnsOf,
   deleteRecord,
   fieldMetadata,
@@ -12,12 +13,13 @@ import {
   relationLabels,
   systemColumns,
   tableOf,
+  type TableInfo,
   updateRecord,
 } from '@platform/data'
 import { ident, qualified, inRecord, isLocked } from '@platform/vocabulary'
 import { ago, display, shortType } from '../format.ts'
 import { describe, useLoad, useSession } from '../session.tsx'
-import { Page, SideGroup, useWorkspace } from '../shell.tsx'
+import { Page, SideGroup, useWorkspaceView } from '../shell.tsx'
 import { fieldText, fieldValue, isWide } from '../fields/edit.ts'
 import { Value } from '../fields/renderers.tsx'
 import { resolveFields } from '../fields/resolve.ts'
@@ -65,12 +67,230 @@ function cameFrom(from: string | undefined): string | null {
   return from && /^\/(?!\/)/.test(from) && !from.includes('\\') ? from : null
 }
 
-export function Item() {
-  const { catalog, withDb, notify, presentations, refresh } = useSession()
+/** What the page calls the record: the label column's value, or the first of its name. */
+function recordTitle(
+  label: string | null,
+  original: Record<string, unknown> | null,
+  id: string
+): string {
+  return (label && original ? display(original[label]) : '') || `Record ${id.slice(0, 8)}`
+}
+
+/** The fields the owner keeps out of the form, though the reader may reach them. */
+function WithheldFields({ fields }: { fields: FieldInfo[] }) {
+  return (
+    <div class="field field-wide unreachable">
+      <p>
+        <HiddenIcon size={16} aria-hidden="true" />
+        Not in the record:{' '}
+        {fields.map((c, i) => (
+          <span key={c.name}>
+            {i > 0 && ', '}
+            <span class="mono">{c.name}</span>
+          </span>
+        ))}
+        . The owner of this collection keeps these fields out of the form.
+      </p>
+    </div>
+  )
+}
+
+/** The fields the database grants the reader no right to reach at all. */
+function UnreachableFields({ fields, creating }: { fields: FieldInfo[]; creating: boolean }) {
+  return (
+    <div class="field field-wide unreachable">
+      <p>
+        <HiddenIcon size={16} aria-hidden="true" />
+        {creating ? 'You may not set' : 'Hidden from you'}:{' '}
+        {fields.map((c, i) => (
+          <span key={c.name}>
+            {i > 0 && ', '}
+            <span class="mono">{c.name}</span>
+          </span>
+        ))}
+        . The database grants your role no {creating ? 'INSERT' : 'SELECT or UPDATE'} on{' '}
+        {fields.length === 1 ? 'it' : 'them'}.
+      </p>
+    </div>
+  )
+}
+
+/** What the record itself holds: the columns the platform keeps, and when it last changed. */
+function RecordFacts({
+  original,
+  fields,
+}: {
+  original: Record<string, unknown>
+  fields: FieldInfo[]
+}) {
+  return (
+    <>
+      <dl class="facts">
+        {systemColumns.map((name) => {
+          const field = fields.find((one) => one.name === name)
+          if (!field || !(name in original)) return null
+          return (
+            <Fragment key={name}>
+              <dt>{name.replace('_', ' ').replace(/^./, (c) => c.toUpperCase())}</dt>
+              <dd>
+                <Value value={original[name]} field={field} situation="record" />
+              </dd>
+            </Fragment>
+          )
+        })}
+      </dl>
+      {typeof original.updated_at === 'string' && (
+        <p class="side-note">Last changed {ago(original.updated_at)}.</p>
+      )}
+    </>
+  )
+}
+
+/**
+ * What the reader does with a record: saves it, or deletes it. Each says what the database
+ * made of it, and what the reader may do next. The form it writes is the form it holds: a
+ * save that is refused leaves the reader's own text where it was.
+ */
+function useRecordWriter({
+  creating,
+  errors,
+  from,
+  id,
+  info,
+  onSaved,
+  readable,
+  refresh,
+  reload,
+  startText,
+  table,
+  values,
+  version,
+  ws,
+}: {
+  creating: boolean
+  errors: Record<string, string>
+  from: string | null
+  id: string
+  info: TableInfo | undefined
+  /** Called when the record was saved: the form empties itself. */
+  onSaved: () => void
+  readable: ColumnInfo[]
+  refresh: () => Promise<void>
+  reload: () => void
+  /** What the address says the record starts with: it changes when the address does. */
+  startText: string
+  table: string
+  values: Record<string, unknown>
+  version: number | undefined
+  ws: string
+}) {
+  const { withDb, notify } = useSession()
   const location = useLocation()
-  const ws = useWorkspace()
+  const [saving, setSaving] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [problem, setProblem] = useState<{ title: string; detail?: string } | null>(null)
+  const formRef = useRef<HTMLFormElement>(null)
+  // A record that has just been opened has nothing wrong with it yet.
+  useEffect(() => setProblem(null), [ws, table, id, startText])
+
+  const save = async (event?: Event) => {
+    event?.preventDefault()
+    if (Object.keys(errors).length) return
+    setSaving(true)
+    setProblem(null)
+    try {
+      if (creating) {
+        const affected = await withDb((db) => insertRecord(db, ws, table, values))
+        notify({
+          tone: 'success',
+          title: affected ? 'Record created' : 'The database created no record',
+        })
+        // A row of the platform's own may be something the interface itself reads.
+        if (info?.system) await refresh().catch(() => undefined)
+        location.route(from ?? href('/content/records', { ws, c: table }))
+        return
+      }
+      // The write, and then the record as it stands: when the database changed no row, what
+      // it holds now says whether someone else changed it first.
+      const outcome = await withDb(async (db) => {
+        const affected = await updateRecord(db, ws, table, id, values, version)
+        const now = readable.length
+          ? await record(
+              db,
+              ws,
+              table,
+              readable.map((c) => c.name),
+              id
+            )
+          : null
+        return { affected, now }
+      })
+      if (outcome.affected) {
+        notify({ tone: 'success', title: 'Saved' })
+        onSaved()
+        if (info?.system) await refresh().catch(() => undefined)
+        reload()
+      } else if (outcome.now && version !== undefined && outcome.now.version !== version) {
+        setProblem({
+          title: `Changed by ${display(outcome.now.updated_by) || 'someone else'} since you opened it`,
+          detail: `It is at version ${display(outcome.now.version)}; you edited version ${version}. Your changes are still in the form: read the record again before saving.`,
+        })
+      } else {
+        setProblem({
+          title: 'The database changed no row',
+          detail:
+            'A row policy on this collection does not let you change this record, or it is no longer there.',
+        })
+      }
+    } catch (error) {
+      setProblem(metadataRefusal(ws, table, error) ?? describe(error))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const remove = async () => {
+    setSaving(true)
+    try {
+      const affected = await withDb((db) => deleteRecord(db, ws, table, id, version))
+      setConfirming(false)
+      if (affected) {
+        notify({ tone: 'success', title: 'Record deleted' })
+        if (info?.system) await refresh().catch(() => undefined)
+        location.route(from ?? href('/content/records', { ws, c: table }))
+      } else
+        setProblem({
+          title: 'The database deleted no row',
+          detail: 'A row policy keeps this record from you, or it changed since you opened it.',
+        })
+    } catch (error) {
+      setConfirming(false)
+      setProblem(describe(error))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Save with Ctrl or Cmd + S.
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+        event.preventDefault()
+        formRef.current?.requestSubmit()
+      }
+    }
+    document.addEventListener('keydown', key)
+    return () => document.removeEventListener('keydown', key)
+  })
+
+  return { formRef, saving, confirming, setConfirming, problem, save, remove }
+}
+
+export function Item() {
+  const { catalog, presentations, refresh } = useSession()
+  const location = useLocation()
+  const { ws, shown: workspace } = useWorkspaceView()
   const table = location.query.c ?? ''
-  const workspace = presentationOf(presentations, ws)
   const collection = presentationOf(presentations, ws, table)
   const id = location.query.id ?? '+'
   const creating = id === '+'
@@ -136,13 +356,8 @@ export function Item() {
   // The fields the owner keeps out of the record, though the reader may reach them.
   const withheld = own.filter((field) => reachable(field) && !inRecord(field.views))
   const [draft, setDraft] = useState<Record<string, string>>({})
-  const [saving, setSaving] = useState(false)
-  const [confirming, setConfirming] = useState(false)
-  const [problem, setProblem] = useState<{ title: string; detail?: string } | null>(null)
-  const formRef = useRef<HTMLFormElement>(null)
   useEffect(() => {
     setDraft(JSON.parse(startText) as Record<string, string>)
-    setProblem(null)
   }, [ws, table, id, startText])
 
   /** What the form held for a field when it opened: the stored value, as text. */
@@ -169,109 +384,35 @@ export function Item() {
     return `UPDATE ${qualified(ws, table)}\n   SET ${names.map((n, i) => `${ident(n)} = $${i + 1}`).join(',\n       ')}\n WHERE id = $${names.length + 1}${version !== undefined ? ` AND version = $${names.length + 2}` : ''};`
   }, [JSON.stringify(values), creating, version])
 
-  const save = async (event?: Event) => {
-    event?.preventDefault()
-    if (Object.keys(errors).length) return
-    setSaving(true)
-    setProblem(null)
-    try {
-      if (creating) {
-        const affected = await withDb((db) => insertRecord(db, ws, table, values))
-        notify({
-          tone: 'success',
-          title: affected ? 'Record created' : 'The database created no record',
-        })
-        // A row of the platform's own may be something the interface itself reads.
-        if (info?.system) await refresh().catch(() => undefined)
-        location.route(from ?? href('/content/records', { ws, c: table }))
-        return
-      }
-      // The write, and then the record as it stands: when the database changed no row, what
-      // it holds now says whether someone else changed it first.
-      const outcome = await withDb(async (db) => {
-        const affected = await updateRecord(db, ws, table, id, values, version)
-        const now = readable.length
-          ? await record(
-              db,
-              ws,
-              table,
-              readable.map((c) => c.name),
-              id
-            )
-          : null
-        return { affected, now }
-      })
-      if (outcome.affected) {
-        notify({ tone: 'success', title: 'Saved' })
-        setDraft({})
-        if (info?.system) await refresh().catch(() => undefined)
-        loaded.reload()
-      } else if (outcome.now && version !== undefined && outcome.now.version !== version) {
-        setProblem({
-          title: `Changed by ${display(outcome.now.updated_by) || 'someone else'} since you opened it`,
-          detail: `It is at version ${display(outcome.now.version)}; you edited version ${version}. Your changes are still in the form: read the record again before saving.`,
-        })
-      } else {
-        setProblem({
-          title: 'The database changed no row',
-          detail:
-            'A row policy on this collection does not let you change this record, or it is no longer there.',
-        })
-      }
-    } catch (error) {
-      setProblem(metadataRefusal(ws, table, error) ?? describe(error))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const remove = async () => {
-    setSaving(true)
-    try {
-      const affected = await withDb((db) => deleteRecord(db, ws, table, id, version))
-      setConfirming(false)
-      if (affected) {
-        notify({ tone: 'success', title: 'Record deleted' })
-        if (info?.system) await refresh().catch(() => undefined)
-        location.route(from ?? href('/content/records', { ws, c: table }))
-      } else
-        setProblem({
-          title: 'The database deleted no row',
-          detail: 'A row policy keeps this record from you, or it changed since you opened it.',
-        })
-    } catch (error) {
-      setConfirming(false)
-      setProblem(describe(error))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  // Save with Ctrl or Cmd + S.
-  useEffect(() => {
-    const key = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
-        event.preventDefault()
-        formRef.current?.requestSubmit()
-      }
-    }
-    document.addEventListener('keydown', key)
-    return () => document.removeEventListener('keydown', key)
+  const writer = useRecordWriter({
+    creating,
+    errors,
+    from,
+    id,
+    info,
+    onSaved: () => setDraft({}),
+    readable,
+    refresh,
+    reload: loaded.reload,
+    startText,
+    table,
+    values,
+    version,
+    ws,
   })
+  const { formRef, saving, confirming, setConfirming, problem, save, remove } = writer
 
   const back = from ?? href('/content/records', { ws, c: table })
   if (!info)
     return (
       <Page title="Record" icon={<CollectionIcon size={22} />}>
-        <Notice tone="warning" title={`The database shows you no collection named ${ws}.${table}`} />
+        <Notice
+          tone="warning"
+          title={`The database shows you no collection named ${ws}.${table}`}
+        />
       </Page>
     )
-  const title = creating
-    ? `New record`
-    : (() => {
-        const label = labelColumn(catalog, ws, table)
-        return (label && original ? display(original[label]) : '') || `Record ${id.slice(0, 8)}`
-      })()
+  const title = creating ? `New record` : recordTitle(labelColumn(catalog, ws, table), original, id)
   // A record that did not load offers nothing to save or delete.
   const present = creating || Boolean(original)
   const canDelete = !creating && info.can_delete && present
@@ -320,23 +461,7 @@ export function Item() {
             !creating && original ? (
               <>
                 <SideGroup title="Record" icon={<InfoIcon size={16} />}>
-                  <dl class="facts">
-                    {systemColumns.map((name) => {
-                      const field = all.find((one) => one.name === name)
-                      if (!field || !(name in original)) return null
-                      return (
-                        <Fragment key={name}>
-                          <dt>{name.replace('_', ' ').replace(/^./, (c) => c.toUpperCase())}</dt>
-                          <dd>
-                            <Value value={original[name]} field={field} situation="record" />
-                          </dd>
-                        </Fragment>
-                      )
-                    })}
-                  </dl>
-                  {original && typeof original.updated_at === 'string' && (
-                    <p class="side-note">Last changed {ago(original.updated_at)}.</p>
-                  )}
+                  <RecordFacts original={original} fields={all} />
                 </SideGroup>
                 <SideGroup title="Revisions" icon={<HistoryIcon size={16} />}>
                   <RowRevisions schema={ws} table={table} id={id} />
@@ -376,37 +501,8 @@ export function Item() {
               storedLabel={loaded.data?.labels[field.name]?.[String(original?.[field.name])]}
             />
           ))}
-          {withheld.length > 0 && (
-            <div class="field field-wide unreachable">
-              <p>
-                <HiddenIcon size={16} aria-hidden="true" />
-                Not in the record:{' '}
-                {withheld.map((c, i) => (
-                  <span key={c.name}>
-                    {i > 0 && ', '}
-                    <span class="mono">{c.name}</span>
-                  </span>
-                ))}
-                . The owner of this collection keeps these fields out of the form.
-              </p>
-            </div>
-          )}
-          {unreachable.length > 0 && (
-            <div class="field field-wide unreachable">
-              <p>
-                <HiddenIcon size={16} aria-hidden="true" />
-                {creating ? 'You may not set' : 'Hidden from you'}:{' '}
-                {unreachable.map((c, i) => (
-                  <span key={c.name}>
-                    {i > 0 && ', '}
-                    <span class="mono">{c.name}</span>
-                  </span>
-                ))}
-                . The database grants your role no {creating ? 'INSERT' : 'SELECT or UPDATE'} on{' '}
-                {unreachable.length === 1 ? 'it' : 'them'}.
-              </p>
-            </div>
-          )}
+          {withheld.length > 0 && <WithheldFields fields={withheld} />}
+          {unreachable.length > 0 && <UnreachableFields fields={unreachable} creating={creating} />}
           {statement && (
             <div class="field field-wide">
               <Statement
@@ -518,8 +614,8 @@ function RecordField({
         />
       ) : !column.can_select ? (
         <p class="side-note">
-          You may write this field, but you may not read it back: the database grants you no SELECT on
-          it.
+          You may write this field, but you may not read it back: the database grants you no SELECT
+          on it.
         </p>
       ) : creating ? (
         <p class="side-note">
