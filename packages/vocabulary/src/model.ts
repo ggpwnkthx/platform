@@ -22,7 +22,7 @@ import {
   systemFields,
   type TypeName,
 } from './core.ts'
-import { onDeleteAction, type OnDelete } from './dcl.ts'
+import { onDeleteAction, type OnDelete } from './access.ts'
 import { InvalidName } from './errors.ts'
 import {
   fieldRenderersStatement,

@@ -14,7 +14,7 @@
  */
 
 export * from './core.ts'
-export * from './dcl.ts'
+export * from './access.ts'
 export * from './errors.ts'
 export * from './metadata.ts'
 export * from './model.ts'
