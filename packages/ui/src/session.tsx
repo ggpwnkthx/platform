@@ -100,6 +100,24 @@ export function describe(error: unknown): { title: string; detail?: string } {
 const loginRefused = (error: unknown) =>
   error instanceof PgError && (error.code === '28000' || error.code === '28P01')
 
+/**
+ * The login the reader holds, if it is still good: it must be there, and it must not have
+ * expired. A login that has expired is signed out of, and the reader is told why.
+ */
+function currentLogin(
+  credentials: Credentials | null,
+  config: RuntimeConfig | null,
+  signOut: (reason?: string) => void
+): { who: Credentials; config: RuntimeConfig } {
+  if (!credentials || !config) throw new Error('Sign in first.')
+  const expiry = expiresAt(credentials.token)
+  if (expiry !== null && expiry <= Date.now()) {
+    signOut('Your sign-in expired. Sign in again to continue.')
+    throw new Error('Your sign-in expired.')
+  }
+  return { who: credentials, config }
+}
+
 export function SessionProvider({ children }: { children: ComponentChildren }) {
   const location = useLocation()
   const [phase, setPhase] = useState<Phase>('starting')
@@ -145,13 +163,7 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
 
   const withDb = useCallback(
     async <T,>(work: (db: Db) => Promise<T>): Promise<T> => {
-      const who = credentials.current
-      if (!who || !config) throw new Error('Sign in first.')
-      const expiry = expiresAt(who.token)
-      if (expiry !== null && expiry <= Date.now()) {
-        signOut('Your sign-in expired. Sign in again to continue.')
-        throw new Error('Your sign-in expired.')
-      }
+      currentLogin(credentials.current, config, signOut)
       const kept = keeper.current
       if (!kept) throw new Error('Sign in first.')
       try {
@@ -167,14 +179,8 @@ export function SessionProvider({ children }: { children: ComponentChildren }) {
 
   const withReaderDb = useCallback(
     async <T,>(work: (db: Db) => Promise<T>): Promise<T> => {
-      const who = credentials.current
-      if (!who || !config) throw new Error('Sign in first.')
-      const expiry = expiresAt(who.token)
-      if (expiry !== null && expiry <= Date.now()) {
-        signOut('Your sign-in expired. Sign in again to continue.')
-        throw new Error('Your sign-in expired.')
-      }
-      const db = await connect(config, who)
+      const { who, config: cfg } = currentLogin(credentials.current, config, signOut)
+      const db = await connect(cfg, who)
       try {
         return await work(db)
       } finally {
