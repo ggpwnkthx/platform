@@ -9,6 +9,7 @@ import {
 import type { RuntimeConfig } from '@platform/ui/config.ts'
 import type { Credentials, Db, Person, WithoutIssuer } from '@platform/ui/pg/connect.ts'
 import type pg from 'pg'
+import { ident } from '@platform/vocabulary'
 import { parseManifest } from './apply.ts'
 import { applyFolder, type Applied, manifestOf } from './folder.ts'
 import { MIGRATIONS } from './migrations.ts'
@@ -190,6 +191,13 @@ async function asset(path: string): Promise<Response> {
   return response
 }
 
+/**
+ * The statement that makes this page one person, as a login is one token. The role is a name,
+ * and it is quoted as one: a role may hold a quote of its own.
+ */
+export const sessionAuthorization = (role: string): string =>
+  `SET SESSION AUTHORIZATION ${ident(role)}`
+
 async function start(applied: Applied, storageKey: string, role: string): Promise<PGlite> {
   const [pgliteWasmModule, initdbWasmModule, fsBundle] = await Promise.all([
     asset('/dev/pglite.wasm').then((r) => WebAssembly.compileStreaming(r)),
@@ -217,7 +225,7 @@ async function start(applied: Applied, storageKey: string, role: string): Promis
     .then((r) => r.rows[0]?.found === 't')
   if (!installed) await install(db, applied)
   // From here on this page is one person, as a login is one token.
-  await db.query(`SET SESSION AUTHORIZATION ${JSON.stringify(role)}`)
+  await db.query(sessionAuthorization(role))
   return db
 }
 
