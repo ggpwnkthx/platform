@@ -3,7 +3,7 @@ import { activity, columnsOf, metadata, systemWorkspaceName, tablesIn } from '@p
 import { qualified, workspaceTarget, isReservedKey } from '@platform/vocabulary'
 import { display, count as formatCount } from '../format.ts'
 import { useLoad, useSession } from '../session.tsx'
-import { Page, useWorkspace } from '../shell.tsx'
+import { Page, useWorkspaceView } from '../shell.tsx'
 import { presentationOf } from '@platform/data'
 import { href } from '../url.ts'
 import { Avatar } from '../ui/avatar.tsx'
@@ -22,13 +22,11 @@ import { Rights } from '../access/rights.tsx'
 
 /** A workspace at a glance: its collections, how many rows reach you, and what you may do. */
 export function ContentHome() {
-  const { catalog, identity, presentations } = useSession()
-  const ws = useWorkspace()
-  const schema = catalog.schemas.find((s) => s.name === ws)
+  const { identity, presentations } = useSession()
+  const { ws, schema, shown, catalog } = useWorkspaceView()
   // The platform's own workspace: its collections are read like any other, each under its
   // own row security, and there is nothing of it to administer from here.
   const system = schema?.kind === 'system'
-  const shown = presentationOf(presentations, ws)
   const WorkspaceGlyph = iconFor(shown.icon) ?? WorkspaceIcon
   const tables = tablesIn(catalog, ws)
   const counts = useLoad(

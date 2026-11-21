@@ -3,8 +3,7 @@ import { useLocation } from 'preact-iso'
 import { workspaceStatements, workspaceTarget } from '@platform/vocabulary'
 import { roles as readRoles } from '@platform/data'
 import { useLoad, useSession } from '../session.tsx'
-import { Page, useWorkspace } from '../shell.tsx'
-import { presentationOf } from '@platform/data'
+import { Page, useWorkspaceView } from '../shell.tsx'
 import { href } from '../url.ts'
 import { Notice, Statement } from '../ui/bits.tsx'
 import { Action } from '../ui/button.tsx'
@@ -93,10 +92,7 @@ export function NewWorkspace() {
 }
 
 export function WorkspaceSettings() {
-  const { catalog, presentations } = useSession()
-  const ws = useWorkspace()
-  const schema = catalog.schemas.find((s) => s.name === ws)
-  const shown = presentationOf(presentations, ws)
+  const { ws, schema, shown } = useWorkspaceView()
   const WorkspaceGlyph = iconFor(shown.icon) ?? WorkspaceIcon
   const roles = useLoad((db) => readRoles(db), [])
   const owner = Boolean(schema?.can_alter)

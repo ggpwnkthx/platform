@@ -50,6 +50,18 @@ export function useWorkspace(): string {
   return ws
 }
 
+/**
+ * The workspace in view, with what the database says about it and how it presents itself:
+ * the three things every page about a workspace reads, read in one place.
+ */
+export function useWorkspaceView() {
+  const { catalog, presentations } = useSession()
+  const ws = useWorkspace()
+  const schema = catalog.schemas.find((s) => s.name === ws)
+  const shown = presentationOf(presentations, ws)
+  return { ws, schema, shown, catalog }
+}
+
 /** Statements worth starting from: questions the database answers about the reader. */
 const snippets = (ws: string) => [
   { label: 'Who am I', sql: 'SELECT session_user, current_user, current_database(), version();' },
@@ -303,8 +315,8 @@ function NavPane({ module }: { module: Module | null }) {
       <>
         <h2 class="nav-title">SQL</h2>
         <p class="nav-foot">
-          One statement at a time, run as your own role. The database checks every GRANT, REVOKE, DDL
-          and row it touches.
+          One statement at a time, run as your own role. The database checks every GRANT, REVOKE,
+          DDL and row it touches.
         </p>
         <h2 class="nav-title">Ask the database</h2>
         <ul class="nav-list">
