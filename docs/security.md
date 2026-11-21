@@ -83,6 +83,14 @@ hiding the object catalogs is a separate and much wider change that breaks psql'
 `pg_dump` and most administration tools. RLS also has PostgreSQL's usual unique/FK constraint
 side channels.
 
+A folder is code, not data, and applying one runs it. Its `models.ts` is loaded and run by
+`apply --dir`, with the operator's own rights. Its `migration.sql` and `demo.sql` are run as
+they are, beside the server, and only where the caller is the server's own superuser, so a
+folder's SQL carries the server's authority and not the operator's. Its `extensions.tsx` is put
+in the place of the interface's own extensions module by `ui build --dir`, and runs in every
+reader's browser. Take a folder from a source you would run code from, and keep the folder a
+deployment applies one your own trust holds.
+
 ## Sign-in and its limits
 
 Dex is the single issuer PostgreSQL trusts, so Dex and everything behind it are part of the
