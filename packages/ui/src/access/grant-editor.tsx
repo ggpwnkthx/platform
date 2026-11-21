@@ -51,6 +51,47 @@ const named = (text: string): string => {
 const isSystemRole = (name: string) => name.startsWith('pg_')
 
 /**
+ * The foot of a grant drawer: cancel, and the button that applies the statements — or
+ * revokes them, when what they take away is what the role already holds.
+ */
+function GrantFooter({
+  statements,
+  problem,
+  grantee,
+  revoking,
+  runner,
+  onDone,
+  onClose,
+}: {
+  statements: string[]
+  problem: string | null
+  grantee: string
+  revoking: boolean
+  runner: ReturnType<typeof useRunner>
+  onDone: () => void
+  onClose: () => void
+}) {
+  return (
+    <>
+      <Button onClick={onClose}>Cancel</Button>
+      <Button
+        tone={revoking ? 'danger' : 'primary'}
+        busy={runner.busy}
+        disabled={!statements.length || !!problem}
+        onClick={async () => {
+          if (await runner.runStatements(statements, `Changed what ${grantee} holds`)) {
+            onDone()
+            onClose()
+          }
+        }}
+      >
+        {revoking ? 'Revoke' : 'Apply'}
+      </Button>
+    </>
+  )
+}
+
+/**
  * A key that changes each time something opens and stays while it closes, so that an editor
  * starts from what the database holds every time it is opened.
  */
@@ -285,22 +326,15 @@ function GrantEditor({
       }
       subtitle="What the role holds on this collection itself. The database lets the collection’s owner change it."
       footer={
-        <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button
-            tone={statements.length && !grantsSomething ? 'danger' : 'primary'}
-            busy={runner.busy}
-            disabled={!statements.length || !!problem}
-            onClick={async () => {
-              if (await runner.runStatements(statements, `Changed what ${grantee} holds`)) {
-                onDone()
-                onClose()
-              }
-            }}
-          >
-            {statements.length && !grantsSomething ? 'Revoke' : 'Apply'}
-          </Button>
-        </>
+        <GrantFooter
+          statements={statements}
+          problem={problem}
+          grantee={grantee}
+          revoking={Boolean(statements.length && !grantsSomething)}
+          runner={runner}
+          onDone={onDone}
+          onClose={onClose}
+        />
       }
     >
       {runner.problem && (
@@ -882,22 +916,15 @@ function SchemaGrantEditor({
       }
       subtitle="What the role holds on the workspace’s own schema. The database lets the workspace’s owner change it."
       footer={
-        <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button
-            tone={statements.length && !granted.length ? 'danger' : 'primary'}
-            busy={runner.busy}
-            disabled={!statements.length || !!problem}
-            onClick={async () => {
-              if (await runner.runStatements(statements, `Changed what ${grantee} holds`)) {
-                onDone()
-                onClose()
-              }
-            }}
-          >
-            {statements.length && !granted.length ? 'Revoke' : 'Apply'}
-          </Button>
-        </>
+        <GrantFooter
+          statements={statements}
+          problem={problem}
+          grantee={grantee}
+          revoking={Boolean(statements.length && !granted.length)}
+          runner={runner}
+          onDone={onDone}
+          onClose={onClose}
+        />
       }
     >
       {runner.problem && (

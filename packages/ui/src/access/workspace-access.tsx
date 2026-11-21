@@ -24,9 +24,9 @@ import {
   KeyIcon,
   PlusIcon,
 } from '../ui/icons.tsx'
-import { HoldCell, PrivilegeHeads } from './collection-access.tsx'
+import { HoldCells, PrivilegeHeads } from './collection-access.tsx'
 import { GrantDrawer, type GrantTarget, SchemaGrantDrawer } from './grant-editor.tsx'
-import { alsoHeld, drawn, everyone, granteesOf, heldBy, heldOf, holdOf } from './model.ts'
+import { drawn, everyone, granteesOf, heldBy } from './model.ts'
 import { Legend, Mark, RoleLabel } from './rights.tsx'
 
 /**
@@ -69,7 +69,8 @@ export function WorkspaceGrants({
           <h2>Who may use this workspace</h2>
           <p>
             USAGE lets a role reach the collections inside, each under its own grants and row
-            policies; without it the database refuses them all. CREATE lets it make collections here.
+            policies; without it the database refuses them all. CREATE lets it make collections
+            here.
           </p>
         </div>
         {owner && (
@@ -285,16 +286,7 @@ export function Grants() {
                                   <RoleLabel name={grantee} roles={roles} />
                                   {grantee === everyone && <Badge>everyone</Badge>}
                                 </td>
-                                {drawn.map((privilege) => (
-                                  <HoldCell
-                                    key={privilege}
-                                    hold={holdOf(held[privilege])}
-                                    privilege={privilege}
-                                    fields={heldOf(held, privilege).columns}
-                                    of={columns.length}
-                                  />
-                                ))}
-                                <td class="mono cell-muted">{alsoHeld(held).join(', ')}</td>
+                                <HoldCells held={held} privileges={drawn} of={columns.length} />
                                 <td class="grid-actions">
                                   {table.can_alter && (
                                     <button

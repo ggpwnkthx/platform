@@ -10,6 +10,7 @@ import {
   reach as readReach,
   roles as readRoles,
 } from '@platform/data'
+import type { Held } from '@platform/vocabulary'
 import { describe, useLoad, useSession } from '../session.tsx'
 import { Badge, Loading, Notice } from '../ui/bits.tsx'
 import { Button } from '../ui/button.tsx'
@@ -60,6 +61,38 @@ export function HoldCell({
         </small>
       ) : null}
     </td>
+  )
+}
+
+/**
+ * The cells of a row that says what a grantee holds: one per privilege the table draws, and
+ * what is held beyond them.
+ */
+export function HoldCells({
+  held,
+  privileges,
+  of,
+}: {
+  /** What the grantee holds, by privilege. */
+  held: Record<string, Held>
+  /** The privileges this table draws. */
+  privileges: readonly string[]
+  /** How many fields the collection has. */
+  of: number
+}) {
+  return (
+    <>
+      {privileges.map((privilege) => (
+        <HoldCell
+          key={privilege}
+          hold={holdOf(held[privilege])}
+          privilege={privilege}
+          fields={heldOf(held, privilege).columns}
+          of={of}
+        />
+      ))}
+      <td class="mono cell-muted">{alsoHeld(held).join(', ')}</td>
+    </>
   )
 }
 
@@ -307,16 +340,7 @@ export function CollectionAccess({ table }: { table: TableInfo }) {
                         </Badge>
                       )}
                     </td>
-                    {drawn.map((privilege) => (
-                      <HoldCell
-                        key={privilege}
-                        hold={holdOf(held[privilege])}
-                        privilege={privilege}
-                        fields={heldOf(held, privilege).columns}
-                        of={columns.length}
-                      />
-                    ))}
-                    <td class="mono cell-muted">{alsoHeld(held).join(', ')}</td>
+                    <HoldCells held={held} privileges={drawn} of={columns.length} />
                     <td class="grid-actions">
                       {owner && (
                         <button

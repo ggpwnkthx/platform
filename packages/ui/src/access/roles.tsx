@@ -1,8 +1,12 @@
 import { useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import {
+  type Catalog,
+  type GrantInfo,
   type MembershipInfo,
+  type ReachInfo,
   type RoleInfo,
+  type TableInfo,
   columnsOf,
   grants as readGrants,
   policies as readPolicies,
@@ -14,7 +18,7 @@ import {
 } from '@platform/data'
 import { createRoleStatements, membershipStatement, schemaPrivileges } from '@platform/vocabulary'
 import { describe, useLoad, useSession } from '../session.tsx'
-import { Page, useWorkspace, WorkspaceSelect } from '../shell.tsx'
+import { Page, useWorkspaceView, WorkspaceSelect } from '../shell.tsx'
 import { href } from '../url.ts'
 import { Badge, Empty, Loading, Notice, Statement } from '../ui/bits.tsx'
 import { Action, Button } from '../ui/button.tsx'
@@ -525,13 +529,285 @@ function ComesFrom({
   )
 }
 
+/** The groups a role belongs to: the rights it holds through them. */
+function MemberOfPanel({
+  name,
+  memberOf,
+  all,
+  onAdd,
+  onRemove,
+}: {
+  name: string
+  memberOf: MembershipInfo[]
+  all: RoleInfo[]
+  onAdd: () => void
+  onRemove: (membership: MembershipInfo) => void
+}) {
+  return (
+    <section class="panel">
+      <header class="panel-head">
+        <div>
+          <h2>Member of</h2>
+          <p>The groups whose rights {name} holds.</p>
+        </div>
+        <Button small icon={<PlusIcon size={14} />} onClick={onAdd}>
+          Add to a group
+        </Button>
+      </header>
+      {memberOf.length ? (
+        <ul class="members">
+          {memberOf.map((m) => (
+            <li key={m.role}>
+              <RoleLabel name={m.role} roles={all} />
+              {m.admin_option && <Badge tone="warning">admin</Badge>}
+              {!m.inherit_option && <Badge>no inherit</Badge>}
+              <button
+                type="button"
+                class="icon-button"
+                aria-label={`Remove ${name} from ${m.role}`}
+                title="Remove from the group"
+                onClick={() => onRemove(m)}
+              >
+                <TrashIcon size={15} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p class="panel-note">No group you may see.</p>
+      )}
+    </section>
+  )
+}
+
+/** The roles that belong to a role: the members of a group. */
+function MembersPanel({
+  name,
+  members,
+  all,
+  admits,
+  isLogin,
+  isOperator,
+  onAdd,
+  onRemove,
+}: {
+  name: string
+  members: MembershipInfo[]
+  all: RoleInfo[]
+  /** Whether the role may admit others to itself. */
+  admits: boolean
+  /** Whether the role is a person: a user has no members. */
+  isLogin: boolean
+  isOperator: boolean
+  onAdd: () => void
+  onRemove: (membership: MembershipInfo) => void
+}) {
+  return (
+    <section class="panel">
+      <header class="panel-head">
+        <div>
+          <h2>Members</h2>
+          <p>The roles that hold {name}’s rights.</p>
+        </div>
+        {admits && !isLogin && (
+          <Button small icon={<AddMemberIcon size={14} />} onClick={onAdd}>
+            Add member
+          </Button>
+        )}
+      </header>
+      {members.length ? (
+        <ul class="members">
+          {members.map((m) => (
+            <li key={m.member}>
+              <RoleLabel name={m.member} roles={all} />
+              {m.admin_option && <Badge tone="warning">admin</Badge>}
+              {admits && (
+                <button
+                  type="button"
+                  class="icon-button"
+                  aria-label={`Remove ${m.member}`}
+                  title="Remove from the group"
+                  onClick={() => onRemove(m)}
+                >
+                  <TrashIcon size={15} />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p class="panel-note">
+          {isLogin
+            ? 'A user has no members.'
+            : isOperator
+              ? 'Nobody belongs to it.'
+              : 'No member you may see: the database shows you your own memberships.'}
+        </p>
+      )}
+    </section>
+  )
+}
+
+/** What the role holds on the workspace itself: its usage, and its right to create. */
+function WorkspaceRights({
+  ws,
+  name,
+  workspace,
+  mayAlter,
+  holdsHere,
+  onChange,
+}: {
+  ws: string
+  name: string
+  workspace: { usage: boolean; create: boolean } | undefined
+  mayAlter: boolean
+  holdsHere: boolean
+  onChange: () => void
+}) {
+  if (!workspace) return null
+  return (
+    <>
+      <p class="reach-line">
+        <span>
+          The workspace <span class="mono">{ws}</span>
+        </span>
+        {schemaPrivileges.map((privilege) => {
+          const held = privilege === 'USAGE' ? workspace.usage : workspace.create
+          return (
+            <span key={privilege} class="right">
+              <Mark
+                hold={held ? 'all' : 'none'}
+                label={`${privilege}: ${held ? 'held' : 'not held'}`}
+              />
+              <span class="right-name">{privilege}</span>
+              <span class="sr-only">{held ? 'held' : 'not held'}</span>
+            </span>
+          )
+        })}
+        {mayAlter && (
+          <Button small icon={<GrantIcon size={14} />} onClick={onChange}>
+            Change
+          </Button>
+        )}
+      </p>
+      {!workspace.usage && holdsHere && (
+        <Notice tone="warning" title={`${name} may not use ${ws}`}>
+          It holds privileges on collections here, and the database refuses every statement on them
+          until it holds USAGE on the workspace.
+        </Notice>
+      )}
+    </>
+  )
+}
+
+/** What the role may do in the workspace: the database's own answer, collection by collection. */
+function ReachTable({
+  ws,
+  name,
+  tables,
+  acl,
+  answers,
+  memberships,
+  catalog,
+  onGrant,
+}: {
+  ws: string
+  name: string
+  tables: TableInfo[]
+  acl: GrantInfo[]
+  answers: ReachInfo[]
+  memberships: MembershipInfo[]
+  catalog: Catalog
+  onGrant: (table: string) => void
+}) {
+  return (
+    <div class="grid-wrap">
+      <table class="grid matrix">
+        <thead>
+          <tr>
+            <th>Collection</th>
+            <PrivilegeHeads />
+            <th>Also</th>
+            <th>Comes from</th>
+            <th class="grid-actions">
+              <span class="sr-only">Actions</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {tables.map((t) => {
+            const answer = answers.find((row) => row.table === t.name)
+            const held = heldBy(acl, t.name, name)
+            const own = holdsAny(held)
+            const through = throughOf(name, t.name, acl, memberships)
+            const owns = t.owner === name
+            const columns = columnsOf(catalog, ws, t.name)
+            return (
+              <tr key={t.name}>
+                <td>
+                  <a
+                    class="grid-open strong"
+                    href={href('/model/collection', { ws, c: t.name, tab: 'access' })}
+                  >
+                    <span class="mono">{t.name}</span>
+                  </a>
+                  {owns && <Badge tone="outline">owner</Badge>}
+                </td>
+                {drawn.map((privilege) => (
+                  <HoldCell
+                    key={privilege}
+                    hold={owns ? 'all' : reachOf(answer, privilege)}
+                    privilege={privilege}
+                    // The ACL says which fields only where nothing else adds to them.
+                    fields={through.length ? undefined : heldOf(held, privilege).columns}
+                    of={columns.length}
+                  />
+                ))}
+                <td class="mono cell-muted">
+                  {others.filter((p) => reachOf(answer, p) !== 'none').join(', ')}
+                </td>
+                <td class="cell-muted">
+                  {owns ? (
+                    'owner'
+                  ) : (
+                    <ComesFrom
+                      own={own}
+                      through={through}
+                      reached={Boolean(answer && reaches(answer))}
+                    />
+                  )}
+                </td>
+                <td class="grid-actions">
+                  {t.can_alter && !owns && (
+                    <button
+                      type="button"
+                      class="icon-button"
+                      aria-label={`Change what ${name} holds on ${t.name}`}
+                      title="Change its own grants"
+                      onClick={() => onGrant(t.name)}
+                    >
+                      <EditIcon size={16} />
+                    </button>
+                  )}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      <div class="grid-note">
+        <Legend />
+      </div>
+    </div>
+  )
+}
+
 /** One role: what it belongs to, what it may do in the workspace in view, and its policies. */
 export function RoleDetail() {
-  const { catalog, identity } = useSession()
+  const { identity } = useSession()
   const location = useLocation()
   const name = location.query.r ?? ''
-  const ws = useWorkspace()
-  const schema = catalog.schemas.find((s) => s.name === ws)
+  const { ws, schema, catalog } = useWorkspaceView()
   const found = useLoad((db) => readRoles(db), [name, catalog])
   const grants = useLoad(ws ? (db) => readGrants(db, ws) : null, [ws, catalog])
   const reach = useLoad(ws && name ? (db) => readReach(db, ws, { role: name }) : null, [
@@ -604,81 +880,23 @@ export function RoleDetail() {
         </Notice>
       )}
       <div class="split">
-        <section class="panel">
-          <header class="panel-head">
-            <div>
-              <h2>Member of</h2>
-              <p>The groups whose rights {name} holds.</p>
-            </div>
-            <Button small icon={<PlusIcon size={14} />} onClick={() => setAdding('group')}>
-              Add to a group
-            </Button>
-          </header>
-          {memberOf.length ? (
-            <ul class="members">
-              {memberOf.map((m) => (
-                <li key={m.role}>
-                  <RoleLabel name={m.role} roles={all} />
-                  {m.admin_option && <Badge tone="warning">admin</Badge>}
-                  {!m.inherit_option && <Badge>no inherit</Badge>}
-                  <button
-                    type="button"
-                    class="icon-button"
-                    aria-label={`Remove ${name} from ${m.role}`}
-                    title="Remove from the group"
-                    onClick={() => setRemoving(m)}
-                  >
-                    <TrashIcon size={15} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p class="panel-note">No group you may see.</p>
-          )}
-        </section>
-        <section class="panel">
-          <header class="panel-head">
-            <div>
-              <h2>Members</h2>
-              <p>The roles that hold {name}’s rights.</p>
-            </div>
-            {role?.admits && !role.login && (
-              <Button small icon={<AddMemberIcon size={14} />} onClick={() => setAdding('member')}>
-                Add member
-              </Button>
-            )}
-          </header>
-          {members.length ? (
-            <ul class="members">
-              {members.map((m) => (
-                <li key={m.member}>
-                  <RoleLabel name={m.member} roles={all} />
-                  {m.admin_option && <Badge tone="warning">admin</Badge>}
-                  {role?.admits && (
-                    <button
-                      type="button"
-                      class="icon-button"
-                      aria-label={`Remove ${m.member}`}
-                      title="Remove from the group"
-                      onClick={() => setRemoving(m)}
-                    >
-                      <TrashIcon size={15} />
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p class="panel-note">
-              {role?.login
-                ? 'A user has no members.'
-                : identity?.is_operator
-                  ? 'Nobody belongs to it.'
-                  : 'No member you may see: the database shows you your own memberships.'}
-            </p>
-          )}
-        </section>
+        <MemberOfPanel
+          name={name}
+          memberOf={memberOf}
+          all={all}
+          onAdd={() => setAdding('group')}
+          onRemove={setRemoving}
+        />
+        <MembersPanel
+          name={name}
+          members={members}
+          all={all}
+          admits={Boolean(role?.admits)}
+          isLogin={Boolean(role?.login)}
+          isOperator={Boolean(identity?.is_operator)}
+          onAdd={() => setAdding('member')}
+          onRemove={setRemoving}
+        />
       </div>
       <section class="section">
         <header class="section-head">
@@ -693,124 +911,29 @@ export function RoleDetail() {
           </div>
           <WorkspaceSelect path="/access/role" place={{ r: name }} />
         </header>
-        {workspace && (
-          <p class="reach-line">
-            <span>
-              The workspace <span class="mono">{ws}</span>
-            </span>
-            {schemaPrivileges.map((privilege) => {
-              const held = privilege === 'USAGE' ? workspace.usage : workspace.create
-              return (
-                <span key={privilege} class="right">
-                  <Mark
-                    hold={held ? 'all' : 'none'}
-                    label={`${privilege}: ${held ? 'held' : 'not held'}`}
-                  />
-                  <span class="right-name">{privilege}</span>
-                  <span class="sr-only">{held ? 'held' : 'not held'}</span>
-                </span>
-              )
-            })}
-            {schema?.can_alter && schema.owner !== name && (
-              <Button
-                small
-                icon={<GrantIcon size={14} />}
-                onClick={() => setUsage({ grantee: name })}
-              >
-                Change
-              </Button>
-            )}
-          </p>
-        )}
-        {workspace && !workspace.usage && holdsHere && (
-          <Notice tone="warning" title={`${name} may not use ${ws}`}>
-            It holds privileges on collections here, and the database refuses every statement on them
-            until it holds USAGE on the workspace.
-          </Notice>
-        )}
+        <WorkspaceRights
+          ws={ws}
+          name={name}
+          workspace={workspace}
+          mayAlter={Boolean(schema?.can_alter && schema.owner !== name)}
+          holdsHere={holdsHere}
+          onChange={() => setUsage({ grantee: name })}
+        />
         {grants.error || reach.error ? (
           <Notice tone="danger" title={describe(grants.error ?? reach.error).title} />
         ) : !grants.data || !reach.data ? (
           <Loading />
         ) : tables.length ? (
-          <div class="grid-wrap">
-            <table class="grid matrix">
-              <thead>
-                <tr>
-                  <th>Collection</th>
-                  <PrivilegeHeads />
-                  <th>Also</th>
-                  <th>Comes from</th>
-                  <th class="grid-actions">
-                    <span class="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {tables.map((t) => {
-                  const answer = answers.find((row) => row.table === t.name)
-                  const held = heldBy(acl, t.name, name)
-                  const own = holdsAny(held)
-                  const through = throughOf(name, t.name, acl, memberships)
-                  const owns = t.owner === name
-                  const columns = columnsOf(catalog, ws, t.name)
-                  return (
-                    <tr key={t.name}>
-                      <td>
-                        <a
-                          class="grid-open strong"
-                          href={href('/model/collection', { ws, c: t.name, tab: 'access' })}
-                        >
-                          <span class="mono">{t.name}</span>
-                        </a>
-                        {owns && <Badge tone="outline">owner</Badge>}
-                      </td>
-                      {drawn.map((privilege) => (
-                        <HoldCell
-                          key={privilege}
-                          hold={owns ? 'all' : reachOf(answer, privilege)}
-                          privilege={privilege}
-                          // The ACL says which fields only where nothing else adds to them.
-                          fields={through.length ? undefined : heldOf(held, privilege).columns}
-                          of={columns.length}
-                        />
-                      ))}
-                      <td class="mono cell-muted">
-                        {others.filter((p) => reachOf(answer, p) !== 'none').join(', ')}
-                      </td>
-                      <td class="cell-muted">
-                        {owns ? (
-                          'owner'
-                        ) : (
-                          <ComesFrom
-                            own={own}
-                            through={through}
-                            reached={Boolean(answer && reaches(answer))}
-                          />
-                        )}
-                      </td>
-                      <td class="grid-actions">
-                        {t.can_alter && !owns && (
-                          <button
-                            type="button"
-                            class="icon-button"
-                            aria-label={`Change what ${name} holds on ${t.name}`}
-                            title="Change its own grants"
-                            onClick={() => setGranting({ table: t.name, grantee: name })}
-                          >
-                            <EditIcon size={16} />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-            <div class="grid-note">
-              <Legend />
-            </div>
-          </div>
+          <ReachTable
+            ws={ws}
+            name={name}
+            tables={tables}
+            acl={acl}
+            answers={answers}
+            memberships={memberships}
+            catalog={catalog}
+            onGrant={(table) => setGranting({ table, grantee: name })}
+          />
         ) : (
           <Empty icon={<KeyIcon size={24} />} title="No collection here you may reach" />
         )}
