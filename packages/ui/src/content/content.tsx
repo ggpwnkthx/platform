@@ -1,9 +1,9 @@
-import { Fragment } from 'preact'
 import { activity, columnsOf, metadata, systemWorkspaceName, tablesIn } from '@platform/data'
-import { qualified, workspaceTarget, isReservedKey } from '@platform/vocabulary'
-import { display, count as formatCount } from '../format.ts'
+import { qualified, workspaceTarget } from '@platform/vocabulary'
+import { count as formatCount } from '../format.ts'
 import { useLoad, useSession } from '../session.tsx'
-import { Page, useWorkspaceView } from '../shell.tsx'
+import { Page } from '../shell/page.tsx'
+import { useWorkspaceView } from '../workspace/view.ts'
 import { presentationOf } from '@platform/data'
 import { href } from '../url.ts'
 import { Avatar } from '../ui/avatar.tsx'
@@ -17,8 +17,8 @@ import {
   PlusIcon,
   WorkspaceIcon,
 } from '../ui/icons.tsx'
-import { RevisionList } from '../activity/activity.tsx'
 import { Rights } from '../access/rights.tsx'
+import { RecentChanges, WorkspaceAbout } from './workspace.tsx'
 
 /** A workspace at a glance: its collections, how many rows reach you, and what you may do. */
 export function ContentHome() {
@@ -41,6 +41,7 @@ export function ContentHome() {
               continue
             }
             try {
+              // fallow-ignore-next-line security-sink -- the table name is quoted with ident(); the statement takes no value
               const r = await db.query<{ n: number }>(
                 `SELECT count(*)::int AS n FROM ${qualified(ws, t.name)}`
               )
@@ -160,62 +161,13 @@ export function ContentHome() {
       )}
       {tables.length > 0 && counts.data && !system && (
         <div class="split">
-          <section class="panel">
-            <header class="panel-head">
-              <div>
-                <h2>Recent changes</h2>
-                <p>Every write in {ws}, recorded by its trigger in the same transaction.</p>
-              </div>
-              <a class="button button-secondary button-small" href={href('/activity', { ws })}>
-                All activity
-              </a>
-            </header>
-            {counts.data.recent.length ? (
-              <RevisionList entries={counts.data.recent} compact showTable />
-            ) : (
-              <p class="panel-note">
-                {schema.can_alter
-                  ? 'Nothing has changed here yet.'
-                  : "Revisions are read by the workspace's owners, so the log never reveals a field your grants hide."}
-              </p>
-            )}
-          </section>
-          <section class="panel">
-            <header class="panel-head">
-              <div>
-                <h2>About {shown.displayName ?? ws}</h2>
-                <p>What this workspace is, as its owner describes it.</p>
-              </div>
-              <a
-                class="button button-secondary button-small"
-                href={href('/workspace/settings', { ws })}
-              >
-                Settings
-              </a>
-            </header>
-            <dl class="facts">
-              <dt>Owner</dt>
-              <dd class="mono">{schema.owner}</dd>
-              <dt>You may</dt>
-              <dd>
-                {schema.can_alter
-                  ? 'Administer it: you own it'
-                  : schema.can_create
-                    ? 'Make collections here'
-                    : 'Use the collections granted to you'}
-              </dd>
-              {counts.data.about
-                .filter((entry) => !isReservedKey('workspace', entry.key))
-                .map((entry) => (
-                  <Fragment key={entry.key}>
-                    <dt>{entry.key.replaceAll('_', ' ')}</dt>
-                    <dd class={typeof entry.value === 'string' ? '' : 'mono'}>
-                      {display(entry.value)}
-                    </dd>
-                  </Fragment>
-                ))}
-            </dl>
-          </section>
+          <RecentChanges ws={ws} entries={counts.data.recent} mayAlter={schema.can_alter} />
+          <WorkspaceAbout
+            ws={ws}
+            schema={schema}
+            shown={shown.displayName ?? ws}
+            about={counts.data.about}
+          />
         </div>
       )}
     </Page>

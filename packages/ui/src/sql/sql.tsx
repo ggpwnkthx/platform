@@ -1,43 +1,15 @@
-import clsx from 'clsx'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import { run } from './query.ts'
-import { display } from '../format.ts'
-import { PgError, type Result } from '@platform/pg-client'
-import { describe, useSession } from '../session.tsx'
-import { Page } from '../shell.tsx'
-import { Badge, Empty, Notice } from '../ui/bits.tsx'
+import { useSession } from '../session.tsx'
+import { Page } from '../shell/page.tsx'
+import { Empty } from '../ui/bits.tsx'
 import { Action } from '../ui/button.tsx'
 import { RunIcon, SqlIcon } from '../ui/icons.tsx'
-
-interface Ran {
-  sql: string
-  at: number
-  ms: number
-  result?: Result
-  error?: { title: string; detail?: string; code?: string; position?: number }
-}
+import { errorOf, History, type Ran, ResultView } from './result.tsx'
 
 /** Kept for this page's life only, like the token. */
 const history: Ran[] = []
-
-function Caret({ sql, position }: { sql: string; position: number }) {
-  const before = sql.slice(0, position - 1)
-  const line = before.split('\n').length
-  const lineStart = before.lastIndexOf('\n') + 1
-  const text = sql.split('\n')[line - 1] ?? ''
-  const column = position - 1 - lineStart
-  return (
-    <pre class="caret">
-      <code>
-        {line > 1 ? `line ${line}: ` : ''}
-        {text}
-        {'\n'}
-        {' '.repeat(column + (line > 1 ? `line ${line}: `.length : 0))}^
-      </code>
-    </pre>
-  )
-}
 
 export function Sql() {
   const { withReaderDb, refresh } = useSession()
@@ -66,11 +38,7 @@ export function Sql() {
       if (!/^\s*(select|with|show|explain|table|values)\b/i.test(text))
         await refresh().catch(() => undefined)
     } catch (error) {
-      entry.error = { ...describe(error) }
-      if (error instanceof PgError) {
-        entry.error.code = error.code
-        entry.error.position = error.position
-      }
+      entry.error = errorOf(error)
     } finally {
       entry.ms = Math.round(performance.now() - started)
       history.unshift(entry)
@@ -94,39 +62,13 @@ export function Sql() {
         />
       }
       sidebar={
-        <div class="side-plain">
-          <h2 class="side-heading">This page's history</h2>
-          {history.length ? (
-            <ol class="history">
-              {history.map((h) => (
-                <li key={h.at}>
-                  <button
-                    type="button"
-                    class={clsx('history-item', h.error && 'is-refused')}
-                    onClick={() => {
-                      setSql(h.sql)
-                      area.current?.focus()
-                    }}
-                  >
-                    <code>{h.sql}</code>
-                    <span>
-                      {h.error ? (
-                        <Badge tone="danger">{h.error.code ?? 'failed'}</Badge>
-                      ) : (
-                        <Badge tone="success">{h.result?.command || 'OK'}</Badge>
-                      )}
-                      <small>{h.ms} ms</small>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p class="side-note">
-              Statements you run appear here until you leave the page. Nothing is stored.
-            </p>
-          )}
-        </div>
+        <History
+          history={history}
+          onChoose={(text) => {
+            setSql(text)
+            area.current?.focus()
+          }}
+        />
       }
     >
       <div class="editor">
@@ -155,59 +97,7 @@ export function Sql() {
       </div>
       {latest && (
         <section class="result" aria-live="polite">
-          {latest.error ? (
-            <Notice tone="danger" title={latest.error.title}>
-              {latest.error.detail}
-              {latest.error.position !== undefined && (
-                <Caret sql={latest.sql} position={latest.error.position} />
-              )}
-            </Notice>
-          ) : latest.result ? (
-            <>
-              <p class="result-head">
-                <Badge tone="success">{latest.result.command || 'OK'}</Badge>
-                <span>
-                  {latest.result.affected !== null
-                    ? `${latest.result.affected} ${latest.result.command === 'SELECT' ? 'rows' : 'rows affected'}`
-                    : 'Done'}{' '}
-                  · {latest.ms} ms
-                </span>
-              </p>
-              {latest.result.fields.length > 0 ? (
-                <div class="grid-wrap">
-                  <table class="grid">
-                    <thead>
-                      <tr>
-                        {latest.result.fields.map((f, i) => (
-                          <th key={i}>{f.name}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {latest.result.rows.slice(0, 1000).map((row, i) => (
-                        <tr key={i}>
-                          {latest.result!.fields.map((f, j) => (
-                            <td key={j} class="mono">
-                              {row[f.name] === null ? (
-                                <span class="null">null</span>
-                              ) : (
-                                display(row[f.name])
-                              )}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {latest.result.rows.length > 1000 && (
-                    <p class="result-more">
-                      Showing the first 1,000 of {latest.result.rows.length} rows.
-                    </p>
-                  )}
-                </div>
-              ) : null}
-            </>
-          ) : null}
+          <ResultView latest={latest} />
         </section>
       )}
       {!latest && (
