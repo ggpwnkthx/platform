@@ -1,3 +1,4 @@
+import { dequal } from 'dequal'
 import { defaultViews, viewsKey, type ViewMode } from './keys.ts'
 import type { MetadataRow } from './rows.ts'
 
@@ -100,10 +101,7 @@ export function customViews(views: FieldViews): Record<string, Mode> {
 
 /** Are two sayings the same? The order the views were said in does not matter. */
 export function viewsEqual(one: FieldViews, other: FieldViews): boolean {
-  const said = viewsValue(one)
-  const also = viewsValue(other)
-  const names = [...new Set([...Object.keys(said), ...Object.keys(also)])].sort()
-  return names.every((name) => said[name] === also[name])
+  return dequal(viewsValue(one), viewsValue(other))
 }
 
 /** Is this a view of the owner's own, rather than one the interface draws? */

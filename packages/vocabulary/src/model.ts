@@ -8,7 +8,7 @@
  * written around it — the statement that adds it, the index, the relation, the comment and
  * the field's own saying of where it appears — is written here, once.
  *
- * This module has no dependencies and runs in the browser, in Bun and in Node.
+ * This module runs in the browser, in Bun and in Node.
  */
 
 import {

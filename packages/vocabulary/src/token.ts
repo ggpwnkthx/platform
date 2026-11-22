@@ -6,14 +6,12 @@
  * reads one to learn the same. Neither verifies it — PostgreSQL verifies the signature,
  * the issuer and the expiry at every login — so what is read here is a name, not a proof.
  */
+import { jwtDecode } from 'jwt-decode'
 
 /** The claims of a token, read without verifying it. */
 export function claims(token: string): Record<string, unknown> {
-  const part = token.split('.')[1] ?? ''
   try {
-    const json = atob(part.replaceAll('-', '+').replaceAll('_', '/'))
-    const bytes = Uint8Array.from(json, (c) => c.charCodeAt(0))
-    const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes))
+    const parsed: unknown = jwtDecode(token)
     return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {}
   } catch {
     return {}

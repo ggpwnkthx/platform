@@ -5,27 +5,22 @@
  * tools were built for one. A schema of another version is not one they know — a field's
  * metadata, for instance, is a column the platform added in 2.2.0.
  */
-
-/** The parts of a version, as numbers. A part that is not a number counts as zero. */
-function parts(version: string): number[] {
-  return version.split('.').map((part) => Number(part) || 0)
-}
+import { compareVersions as compare, validate } from 'compare-versions'
 
 /** Is the first version older than the second? */
 export function older(one: string, other: string): boolean {
   return compareVersions(one, other) < 0
 }
 
-/** -1, 0 or 1: is the first version older than, the same as, or newer than the second? */
+/**
+ * -1, 0 or 1: is the first version older than, the same as, or newer than the second?
+ *
+ * A version that is no version at all — an installation that says nothing, or says
+ * something else — is no difference: there is nothing to compare, so nothing is found.
+ */
 export function compareVersions(one: string, other: string): number {
-  const left = parts(one)
-  const right = parts(other)
-  for (let index = 0; index < Math.max(left.length, right.length); index++) {
-    const a = left[index] ?? 0
-    const b = right[index] ?? 0
-    if (a !== b) return a < b ? -1 : 1
-  }
-  return 0
+  if (!validate(one) || !validate(other)) return 0
+  return compare(one, other)
 }
 
 /** How an installation differs from the version something was built for. */

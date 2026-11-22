@@ -1,3 +1,4 @@
+import { dequal } from 'dequal'
 import { renderersKey } from './keys.ts'
 import type { MetadataRow } from './rows.ts'
 import type { AnySituation } from './views.ts'
@@ -95,10 +96,7 @@ export function renderersValue(renderers: FieldRenderers): Record<string, unknow
 
 /** Are two sayings the same? The order the situations were said in does not matter. */
 export function renderersEqual(one: FieldRenderers, other: FieldRenderers): boolean {
-  const said = renderersValue(one)
-  const also = renderersValue(other)
-  const names = [...new Set([...Object.keys(said), ...Object.keys(also)])].sort()
-  return names.every((name) => JSON.stringify(said[name]) === JSON.stringify(also[name]))
+  return dequal(renderersValue(one), renderersValue(other))
 }
 
 /** Every field's saying, by the column it names. */

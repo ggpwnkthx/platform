@@ -8,7 +8,7 @@
  * they both read and write an item's metadata the same way: where a field appears, and how
  * its values are drawn, is said once and means the same wherever it is said.
  *
- * This package has no dependencies and runs in the browser, in Bun and in Node: everything
+ * This package runs in the browser, in Bun and in Node: everything
  * here is either the text of a statement, the reading of a token, or the saying of what an
  * item is.
  */

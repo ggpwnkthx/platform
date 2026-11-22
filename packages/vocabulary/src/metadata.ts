@@ -7,7 +7,7 @@
  * appears means the same thing whoever reads it, and the value written under the key
  * `views` is the same value in the page and in a psql session.
  *
- * This module has no dependencies and runs in the browser, in Bun and in Node.
+ * This module runs in the browser, in Bun and in Node.
  */
 export * from './metadata/keys.ts'
 export * from './metadata/renderers.ts'

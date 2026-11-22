@@ -177,7 +177,7 @@ deployment files, the documentation and the integration tests that cross the pac
   (identifiers, literals, columns, the names a relation's constraint carries, and the access
   it grants) and the tokens and versions it reads. The operator's tools and the interface
   both build DDL and DCL, and they must build it the same way, so the rules live here rather
-  than twice. It has no dependencies and runs in the browser, in Bun and in Node.
+  than twice. It runs in the browser, in Bun and in Node.
 - `packages/data` — the questions the platform asks PostgreSQL, and the answers it reads
   back: the catalog, the records, the metadata, the access, the revisions, the identity and
   the workspace. It holds no connection of its own: it asks through a source of statements
