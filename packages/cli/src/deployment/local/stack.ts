@@ -1,4 +1,11 @@
-import { type DeployRuntime, type RunOptions, option, seconds } from '../runtime.ts'
+import {
+  type DeployRuntime,
+  type RunOptions,
+  LOCAL_OPTIONS,
+  PASSTHROUGH_ACTIONS,
+  seconds,
+} from '../runtime.ts'
+import { options } from '../../options.ts'
 import { compose, composeCommand, quickAction, tailOf } from './compose.ts'
 import { prepareStack } from './prepare.ts'
 import { reportStack } from './report.ts'
@@ -13,10 +20,17 @@ export async function stack(
   /** The last word of the run, when there is one: where to go next. */
   last: { word?: string }
 ): Promise<number> {
-  const engine = option(args, 'engine') ?? 'auto'
-  const timeout = seconds(option(args, 'timeout'))
-  const domainOption = option(args, 'domain')
-  const prepared = await prepareStack(action, args, r, domainOption)
+  // The logs of the stack, and the things an operator asks of it, are another program's
+  // arguments: what is left of them is given on as it was written.
+  const onward = PASSTHROUGH_ACTIONS.includes(action)
+  const { values, rest } = options(args, LOCAL_OPTIONS, {
+    unknown: onward ? 'keep' : 'refuse',
+    positionals: onward ? 'keep' : 'refuse',
+  })
+  const engine = values.engine ?? 'auto'
+  const timeout = seconds(values.timeout)
+  const domainOption = values.domain
+  const prepared = await prepareStack(action, r, domainOption)
   if (prepared.built !== undefined) return prepared.built
   const computed = prepared.computed
   const s = stackSettings(r, domainOption)
@@ -49,7 +63,7 @@ export async function stack(
       ],
       { env, task }
     )
-  const quick = await quickAction(action, args, run, beside)
+  const quick = await quickAction(action, rest, run, beside)
   if (quick !== undefined) return quick
   const built = await buildImages(r, cmd, base, env)
   if (built || action === 'build') return built

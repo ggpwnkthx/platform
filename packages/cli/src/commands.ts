@@ -9,6 +9,7 @@ import { authenticationProblems, postureNotes, requirePostgres18 } from './datab
 import { setLogin } from './login.ts'
 import { applyModel } from './model.ts'
 import { MIGRATIONS } from './migrations.ts'
+import { options } from './options.ts'
 import { VERSION, requireInstalledVersion } from './version.ts'
 
 /**
@@ -40,17 +41,23 @@ function appliedIn(dir: string): Applied {
 
 /** Applies what a deployment is given: its manifests, and what a folder says it applies. */
 async function apply(q: pg.Client, args: string[]) {
-  const dry = args.includes('--dry-run')
+  const { values, rest } = options(
+    args,
+    {
+      'dry-run': { type: 'boolean' },
+      administrator: { type: 'boolean' },
+      dir: { type: 'string' },
+    },
+    { positionals: 'keep' }
+  )
+  const dry = values['dry-run']
   // The deployment's administrator, and nothing else: there is somebody to sign in as.
-  const administrator = args.includes('--administrator')
+  const administrator = values.administrator
   // What a folder applies: its models, then its migration and its demonstration.
   // It is applied first, so that a manifest beside it may name the folder's administrator
   // as the owner of a workspace.
-  const flag = args.find((a) => a === '--dir' || a.startsWith('--dir='))
-  const applied = flag === undefined ? undefined : appliedIn(flag.slice('--dir='.length))
-  const files = args.filter((a) => a !== '--dry-run' && a !== '--administrator' && a !== flag)
-  const unknown = files.find((a) => a.startsWith('--'))
-  if (unknown) throw new Error(`Unknown option: ${unknown}`)
+  const applied = values.dir === undefined ? undefined : appliedIn(values.dir)
+  const files = rest
   if (!files.length && !applied && !administrator)
     throw new Error(
       'apply needs a deployment and at least one manifest file, --dir or --administrator'

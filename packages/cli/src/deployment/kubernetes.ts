@@ -1,9 +1,18 @@
-import { type DeployRuntime, noExtra, option, seconds } from './runtime.ts'
+/**
+ * The intermediate state of the Kubernetes command: the options are read by node's parser,
+ * and the database is still named by the deployment (the manifests are still rendered by
+ * replacing text in them). This is the file as it is between the two commits.
+ */
+import { type DeployRuntime, KUBERNETES_OPTIONS, seconds } from './runtime.ts'
 import { computedValues, ensureConfig, settingValue } from './config.ts'
 import { firstGiven, renderKubernetes } from './manifests.ts'
+import { options } from '../options.ts'
 
 /** The actions that name the deployment itself: they render manifests and need its names. */
 const MANIFEST_ACTIONS = ['render', 'validate', 'diff', 'apply']
+
+/** The actions a Kubernetes deployment answers to. */
+const ACTIONS = ['render', 'validate', 'diff', 'apply', 'status', 'logs', 'down']
 
 /**
  * The settings of a Kubernetes deployment: what the operator gave on the command line, what
@@ -11,7 +20,7 @@ const MANIFEST_ACTIONS = ['render', 'validate', 'diff', 'apply']
  */
 async function k8sSettings(
   action: string,
-  args: string[],
+  values: Record<string, string | undefined>,
   r: DeployRuntime
 ): Promise<{
   namespace: string
@@ -28,22 +37,19 @@ async function k8sSettings(
   databaseHost: string
   databaseName: string
 }> {
-  const namespace = option(args, 'namespace') ?? 'default'
+  const namespace = values.namespace ?? 'default'
   if (!/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(namespace) || namespace.length > 63)
     throw new Error('Invalid namespace')
-  const timeout = seconds(option(args, 'timeout'))
+  const timeout = seconds(values.timeout)
   const given = {
-    PLATFORM_DOMAIN: option(args, 'domain'),
-    PLATFORM_IMAGE: option(args, 'image'),
-    PUBLIC_URL: option(args, 'public-url'),
-    OIDC_ISSUER: option(args, 'oidc-issuer'),
-    DATABASE_HOST: option(args, 'database-host'),
-    DATABASE_NAME: option(args, 'database-name'),
-    DATABASE_PORT: option(args, 'database-port'),
+    PLATFORM_DOMAIN: values.domain,
+    PLATFORM_IMAGE: values.image,
+    PUBLIC_URL: values['public-url'],
+    OIDC_ISSUER: values['oidc-issuer'],
+    DATABASE_HOST: values['database-host'],
+    DATABASE_NAME: values['database-name'],
+    DATABASE_PORT: values['database-port'],
   }
-  if (!['render', 'validate', 'diff', 'apply', 'status', 'logs', 'down'].includes(action))
-    throw new Error(`Unknown k8s action: ${action}`)
-  if (action !== 'logs') noExtra(args)
   // The settings of the deployment live in one file: when there is none, the first run asks
   // for what it does not know and writes it down, so that the flags are optional afterwards.
   if (MANIFEST_ACTIONS.includes(action))
@@ -101,7 +107,15 @@ export async function kubernetes(
   args: string[],
   r: DeployRuntime
 ): Promise<number> {
-  const s = await k8sSettings(action, args, r)
+  if (!ACTIONS.includes(action)) throw new Error(`Unknown k8s action: ${action}`)
+  // The logs of a deployment are kubectl's own: what is left of the arguments is given to
+  // it, as it was written.
+  const logs = action === 'logs'
+  const { values, rest } = options(args, KUBERNETES_OPTIONS, {
+    unknown: logs ? 'keep' : 'refuse',
+    positionals: logs ? 'keep' : 'refuse',
+  })
+  const s = await k8sSettings(action, values, r)
   // The domain names the deployment: the actions that render manifests need it, and the
   // ones that only look at a cluster do not.
   if (!s.domain && !s.publicUrl && MANIFEST_ACTIONS.includes(action))
@@ -128,7 +142,7 @@ export async function kubernetes(
   const run = (a: string[], input?: string) => r.run([k, '-n', s.namespace, ...a], { input })
   if (action === 'status')
     return run(['get', 'deployment,service,pod', '-l', 'app=platform', '-o', 'wide'])
-  if (action === 'logs') return run(['logs', 'deployment/platform-relay', ...args])
+  if (action === 'logs') return run(['logs', 'deployment/platform-relay', ...rest])
   if (action === 'down')
     return run([
       'delete',

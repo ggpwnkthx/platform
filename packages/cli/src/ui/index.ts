@@ -5,8 +5,7 @@ import { buildSite, extensionsPlugin, inPageAssets, seamPlugin } from './build.t
 import { applyFiles, extensionsModule, type FolderConfig, findConfig } from '../config.ts'
 import { serveInterface } from './dev.ts'
 import { UI_HELP } from './help.ts'
-
-const KNOWN = ['--dir=', '--production', '--relay=', '--port=']
+import { options } from '../options.ts'
 
 /**
  * The site a folder asks for, and where it is written: in the folder itself, beside what it
@@ -29,19 +28,21 @@ export async function ui(args: string[]): Promise<number> {
   }
   if (!['build', 'dev'].includes(action))
     throw new Error(`Unknown action: ${action}. Supported actions: build, dev. Run ui help.`)
-  const unknown = rest.find((a) => a.startsWith('--') && !KNOWN.some((k) => a.startsWith(k)))
-  if (unknown) throw new Error(`Unknown option: ${unknown}`)
-  const dir = rest.find((a) => a.startsWith('--dir='))?.slice('--dir='.length) ?? process.cwd()
-  const relay = rest.find((a) => a.startsWith('--relay='))?.slice('--relay='.length)
-  const port = Number(
-    rest.find((a) => a.startsWith('--port='))?.slice('--port='.length) ?? process.env.PORT ?? 5173
-  )
+  const { values } = options(rest, {
+    dir: { type: 'string' },
+    production: { type: 'boolean' },
+    relay: { type: 'string' },
+    port: { type: 'string' },
+  })
+  const dir = values.dir ?? process.cwd()
+  const relay = values.relay
+  const port = Number(values.port ?? process.env.PORT ?? 5173)
 
   const config = findConfig(dir)
   // A folder that applies something is built with it installed in the page, so that it can be
   // worked on with nothing running. The published interface is what a deployment serves, and
   // whoever builds for one says so.
-  const development = !rest.includes('--production') && config?.apply !== undefined
+  const development = !values.production && config?.apply !== undefined
 
   if (action === 'dev') {
     await serveInterface(config, { relay, port })

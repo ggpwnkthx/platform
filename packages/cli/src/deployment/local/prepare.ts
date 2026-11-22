@@ -1,4 +1,4 @@
-import { type DeployRuntime, noExtra } from '../runtime.ts'
+import type { DeployRuntime } from '../runtime.ts'
 import { computedValues, ensureConfig } from '../config.ts'
 import { buildInterface } from './site.ts'
 
@@ -12,7 +12,6 @@ import { buildInterface } from './site.ts'
  */
 export async function prepareStack(
   action: string,
-  args: string[],
   r: DeployRuntime,
   domainOption: string | undefined
 ): Promise<{ computed: Record<string, string>; built: number | undefined }> {
@@ -20,7 +19,6 @@ export async function prepareStack(
     !['up', 'init', 'ui', 'validate', 'build', 'status', 'logs', 'down', 'admin'].includes(action)
   )
     throw new Error(`Unknown local action: ${action}`)
-  if (!['logs', 'down', 'admin'].includes(action)) noExtra(args)
   if (!['status', 'logs', 'down', 'admin'].includes(action))
     await ensureConfig(
       'local',

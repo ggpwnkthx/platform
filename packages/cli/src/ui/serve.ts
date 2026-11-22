@@ -10,6 +10,7 @@
  */
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { options } from '../options.ts'
 
 export const types: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -100,12 +101,9 @@ function serveSite(dir: string, port: number) {
 
 /** The `ui serve` command. */
 export function serve(args: string[]): number {
-  const unknown = args.find((a) => !a.startsWith('--dir=') && !a.startsWith('--port='))
-  if (unknown) throw new Error(`Unknown option: ${unknown}`)
-  const dir = args.find((a) => a.startsWith('--dir='))?.slice('--dir='.length) ?? process.cwd()
-  const port = Number(
-    args.find((a) => a.startsWith('--port='))?.slice('--port='.length) ?? process.env.PORT ?? 8080
-  )
+  const { values } = options(args, { dir: { type: 'string' }, port: { type: 'string' } })
+  const dir = values.dir ?? process.cwd()
+  const port = Number(values.port ?? process.env.PORT ?? 8080)
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid --port')
   const server = serveSite(dir, port)
   console.log(`The site in ${resolve(dir)}, on http://localhost:${server.port}/`)

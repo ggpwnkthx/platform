@@ -8,7 +8,12 @@ import type { DeployRuntime } from './runtime/types.ts'
 export const ROOT = resolve(import.meta.dir, '../../../..')
 
 export { generate, saved } from './runtime/saved.ts'
-export { noExtra, option, seconds } from './runtime/options.ts'
+export {
+  KUBERNETES_OPTIONS,
+  LOCAL_OPTIONS,
+  PASSTHROUGH_ACTIONS,
+  seconds,
+} from './runtime/options.ts'
 export type { DeployRuntime, RunOptions } from './runtime/types.ts'
 
 export const runtime: DeployRuntime = {

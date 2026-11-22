@@ -5,6 +5,7 @@ import { transaction } from './database/db.ts'
 import { deploy } from './deployment/index.ts'
 import { hardenNotes, hardenSql, type HardenMode } from './harden.ts'
 import { Cancelled, close, note, type Waiting, waiting } from './terminal.ts'
+import { options, unexpected } from './options.ts'
 import { deviceToken } from './token.ts'
 import { VERSION } from './version.ts'
 import { connection } from './connection.ts'
@@ -17,16 +18,20 @@ import { HELP } from './help.ts'
  * business rather than the deployment's.
  */
 async function harden(args: string[]) {
-  const [target, ...rest] = args
+  const { values, rest } = options(
+    args,
+    { 'keep-names': { type: 'boolean' }, restore: { type: 'boolean' } },
+    { positionals: 'keep' }
+  )
+  const [target, ...extra] = rest
+  if (extra.length) unexpected(extra)
   if (!target || !['local', 'k8s', 'kubernetes'].includes(target))
     throw new Error('harden needs a deployment: local or k8s')
-  const mode: HardenMode = rest.includes('--keep-names')
+  const mode: HardenMode = values['keep-names']
     ? 'keep-names'
-    : rest.includes('--restore')
+    : values.restore
       ? 'restore'
       : 'strict'
-  const unknown = rest.find((a) => !['--keep-names', '--restore'].includes(a))
-  if (unknown) throw new Error(`Unknown option: ${unknown}`)
   const q = connection(target === 'kubernetes' ? 'k8s' : target)
   await q.connect()
   try {
@@ -63,10 +68,8 @@ async function token(args: string[]) {
   // The token is the only thing on stdout, so that it can be captured. With --out it is
   // not on stdout at all: it is written to a file of the caller's own, for PGTOKEN_FILE,
   // and never passes through a terminal's scrollback, a pipe or a CI log.
-  const unknown = args.find((a) => !a.startsWith('--out='))
-  if (unknown) throw new Error(`Unknown option: ${unknown}`)
-  const out = args.at(-1)?.slice('--out='.length)
-  if (out === '') throw new Error('--out needs a file path')
+  const { values } = options(args, { out: { type: 'string' } })
+  const out = values.out
   let signingIn: Waiting | undefined
   const printed = await deviceToken(
     config.oidcIssuer,
