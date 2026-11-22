@@ -1,8 +1,6 @@
 import { type DataSource, ident, qualified } from '@platform/vocabulary'
-import type { PolicyInfo } from '../access/types.ts'
-import { labelColumn, relationOf, tableOf } from '../catalog/catalog.ts'
-import type { Catalog } from '../catalog/types.ts'
-import { conditionClause, type Filter } from './filter.ts'
+import type { Filter } from './filter.ts'
+import { predicate } from './predicate.ts'
 
 /**
  * The records of a collection: read, searched, filtered, paged and written. Every value is
@@ -26,41 +24,6 @@ export interface RecordQuery {
   offset: number
 }
 
-export interface Predicate {
-  sql: string
-  values: unknown[]
-}
-
-/**
- * The WHERE clause of a record query: the filter's conditions, then the search. Every value is
- * bound and every column quoted, so a query can never change the shape of the statement.
- */
-export function predicate(
-  filter: Filter,
-  search: string,
-  searchable: readonly string[]
-): Predicate {
-  const values: unknown[] = []
-  const clauses: string[] = []
-  for (const [column, condition] of Object.entries(filter)) {
-    const clause = conditionClause(ident(column), condition)
-    if (!clause.values.length && clause.sql === 'TRUE') continue
-    const offset = values.length
-    clauses.push(clause.sql.replace(/\$(\d+)/g, (_, i: string) => `$${offset + Number(i)}`))
-    values.push(
-      ...clause.values.map((v) => (v !== null && typeof v === 'object' ? JSON.stringify(v) : v))
-    )
-  }
-  if (search.trim() && searchable.length) {
-    values.push(`%${search.trim().replace(/([\\%_])/g, '\\$1')}%`)
-    const matched = searchable.map(
-      (column) => `CAST(${ident(column)} AS TEXT) ILIKE $${values.length} ESCAPE '\\'`
-    )
-    clauses.push(`(${matched.join(' OR ')})`)
-  }
-  return { sql: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '', values }
-}
-
 /** One page of rows, and the number of rows the predicate allows under row security. */
 export async function records(db: DataSource, query: RecordQuery) {
   const target = qualified(query.schema, query.table)
@@ -69,12 +32,14 @@ export async function records(db: DataSource, query: RecordQuery) {
     (name) => `${ident(name.replace(/^-/, ''))} ${name.startsWith('-') ? 'DESC' : 'ASC'} NULLS LAST`
   )
   const values = [...where.values, query.limit, query.offset]
+  // fallow-ignore-next-line security-sink -- every column and table name is quoted with ident(); every value is bound
   const rows = await db.query(
     `SELECT ${query.columns.map(ident).join(', ')} FROM ${target} ${where.sql}
      ${order.length ? `ORDER BY ${order.join(', ')}` : ''}
      LIMIT $${values.length - 1} OFFSET $${values.length}`,
     values
   )
+  // fallow-ignore-next-line security-sink -- every column and table name is quoted with ident(); every value is bound
   const counted = await db.query<{ total: number }>(
     `SELECT count(*)::int AS total FROM ${target} ${where.sql}`,
     where.values
@@ -90,142 +55,10 @@ export async function record(
   columns: string[],
   id: string
 ) {
+  // fallow-ignore-next-line security-sink -- every column and table name is quoted with ident(); every value is bound
   const result = await db.query(
     `SELECT ${columns.map(ident).join(', ')} FROM ${qualified(schema, table)} WHERE id = $1`,
     [id]
   )
   return result.rows[0] ?? null
-}
-
-/**
- * Writes a row. No RETURNING: the right to insert or update a column is not a right to read
- * it back, so a write reports how many rows it touched and nothing else.
- */
-export async function insertRecord(
-  db: DataSource,
-  schema: string,
-  table: string,
-  values: Record<string, unknown>
-) {
-  const entries = Object.entries(values)
-  const sql = entries.length
-    ? `INSERT INTO ${qualified(schema, table)} (${entries.map(([k]) => ident(k)).join(', ')})
-       VALUES (${entries.map((_, i) => `$${i + 1}`).join(', ')})`
-    : `INSERT INTO ${qualified(schema, table)} DEFAULT VALUES`
-  return (
-    (
-      await db.query(
-        sql,
-        entries.map(([, v]) => v)
-      )
-    ).affected ?? 0
-  )
-}
-
-/** Changes a row, only if it still carries the version the reader saw. */
-export async function updateRecord(
-  db: DataSource,
-  schema: string,
-  table: string,
-  id: string,
-  values: Record<string, unknown>,
-  version?: number
-) {
-  const entries = Object.entries(values)
-  if (!entries.length) return 0
-  const params: unknown[] = entries.map(([, v]) => v)
-  params.push(id)
-  let sql = `UPDATE ${qualified(schema, table)} SET ${entries
-    .map(([k], i) => `${ident(k)} = $${i + 1}`)
-    .join(', ')} WHERE id = $${params.length}`
-  if (version !== undefined) {
-    params.push(version)
-    sql += ` AND version = $${params.length}`
-  }
-  return (await db.query(sql, params)).affected ?? 0
-}
-
-export async function deleteRecord(
-  db: DataSource,
-  schema: string,
-  table: string,
-  id: string,
-  version?: number
-) {
-  const params: unknown[] = [id]
-  let sql = `DELETE FROM ${qualified(schema, table)} WHERE id = $1`
-  if (version !== undefined) {
-    params.push(version)
-    sql += ' AND version = $2'
-  }
-  return (await db.query(sql, params)).affected ?? 0
-}
-
-/** The options a relation offers: rows of the target, labelled by their first text column. */
-export async function relationOptions(
-  db: DataSource,
-  schema: string,
-  table: string,
-  label: string | null,
-  search: string
-) {
-  const shown = label ? `CAST(${ident(label)} AS TEXT)` : 'id::text'
-  const result = await db.query<{ id: string; label: string }>(
-    `SELECT id::text AS id, ${shown} AS label FROM ${qualified(schema, table)}
-      WHERE $1 = '' OR ${shown} ILIKE '%' || $1 || '%' OR id::text = $1
-      ORDER BY 2 LIMIT 20`,
-    [search.trim()]
-  )
-  return result.rows
-}
-
-/** The labels of the rows a relation column points at, read in one statement per target. */
-export async function relationLabels(
-  db: DataSource,
-  catalog: Catalog,
-  schema: string,
-  table: string,
-  rows: Record<string, unknown>[],
-  columns: string[]
-): Promise<Record<string, Record<string, string>>> {
-  const out: Record<string, Record<string, string>> = {}
-  for (const column of columns) {
-    const relation = relationOf(catalog, schema, table, column)
-    if (!relation) continue
-    const ids = [
-      ...new Set(rows.map((r) => r[column]).filter((v) => v !== null && v !== undefined)),
-    ]
-    if (!ids.length) continue
-    const label = labelColumn(catalog, relation.target_schema, relation.target_table)
-    const target = tableOf(catalog, relation.target_schema, relation.target_table)
-    if (!label || !target?.can_select) continue
-    try {
-      const found = await db.query<{ id: string; label: string }>(
-        `SELECT id::text AS id, ${ident(label)}::text AS label FROM ${qualified(relation.target_schema, relation.target_table)} WHERE id::text = ANY($1)`,
-        [ids.map(String)]
-      )
-      out[column] = Object.fromEntries(found.rows.map((r) => [r.id, r.label]))
-    } catch {
-      // A label the reader may not read stays an id.
-    }
-  }
-  return out
-}
-
-/**
- * The row policies on a collection, and whether each one speaks for the reader. The role a
- * policy names is asked of PostgreSQL and not read from pg_roles, which may be hidden from
- * the reader (`cli harden`).
- */
-export async function tablePolicies(db: DataSource, schema: string, table: string) {
-  const result = await db.query<PolicyInfo & { applies: boolean }>(
-    `SELECT schemaname::text AS schema, tablename::text AS table, policyname::text AS name, permissive,
-            roles::text[] AS roles, cmd AS command, qual AS using, with_check AS check,
-            EXISTS (SELECT 1 FROM unnest(roles) r
-                     WHERE r = 'public'
-                        OR pg_has_role(session_user, to_regrole(quote_ident(r::text))::oid, 'MEMBER')) AS applies
-       FROM pg_policies WHERE schemaname = $1 AND tablename = $2 ORDER BY policyname`,
-    [schema, table]
-  )
-  return result.rows
 }
