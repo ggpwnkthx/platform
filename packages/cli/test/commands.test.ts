@@ -1,17 +1,15 @@
 import { describe, expect, test } from 'bun:test'
+import { DATABASE_COMMANDS, databaseCommand } from '../src/commands.ts'
+import { connection } from '../src/connection.ts'
+import { HELP } from '../src/help.ts'
+import { deviceToken } from '../src/token.ts'
+import { UI_HELP } from '../src/ui/help.ts'
+import { VERSION } from '../src/version.ts'
+import { silent, restore } from './commands-helpers.ts'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type pg from 'pg'
-import { z } from 'zod'
-import { main } from '../src/cli.ts'
-import { DATABASE_COMMANDS, databaseCommand } from '../src/commands.ts'
-import { connection } from '../src/connection.ts'
-import { HELP } from '../src/help.ts'
-import { inPage, sessionAuthorization } from '../src/in-page.ts'
-import { deviceToken } from '../src/token.ts'
-import { UI_HELP } from '../src/ui/help.ts'
-import { VERSION } from '../src/version.ts'
 
 /**
  * The commands that speak to the database, and the two things that guard the way in to it:
@@ -19,22 +17,6 @@ import { VERSION } from '../src/version.ts'
  * signed in. What is tested here is what is said before the database is asked anything, and
  * what the connection refuses before it opens.
  */
-
-/** A client that answers nothing: a command that reaches the database has gone wrong here. */
-const silent = {
-  query: async () => {
-    throw new Error('The database was asked a question it should not have been asked')
-  },
-} as unknown as pg.Client
-
-/** The environment as it was, so that a test that changes it can put it back. */
-const kept = { ...process.env }
-
-/** Puts the environment back as it was. */
-function restore() {
-  for (const name of Object.keys(process.env)) if (!(name in kept)) delete process.env[name]
-  for (const [name, value] of Object.entries(kept)) process.env[name] = value
-}
 
 describe('The commands that speak to the database', () => {
   test('are the ones that need one, and the help names every one of them', () => {
@@ -194,89 +176,6 @@ describe('The sign-in from a terminal', () => {
       )
     } finally {
       server.stop(true)
-    }
-  })
-})
-
-describe('The page’s own database', () => {
-  test('becomes the reader, and the reader’s name is quoted as a name', () => {
-    expect(sessionAuthorization('alice')).toBe('SET SESSION AUTHORIZATION "alice"')
-    // A role may hold a quote of its own: PostgreSQL reads it as one name, not as two.
-    expect(sessionAuthorization('a"b')).toBe('SET SESSION AUTHORIZATION "a""b"')
-    expect(sessionAuthorization('a"b; DROP TABLE x')).toBe(
-      'SET SESSION AUTHORIZATION "a""b; DROP TABLE x"'
-    )
-  })
-})
-
-describe('The command the operator asked for', () => {
-  test('the version is printed, and an unknown command is answered with the help', async () => {
-    const said: string[] = []
-    const log = console.log
-    console.log = (...parts: unknown[]) => said.push(parts.map(String).join(' '))
-    try {
-      await main(['--version'])
-      await main(['nonsense'])
-    } finally {
-      console.log = log
-    }
-    expect(said[0]).toBe(VERSION)
-    expect(said[1]).toContain('platform <command>')
-  })
-
-  test('a command that needs the database says what it needs when there is no token', async () => {
-    delete process.env.PGTOKEN
-    delete process.env.PGTOKEN_FILE
-    process.env.DATABASE_HOST = '127.0.0.1'
-    try {
-      await expect(main(['migrate'])).rejects.toThrow('PGTOKEN or PGTOKEN_FILE is required')
-    } finally {
-      restore()
-    }
-  })
-})
-
-describe('The schemas the page makes', () => {
-  test('are made without compiling them, so the page compiles no script', async () => {
-    const before = z.config()
-    try {
-      await import('../src/no-eval.ts')
-      expect(z.config().jitless).toBe(true)
-    } finally {
-      z.config(before)
-    }
-  })
-})
-
-describe('The page’s own people', () => {
-  test('are the manifest’s own, and the page keeps who was chosen', () => {
-    const store = new Map<string, string>()
-    globalThis.sessionStorage = {
-      getItem: (key: string) => store.get(key) ?? null,
-      setItem: (key: string, value: string) => void store.set(key, value),
-      removeItem: (key: string) => void store.delete(key),
-    } as unknown as Storage
-    try {
-      const page = inPage({
-        models: {
-          format: 1,
-          users: [
-            { name: 'alice', login: true },
-            { name: 'a-group', login: false },
-          ],
-        },
-        migration: undefined,
-        demo: undefined,
-      })
-      // A person signs in; a group has no login of its own.
-      expect(page.withoutIssuer.people.map((person) => person.role)).toEqual(['alice'])
-      expect(page.withoutIssuer.chosen()).toBe(null)
-      page.withoutIssuer.choose('alice')
-      expect(page.withoutIssuer.chosen()).toBe('alice')
-      page.withoutIssuer.forget()
-      expect(page.withoutIssuer.chosen()).toBe(null)
-    } finally {
-      delete (globalThis as { sessionStorage?: Storage }).sessionStorage
     }
   })
 })
