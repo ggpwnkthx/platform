@@ -1,6 +1,7 @@
 import { useState } from 'preact/hooks'
 import { transaction } from '@platform/vocabulary'
 import { describe, useSession } from '../session.tsx'
+import { Notice } from '../ui/bits.tsx'
 
 /**
  * Runs statements the reader has seen, as the reader, in one transaction: all of them happen
@@ -31,4 +32,17 @@ export function useRunner() {
     }
   }
   return { busy, problem, setProblem, runStatements }
+}
+
+/** The runner a drawer holds while it works. */
+export type Runner = ReturnType<typeof useRunner>
+
+/** What the database said when the reader's statements could not run. */
+export function RunnerProblem({ runner }: { runner: Runner }) {
+  if (!runner.problem) return null
+  return (
+    <Notice tone="danger" title={runner.problem.title}>
+      {runner.problem.detail}
+    </Notice>
+  )
 }
