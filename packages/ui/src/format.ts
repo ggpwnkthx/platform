@@ -8,6 +8,7 @@ export function display(value: unknown): string {
 }
 
 const numberFormat = new Intl.NumberFormat('en-US')
+const relativeFormat = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
 
 export function count(value: number): string {
   return numberFormat.format(value)
@@ -25,13 +26,13 @@ export function ago(value: string): string {
   const then = Date.parse(value.replace(' ', 'T').replace(/([+-]\d{2})$/, '$1:00'))
   if (Number.isNaN(then)) return value
   const seconds = Math.round((Date.now() - then) / 1000)
-  if (seconds < 60) return 'just now'
+  if (Math.abs(seconds) < 60) return relativeFormat.format(0, 'second')
   const minutes = Math.round(seconds / 60)
-  if (minutes < 60) return `${minutes} min ago`
+  if (Math.abs(minutes) < 60) return relativeFormat.format(-minutes, 'minute')
   const hours = Math.round(minutes / 60)
-  if (hours < 24) return `${hours} h ago`
+  if (Math.abs(hours) < 24) return relativeFormat.format(-hours, 'hour')
   const days = Math.round(hours / 24)
-  if (days < 30) return `${days} d ago`
+  if (Math.abs(days) < 30) return relativeFormat.format(-days, 'day')
   return moment(value)
 }
 
