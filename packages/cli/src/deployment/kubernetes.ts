@@ -1,8 +1,3 @@
-/**
- * The intermediate state of the Kubernetes command: the options are read by node's parser,
- * and the database is still named by the deployment (the manifests are still rendered by
- * replacing text in them). This is the file as it is between the two commits.
- */
 import { type DeployRuntime, KUBERNETES_OPTIONS, seconds } from './runtime.ts'
 import { computedValues, ensureConfig, settingValue } from './config.ts'
 import { firstGiven, renderKubernetes } from './manifests.ts'
@@ -35,7 +30,6 @@ async function k8sSettings(
   relayUrl: string
   databasePort: string
   databaseHost: string
-  databaseName: string
 }> {
   const namespace = values.namespace ?? 'default'
   if (!/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(namespace) || namespace.length > 63)
@@ -47,7 +41,6 @@ async function k8sSettings(
     PUBLIC_URL: values['public-url'],
     OIDC_ISSUER: values['oidc-issuer'],
     DATABASE_HOST: values['database-host'],
-    DATABASE_NAME: values['database-name'],
     DATABASE_PORT: values['database-port'],
   }
   // The settings of the deployment live in one file: when there is none, the first run asks
@@ -84,7 +77,6 @@ async function k8sSettings(
   const relayUrl = firstGiven(computed.PLATFORM_RELAY_URL)
   const databasePort = firstGiven(given.DATABASE_PORT, settingValue(r, 'DATABASE_PORT'), '5432')
   const databaseHost = firstGiven(given.DATABASE_HOST, computed.DATABASE_HOST)
-  const databaseName = firstGiven(given.DATABASE_NAME, computed.DATABASE_NAME, 'platform')
   return {
     namespace,
     timeout,
@@ -98,7 +90,6 @@ async function k8sSettings(
     relayUrl,
     databasePort,
     databaseHost,
-    databaseName,
   }
 }
 
@@ -128,7 +119,6 @@ export async function kubernetes(
         publicUrl: s.publicUrl,
         oidcIssuer: s.oidcIssuer,
         databaseHost: s.databaseHost,
-        databaseName: s.databaseName,
         databasePort: s.databasePort,
         namespace: s.namespace,
       })

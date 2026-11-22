@@ -1,6 +1,7 @@
 /** Kubernetes: the relay's manifests, and what kubectl does with them. */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { isMap, isSeq, parseAllDocuments } from 'yaml'
 import { ROOT } from './runtime.ts'
 
 /** What a manifest is rendered from: the image, the addresses, and the database it reads. */
@@ -9,7 +10,6 @@ type ManifestOptions = {
   publicUrl: string
   oidcIssuer: string
   databaseHost: string
-  databaseName: string
   databasePort: string
   namespace?: string
 }
@@ -54,8 +54,6 @@ function checkDatabase(options: ManifestOptions): void {
   // IPv6 address in brackets, and nothing that could become another argument.
   if (!/^([A-Za-z0-9.-]+|\[[0-9A-Fa-f:]+\])$/.test(options.databaseHost))
     throw new Error('--database-host must be a host name or an IP address')
-  if (!options.databaseName || options.databaseName.includes('\0'))
-    throw new Error('Invalid database name')
   if (
     !/^\d+$/.test(options.databasePort) ||
     Number(options.databasePort) < 1 ||
@@ -77,22 +75,36 @@ function checkManifest(options: ManifestOptions, namespace: string): void {
   checkDatabase(options)
 }
 
+/**
+ * The relay's manifests, as the deployment is to have them: the image it runs, the address
+ * it reaches PostgreSQL at, the origin it allows, and the namespace it is deployed to.
+ *
+ * The manifests are YAML, and they are changed as YAML: the values are set where they
+ * belong, so that a value that is not the one the operator gave cannot become another
+ * setting, and the comments the manifests carry are kept.
+ */
 export function renderKubernetes(options: ManifestOptions): string {
   const namespace = options.namespace ?? 'default'
   checkManifest(options, namespace)
-  return readFileSync(join(ROOT, 'deploy/k8s/deployment.yaml'), 'utf8')
-    .replaceAll(
-      'metadata:\n  name: platform',
-      `metadata:\n  namespace: ${JSON.stringify(namespace)}\n  name: platform`
-    )
-    .replace('YOUR_REGISTRY/platform-relay:2.3.0', JSON.stringify(options.image))
-    .replace('"https://platform.example.com"', JSON.stringify(options.publicUrl))
-    .replace(
-      '"db.YOUR_DOMAIN:5432"',
-      JSON.stringify(`${options.databaseHost}:${options.databasePort}`)
-    )
-    .replace(
-      '{ name: DATABASE_NAME, value: platform }',
-      `{ name: DATABASE_NAME, value: ${JSON.stringify(options.databaseName)} }`
-    )
+  const documents = parseAllDocuments(
+    readFileSync(join(ROOT, 'deploy/k8s/deployment.yaml'), 'utf8')
+  )
+  const deployment = documents[0]
+  if (!deployment) throw new Error("The relay's manifests are missing")
+  // Every document of the deployment is in the namespace it is deployed to.
+  for (const document of documents) document.setIn(['metadata', 'namespace'], namespace)
+  const container = deployment.getIn(['spec', 'template', 'spec', 'containers', 0])
+  if (!isMap(container)) throw new Error("The relay's manifest has no container")
+  container.set('image', options.image)
+  const environment = container.get('env')
+  if (!isSeq(environment)) throw new Error("The relay's manifest has no environment")
+  const setting = (name: string, value: string) => {
+    for (const entry of environment.items)
+      if (isMap(entry) && entry.get('name') === name) entry.set('value', value)
+  }
+  // The database the relay forwards to, and the one origin it opens a session for.
+  setting('RELAY_UPSTREAM', `${options.databaseHost}:${options.databasePort}`)
+  setting('RELAY_ORIGINS', options.publicUrl)
+  // The documents are written one after the other, each of them a document of its own.
+  return documents.map((document) => document.toString().replace(/^---\r?\n/, '')).join('\n---\n')
 }

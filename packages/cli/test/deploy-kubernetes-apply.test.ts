@@ -36,6 +36,21 @@ describe('Kubernetes deployment orchestration', () => {
       doc.spec.template.spec.containers[0].env.find((e: any) => e.name === 'RELAY_ORIGINS').value
     ).toBe('https://platform.example.com/?a="b')
   })
+  test('the manifests are changed as YAML, and keep what they say', () => {
+    const yaml = renderKubernetes({ ...settings, namespace: 'team' })
+    // The comments of the manifests are kept: the operator reads them before they apply.
+    expect(yaml).toContain('# The relay: the WebSocket in front of PostgreSQL')
+    // Every document of the deployment is in the namespace it is deployed to.
+    const docs = yaml.split(/^---$/m).map((s) => Bun.YAML.parse(s)) as any[]
+    expect(docs.every((d) => d.metadata.namespace === 'team')).toBe(true)
+    // The values are set where they belong, and nowhere else.
+    const container = docs[0].spec.template.spec.containers[0]
+    expect(container.image).toBe(settings.image)
+    expect(container.env.find((e: any) => e.name === 'RELAY_UPSTREAM').value).toBe(
+      'db.internal:5432'
+    )
+    expect(docs[0].metadata.name).toBe('platform-relay')
+  })
 })
 
 test('CLI apply invokes the real subprocess adapter and sends the manifest through stdin', async () => {

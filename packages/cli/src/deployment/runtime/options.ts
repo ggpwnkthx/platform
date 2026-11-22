@@ -22,7 +22,6 @@ export const KUBERNETES_OPTIONS = {
   'public-url': { type: 'string' },
   'oidc-issuer': { type: 'string' },
   'database-host': { type: 'string' },
-  'database-name': { type: 'string' },
   'database-port': { type: 'string' },
 } as const
 

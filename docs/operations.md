@@ -438,17 +438,18 @@ the addresses follow — `idp.<domain>` for Dex, `api.<domain>` for the relay, `
 for PostgreSQL. Give the domain (`--domain`, or PLATFORM_DOMAIN) and the issuer, the relay's
 address and the database's address are worked out from it; give any of them outright and
 they are used as they are. Equivalent flags are --domain, --image, --public-url,
---oidc-issuer, --database-host, --database-name, --database-port. PUBLIC_URL and OIDC_ISSUER
-must be HTTPS.
+--oidc-issuer, --database-host, --database-port. PUBLIC_URL and OIDC_ISSUER
+must be HTTPS. The database itself is the readers' own: they name it when they sign in, so
+the deployment does not name it.
 `render` is offline. `validate` is a server-side dry run and needs cluster connectivity.
 `diff` preserves kubectl's exit 1 for differences; `apply` waits for rollout and propagates
 failure. Namespace defaults to `default`, and `--timeout=120` controls the rollout timeout.
 `down` deletes only the `platform-relay` deployment and service, not the external PostgreSQL
 database. No namespace is created automatically.
 
-The renderer uses deploy/k8s/deployment.yaml, fills endpoint/image values, adds the selected
-namespace and feeds the resulting manifest to kubectl through stdin. The source template
-remains unchanged. It is one Deployment, `platform-relay`, whose pod runs the relay, and a
+The renderer uses deploy/k8s/deployment.yaml, fills endpoint/image values as YAML, adds the
+selected namespace and feeds the resulting manifest to kubectl through stdin. The source
+template remains unchanged, comments and all. It is one Deployment, `platform-relay`, whose pod runs the relay, and a
 Service in front of it. The container holds no database credentials. PUBLIC_URL is the site's
 address, and the only origin the relay allows; it is not an HTTPS listener. Supply your own
 HTTPS ingress or tunnel: deploy/k8s/ingress.yaml is an example of one, and the address it

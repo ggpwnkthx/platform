@@ -104,12 +104,6 @@ export function settingsKubernetes(): Setting[] {
       note: 'Where PostgreSQL is: its own sub-domain',
       follows: (answers) => serviceName(answers, 'PLATFORM_DB_HOST'),
     },
-    {
-      name: 'DATABASE_NAME',
-      note: 'The database the platform is installed in',
-      // The name the platform installs itself under: the same for every deployment.
-      follows: () => 'platform',
-    },
 
     {
       name: 'DATABASE_PORT',

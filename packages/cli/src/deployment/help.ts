@@ -67,7 +67,6 @@ export const DEPLOY_HELP = `platform deploy <local|k8s> <action> [options]
     --public-url=https://...        Or PUBLIC_URL: the address of the site, the only origin the relay allows.
     --oidc-issuer=https://...       Or OIDC_ISSUER: an issuer other than the deployment's own Dex.
     --database-host=HOST            Or DATABASE_HOST: a database other than the one on db.<domain>.
-    --database-name=platform        Or DATABASE_NAME.
     --database-port=5432            Or DATABASE_PORT.
     --timeout=120                   Rollout timeout in seconds.
     PostgreSQL 18 and Dex are yours to run. Install the database separately, as the
