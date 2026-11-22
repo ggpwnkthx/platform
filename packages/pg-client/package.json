@@ -13,5 +13,11 @@
     "./wire.ts": "./src/wire.ts",
     "./socket.ts": "./src/socket.ts",
     "./kept.ts": "./src/kept.ts"
+  },
+  "dependencies": {
+    "buffer": "6.0.3",
+    "generic-pool": "3.9.0",
+    "pg-protocol": "1.16.1",
+    "postgres-array": "3.0.4"
   }
 }

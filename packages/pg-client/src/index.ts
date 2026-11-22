@@ -7,7 +7,7 @@
  * about the interface, and nothing about what a statement means: that is the vocabulary's
  * business, in `@platform/vocabulary`, and the questions' business, in `@platform/data`.
  *
- * It has no dependencies and runs in the browser, in Bun and in Node.
+ * It runs in the browser, in Bun and in Node.
  */
 
 export * from './kept.ts'

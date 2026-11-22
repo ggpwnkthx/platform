@@ -1,23 +1,19 @@
+import { serialize as protocol } from 'pg-protocol'
+import { Parser } from 'pg-protocol/dist/parser'
 import { ConnectionError } from './errors.ts'
-import { PgError } from './errors.ts'
-import { Reader, Writer } from './codec.ts'
 import { queryMessages } from './query.ts'
-import {
-  authentication,
-  commandComplete,
-  dataRow,
-  errorResponse,
-  readyForQuery,
-  rowDescription,
-} from './messages.ts'
+import { handle } from './messages.ts'
 import type { LoginOptions, Pending, Result, Session, Transport } from './types.ts'
 
 /**
  * One logged-in session. Statements run one after another, in the order they were asked
  * for; a refused statement rejects its own promise and leaves the session usable.
+ *
+ * The messages are the protocol's own: `pg-protocol` writes them and reads them, and this
+ * session decides what they mean — what a statement is answered with, and what a refusal is.
  */
 export class Connection implements Session {
-  private buffer = new Uint8Array(0)
+  private readonly parser = new Parser()
   readonly queue: Pending[] = []
   private chain: Promise<unknown> = Promise.resolve()
   closed: Error | null = null
@@ -54,77 +50,28 @@ export class Connection implements Session {
   }
 
   private startup() {
-    const message = new Writer().int32(196608)
-    const params: Record<string, string> = {
+    const message = protocol.startup({
       user: this.options.user,
       database: this.options.database,
       application_name: this.options.applicationName ?? 'platform-ui',
-      client_encoding: 'UTF8',
       DateStyle: 'ISO, MDY',
       ...this.options.settings,
-    }
-    for (const [key, value] of Object.entries(params)) message.cstring(key).cstring(value)
-    message.bytes(new Uint8Array(1))
-    this.transport.send(message.frame())
+    })
+    this.transport.send(message)
   }
 
   private receive(chunk: Uint8Array) {
-    const joined = new Uint8Array(this.buffer.length + chunk.length)
-    joined.set(this.buffer)
-    joined.set(chunk, this.buffer.length)
-    this.buffer = joined
-    let at = 0
-    while (this.buffer.length - at >= 5) {
-      const type = String.fromCharCode(this.buffer[at]!)
-      const length = new DataView(this.buffer.buffer, this.buffer.byteOffset + at + 1, 4).getInt32(
-        0
-      )
-      if (this.buffer.length - at < length + 1) break
-      const body = this.buffer.subarray(at + 5, at + 1 + length)
-      at += length + 1
-      try {
-        this.message(type, new Reader(body))
-      } catch (error) {
-        this.end(error instanceof Error ? error : new Error(String(error)))
-        return
+    // The parser keeps what it cannot read yet, and reads the rest as it comes.
+    this.parser.parse(
+      Buffer.from(chunk.buffer as ArrayBuffer, chunk.byteOffset, chunk.length),
+      (message) => {
+        try {
+          handle(this, message)
+        } catch (error) {
+          this.end(error instanceof Error ? error : new Error(String(error)))
+        }
       }
-    }
-    this.buffer = this.buffer.slice(at)
-  }
-
-  private message(type: string, body: Reader) {
-    switch (type) {
-      case 'R':
-        return authentication(this, body)
-      case 'S':
-        this.parameters.set(body.cstring(), body.cstring())
-        return
-      case 'K':
-      case '1':
-      case '2':
-      case '3':
-      case 'n':
-      case 't':
-      case 's':
-      case 'A':
-        return
-      case 'N':
-        return
-      case 'Z':
-        return readyForQuery(this)
-      case 'E':
-        return errorResponse(this, new PgError(fields(body)))
-      case 'T':
-        return rowDescription(this, body)
-      case 'D':
-        return dataRow(this, body)
-      case 'C':
-        return commandComplete(this, body.cstring())
-      case 'I':
-        return
-      default:
-        throw new ConnectionError(`Unexpected message from the server: ${type}`)
-    }
+    )
   }
 
   end(reason: Error | null) {
@@ -175,20 +122,10 @@ export class Connection implements Session {
   close() {
     if (this.closed) return
     try {
-      this.transport.send(new Writer().frame('X'))
+      this.transport.send(protocol.end())
     } catch {
       // The stream is already gone.
     }
     this.end(new ConnectionError('The connection is closed'))
   }
-}
-
-function fields(body: Reader): Map<string, string> {
-  const out = new Map<string, string>()
-  while (!body.done) {
-    const code = body.byte()
-    if (!code) break
-    out.set(String.fromCharCode(code), body.cstring())
-  }
-  return out
 }

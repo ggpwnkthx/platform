@@ -1,3 +1,4 @@
+import { createPool, type Pool } from 'generic-pool'
 import { ConnectionError, type Login, PgError } from './wire.ts'
 
 /**
@@ -22,24 +23,40 @@ export type KeptSessionOptions = {
 }
 
 export class KeptSession {
-  private readonly size: number
-  private readonly open: () => Promise<Login>
+  private readonly pool: Pool<Login>
   private readonly expiryOf: () => number | null
-  /** Logins nobody is using. */
-  private free: Login[] = []
-  /** Logins an action is using. */
-  private busy = new Set<Login>()
-  /** Actions waiting for a login. */
-  private waiting: { resolve: (db: Login) => void; reject: (error: unknown) => void }[] = []
-  /** Logins on their way. */
-  private opening = 0
   private timer: ReturnType<typeof setTimeout> | null = null
   private closed = false
+  /** Rejects when the session ends, so that an action waiting for a login is not left waiting. */
+  private readonly ended: Promise<never>
+  private end: (error: Error) => void = () => undefined
 
   constructor(options: KeptSessionOptions) {
-    this.size = Math.max(1, options.size ?? 2)
-    this.open = options.open
     this.expiryOf = options.expiresAt
+    this.ended = new Promise<never>((_, reject) => {
+      this.end = reject
+    })
+    // The end of the session is a rejection nobody may be waiting for: it is caught here,
+    // and every action that is waiting for a login hears of it through the race below.
+    this.ended.catch(() => undefined)
+    this.pool = createPool<Login>(
+      {
+        create: options.open,
+        destroy: async (db: Login) => {
+          try {
+            db.close()
+          } catch {
+            // It is already gone.
+          }
+        },
+      },
+      {
+        max: Math.max(1, options.size ?? 2),
+        min: 0,
+        // A login is kept until the sign-in ends, not until it has been idle a while.
+        evictionRunIntervalMillis: 0,
+      }
+    )
   }
 
   /**
@@ -48,113 +65,49 @@ export class KeptSession {
    */
   async run<T>(work: (db: Login) => Promise<T>): Promise<T> {
     const db = await this.acquire()
+    let spoiled = false
     try {
       return await work(db)
     } catch (error) {
-      if (broken(error)) this.drop(db)
+      spoiled = broken(error)
       throw error
     } finally {
-      this.release(db)
+      this.release(db, spoiled)
     }
   }
 
   /** A login to work on: one that is free, or a new one, or a wait for one to come back. */
   async acquire(): Promise<Login> {
     if (this.closed) throw new Error('The sign-in has ended.')
-    this.pump()
-    const free = this.free.pop()
-    if (free) {
-      this.busy.add(free)
-      return free
-    }
-    if (this.live < this.size) return this.newLogin()
-    return new Promise<Login>((resolve, reject) => this.waiting.push({ resolve, reject }))
+    const loan = this.pool.acquire()
+    // A login that is given to a waiter after the session has ended is closed at once.
+    void loan.then(
+      (db) => {
+        if (this.closed) void this.pool.destroy(db)
+      },
+      () => undefined
+    )
+    const db = await Promise.race([loan, this.ended])
+    this.arm()
+    return db
   }
 
-  /** Gives a login back. */
-  release(db: Login): void {
-    this.busy.delete(db)
-    if (this.closed || db.isClosed) this.drop(db)
-    else this.free.push(db)
-    this.pump()
-  }
-
-  /** Throws a login away: it cannot be used again. */
-  drop(db: Login): void {
-    this.busy.delete(db)
-    this.free = this.free.filter((other) => other !== db)
-    try {
-      db.close()
-    } catch {
-      // It is already gone.
-    }
+  /** Gives a login back. A login that is broken, or that the session has ended, is thrown away. */
+  release(db: Login, spoiled = false): void {
+    if (this.closed || spoiled || db.isClosed) void this.pool.destroy(db)
+    else void this.pool.release(db)
   }
 
   /** Ends the session: every login is closed and no new one is opened. */
   close(): void {
+    if (this.closed) return
     this.closed = true
     if (this.timer) {
       clearTimeout(this.timer)
       this.timer = null
     }
-    for (const db of [...this.free, ...this.busy]) this.drop(db)
-    this.free = []
-    this.busy.clear()
-    for (const waiter of this.waiting.splice(0)) waiter.reject(new Error('The sign-in has ended.'))
-  }
-
-  /** How many logins the page holds: the ones in use, the ones waiting, and the ones coming. */
-  private get live(): number {
-    return this.free.length + this.busy.size + this.opening
-  }
-
-  /** Opens a login and hands it to the action that asked for one. */
-  private async newLogin(): Promise<Login> {
-    this.opening++
-    try {
-      const db = await this.open()
-      if (this.closed) {
-        db.close()
-        throw new Error('The sign-in has ended.')
-      }
-      this.busy.add(db)
-      this.arm()
-      return db
-    } finally {
-      this.opening--
-    }
-  }
-
-  /** Hands free logins to whoever is waiting, and opens more when the pool is below its size. */
-  private pump(): void {
-    this.free = this.free.filter((db) => !db.isClosed)
-    while (this.waiting.length > 0) {
-      const free = this.free.pop()
-      if (free) {
-        this.busy.add(free)
-        this.waiting.shift()!.resolve(free)
-        continue
-      }
-      if (this.live >= this.size) return
-      const waiter = this.waiting.shift()!
-      this.opening++
-      this.open()
-        .then((db) => {
-          this.opening--
-          if (this.closed) {
-            db.close()
-            waiter.reject(new Error('The sign-in has ended.'))
-            return
-          }
-          this.busy.add(db)
-          this.arm()
-          waiter.resolve(db)
-        })
-        .catch((error) => {
-          this.opening--
-          waiter.reject(error)
-        })
-    }
+    this.end(new Error('The sign-in has ended.'))
+    void this.pool.clear()
   }
 
   /** Closes the logins when the sign-in expires: a session must not outlive the token. */
