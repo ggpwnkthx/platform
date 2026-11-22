@@ -1,5 +1,6 @@
 import { appendFileSync, chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
+import ignore from 'ignore'
 import type { DeployRuntime } from '../runtime.ts'
 import type { Setting } from './setting.ts'
 
@@ -85,17 +86,12 @@ function ignoredByGit(file: string): boolean | null {
     if (checked.exitCode === 0) return true
     if (checked.exitCode === 1) return false
   }
-  // Git could not answer: the ignore file beside the file is what is read instead.
+  // Git could not answer: the ignore file beside the file is what is read instead, and it
+  // is read as git reads it.
   const ignoreFile = join(dirname(file), '.gitignore')
   if (!existsSync(ignoreFile)) return false
   const patterns = readFileSync(ignoreFile, 'utf8')
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith('#'))
-  const name = basename(file)
-  return patterns.some(
-    (pattern) => pattern === name || pattern === `/${name}` || pattern === '*' || pattern === '/.*'
-  )
+  return ignore().add(patterns).ignores(basename(file))
 }
 
 /** Keeps a file that holds secrets out of git, and says that it did. */

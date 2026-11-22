@@ -12,18 +12,6 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { options } from '../options.ts'
 
-export const types: Record<string, string> = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.json': 'application/json; charset=utf-8',
-  '.woff2': 'font/woff2',
-  '.wasm': 'application/wasm',
-  '.data': 'application/octet-stream',
-  '.map': 'application/json',
-}
-
 /** The file a path names in a built site: a page is the `index.html` of its folder. */
 export function fileIn(dist: string, path: string): string | null {
   let clean: string
@@ -87,9 +75,8 @@ function serveSite(dir: string, port: number) {
           headerRules(readFileSync(join(dist, '_headers'), 'utf8'))
         : []
       // fallow-ignore-next-line security-sink -- the path is inside the built site; fileIn refuses any '..' in it
-      return new Response(new Uint8Array(readFileSync(file)), {
+      return new Response(Bun.file(file), {
         headers: {
-          'content-type': types[file.slice(file.lastIndexOf('.'))] ?? 'application/octet-stream',
           // Nothing is kept for long: config.json least of all, which names the relay.
           'cache-control': path === '/config.json' ? 'no-store' : 'no-cache',
           ...headersFor(rules, path),

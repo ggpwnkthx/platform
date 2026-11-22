@@ -10,7 +10,7 @@ import { join } from 'node:path'
 import { securityHeaders } from '@platform/ui/headers.ts'
 import { root, sources } from '@platform/ui/paths.ts'
 import type { FolderConfig } from '../config.ts'
-import { fileIn, types } from './serve.ts'
+import { fileIn } from './serve.ts'
 
 /** The interface, served on a port, with the site it serves beside it. */
 export async function serveInterface(
@@ -79,7 +79,7 @@ export async function serveInterface(
         url.pathname === '/config.json' ? JSON.stringify(site) : new Uint8Array(readFileSync(file))
       return new Response(content, {
         headers: {
-          'content-type': types[file.slice(file.lastIndexOf('.'))] ?? 'application/octet-stream',
+          'content-type': Bun.file(file).type,
           'cache-control': 'no-store',
           ...headers,
         },

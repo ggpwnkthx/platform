@@ -1,3 +1,6 @@
+import { createInterface } from 'node:readline'
+import { Readable } from 'node:stream'
+
 /**
  * What nobody reads in a build's output: the identifiers of the layers and of the images,
  * and the word Podman has about the Compose provider it runs.
@@ -22,12 +25,9 @@ export function said(line: string): string | undefined {
 }
 /** Hands what a process says to a reader, a line at a time. A carriage return ends a line too. */
 export async function lines(stream: ReadableStream<Uint8Array>, each: (line: string) => void) {
-  const decoder = new TextDecoder()
-  let rest = ''
-  for await (const chunk of stream) {
-    const parts = (rest + decoder.decode(chunk, { stream: true })).split(/\r?\n|\r/)
-    rest = parts.pop() ?? ''
-    for (const part of parts) if (part.trim()) each(part)
-  }
-  if (rest.trim()) each(rest)
+  const reader = createInterface({
+    input: Readable.fromWeb(stream as unknown as Parameters<typeof Readable.fromWeb>[0]),
+    crlfDelay: Infinity,
+  })
+  for await (const line of reader) if (line.trim()) each(line)
 }

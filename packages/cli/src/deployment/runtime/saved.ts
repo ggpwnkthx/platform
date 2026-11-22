@@ -1,15 +1,12 @@
 import { randomBytes } from 'node:crypto'
 import { appendFileSync, existsSync, readFileSync } from 'node:fs'
+import { parse } from 'dotenv'
 import type { DeployRuntime } from './types.ts'
 
 /** The value a dotenv file gives a name; the last assignment wins, as it does for Compose. */
 export function saved(file: string, name: string): string | undefined {
   if (!existsSync(file)) return undefined
-  let value: string | undefined
-  for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
-    const m = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/)
-    if (m?.[1] === name) value = m[2]!.replace(/^(['"])(.*)\1$/, '$2')
-  }
+  const value = parse(readFileSync(file, 'utf8'))[name]
   return value || undefined
 }
 /** Appends a value to the saved file, which is private to its owner. */
