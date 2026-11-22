@@ -7,7 +7,7 @@ import { kubernetes } from './kubernetes.ts'
 import { type DeployRuntime, ROOT, runtime } from './runtime.ts'
 
 export { localDatabase } from './local.ts'
-export { renderKubernetes } from './kubernetes.ts'
+export { renderKubernetes } from './manifests.ts'
 export type { DeployRuntime } from './runtime.ts'
 
 export async function deploy(args: string[], r: DeployRuntime = runtime): Promise<number> {

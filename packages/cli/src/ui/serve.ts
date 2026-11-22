@@ -82,8 +82,10 @@ function serveSite(dir: string, port: number) {
       if (!file) return new Response('Not found', { status: 404 })
       // Read on every request: a site that is built again is the one that is served.
       const rules = existsSync(join(dist, '_headers'))
-        ? headerRules(readFileSync(join(dist, '_headers'), 'utf8'))
+        ? // fallow-ignore-next-line security-sink -- the path is inside the built site; fileIn refuses any '..' in it
+          headerRules(readFileSync(join(dist, '_headers'), 'utf8'))
         : []
+      // fallow-ignore-next-line security-sink -- the path is inside the built site; fileIn refuses any '..' in it
       return new Response(new Uint8Array(readFileSync(file)), {
         headers: {
           'content-type': types[file.slice(file.lastIndexOf('.'))] ?? 'application/octet-stream',

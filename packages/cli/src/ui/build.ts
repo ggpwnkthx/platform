@@ -12,11 +12,13 @@
  * shape.
  */
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
-import { defaultRuntimeConfig, type RuntimeConfig } from '@platform/ui/config.ts'
-import { headersFile, type Origins } from '@platform/ui/headers.ts'
+import { dirname, join } from 'node:path'
+import { headersFile } from '@platform/ui/headers.ts'
 import { root, sources } from '@platform/ui/paths.ts'
-import type { ApplyFiles } from '../config.ts'
+import { siteConfig, siteOrigins } from './site-config.ts'
+
+export { siteConfig, siteOrigins } from './site-config.ts'
+export { extensionsPlugin, inPageAssets, seamPlugin } from './plugins.ts'
 
 /** How a site is built: where it goes, what it is called, and what shapes it. */
 export type SiteBuild = {
@@ -126,117 +128,4 @@ export async function buildSite(build: SiteBuild): Promise<number> {
     await writeFile(target, page(html, title, build.title ?? ''))
   }
   return rendered.length
-}
-
-/**
- * The file the pages read to find the issuer, the relay and the database. It is served
- * beside the pages, so a deployment changes it without rebuilding the bundle.
- *
- * Two say it, in this order: the platform's own defaults, and the environment the deployment
- * runs in. A folder says what it is, and never where it runs, so it is not asked.
- */
-export function siteConfig(
-  relay: string | undefined,
-  env: Record<string, string | undefined> = process.env
-): RuntimeConfig {
-  const base = defaultRuntimeConfig
-  return {
-    issuer: env.PLATFORM_ISSUER ?? env.OIDC_ISSUER ?? base.issuer,
-    clientId: env.PLATFORM_CLIENT_ID ?? base.clientId,
-    claim: env.PLATFORM_CLAIM ?? base.claim,
-    relay: relay ?? base.relay,
-    database: env.PLATFORM_DATABASE_NAME ?? base.database,
-    statementTimeoutMs: Number(env.PLATFORM_STATEMENT_TIMEOUT_MS ?? base.statementTimeoutMs),
-  }
-}
-
-/**
- * The deployment's names, as the headers need them: who the pages may speak to. The issuer
- * is the one `config.json` sends the pages to, so the two files cannot say different things.
- */
-export function siteOrigins(
-  config: RuntimeConfig,
-  env: Record<string, string | undefined> = process.env
-): Origins {
-  return {
-    public: env.PLATFORM_PUBLIC_URL ?? 'http://localhost:5173',
-    issuer: config.issuer,
-    relay: env.PLATFORM_RELAY_URL ?? 'ws://localhost:8081',
-  }
-}
-
-/** PostgreSQL in the page, and what makes the seam's database of what a folder applies. */
-const inPageModule = join(import.meta.dir, '..', 'in-page.ts')
-
-/** What tells the manifest's schemas not to compile themselves: see the module. */
-const noEvalModule = join(import.meta.dir, '..', 'no-eval.ts')
-
-/**
- * The seam: the interface's own database, replaced by a PostgreSQL that runs in the page,
- * installed from the files a folder applies.
- *
- * The seam is loaded as a module that imports those files and hands them over: the manifest
- * as what it says, the SQL as its text. Nothing is written in the folder to make it so.
- */
-export function seamPlugin(files: ApplyFiles): Bun.BunPlugin {
-  const seam = join(sources, 'pg', 'connect.ts')
-  const text = (name: string, path: string | undefined) =>
-    path === undefined
-      ? `const ${name} = undefined`
-      : `import ${name} from ${JSON.stringify(path)} with { type: 'text' }`
-  const contents = [
-    // First, so that it has run before the in-page module's schemas are made.
-    `import ${JSON.stringify(noEvalModule)}`,
-    `import { inPage } from ${JSON.stringify(inPageModule)}`,
-    `import models from ${JSON.stringify(files.models)}`,
-    text('migration', files.migration),
-    text('demo', files.demo),
-    'export const { connect, withoutIssuer } = inPage({ models, migration, demo })',
-    '',
-  ].join('\n')
-  return {
-    name: 'the-database-seam',
-    setup(build) {
-      build.onLoad({ filter: /[\\/]pg[\\/]connect\.ts$/ }, (args) =>
-        resolve(args.path) === seam ? { contents, loader: 'ts' } : undefined
-      )
-    },
-  }
-}
-
-/**
- * The other seam: the interface's own extensions, which are empty, replaced by the module a
- * site names. The module registers the site's field types and renderers with what the
- * interface publishes — `@platform/ui/fields/registry.ts`, `@platform/ui/fields/renderers.tsx`
- * — and it is imported before any page draws a field, in the prerender and in the bundle.
- *
- * The seam is not resolved to the site's module: it is loaded as a module that imports it.
- * The site's module is then found as any other is, so it is compiled as its own directory
- * says — its JSX is its own `tsconfig.json`'s — and it may be named `extensions.ts` too.
- */
-export function extensionsPlugin(extensions: string): Bun.BunPlugin {
-  const replacement = resolve(extensions)
-  const seam = join(sources, 'extensions.ts')
-  return {
-    name: 'the-extensions-seam',
-    setup(build) {
-      build.onLoad({ filter: /[\\/]extensions\.ts$/ }, (args) =>
-        resolve(args.path) === seam
-          ? { contents: `import ${JSON.stringify(replacement)}\n`, loader: 'ts' }
-          : undefined
-      )
-    },
-  }
-}
-
-/**
- * PostgreSQL itself, compiled to WebAssembly: what the in-page database runs on. It is
- * found where the tools find it themselves.
- */
-export function inPageAssets(): { from: string; to: string }[] {
-  const dist = dirname(Bun.resolveSync('@electric-sql/pglite', import.meta.dir))
-  return ['pglite.wasm', 'initdb.wasm', 'pglite.data'].map((file) => ({
-    from: join(dist, file),
-    to: join('dev', file),
-  }))
 }

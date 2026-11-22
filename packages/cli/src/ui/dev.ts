@@ -42,6 +42,7 @@ export async function serveInterface(
   // The site the build wrote: what it says about the issuer and the relay. The
   // development server is the relay, so it says so itself.
   const site: Record<string, unknown> = {
+    // fallow-ignore-next-line security-sink -- the path is inside the built site; fileIn refuses any '..' in it
     ...(JSON.parse(readFileSync(join(dist, 'config.json'), 'utf8')) as Record<string, unknown>),
     relay: '/pg',
   }
@@ -74,6 +75,7 @@ export async function serveInterface(
       // The built site's config.json names the deployment's relay; the development server
       // relays /pg itself, so it says so.
       const content =
+        // fallow-ignore-next-line security-sink -- the path is inside the built site; fileIn refuses any '..' in it
         url.pathname === '/config.json' ? JSON.stringify(site) : new Uint8Array(readFileSync(file))
       return new Response(content, {
         headers: {
