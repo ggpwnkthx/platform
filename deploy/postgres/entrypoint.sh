@@ -110,7 +110,7 @@ if [ "${1:-}" = postgres ]; then
   # and every statement that changes a role, a grant, a policy or a table. These come before the
   # caller's own settings, so a deployment that logs otherwise says so and is obeyed.
   shift
-  set -- postgres -c log_connections=on -c log_statement=ddl "$@"
+  set -- postgres -c log_connections=on -c log_statement=ddl -c authentication_timeout=30s "$@"
   set -- "$@" \
     -c hba_file=/etc/platform/pg_hba.conf \
     -c oauth_validator_libraries=pg_oidc_validator \

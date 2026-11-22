@@ -1,25 +1,12 @@
-/**
- * What the page needs to find the issuer and the database. The pages are static, so this is
- * a file served beside them (/config.json): a deployment changes it without rebuilding.
- */
+/** What the pages need to find the issuer and the database: `config.json`, served beside them. */
 export interface RuntimeConfig {
-  /** The one OpenID Connect issuer the database trusts: Dex. */
   issuer: string
-  /** The public client the page signs in with. */
   clientId: string
-  /** The token claim the database matches against the role name. */
   claim: string
-  /** The WebSocket address of the relay in front of the database. Relative to the page if it starts with /. */
   relay: string
-  /** The database Platform is installed in. */
   database: string
   statementTimeoutMs: number
 }
-
-/**
- * The platform's own defaults: what a site says when it says nothing. A deployment names
- * its own issuer, relay and database, and the builder starts from these.
- */
 export const defaultRuntimeConfig: RuntimeConfig = {
   issuer: 'http://idp.localhost:5556',
   clientId: 'platform-console',
@@ -28,31 +15,73 @@ export const defaultRuntimeConfig: RuntimeConfig = {
   database: 'platform',
   statementTimeoutMs: 15000,
 }
+/** The deployment's answer: the platform's defaults, then the environment it runs in. */
+export const runtimeConfigFrom = (
+  env: Record<string, string | undefined>,
+  relay?: string
+): RuntimeConfig => ({
+  issuer: (env.PLATFORM_ISSUER ?? env.OIDC_ISSUER ?? defaultRuntimeConfig.issuer).replace(
+    /\/+$/,
+    ''
+  ),
+  clientId: env.PLATFORM_CLIENT_ID ?? defaultRuntimeConfig.clientId,
+  claim: env.PLATFORM_CLAIM ?? defaultRuntimeConfig.claim,
+  relay: relay ?? env.PLATFORM_RELAY_URL ?? defaultRuntimeConfig.relay,
+  database: env.PLATFORM_DATABASE_NAME ?? defaultRuntimeConfig.database,
+  statementTimeoutMs: Number(
+    env.PLATFORM_STATEMENT_TIMEOUT_MS ?? defaultRuntimeConfig.statementTimeoutMs
+  ),
+})
 
-let loaded: Promise<RuntimeConfig> | null = null
+/** The pages of the interface. Each is written out as its own file, so a reload lands on one. */
+export const pages = {
+  '/': 'Sign in',
+  '/content': 'Content',
+  '/content/records': 'Records',
+  '/content/item': 'Record',
+  '/model': 'Data model',
+  '/model/collection': 'Collection',
+  '/model/new': 'New collection',
+  '/workspace/new': 'New workspace',
+  '/workspace/settings': 'Workspace settings',
+  '/access': 'Roles',
+  '/access/role': 'Role',
+  '/access/grants': 'Permissions',
+  '/access/policies': 'Row policies',
+  '/activity': 'Activity',
+  '/sql': 'SQL',
+} as const
 
-/** The relay's absolute address: a path is resolved against the page, ws for http, wss for https. */
-export function relayUrl(relay: string, page: URL): string {
-  if (/^wss?:\/\//.test(relay)) return relay
-  const url = new URL(relay, page)
-  url.protocol = page.protocol === 'https:' ? 'wss:' : 'ws:'
-  return url.toString()
-}
-
-export function runtimeConfig(): Promise<RuntimeConfig> {
-  loaded ??= fetch('/config.json', { cache: 'no-store' })
-    .then((response) => {
-      // A site without its configuration cannot work, and saying so is better than sending
-      // the reader to a relay that is not there.
-      if (!response.ok)
-        throw new Error('The interface has no configuration: config.json is missing from the site.')
-      return response.json()
-    })
-    .then((found: Partial<RuntimeConfig>) => {
-      const config = { ...defaultRuntimeConfig, ...found }
-      config.issuer = config.issuer.replace(/\/+$/, '')
-      config.relay = relayUrl(config.relay, new URL(location.href))
-      return config
-    })
-  return loaded
+/** The headers a CDN serves the site with: the pages reach the issuer and the relay, nothing else. */
+export function headersFile(config: RuntimeConfig, inPage = false): string {
+  const origin = (url: string) => {
+    try {
+      return new URL(url).origin.replace(/^http/, url.startsWith('ws') ? 'ws' : 'http')
+    } catch {
+      return ''
+    }
+  }
+  const headers = {
+    'Content-Security-Policy': [
+      "default-src 'self'",
+      // The in-page PostgreSQL of the dev mode is WebAssembly; the published interface has none.
+      `script-src 'self'${inPage ? " 'wasm-unsafe-eval'" : ''}`,
+      // The component library styles elements inline.
+      "style-src 'self' 'unsafe-inline'",
+      "font-src 'self'",
+      "img-src 'self' data:",
+      `connect-src 'self' ${origin(config.issuer)} ${origin(config.relay)}`.trim(),
+      "frame-ancestors 'none'",
+      "base-uri 'none'",
+      "form-action 'self'",
+    ].join('; '),
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'no-referrer',
+    'X-Frame-Options': 'DENY',
+    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+  }
+  return `/*\n${Object.entries(headers)
+    .map(([name, value]) => `  ${name}: ${value}`)
+    .join('\n')}\n`
 }

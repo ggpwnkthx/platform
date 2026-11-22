@@ -14,9 +14,8 @@
     "skipLibCheck": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
-    "jsx": "react-jsx",
-    "jsxImportSource": "preact"
+    "jsx": "react-jsx"
   },
-  "include": ["packages/*/src", "packages/*/test", "packages/ui/scripts", "examples", "test"],
-  "exclude": ["node_modules", "packages/ui/dist", "packages/ui/dist-dev"]
+  "include": ["packages/*/src", "packages/*/test", "packages/ui/vite.config.ts", "examples"],
+  "exclude": ["node_modules", "packages/ui/dist", "examples/*/.dist"]
 }

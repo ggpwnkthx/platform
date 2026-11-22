@@ -23,7 +23,7 @@ There is one installation script, `migrations/0001_platform.sql`, and it install
 an empty database. The platform has not been released, so nothing earlier is brought
 forward: a database that holds a development version from before 2.3.0 is refused, and is
 made again. The next change to the schema is the next file in `migrations/`, named in
-`packages/cli/src/migrations.ts`: the one list `migrate` runs, and the one a PostgreSQL in a
+`packages/cli/src/cli.ts`: the one list `migrate` runs, and the one a PostgreSQL in a
 page or in a test is installed from.
 
 The interface and the installation are one version. The interface reads the platform's
@@ -220,11 +220,6 @@ part of the path that answers on the network.
 | RELAY_UPSTREAM                 | 127.0.0.1:5432            | host:port of PostgreSQL, for the relay                                            |
 | RELAY_PORT                     | 8081                      | The port the relay listens on                                                     |
 | RELAY_ORIGINS                  | any                       | Comma-separated origins allowed to open a session; unset or `*` checks none       |
-| RELAY_SESSIONS_PER_ADDRESS     | 20                        | Logins one client address may have signing in at once                             |
-| RELAY_SESSIONS_PER_ROLE        | 20                        | Open database sessions one role may hold                                          |
-| RELAY_SESSIONS_LOGGING_IN      | 64                        | Logins every address together may have signing in at once                         |
-| RELAY_LOGIN_SECONDS            | 30                        | How long a session has to log in before it is closed                              |
-| RELAY_TRUSTED_PROXIES          | none                      | Addresses or CIDR blocks whose X-Forwarded-For names a client                     |
 | RELAY_UPSTREAM_TLS             | off, on this machine only | `verify` reaches PostgreSQL in TLS and checks its certificate; required otherwise |
 | RELAY_UPSTREAM_CA              | the system's              | The authority that certificate must come from, as a PEM file                      |
 | RELAY_TLS_CERT / RELAY_TLS_KEY | none                      | The certificate the relay serves TLS with                                         |
@@ -239,21 +234,18 @@ checks the token when it is opened, and `session_user` is the reader's role. The
 statements run on a login of their own, so a transaction or a SET ROLE they leave open cannot
 reach the platform's work. Every open WebSocket is one PostgreSQL connection: size PostgreSQL's
 `max_connections` and per-role connection limits for the people who use the interface at once.
-The relay caps the open sessions per role (RELAY_SESSIONS_PER_ROLE) and the logins signing in,
-per client address (RELAY_SESSIONS_PER_ADDRESS) and in all (RELAY_SESSIONS_LOGGING_IN). A
-session has no PostgreSQL connection until it has sent a whole startup packet, one that opens
-with anything else is refused, and one that has not logged in within RELAY_LOGIN_SECONDS is
-closed, so clients that never sign in cannot hold the database's connections for long. A
-client that sends a startup packet and then stalls does hold one until that time is up: keep
-RELAY_SESSIONS_LOGGING_IN, times the number of relays, well under `max_connections`. The caps are each relay's own: with two replicas, each counts for itself.
-A role's own CONNECTION LIMIT is the server's, and counts for all of them: a manifest sets it
-with `connections` on a user ([apply](apply.md)).
+The relay forwards and counts nothing. A session has no PostgreSQL connection until it has
+sent a startup packet, and one that opens with anything else is refused; a login that then
+stalls is closed by PostgreSQL's own `authentication_timeout` (30 seconds in the stack's
+image), so clients that never sign in cannot hold the database's connections for long.
 
-Behind a proxy every client arrives from the proxy's address, and shares one budget of logins.
-Name the proxy in RELAY_TRUSTED_PROXIES (the ingress controller's pods, a load balancer's
-range) and the relay counts a session against the client the proxy names in X-Forwarded-For
-instead. Only a named proxy is believed, and only for this count: the header is never an
-identity, and from any other address it is ignored.
+How many sessions one client address may hold open is the edge's to cap: the local stack's
+Traefik holds each address to 20 (`inFlightReq` in `deploy/traefik/dynamic.yaml`; behind
+another proxy, set its `ipStrategy.depth`), and `deploy/k8s/ingress.yaml` carries the same
+cap as `nginx.ingress.kubernetes.io/limit-connections`. How many sessions one role may hold
+is the role's own CONNECTION LIMIT, which is the server's and counts through every relay
+together: a manifest sets it with `connections` on a user ([apply](apply.md)). A relay put on
+the network with nothing in front of it has neither cap: put an edge in front of it.
 
 The relay connects to PostgreSQL in TLS with RELAY_UPSTREAM_TLS=verify and in plain TCP with
 RELAY_UPSTREAM_TLS=off. It has to be told which unless PostgreSQL is on the relay's own
@@ -345,7 +337,8 @@ tools, which connect to the database. The Compose file gives the names to the co
 directly (`extra_hosts`), and `deploy local` gives them to this machine: a name under
 `.localhost` is answered by the resolver itself, a name under `.local` is answered by
 multicast DNS — which may be another machine on the network, and is said so plainly — and
-anything else goes in the hosts file, which the operator is asked about before it is touched.
+for anything else that does not resolve, `deploy local` prints the line to add to the hosts
+file and leaves the file to the operator.
 
 What answers on the network's usual ports is the deployment's business: here an edge
 (Traefik, in deploy/traefik/dynamic.yaml), in Kubernetes an ingress, in a cloud the
@@ -458,9 +451,8 @@ names is the one the site's `config.json` must carry (PLATFORM_RELAY_URL).
 The manifest sets RELAY_UPSTREAM_TLS=verify: the relay reaches PostgreSQL in TLS and checks its
 certificate, so PostgreSQL needs `ssl=on` and a certificate for the name the relay is given.
 Set it to `off` only where the pods reach PostgreSQL over a network you trust with a token:
-the same cluster network with network policies, a service mesh with mTLS, or a tunnel. Behind an ingress, set
-RELAY_TRUSTED_PROXIES to the ingress controller's addresses, or every reader shares one budget
-of logins. Name the pods' address range to PostgreSQL with PLATFORM_TOKEN_ONLY_FROM or your
+the same cluster network with network policies, a service mesh with mTLS, or a tunnel. The ingress in front of the relay caps the sessions one address may hold open
+(`limit-connections` in `deploy/k8s/ingress.yaml`). Name the pods' address range to PostgreSQL with PLATFORM_TOKEN_ONLY_FROM or your
 own pg_hba rule, so that the administrator has no login through the relay, and name your
 operators' networks with PLATFORM_ADMIN_FROM, so that the administrator has none from anywhere
 else. For Azure or another
@@ -473,54 +465,36 @@ A login can fail per role even when other roles can connect.
 
 ## Testing
 
-Tests create a random database and roles, log in over TCP with tokens, then drop those test
-resources. They run their own OpenID Connect issuer in the test process, at TEST_OIDC_ISSUER
-(default http://127.0.0.1:54330), and the server under test is the deploy/postgres image
-started trusting that issuer. Host networking lets the server fetch the issuer's keys from the
-loopback address. The relay in front of the server carries the page's wire client the
-way a browser's WebSocket does, at TEST_RELAY_URL (default ws://127.0.0.1:54331):
+`bun test` needs nothing but Bun: the suites start their own PostgreSQL in memory (PGlite, the
+real PostgreSQL compiled to WebAssembly), install it with the real migration and the newsroom
+example, and act as each person in turn.
 
-```bash
-docker build -t platform-postgres:test deploy/postgres
-docker run -d --name platform-test-pg --network host -e PGPORT=54329 \
-  -e PLATFORM_ADMIN=installer@example.com \
-  -e PLATFORM_OIDC_ISSUER=http://127.0.0.1:54330 \
-  platform-postgres:test postgres -c listen_addresses=127.0.0.1
-RELAY_UPSTREAM=127.0.0.1:54329 RELAY_PORT=54331 bun run relay &
-bun run check
-```
+- `packages/core/test/platform.test.ts`: the security properties, as each person — the
+  catalog a reader may reach, row and column enforcement, searches, filters and sorts,
+  version-guarded writes, the audit log's privacy, roles and grants read back from PostgreSQL,
+  a collection made as its owner, metadata read and written under its own row security, and
+  an apply that converges.
+- `packages/core/test/sql.test.ts`: the SQL the platform writes — grants and their
+  differences, policies, roles, fields, metadata — and what manifests and sayings may hold.
+- `packages/ui/test/connect.test.ts`: the page's own connection through the relay — an
+  OAUTHBEARER login against a stand-in for PostgreSQL 18's token login, statements to a real
+  PostgreSQL engine and back, one statement per query, a transaction's session, the relay's
+  origin check and startup-packet rule.
+- `packages/cli/test/cli.test.ts`: the commands themselves, run as an operator runs them
+  against a PostgreSQL of their own (migrate, apply, a dry run, doctor, lock), the deployment's
+  addresses and the Kubernetes manifests.
+- `bun run test:e2e` drives the interface in Chrome, under the site's own
+  Content-Security-Policy. First the newsroom example with PostgreSQL in the page: every
+  change is checked as the statement shown and as what the database then says. Then the
+  published interface: a sign-in through a stand-in issuer, and PostgreSQL's protocol over a
+  WebSocket through the relay to a real PostgreSQL engine (`packages/ui/test/published.ts`).
 
-Use a disposable cluster: bootstrap group roles remain cluster-wide. The tests' administrator
-is the role the server was started with in PLATFORM_ADMIN, and signs in with a token the
-tests' issuer mints for it: the default test URL is
-`postgres://installer%40example.com@127.0.0.1:54329/postgres`, and it carries no password.
-Override TEST_ADMIN_URL for your test instance; TEST_DATABASE_SSL=require enables verified TLS
-for every connection. CI builds the same image and
-starts the same relay. Dex itself is not part of the automated tests. `bun run check` builds the
-interface, typechecks, lints, checks formatting and runs `bun test`.
+`bun run check` builds both sites, typechecks, lints, checks formatting and runs `bun test`.
 
-The server under test must be PostgreSQL 18 with the OAuth validator, and it must trust the
-issuer the tests run in-process: the image above is one way to get that. Any PostgreSQL 18 with
-`oauth_validator_libraries=pg_oidc_validator` will do, reached through TEST_ADMIN_URL, with a
-superuser role of that URL's name and a `pg_hba.conf` allowing nothing but a token:
-
-```
-local   all  all                trust
-host   all  "postgres"      all  reject
-host   all  all           all  oauth issuer="http://127.0.0.1:54330" scope=""
-```
-
-`test/wire.test.ts` covers the page's wire client over TCP and through the relay.
-`test/platform.test.ts` and `test/metadata.test.ts` exercise the security properties through the
-same client the page uses (`test/page.ts`): actual login identity, forged/expired/foreign
-tokens, a token used for another role, role passwords not being a login, the server's
-authentication rules, NOLOGIN, impersonation, row and column enforcement, predicates/sorts, live
-revocation, role delegation, write-only insert, DDL ownership, atomic modeling, CRM import,
-version-guarded updates, trigger metadata, audit privacy/integrity, rollback and TRUNCATE.
-`packages/ui/test/filter.test.ts` covers the record filters, `packages/cli/test/unit.test.ts`
-the smaller pieces and `packages/cli/test/deploy.test.ts` the deployment CLI. Deployment tests exercise sequencing, failures,
-renderer output and CLI dispatch using controlled tool substitutes; they do not provision real
-infrastructure. Integration tests fail rather than silently skip when PostgreSQL is unavailable.
+None of this starts PostgreSQL 18 with the OAuth validator, or Dex: a token login against the
+real server, `deploy local up` and a Kubernetes rollout are verified on a deployment, not by
+the suites. To do that by hand, start the stack (`bun run cli deploy local up`), sign in as the
+administrator in the interface, and run `PGTOKEN=$(bun run --silent cli token) bun run cli doctor`.
 
 Back up database data/schema plus cluster roles (`pg_dumpall --roles-only`) using protected
 storage. Restore ownership, memberships, ACLs, RLS policies, functions and triggers along with

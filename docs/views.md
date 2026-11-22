@@ -72,7 +72,7 @@ what they say.
 The default saying is written in one place:
 
 ```
-packages/vocabulary/src/core.ts    defaultViews
+packages/core/src/sql.ts    defaultViews
 ```
 
 ```ts
@@ -85,7 +85,7 @@ own is laid over it: the three situations are always there.
 
 ### Changing it
 
-1. Edit `defaultViews` in `packages/vocabulary/src/core.ts`. Nothing else in the interface or the
+1. Edit `defaultViews` in `packages/core/src/sql.ts`. Nothing else in the interface or the
    CLI has to change — both build their statements from it.
 2. Fields that already carry a saying keep it. The default is what a field is _given_, not
    what it is _held to_.
@@ -147,13 +147,13 @@ the interface draws.
 A view is a place, and a place is drawn by a component. This is where each of them is drawn,
 and what the saying does there:
 
-| Situation | The place          | The TSX that draws it                                           | What the saying does there                                                                                                                                                                               |
-| --------- | ------------------ | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `list`    | the records grid   | `packages/ui/src/content/records/records.tsx`                   | `inList` picks the columns the grid shows: the sortable header cells and the cell of every row. A field kept out of the grid is not a column of it; it is still readable, and the search still reads it. |
-| `record`  | the record form    | `packages/ui/src/content/item/item.tsx`                         | `inRecord` picks the fields the form offers, `isLocked` shows a field without offering it as an input, and the fields the owner keeps out are named under _Not in the record_.                           |
-| `filter`  | the filter builder | `packages/ui/src/content/records/records.tsx` → `FilterBuilder` | `inFilter` picks the fields the builder offers. A field kept out of the filters cannot be filtered on.                                                                                                   |
-| —         | the field table    | `packages/ui/src/model/collection/fields.tsx`                   | The saying is drawn as a small word per situation, struck through where the field is kept out, with the views of the owner's own beside them.                                                            |
-| —         | the field's drawer | `packages/ui/src/metadata/editors/views.tsx` → `ViewsEditor`    | Where the owner says it: the three situations, the views of the owner's own, and the statements that will run.                                                                                           |
+| Situation | The place          | The TSX that draws it                           | What the saying does there                                                                                                                                                                               |
+| --------- | ------------------ | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list`    | the records grid   | `packages/ui/src/content.tsx`                   | `inList` picks the columns the grid shows: the sortable header cells and the cell of every row. A field kept out of the grid is not a column of it; it is still readable, and the search still reads it. |
+| `record`  | the record form    | `packages/ui/src/content.tsx`                   | `inRecord` picks the fields the form offers, `isLocked` shows a field without offering it as an input, and the fields the owner keeps out are named under _Not in the record_.                           |
+| `filter`  | the filter builder | `packages/ui/src/content.tsx` → `FilterBuilder` | `inFilter` picks the fields the builder offers. A field kept out of the filters cannot be filtered on.                                                                                                   |
+| —         | the field table    | `packages/ui/src/model.tsx`                     | The saying is drawn as a small word per situation, struck through where the field is kept out, with the views of the owner's own beside them.                                                            |
+| —         | the field's drawer | `packages/ui/src/metadata.tsx` → `ViewsEditor`  | Where the owner says it: the three situations, the views of the owner's own, and the statements that will run.                                                                                           |
 
 Every one of them reads the same saying, in the same way: the field's own metadata, read
 under PostgreSQL's row security, so the fields it names are the ones the reader may reach.
@@ -176,17 +176,17 @@ its own component, reading the same saying, wherever it lives.
 A view the interface itself draws is a situation, and a situation is code. These are the
 places that hold one:
 
-| What                                          | Where                                                                             |
-| --------------------------------------------- | --------------------------------------------------------------------------------- |
-| The situations and the order they are offered | `packages/vocabulary/src/metadata.ts` → `situations`                              |
-| What each situation is called                 | `packages/ui/src/metadata/labels.ts` → `situationLabels`                          |
-| What a situation may be told                  | `packages/ui/src/metadata/labels.ts` → `modeLabels`, and the rule in `parseViews` |
-| The default saying                            | `packages/vocabulary/src/metadata.ts` → `defaultViews`                            |
-| The editor                                    | `packages/ui/src/metadata/editors/views.tsx` → `ViewsEditor`                      |
-| The records grid                              | `packages/ui/src/content/records/records.tsx` → `inList`                          |
-| The record form                               | `packages/ui/src/content/item/item.tsx` → `inRecord`, `isLocked`                  |
-| The filter builder                            | `packages/ui/src/content/records/records.tsx` → `inFilter`                        |
-| The marks in the field table                  | `packages/ui/src/model/collection/cells.tsx` → the situation marks                |
+| What                                          | Where                                                                       |
+| --------------------------------------------- | --------------------------------------------------------------------------- |
+| The situations and the order they are offered | `packages/core/src/metadata.ts` → `situations`                              |
+| What each situation is called                 | `packages/ui/src/metadata.tsx` → `situationLabels`                          |
+| What a situation may be told                  | `packages/ui/src/metadata.tsx` → `modeLabels`, and the rule in `parseViews` |
+| The default saying                            | `packages/core/src/metadata.ts` → `defaultViews`                            |
+| The editor                                    | `packages/ui/src/metadata.tsx` → `ViewsEditor`                              |
+| The records grid                              | `packages/ui/src/content.tsx` → `inList`                                    |
+| The record form                               | `packages/ui/src/content.tsx` → `inRecord`, `isLocked`                      |
+| The filter builder                            | `packages/ui/src/content.tsx` → `inFilter`                                  |
+| The marks in the field table                  | `packages/ui/src/model.tsx` → the situation marks                           |
 
 To add one:
 
@@ -223,8 +223,8 @@ A new situation is a place, and a place is a component and a page. To draw one:
    view names are the ones the reader may reach, by PostgreSQL's own row security.
 4. **The editor**, so the owner may say where a field belongs in it: a choice in
    `ViewsEditor`, with the modes the view takes.
-5. **A route**, if the view is a page of its own: `packages/ui/src/routes.ts` names the pages
-   the generator writes — one file each — and `packages/ui/src/app.tsx` routes them.
+5. **A route**, if the view is a page of its own: `packages/ui/src/config.ts` names the pages
+   the generator writes — one file each — and `packages/ui/src/main.tsx` routes them.
 
 A view that is only a place in a page — a section of the record page, say — needs no route
 of its own: the component is drawn where the page draws it, and the saying says which fields

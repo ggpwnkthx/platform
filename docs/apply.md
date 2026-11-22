@@ -55,7 +55,7 @@ three as variables, and each is named where it is used:
 `models.ts` exports the manifest as a function of them, `export default ({ admin }) => ({ format: 1, … })`,
 and the SQL files read each as a setting of the transaction they run in. A models file that
 uses none may be JSON: the manifest itself. A new variable is added in one place,
-`DeploymentVariables` in `packages/cli/src/folder.ts`, and is then there in all three files. The
+`DeploymentVariables` in `packages/core/src/manifest.ts`, and is then there in all three files. The
 folder is applied before the files named beside it, so a manifest may name the folder's
 administrator as the owner of a workspace.
 

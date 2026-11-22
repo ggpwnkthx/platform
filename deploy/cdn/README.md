@@ -4,10 +4,8 @@ The interface is a directory of files. There is no server to run: `bun run build
 `bun run cli deploy local ui`) writes `packages/ui/dist`, and that directory is what a CDN serves.
 
 ```
-packages/ui/dist/index.html          one file per page, prerendered
-packages/ui/dist/app.js              the client bundle
-packages/ui/dist/styles.css          the styles
-packages/ui/dist/fonts/              the self-hosted fonts
+packages/ui/dist/index.html          the document; every page has a copy of it at its own address
+packages/ui/dist/assets/             the client bundle, its styles, the icons and the self-hosted fonts
 packages/ui/dist/config.json         where the pages find the issuer, the relay and the database
 packages/ui/dist/_headers            the headers the site is served with
 ```
@@ -34,7 +32,7 @@ the relay and the issuer. Cloudflare Pages and Netlify read this file as it is; 
 need the same headers set by their own means (CloudFront's response headers policy, Fastly's
 `set_headers`, Fastly's or Cloudflare's edge rules).
 
-The values in both files come from one source, `packages/ui/src/headers.ts`, so the site a CDN
+The values in both files come from one source, `packages/ui/src/config.ts`, so the site a CDN
 serves, the development server and the tests cannot drift apart. `bun run build:ui` writes
 them from the environment:
 

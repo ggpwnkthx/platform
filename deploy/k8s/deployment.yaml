@@ -29,10 +29,10 @@ spec:
             - { name: RELAY_PORT, value: "8081" }
             # The only origin allowed to open a session: the address of the site on the CDN.
             - { name: RELAY_ORIGINS, value: "https://platform.example.com" }
-            # Behind an ingress every reader arrives from the ingress controller's address.
-            # Name its addresses here and the relay counts logins against the client it
-            # reports in X-Forwarded-For; from any other address the header is ignored.
-            # - { name: RELAY_TRUSTED_PROXIES, value: "10.0.0.0/8" }
+            # The relay forwards and counts nothing. How many sessions one address may hold is
+            # the ingress's to cap (see ingress.yaml), how many one role may hold is
+            # PostgreSQL's (ALTER ROLE ... CONNECTION LIMIT, or `connections` in a manifest),
+            # and a login that stalls is closed by PostgreSQL's authentication_timeout.
             # Reach PostgreSQL in TLS, and check its certificate: the stream carries every
             # reader's token. PostgreSQL needs ssl=on and a certificate for the name above
             # (name its authority in RELAY_UPSTREAM_CA when it is not one the system knows).

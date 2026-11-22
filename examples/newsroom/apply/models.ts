@@ -1,4 +1,4 @@
-import type { DeploymentVariables } from '../../../packages/cli/src/folder.ts'
+import type { DeploymentVariables } from '@platform/core'
 import { crm } from './crm.ts'
 import { newsroom } from './newsroom.ts'
 

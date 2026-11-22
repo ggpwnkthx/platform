@@ -47,20 +47,16 @@ weight.
 
 ## What a field type says
 
-| It says            | For                                                                             | Without it                       |
-| ------------------ | ------------------------------------------------------------------------------- | -------------------------------- |
-| `draw.list`        | The cell in the records grid                                                    | —                                |
-| `draw.record`      | The value in the record: a locked field, a computed column, the sidebar's facts | —                                |
-| `draw.filter`      | The value in a filter's chip                                                    | Drawn as the record is           |
-| `numeric`          | Setting the column to the right in the grid                                     | Set to the left                  |
-| `Input`            | The input in the record form                                                    | —                                |
-| `toText`           | The text the form holds for a stored value                                      | The value as the screen shows it |
-| `fromText`         | The value a column receives from what was typed, or the error under the field   | The text, trimmed                |
-| `wide`             | Whether the field takes the whole width of the form                             | Its name decides                 |
-| `filter.operators` | The operators the filter builder offers                                         | —                                |
-| `filter.Input`     | The input a condition's value is typed in                                       | A line of text                   |
-| `filter.parse`     | The value a condition carries, from what was typed                              | The text itself                  |
-| `filter.initial`   | The value a new condition starts with                                           | Empty                            |
+| It says       | For                                                                                                    | Without it          |
+| ------------- | ------------------------------------------------------------------------------------------------------ | ------------------- |
+| `draw.list`   | The cell in the records grid                                                                           | —                   |
+| `draw.record` | The value in the record and in a filter's chip: a locked field, a computed column, the sidebar's facts | —                   |
+| `numeric`     | Setting the column to the right in the grid                                                            | Set to the left     |
+| `Input`       | The input in the record form                                                                           | —                   |
+| `toForm`      | What the form holds for a stored value                                                                 | The value as text   |
+| `fromForm`    | The value a column receives from what the form holds, or the error under the field                     | What the form holds |
+| `operators`   | The operators the filter builder offers                                                                | —                   |
+| `parseFilter` | The value a condition carries, from what was typed                                                     | The text itself     |
 
 The drawings are what the `default` renderer draws. A field that names another renderer for a
 situation is drawn by that one instead; its input and its filter are still its type's.
@@ -69,25 +65,23 @@ situation is drawn by that one instead; its input and its filter are still its t
 
 The interface is one bundle of static files, so a type is added when it is built. An
 installation registers it in the module its `platform.json` names as `extensions`, which the
-build puts in the place of `packages/ui/src/extensions.ts` — the seam the interface imports
+build puts in the place of the module `virtual:platform-site` (`packages/ui/vite.config.ts`) — the seam the interface imports
 before any page draws a field (see [renderers](renderers.md)):
 
 ```tsx
-import { fieldTypeNamed, registerFieldType } from '@platform/ui/fields/registry.ts'
-import { lineInput } from '@platform/ui/fields/inputs.tsx'
+import { fieldTypeNamed, registerFieldType } from '@platform/ui/extensions'
 
 // Every column of the domain `public.email` is an address: a link in the grid and in the
-// record, an input the browser knows is an email, and the filters of a text.
+// record, with the input and the filters of a text.
 registerFieldType({
   ...fieldTypeNamed('text')!,
   name: 'email',
   label: 'Email address',
-  claims: ({ column }) => (column.type === 'public.email' ? 15 : 0),
+  claims: (field) => (field.column.type === 'public.email' ? 15 : 0),
   draw: {
     list: ({ value }) => <a href={`mailto:${value}`}>{String(value)}</a>,
     record: ({ value }) => <a href={`mailto:${value}`}>{String(value)}</a>,
   },
-  Input: lineInput({ inputMode: 'email', mono: false }),
 })
 ```
 
@@ -96,15 +90,15 @@ is given the value and the field, never a connection, and it grants nothing.
 
 ## Where it is
 
-| What                                  | Where                                                                       |
-| ------------------------------------- | --------------------------------------------------------------------------- |
-| What a field and a field type are     | `packages/ui/src/fields/field.ts`                                           |
-| The fields of a collection            | `packages/ui/src/fields/resolve.ts` → `resolveFields`                       |
-| The types the platform holds          | `packages/ui/src/fields/types/platform.tsx`                                 |
-| The types held, and whose a column is | `packages/ui/src/fields/registry.ts` → `registerFieldType`, `fieldTypeFor`  |
-| Between the form and the database     | `packages/ui/src/fields/edit.ts` → `fieldText`, `fieldValue`, `filterValue` |
-| The inputs the types share            | `packages/ui/src/fields/inputs.tsx`, `packages/ui/src/fields/relation.tsx`  |
-| The renderers, and `Value`            | `packages/ui/src/fields/renderers/renderers.tsx`                            |
-| An installation's own                 | The module `platform.json` names as `extensions`                            |
-| The records grid and the filters      | `packages/ui/src/content/records/records.tsx`                               |
-| The record form                       | `packages/ui/src/content/item/item.tsx` → `RecordField`                     |
+| What                                  | Where                                                                   |
+| ------------------------------------- | ----------------------------------------------------------------------- |
+| What a field and a field type are     | `packages/ui/src/fields.tsx`                                            |
+| The fields of a collection            | `packages/ui/src/fields.tsx` → `resolveFields`                          |
+| The types the platform holds          | `packages/ui/src/fields.tsx`                                            |
+| The types held, and whose a column is | `packages/ui/src/fields.tsx` → `registerFieldType`, `fieldTypeFor`      |
+| Between the form and the database     | `packages/ui/src/fields.tsx` → `fieldText`, `fieldValue`, `filterValue` |
+| The inputs the types share            | `packages/ui/src/fields.tsx`, `packages/ui/src/fields.tsx`              |
+| The renderers, and `Value`            | `packages/ui/src/fields.tsx`                                            |
+| An installation's own                 | The module `platform.json` names as `extensions`                        |
+| The records grid and the filters      | `packages/ui/src/content.tsx`                                           |
+| The record form                       | `packages/ui/src/content.tsx` → `RecordField`                           |

@@ -13,6 +13,8 @@ metadata:
     # A database session may stay open for a long while.
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # Open sessions one client address may hold through the relay at once.
+    nginx.ingress.kubernetes.io/limit-connections: "20"
 spec:
   ingressClassName: nginx
   tls:

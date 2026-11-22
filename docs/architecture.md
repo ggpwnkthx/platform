@@ -80,39 +80,35 @@ same transaction. Failed and rolled-back changes leave no committed revision.
 
 ## Interface
 
-The interface is a static site in `packages/ui/`, generated at build time. `packages/ui/src` is a TypeScript
-Preact application; `packages/cli` renders every page to HTML with the interface's own
-prerenderer and bundles the client with Bun's bundler into `packages/ui/dist`: one file per page, one
-client bundle (`app.js`), `styles.css`, the self-hosted Inter and JetBrains Mono fonts and
-`config.json` — the file that says where the site runs, written by the build from the
-platform's defaults and the environment. A web server hands out those files; nothing renders a page at request time,
-holds a session or adds authorization of its own. The pages are listed in
-`packages/ui/src/routes.ts` and described in [interface](interface.md).
+The interface is a static site in `packages/ui/`: a TypeScript React application that Vite
+builds into `packages/ui/dist` — one bundle and its styles, the self-hosted Inter and JetBrains
+Mono fonts, `config.json`, `_headers`, and one copy of the document per page, so every address
+is a real file.
 
-Routing is `preact-iso`: the same location contract drives the generator and the browser, so a
+Routing is `react-router`: the same location contract drives the generator and the browser, so a
 page is generated where it is served, links are ordinary anchors that the router intercepts,
 and the back button, bookmarks and new tabs all work. Because the token is held in memory only,
 a page load always starts signed out, which is exactly the state the generated pages show.
 
-The page speaks PostgreSQL's protocol version 3 itself (`packages/pg-client/src/wire.ts`): OAUTHBEARER
+The page speaks PostgreSQL's protocol version 3 itself (`packages/core/src/token-client.ts`): OAUTHBEARER
 (RFC 7628) login with the reader's token, the extended query protocol with exactly one
 statement per query and every value bound as a parameter, and text-format results. In a
-browser the bytes go over a WebSocket (`packages/pg-client/src/socket.ts`) to the relay, which forwards
+browser the bytes go over a WebSocket (`packages/ui/src/connect.ts`) to the relay, which forwards
 them to PostgreSQL's port and understands none of them. The page opens one login when the
-reader signs in and keeps it open while they work (`packages/pg-client/src/kept.ts`,
+reader signs in and keeps it open while they work (`packages/ui/src/connect.ts`,
 `withDb` in `packages/ui/src/session.tsx`); the reader's own statements run on a login of
 their own, so that what they type cannot reach the platform's work.
 
 What the page does is ordinary SQL, and it belongs to the domain that asks for it. The
 questions themselves are the platform's own, and they are asked of PostgreSQL in
-`packages/data`: the catalog is read with PostgreSQL's privilege functions; the roles and
+`packages/core`: the catalog is read with PostgreSQL's privilege functions; the roles and
 memberships through `platform.visible_roles()` and `platform.visible_memberships()`, policies
 from `pg_policies`, grants from the ACLs through `aclexplode`; the revisions from
 `platform.revisions`; the records with filters, search, sort, paging and a row count, written
 without RETURNING, and guarded on update by the version the reader saw
 (`WHERE id = $n AND version = $m`). The DDL and the DCL — collections, fields, grants,
-policies, memberships and roles — are the vocabulary's own, in `packages/vocabulary`, and the
-interface's pages (`packages/ui/src/model/`, `packages/ui/src/access/`) show them to the
+policies, memberships and roles — are the vocabulary's own, in `packages/core`, and the
+interface's pages (`packages/ui/src/model.tsx`, `packages/ui/src/access.tsx`) show them to the
 reader before they run. Every statement that changes the model or access is shown to the reader
 before it runs, then runs as them in one transaction.
 
@@ -126,9 +122,9 @@ roles. The interface keeps no second opinion about rights; it asks the database,
 fields it withholds (hidden from you, write-only, read-only), and shows a refusal with its
 SQLSTATE.
 
-The interface reaches the database through one seam, `packages/ui/src/pg/connect.ts`. A production
+The interface reaches the database through one seam, `packages/ui/src/connect.ts`. A production
 build leaves it alone, and the page opens a WebSocket to the relay. A dev-mode build
-(`bun run examples:newsroom:dev`) loads the same seam as `packages/cli/src/in-page.ts`, handed
+(`bun run examples:newsroom:dev`) loads the same seam as `packages/ui/src/inpage.ts`, handed
 the files the example's `platform.json` says it applies: PostgreSQL 18 running
 inside the page (PGlite) and installed with the real migrations, so the interface can be built
 without a server, an issuer or a relay. The swap happens while the bundle is built, so PGlite
@@ -137,14 +133,14 @@ sign in without an issuer, what they are told, and how their choice is kept. A p
 seam has none of that — there is an issuer — and the dev-mode seam reads it from the example:
 the people are the ones its `models.ts` names.
 
-There is a second seam, `packages/ui/src/extensions.ts`, for what a site adds to the interface:
+There is a second seam, the module `virtual:platform-site` (`packages/ui/vite.config.ts`), for what a site adds to the interface:
 field types and renderers of its own. It is empty, and every build of a site puts the module
 a site's `platform.json` names as `extensions` in its place; the module registers with what
 `@platform/ui` publishes (`fields/registry.ts`, `fields/renderers.tsx`). The example's is
 `examples/newsroom/extensions.tsx`.
 
 Sign-in is authorization code with PKCE against the one configured issuer, done by the page
-itself (`packages/ui/src/identity/oidc.ts`): the token kept in memory, the PKCE verifier held in
+itself (`packages/ui/src/session.tsx`): the token kept in memory, the PKCE verifier held in
 sessionStorage only across the redirect. The page reads the issuer, client id, claim, relay
 address and database name from `/config.json`, a file served beside the pages, so that a
 deployment changes it without rebuilding the bundle.
@@ -169,60 +165,44 @@ what it is (its metadata) and who may use it (the rights on the schema).
 
 ## Repository
 
-Six packages and an example, each with its own dependencies and its own tests, and a
-repository root that holds what belongs to the deployment as a whole: the migrations, the
-deployment files, the documentation and the integration tests that cross the packages.
+Four packages and an example, and a repository root that holds what belongs to the deployment
+as a whole: the migration, the deployment files and the documentation. The platform's own
+code is what no package does for it; the rest is other people's, kept current.
 
-- `packages/vocabulary` — the vocabulary the platform speaks, written once: the SQL it writes
-  (identifiers, literals, columns, the names a relation's constraint carries, and the access
-  it grants) and the tokens and versions it reads. The operator's tools and the interface
-  both build DDL and DCL, and they must build it the same way, so the rules live here rather
-  than twice. It runs in the browser, in Bun and in Node.
-- `packages/data` — the questions the platform asks PostgreSQL, and the answers it reads
-  back: the catalog, the records, the metadata, the access, the revisions, the identity and
-  the workspace. It holds no connection of its own: it asks through a source of statements
-  (`DataSource` in `packages/vocabulary`), so the page may ask in the browser and a tool may ask
-  from Node, and the question means the same thing either way.
-- `packages/pg-client` — the PostgreSQL client the platform speaks with: the protocol itself
-  (`wire.ts`), the browser's way of carrying it (`socket.ts`) and the logins a client keeps
-  open (`kept.ts`). It knows nothing about the interface, and nothing about what a statement
-  means.
-- `packages/cli` — the operator's tools. `database/db.ts` owns the CLI's connections and the token
-  login, `database/config.ts` the endpoint it reaches and `database/requirements.ts` the
-  server version and its authentication rules; `token.ts` signs a terminal in; `model.ts`
-  builds typed DDL for the model importer; `cli.ts` runs the operator tasks; `apply.ts`
-  converges a database on a JSON manifest; `harden.ts` hides the role catalogs;
-  `deployment/` runs the deployments, split into the local stack, Kubernetes, the help text
-  and the runtime they share; `config.ts` reads `platform.json`, what a folder says of
-  itself; `ui/` builds the interface as a static site and serves it while it is worked on;
-  `in-page.ts` is PostgreSQL in the process, which installs what a folder applies, for its tests, and is
-  the database a dev-mode build puts in the seam.
-- `packages/relay` — the WebSocket in front of PostgreSQL's port: `relay.ts`, and nothing else.
-  It holds no credentials, and it reads one setting: the role PostgreSQL reports, so that it
-  can keep one role from taking the database's connections for itself.
-- `packages/ui` — the interface, and little else: `src` is the Preact application, laid
-  out by domain, and each domain holds its page and what it draws. `content/` reads and
-  writes the records of a collection, `model/` the collections and their fields, `access/`
-  the roles, grants and row policies, `activity/` the revisions, `metadata/` what an item is
-  and how it presents itself, `sql/` the reader's own statement, `workspace/` the schema and
-  the rights on it, `identity/` who the reader is, and `fields/` what a column is drawn as.
-  The SQL these pages run is the platform's own, in `packages/data` and `packages/vocabulary`; the
-  protocol is the client's, in `packages/pg-client`. What is left here is the interface: its
-  widgets (`ui/`), its shell, and the one seam (`pg/connect.ts`) that reaches the database.
-  The root of `src` holds
-  the shell of the application: `app.tsx` routes, `session.tsx` holds the token and the
-  catalog, `shell.tsx` draws the layout, `routes.ts` names the pages, `config.ts` reads
-  `config.json`, `url.ts` carries the context in the address and `format.ts` the words.
-  `src/prerender.tsx` renders the pages, `src/headers.ts` holds the headers the site is
-  served with, and `src/paths.ts` says where the interface lives. There is no build script
-  here: the interface is source, and the packages that need a site build one. The dev-mode
-  server is not here either, and nor is the PostgreSQL that runs inside the page: both are
-  the CLI's.
+- `packages/core` — what the platform says to PostgreSQL and reads back, written once and
+  run in the browser and in Bun alike. `sql.ts` is the SQL it writes — grants and their
+  differences, row policies, roles, collections and fields, metadata — with Kysely doing the
+  quoting and the parameters, and no driver behind it: a statement can be shown before it
+  runs, and run by whichever connection the caller holds. `catalog.ts`, `access.ts` and
+  `metadata.ts` are the questions it asks (PostgreSQL's own privilege functions, the ACLs,
+  the platform's functions); `records.ts` is the record browser's query, built with Kysely;
+  `manifest.ts` is the manifest (Zod) and what converges a database on one; `db.ts` is the one
+  seam to a connection, tokens (jwt-decode) and versions (compare-versions).
+  `token-client.ts` adds OAUTHBEARER logins to node-postgres and the drivers built on it, and
+  `pglite.ts` adapts PGlite: PostgreSQL in the page and in the tests.
+- `packages/ui` — the interface: a React application on Mantine (components, forms,
+  notifications), mantine-datatable (the records grid), TanStack Query (what is read from
+  PostgreSQL), React Router (the address), lucide (icons) and oidc-client-ts (the sign-in),
+  built by Vite. `connect.ts` is the page's logins: Neon's serverless driver — node-postgres
+  over a WebSocket — and its pool. `session.tsx` holds the sign-in and the installation;
+  `fields.tsx` is the field types, the renderers and what an installation may register;
+  `content.tsx`, `model.tsx`, `access.tsx`, `metadata.tsx`, `workspace.tsx` and `activity.tsx`
+  are the pages; `bits.tsx` is the little they share — the privilege mark, the statement, and
+  the drawer every change goes through. `inpage.ts` is the dev mode's PostgreSQL, and
+  `vite.config.ts` the seam (`virtual:platform-site`) through which a site's extensions, and
+  in the dev mode alone its in-page database, reach the bundle.
+- `packages/cli` — the operator's tools, on citty (commands), clack (questions), node-postgres,
+  openid-client (the device sign-in) and yaml. `cli.ts` is the commands; `database.ts` the
+  login a command acts as, doctor, lock and harden; `site.ts` reads `platform.json` and
+  builds, serves and develops a site; `deploy.ts` is the local stack and Kubernetes.
+- `packages/relay` — the WebSocket in front of PostgreSQL's port: `relay.ts`, one file and no
+  dependency. It holds no credentials and reads nothing but the first packet, which must be
+  a login.
 - `examples/newsroom` — the newsroom example. It is content, and no machinery: `platform.json`
   says what the folder is, `apply/` holds what it applies to a database (`models.ts`,
-  `migration.sql` and `demo.sql`), and `extensions.tsx` is what it adds to the interface. The same files are
-  applied to a deployment, installed in the page of a dev-mode build, and asked questions of
-  by the tests beside them.
+  `migration.sql` and `demo.sql`), and `extensions.tsx` is what it adds to the interface. The
+  same files are applied to a deployment, installed in the page of a dev-mode build, and
+  asked questions of by the tests.
 
 `migrations/` holds the installation scripts the CLI applies and the dev-mode build
 installs into its in-page PostgreSQL. `deploy/cdn` explains how the site is published. There

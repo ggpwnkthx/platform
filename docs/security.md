@@ -180,17 +180,13 @@ unset, the relay checks no origin and leaves it to the deployment. A CORS policy
 it, because a WebSocket handshake is not subject to one. What an unchecked origin gives another
 site is small: the token lives in the page's memory and not in a cookie, so a session opened
 from elsewhere has nothing to log in with. Each open WebSocket is one database
-session; the relay caps how many open sessions one role may hold (RELAY_SESSIONS_PER_ROLE, 20)
-and how many logins one client address may have signing in at once (RELAY_SESSIONS_PER_ADDRESS,
-20), and all addresses together (RELAY_SESSIONS_LOGGING_IN, 64). A session has no PostgreSQL
-connection until it has sent a whole startup packet, one that opens with anything else (a
-request for TLS inside the stream, a cancel) is refused, and one that does not log in within
-RELAY_LOGIN_SECONDS (30) is closed. A client that sends a startup packet and stalls holds a
-connection for that long, so the cap on logins belongs well under `max_connections`. Behind a proxy the client's address is the one a proxy named in
-RELAY_TRUSTED_PROXIES reports; from anyone else X-Forwarded-For is ignored. The counts are each
-relay's own, not the fleet's.
-The role is the one PostgreSQL reports, so a client cannot claim a role it has not been signed
-in as, and a session that never signs in counts against nobody's role.
+session, and the relay counts none of them. A session has no PostgreSQL connection until it
+has sent a startup packet, and one that opens with anything else (a request for TLS inside the
+stream, a cancel) is refused. How many sessions an address may hold open is capped by the edge
+in front of the relay (20 in the shipped Traefik and ingress files), how many a role may hold
+by the role's CONNECTION LIMIT in PostgreSQL, and a login that stalls is closed by PostgreSQL's
+`authentication_timeout`. A relay exposed with no edge in front of it has no per-address cap:
+that is a deployment to avoid, and `max_connections` is then the only ceiling.
 Each login asks for STATEMENT_TIMEOUT_MS as `statement_timeout`,
 which a reader may change on their own session: PostgreSQL lets every role set it, so an
 `ALTER ROLE ... SET` is a default too, and not a ceiling. What a reader cannot change is how

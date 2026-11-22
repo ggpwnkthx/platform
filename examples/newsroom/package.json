@@ -6,18 +6,9 @@
   "description": "The newsroom example, running: PostgreSQL in the page, and no issuer to sign in with.",
   "license": "MIT",
   "devDependencies": {
-    "@electric-sql/pglite": "0.5.16",
-    "@platform/data": "workspace:*",
-    "@platform/pg-client": "workspace:*",
-    "@platform/vocabulary": "workspace:*",
+    "@mantine/core": "9.8.2",
+    "@platform/core": "workspace:*",
     "@platform/ui": "workspace:*",
-    "preact": "10.27.2"
-  },
-  "scripts": {
-    "typecheck": "tsc --noEmit",
-    "test": "bun test"
-  },
-  "engines": {
-    "bun": ">=1.4.3"
+    "react": "19.3.1"
   }
 }

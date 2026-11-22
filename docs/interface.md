@@ -8,11 +8,11 @@ and any other client.
 
 ## Pages
 
-`bun run build:ui` (packages/cli) prerenders every page with the interface's own prerenderer into `packages/ui/dist`, beside one client
-bundle (`app.js`), `styles.css`, the self-hosted Inter and JetBrains Mono fonts and
-`config.json`. Each page is its own file, so a bookmark, a new tab and a reload all land on a
-real page; inside the app, links move between pages without a reload, which is what keeps the
-token in memory.
+`bun run build:ui` builds the interface with Vite into `packages/ui/dist`: one bundle and its
+styles under `assets/`, the self-hosted Inter and JetBrains Mono fonts, `config.json` and
+`_headers`. Each page is its own file — a copy of the one document — so a bookmark, a new tab
+and a reload all land on a real page with no rewrite rule on the CDN; inside the app, links
+move between pages without a reload, which is what keeps the token in memory.
 
 | Page                  | Module     | What it is for                                                   |
 | --------------------- | ---------- | ---------------------------------------------------------------- |
@@ -78,7 +78,10 @@ allow, and PostgreSQL refuses a write to such a column.
 
 ## How the page reaches PostgreSQL
 
-`packages/pg-client/src/wire.ts` is a PostgreSQL client for protocol version 3, written for the page:
+The page speaks PostgreSQL's protocol, version 3, with node-postgres's own implementation of
+it: Neon's serverless driver, which is node-postgres carried over a WebSocket
+(`packages/ui/src/connect.ts`). The one thing added is the token login, which neither driver
+has yet (`packages/core/src/token-client.ts`), and the operator's tools use the same addition:
 
 - Login is OAUTHBEARER (RFC 7628) with the reader's own token, as the role the token's claim
   names. PostgreSQL's validator checks the token's signature, issuer and expiry; the page
@@ -88,29 +91,28 @@ allow, and PostgreSQL refuses a write to such a column.
 - The startup message sends `statement_timeout` (STATEMENT_TIMEOUT_MS from `config.json`) and
   `idle_in_transaction_session_timeout`, and the application name `platform-ui`.
 
-In a browser, the protocol travels over a WebSocket (`packages/pg-client/src/socket.ts`) to the relay, at
+In a browser, the protocol travels over a WebSocket (`packages/ui/src/connect.ts`) to the relay, at
 the address `config.json` names (`wss://api.platform.example.com`). The relay (`packages/relay/src/relay.ts`, the
 `relay` image) hands the bytes to PostgreSQL's port and understands none of them. It holds no
 credentials: the reader's token travels inside the PostgreSQL startup packet, and PostgreSQL
-alone checks it. The one thing the relay reads is the setting PostgreSQL reports for the role
-it has signed the session in as, so that it can keep one role from taking the database's
-connections for itself.
+alone checks it. The one thing the relay reads is the first packet of a session, which must
+be a login.
 
-The page keeps its login open (`packages/pg-client/src/kept.ts`): one login when the reader signs
-in, closed when the sign-in ends or the token expires. Every action the platform runs — loading
+The page keeps its logins in the driver's pool (`packages/ui/src/connect.ts`): one login when
+the reader signs in, closed when the sign-in ends or the token expires. Every action the platform runs — loading
 a page's data, saving a record, running a statement — runs on it, and a second action running
 at the same time gets a login of its own rather than waiting. A login the server has closed is
 opened again the next time; a login whose session has been broken is thrown away. The reader's
-own statements (`packages/ui/src/sql/`) run on a login of their own that is closed again
+own statements (`packages/ui/src/activity.tsx`) run on a login of their own that is closed again
 afterwards, so a transaction or a SET ROLE they leave open cannot reach the platform's work. A
 token that has expired signs the reader out before a connection is attempted; a login
 PostgreSQL refuses signs them out with PostgreSQL's message.
 
 What the page runs is ordinary SQL, and the questions are the platform's own, in
-`packages/data`, so that the same question may be asked of another source and mean the same
+`packages/core`, so that the same question may be asked of another source and mean the same
 thing:
 
-- The catalog (`packages/data/src/catalog/`), from PostgreSQL's privilege functions
+- The catalog (`packages/core/src/catalog.ts`), from PostgreSQL's privilege functions
   (`has_table_privilege`, `has_column_privilege`, `has_schema_privilege`, `pg_has_role`).
   The platform's own schema is in it, as a workspace of another kind (`kind: 'system'`): the
   switcher lists it as **Platform**, after the installation's workspaces, and its tables —
@@ -119,15 +121,15 @@ thing:
   decides which rows reach the reader, and the catalog never says the reader may change its
   model, whoever they are: that is the migrations' to do. Nobody lands in it; it is in view
   when it is chosen.
-- What a role may do (`reach`, `schemaReach` in `packages/data/src/access/`): PostgreSQL's
+- What a role may do (`reach`, `schemaReach` in `packages/core/src/access.ts`): PostgreSQL's
   privilege functions asked of that role, for the roles the reader may see and the ones the
   workspace's ACLs name.
-- Roles and memberships (`packages/data/src/access/`) through `platform.visible_roles()` and
+- Roles and memberships (`packages/core/src/access.ts`) through `platform.visible_roles()` and
   `platform.visible_memberships()`, which answer for the reader alone; row policies from
   `pg_policies`; grants from the ACLs through `aclexplode`; the revisions
-  (`packages/data/src/activity/`) from `platform.revisions`, where each logged row holds
+  (`packages/core/src/access.ts`) from `platform.revisions`, where each logged row holds
   the columns the reader may read and no others.
-- Records (`packages/data/src/content/`) with filters, search, sort, `LIMIT`/`OFFSET` and a
+- Records (`packages/core/src/records.ts`) with filters, search, sort, `LIMIT`/`OFFSET` and a
   `count(*)` under the same predicate.
 - Inserts, updates and deletes without RETURNING: the right to write a column is not a right
   to read it back, so a write reports how many rows it touched. An update made from a record
@@ -135,10 +137,10 @@ thing:
   touches no row, the page reads the record again: a newer version means someone changed it
   since it was opened, otherwise a row policy refused the change or the row is gone, and the
   page says "PostgreSQL changed no row".
-- Metadata (`packages/data/src/metadata/`) in `platform.item_metadata`.
-- DDL and DCL built by `packages/ui/src/model/` and `packages/ui/src/access/`: workspaces,
+- Metadata (`packages/core/src/metadata.ts`) in `platform.item_metadata`.
+- DDL and DCL built by `packages/ui/src/model.tsx` and `packages/ui/src/access.tsx`: workspaces,
   collections, fields, grants, row policies, memberships and roles. The statements
-  themselves are the platform's own, in `packages/vocabulary`, so that the operator's tools and
+  themselves are the platform's own, in `packages/core`, so that the operator's tools and
   the interface grant the same rights the same way.
 
 ## Access, from wherever it is asked about
@@ -165,7 +167,7 @@ mark, and a half mark says how many fields it covers.
 The grant editor is the same wherever it is opened: one role on one collection, each privilege
 not held, held on the whole collection, or held on chosen fields. What runs is the difference
 between what the ACL records and what was asked for (`grantChangeStatements` in
-`packages/vocabulary`). PostgreSQL's two levels do not mirror each other, and the editor writes
+`packages/core`). PostgreSQL's two levels do not mirror each other, and the editor writes
 what they need: a privilege narrowed from the whole collection to fields is revoked on the
 collection and granted on those fields by name; one widened from fields to the whole collection
 gives its field grants up; one taken away is revoked on the collection, which takes its fields
@@ -228,7 +230,7 @@ The metadata of every item is kept in one table, `platform.item_metadata`, and t
 a system collection: it is listed in the platform's own workspace, and the interface has no
 second way of reading or changing it. Its model is the platform's — the interface offers no
 change to its fields — and its rows are their owners'. What an item's page shows as its metadata is that collection,
-filtered to the item (`metadataFilter` in `packages/data/src/metadata/collection.ts`): read by
+filtered to the item (`metadataFilter` in `packages/ui/src/metadata.tsx`): read by
 the question every collection is read by, and drawn by the fields every collection is drawn
 by. A key is a link to its row, and **Add key** opens the ordinary record form with the names
 of the item filled in; a row is changed and removed there, by its `id` and its `version`, as
@@ -242,10 +244,10 @@ Three things about it are its own, and they are small:
   as a relation.
 - **The value.** It is a JSON column, typed as it is meant: a sentence is kept as a string
   and what reads as JSON as itself. That is a field type of that one column
-  (`packages/ui/src/metadata/value.tsx`), asked by the record form as any other is.
+  (`packages/ui/src/metadata.tsx`), asked by the record form as any other is.
 - **The keys the interface reads for itself.** `display_name`, `icon`, `color`, `views` and
   `renderers` have editors of their own, held in a registry that mirrors the field types'
-  (`packages/ui/src/metadata/registry.ts` → `registerMetadataKeyEditor`). An editor is shown
+  (`packages/ui/src/metadata.tsx` → `registerMetadataKeyEditor`). An editor is shown
   beside the item, and under its row in the record form; a key without one is just a row. An
   installation that keeps a key of its own may register an editor for it in its extensions.
 
@@ -424,20 +426,15 @@ build serves every deployment. The build reads them from the environment:
 The `relay` image (Dockerfile target `relay`, based on `oven/bun`) is the only part of the
 interface's path that answers on the network. It is configured from the environment:
 
-| Variable                   | Default        | Purpose                                               |
-| -------------------------- | -------------- | ----------------------------------------------------- |
-| RELAY_UPSTREAM             | 127.0.0.1:5432 | host:port of PostgreSQL                               |
-| RELAY_PORT                 | 8081           | The port the relay listens on                         |
-| RELAY_ORIGINS              | any            | Comma-separated origins allowed to open a session     |
-| RELAY_SESSIONS_PER_ADDRESS | 20             | Logins one client address may have signing in at once |
-| RELAY_SESSIONS_PER_ROLE    | 20             | Open sessions one role may hold                       |
-| RELAY_SESSIONS_LOGGING_IN  | 64             | Logins all addresses may have signing in at once      |
-| RELAY_LOGIN_SECONDS        | 30             | How long a session has to log in                      |
-| RELAY_TRUSTED_PROXIES      | none           | Proxies whose X-Forwarded-For names the client        |
-| RELAY_UPSTREAM_TLS         | see below      | `verify` or `off`; required unless on this machine    |
-| RELAY_UPSTREAM_CA          | the system's   | The authority PostgreSQL's certificate must come from |
-| RELAY_TLS_CERT             | none           | The certificate the relay serves TLS with             |
-| RELAY_TLS_KEY              | none           | Its key                                               |
+| Variable           | Default        | Purpose                                               |
+| ------------------ | -------------- | ----------------------------------------------------- |
+| RELAY_UPSTREAM     | 127.0.0.1:5432 | host:port of PostgreSQL                               |
+| RELAY_PORT         | 8081           | The port the relay listens on                         |
+| RELAY_ORIGINS      | any            | Comma-separated origins allowed to open a session     |
+| RELAY_UPSTREAM_TLS | see below      | `verify` or `off`; required unless on this machine    |
+| RELAY_UPSTREAM_CA  | the system's   | The authority PostgreSQL's certificate must come from |
+| RELAY_TLS_CERT     | none           | The certificate the relay serves TLS with             |
+| RELAY_TLS_KEY      | none           | Its key                                               |
 
 `/health` answers `ok` without touching the database. The image holds no database
 credentials and no OAuth client secret. Put it behind TLS: an ingress controller, a load
@@ -450,13 +447,14 @@ balancer, a tunnel, or the relay itself with a certificate.
   verifier across the redirect to Dex and is cleared when the page returns. The page is a
   public client and has no client secret. XSS or a compromised page could still read the
   in-memory token, as it could in any single-page application.
-- **Content security policy.** Every page is sent `default-src 'self';
-  script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'
+- **Content security policy.** Every page is sent `default-src 'self'; script-src 'self';
+  style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'
   <relay origin> <issuer origin>; frame-ancestors 'none'; base-uri 'none';
   form-action 'self'`, with `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
-  and HSTS. There is no inline script and no third-party asset: the fonts are bundled. Pages
-  are sent with `Cache-Control: no-cache` and `config.json` with `no-store`. The headers are
-  written by `packages/ui/src/headers.ts`, in the `_headers` file a CDN reads.
+  and HSTS. There is no inline script and no third-party asset: the fonts are bundled. Styles
+  may be inline because the component library (Mantine) styles elements that way; scripts may
+  not. The dev mode alone adds `'wasm-unsafe-eval'`, for the PostgreSQL in the page. The
+  headers are written by `packages/ui/src/config.ts`, in the `_headers` file a CDN reads.
 - **Origin check.** The relay refuses a handshake whose Origin is not one of
   `RELAY_ORIGINS`, so another site's page cannot open a database session through a visitor's
   browser. A handshake with no Origin at all is refused too when the list is not empty. Unset
@@ -464,19 +462,18 @@ balancer, a tunnel, or the relay itself with a certificate.
   platform's CORS settings are not that: a browser sends a WebSocket handshake from any page
   without asking, so only something that refuses the handshake by its Origin stands in for
   the list.
-- **Session cap.** One open WebSocket is one database session. The relay caps how many open
-  sessions one role may hold (RELAY_SESSIONS_PER_ROLE), and how many logins one client address
-  may have signing in at once (RELAY_SESSIONS_PER_ADDRESS), and all addresses together
-  (RELAY_SESSIONS_LOGGING_IN). Behind a proxy, every client shares the proxy's address unless
-  the proxy is named in RELAY_TRUSTED_PROXIES: then a session counts against the client the
-  proxy names in X-Forwarded-For. The role is the one PostgreSQL reports, so a client cannot
-  claim a role it has not been signed in as. Size PostgreSQL's `max_connections` and per-role
-  connection limits accordingly.
+- **Session caps.** One open WebSocket is one database session, and the relay counts none of
+  them: it forwards. The caps are kept by what already keeps them well. How many sessions one
+  client address may hold open is the edge's: the local stack's Traefik holds each address to
+  20 (`inFlightReq` in `deploy/traefik/dynamic.yaml`), and `deploy/k8s/ingress.yaml` does the
+  same with `limit-connections`. How many one role may hold is PostgreSQL's own
+  `CONNECTION LIMIT` (`connections` on a user in a manifest), which counts through every relay
+  together. Size `max_connections` for the people who use the interface at once.
 - **Logins that do not finish.** A session has no connection to PostgreSQL until it has sent
-  a whole startup packet of protocol 3. One that opens with anything else is refused: a
-  request for TLS inside the stream, for GSSAPI or to cancel a statement is not a login. One
-  that has not logged in within RELAY_LOGIN_SECONDS is closed, and so is one that sends more
-  than a login takes before it has logged in.
+  a startup packet of protocol 3. One that opens with anything else is refused: a request
+  for TLS inside the stream, for GSSAPI or to cancel a statement is not a login. A login that
+  stalls after that is PostgreSQL's to close, with `authentication_timeout` (30 seconds in the
+  stack's image).
 - **A side that falls behind.** When the browser reads slowly the relay stops reading
   PostgreSQL, and when PostgreSQL reads slowly it stops reading the browser, so a large result
   or a large write waits in the sender instead of filling the relay's memory.
@@ -508,7 +505,7 @@ balancer, a tunnel, or the relay itself with a certificate.
 under `packages/ui/src` — or under `examples/newsroom` — rebuilds the pages; reload to see it.
 
 The CLI reads `platform.json` from the directory it is pointed at. That file is how a folder
-says what it is, and every tool reads the same one (`packages/cli/src/config.ts`): the files
+says what it is, and every tool reads the same one (`packages/cli/src/site.ts`): the files
 it applies to a database, and the module that holds its own field types and renderers.
 
 ```json
@@ -527,8 +524,8 @@ deployment ([apply](apply.md)), and a build of the folder installs them in a Pos
 runs inside the page. `models` is required; the two SQL files are the folder's to leave out.
 
 `extensions` is optional, and it is read by every build of the folder: the build puts the
-module it names in the place of `packages/ui/src/extensions.ts`, which is empty, so what the
-site registers is in the prerendered pages and in the bundle. See [renderers](renderers.md)
+module it names in the place of the module `virtual:platform-site` (`packages/ui/vite.config.ts`), which is empty, so what the
+site registers is in the bundle. See [renderers](renderers.md)
 and [fields](fields.md).
 
 The file says what the folder is, and nothing else. How it is built is the command's to say:
@@ -545,8 +542,8 @@ in `--dir=DIR`. Without one, the interface is built as it is published, in
 In it, PostgreSQL 18 runs inside the page: PGlite (`@electric-sql/pglite`, a dependency of the
 CLI, which builds the site),
 installed with the real `migrations/*.sql` (the list `migrate` runs,
-`packages/cli/src/migrations.ts`) and then with the folder's own files, through the
-same code a deployment applies them with (`packages/cli/src/in-page.ts`: the installation,
+`packages/cli/src/cli.ts`) and then with the folder's own files, through the
+same code a deployment applies them with (`packages/ui/src/inpage.ts`: the installation,
 and the database the build puts in the seam, made of whichever folder's files it is handed): `models.ts` is
 the schema, `migration.sql` is what a manifest cannot say, and `demo.sql` is the records and
 their history. In the newsroom example they leave the newsroom
@@ -561,8 +558,8 @@ installation scripts and the folder's three files. A change to any of them is an
 the next load installs them again, forgets the database of the earlier build, and with
 it what was written in the page. Clearing the site's storage does the same.
 
-The swap happens at build time: a Bun plugin loads `packages/ui/src/pg/connect.ts` as a module
-that imports the files `apply` names and hands them to `packages/cli/src/in-page.ts`, so
+The swap happens at build time: a Bun plugin loads `packages/ui/src/connect.ts` as a module
+that imports the files `apply` names and hands them to `packages/ui/src/inpage.ts`, so
 PGlite never reaches the production bundle and nothing is written in the folder to make it
 so. The newsroom example is a package of its own (`examples/newsroom/package.json`) so that its
 extensions and its tests are compiled as its own; it holds no code that knows PostgreSQL

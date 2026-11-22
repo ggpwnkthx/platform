@@ -10,8 +10,8 @@ object/column grants and row security policies. They apply equally through the i
 There is no application server. The interface is a static site whose pages speak PostgreSQL's
 own wire protocol: the page opens a login to PostgreSQL with the reader's own token, keeps it
 open while the reader works, and runs ordinary SQL on it. In a browser the bytes travel over a
-WebSocket to a relay, a stock WebSocket-to-TCP forwarder that holds no credentials and reads
-nothing but the role PostgreSQL reports. Nothing
+WebSocket to a relay, a WebSocket-to-TCP forwarder that holds no credentials and reads nothing
+but the first packet, which must be a login. Nothing
 between the page and PostgreSQL holds a **database service account, administrator password,
 user table, password hashes, session tokens, policy cache or privileged schema connection**.
 `session_user` is the actual authenticated login. No role has a password, the administrator's
@@ -104,9 +104,9 @@ issuer and no password here: the page is the identity provider, and nobody signs
 secret. The database
 is kept in the browser's IndexedDB across reloads. `PORT=8080 bun run examples:newsroom:dev` chooses the port.
 
-Editing anything under `packages/ui/src` — or under `examples/newsroom` — rebuilds the pages and the page picks it up on the next
-reload. The in-page database is swapped in when the bundle is built, so it never reaches a
-production bundle: `bun run build:ui` writes the real interface, which signs in through the
+Editing anything under `packages/ui/src` — or under `examples/newsroom` — is picked up by the
+page as it is saved. The in-page database is put in when the bundle is built, so it never
+reaches a production bundle: `bun run build:ui` writes the real interface, which signs in through the
 issuer and reaches PostgreSQL through the relay. `bun run examples:newsroom:dev --relay=HOST:PORT` serves that
 real build and forwards its WebSockets to a real PostgreSQL. See [interface](docs/interface.md).
 
@@ -123,7 +123,7 @@ real build and forwards its WebSockets to a real PostgreSQL. See [interface](doc
   (`?ws=`), the collection (`?c=`) and the record (`?id=`) are part of the address. The record
   browser searches every readable column, filters on named operators, sorts by any column,
   pages with a row count and keeps its state in the address. It is a static site: TypeScript
-  and Preact with `preact-iso` routing, generated at build time and served as files.
+  and React on Mantine, built by Vite and served as files.
 - Typed collection/field builders; real CHECK, NOT NULL, UNIQUE, indexes and foreign keys.
   Use native ALTER TABLE for other schema changes and native views/joins for relationships.
   A field may have any type the database holds — `geometry` and `geography` where PostGIS is
@@ -160,32 +160,22 @@ See [access control](docs/access.md) for concrete policies and delegation.
 
 ## The packages
 
-| Package               | What it is                                                                               |
-| --------------------- | ---------------------------------------------------------------------------------------- |
-| `packages/vocabulary` | The vocabulary the platform speaks: the SQL it writes, the tokens and versions it reads. |
-| `packages/data`       | The questions the platform asks PostgreSQL: the catalog, the records, the access.        |
-| `packages/pg-client`  | The PostgreSQL client the platform speaks with: the protocol, and the logins it keeps.   |
-| `packages/cli`        | The operator's tools: install, apply, harden, deploy, and build the interface.           |
-| `packages/relay`      | The WebSocket in front of PostgreSQL's port. No dependencies, no credentials.            |
-| `packages/ui`         | The interface: a Preact application, and the pages it renders itself into.               |
-| `examples/newsroom`   | The newsroom example, running: the dev mode, its in-page PostgreSQL and its people.      |
+The platform's own code is what no package does for it: the SQL it writes, the questions it
+asks PostgreSQL, and the pages that draw the answers. Everything else is somebody else's,
+actively developed, and listed here so that it stays that way.
 
-Each package declares its own dependencies and owns its unit tests; the root holds the
-migrations, the deployment files and the integration tests that cross the packages. The
-repository root is a Bun workspace — `packages/*` and `examples/*` — so `bun install` installs
-all of them.
+| Package             | What it is                                                                       | What it stands on                                                                                     |
+| ------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `packages/core`     | What the platform says to PostgreSQL and reads back; manifests and applying them | Kysely (SQL), Zod (manifests), jwt-decode, compare-versions                                           |
+| `packages/ui`       | The interface: a React application, and the site Vite builds of it               | Mantine, mantine-datatable, TanStack Query, React Router, lucide, oidc-client-ts, Neon's driver, Vite |
+| `packages/cli`      | The operator's tools: install, apply, harden, deploy, build the interface        | citty, clack, node-postgres, openid-client, yaml                                                      |
+| `packages/relay`    | The WebSocket in front of PostgreSQL's port: one file, no dependency             | Bun                                                                                                   |
+| `examples/newsroom` | The newsroom example: what it applies, and the renderers it adds                 | PGlite, in the dev mode                                                                               |
 
-The interface's own source is laid out by domain: `content/`, `model/`, `access/`,
-`activity/`, `metadata/`, `sql/`, `workspace/`, `identity/` and `fields/` each hold their page
-and what they draw — and little else. The SQL they run is the platform's own, in
-`packages/data` (the questions, asked of any source of statements) and `packages/vocabulary` (the
-vocabulary they are written in); the protocol is the client's, in `packages/pg-client`. Two folders
-are shared by all of them — `ui/` holds the interface's own widgets, `pg/` the one seam that
-reaches the database — and the root of `packages/ui/src` holds the shell of the
-application: the router, the session, the layout, the routes, the configuration, the address
-and the formatting. The PostgreSQL that runs inside the page in dev mode is an example, not
-a part of the interface: it is the package `examples/newsroom`, which depends on the interface
-through its published entry points and owns the files it installs and the people who sign in.
+Three things are still the platform's own because nothing does them: the OAUTHBEARER login
+that neither node-postgres nor Neon's driver speaks yet (`packages/core/src/token-client.ts`,
+forty lines over the drivers' own protocol code), the relay, and the migration. See
+[architecture](docs/architecture.md#repository) for where each thing is.
 
 ## Commands
 
@@ -197,7 +187,8 @@ bun run examples:newsroom:dev       # dev mode: the interface on http://localhos
 bun run examples:newsroom:dev --relay=127.0.0.1:5432  # the real interface against a real PostgreSQL
 bun run cli ui build                # the published interface: no configuration, the relay and the issuer
 bun run cli ui dev --dir=examples/newsroom  # the same server, named by the example's configuration
-bun test               # needs the test server and relay: see docs/operations.md, Testing
+bun test               # needs nothing but Bun: the suites start PostgreSQL in memory
+bun run test:e2e       # the interface in Chrome, against the example with PostgreSQL in the page
 bun run cli deploy help
 bun run cli deploy local up
 bun run cli deploy local status
@@ -224,21 +215,22 @@ Database CLI commands act as a person, with the token in `PGTOKEN` or `PGTOKEN_F
 no password to give them: the administrator signs in with a token like everyone else. Tokens
 belong in operator sessions and migration jobs, never the interface or the relay. The local
 stack's own server is administered beside it, through its socket: `bun run cli deploy local
-admin <command>`. Tests use `TEST_ADMIN_URL`; see [operations](docs/operations.md).
+admin <command>`. See [operations](docs/operations.md).
 
-| Document                             | Contents                                                        |
-| ------------------------------------ | --------------------------------------------------------------- |
-| [Architecture](docs/architecture.md) | Connection identity and database layout                         |
-| [Access](docs/access.md)             | Roles, grants, RLS, delegation and revocation                   |
-| [Interface](docs/interface.md)       | Pages, the relay, configuration and the browser surface         |
-| [Fields](docs/fields.md)             | What a field is: its type, its cell, its input and its filter   |
-| [Views](docs/views.md)               | Where a field appears: the defaults, your own views, the saying |
-| [Renderers](docs/renderers.md)       | How a field's values are drawn, in each place it appears        |
-| [Publishing](deploy/cdn/README.md)   | The static site on a CDN: config.json, headers, the relay       |
-| [Security](docs/security.md)         | Boundaries and practical limitations                            |
-| [Operations](docs/operations.md)     | Deploying, PostgreSQL 18, Dex, TLS and testing                  |
-| [Applying changes](docs/apply.md)    | Declaring users, groups, workspaces, grants and policies        |
-| [Importing data](docs/import.md)     | Data, identity mappings and native permissions                  |
-| [Features](docs/features.md)         | Native data and access capabilities                             |
+| Document                             | Contents                                                         |
+| ------------------------------------ | ---------------------------------------------------------------- |
+| [Architecture](docs/architecture.md) | Connection identity and database layout                          |
+| [Access](docs/access.md)             | Roles, grants, RLS, delegation and revocation                    |
+| [Interface](docs/interface.md)       | Pages, the relay, configuration and the browser surface          |
+| [Fields](docs/fields.md)             | What a field is: its type, its cell, its input and its filter    |
+| [Views](docs/views.md)               | Where a field appears: the defaults, your own views, the saying  |
+| [Renderers](docs/renderers.md)       | How a field's values are drawn, in each place it appears         |
+| [Publishing](deploy/cdn/README.md)   | The static site on a CDN: config.json, headers, the relay        |
+| [Security](docs/security.md)         | Boundaries and practical limitations                             |
+| [Operations](docs/operations.md)     | Deploying, PostgreSQL 18, Dex, TLS and testing                   |
+| [Applying changes](docs/apply.md)    | Declaring users, groups, workspaces, grants and policies         |
+| [Importing data](docs/import.md)     | Data, identity mappings and native permissions                   |
+| [Features](docs/features.md)         | Native data and access capabilities                              |
+| [The remake](docs/remake.md)         | What was replaced by which package, and what behaves differently |
 
 MIT. See [LICENSE](LICENSE).

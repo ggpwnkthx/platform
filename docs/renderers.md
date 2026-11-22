@@ -16,7 +16,7 @@ values are drawn where it is.
 
 | Kind           | What it is                                                              | Where it comes from                                   |
 | -------------- | ----------------------------------------------------------------------- | ----------------------------------------------------- |
-| A default one  | The way the field's own type draws a value in that place                | `packages/ui/src/fields/types/platform.tsx`           |
+| A default one  | The way the field's own type draws a value in that place                | `packages/ui/src/fields.tsx`                          |
 | A custom one   | A renderer of the installation's own, or one the owner configures       | `registerRenderer`, or the options the renderer takes |
 | A configurable | The choice of which renderer draws a value, in one place, for one field | The field's own metadata, under the key `renderers`   |
 
@@ -170,14 +170,12 @@ is given the value, the kind of value it is and the place it is drawn in, and it
 
 ```tsx
 // examples/newsroom/extensions.tsx
-import { registerRenderer } from '@platform/ui/fields/renderers.tsx'
-import { numberOf } from '@platform/ui/fields/text.ts'
+import { numberOf, registerRenderer } from '@platform/ui/extensions'
 
 registerRenderer({
   name: 'reading-time',
   label: 'As the time it takes to read',
   kinds: ['integer'],
-  situations: [],
   render: ({ value }) => (
     <span>{Math.max(1, Math.round((numberOf(value) ?? 0) / 230))} min read</span>
   ),
@@ -185,10 +183,9 @@ registerRenderer({
 ```
 
 The interface is one bundle of static files, so a renderer is added when it is built. The
-interface imports `packages/ui/src/extensions.ts` before any page draws a field, and the
+interface imports the module `virtual:platform-site` (`packages/ui/vite.config.ts`) before any page draws a field, and the
 platform itself adds nothing there: that module is a seam. A site names a module of its own
-in its `platform.json`, and the build puts it in the seam's place — in the prerendered pages
-and in the bundle alike, in a development build and a production one:
+in its `platform.json`, and the build puts it in the seam's place, in a development build and a production one alike:
 
 ```json
 {
@@ -202,19 +199,19 @@ and in the bundle alike, in a development build and a production one:
 ```
 
 The module is the site's: it is kept beside the site's configuration, it is compiled as the
-site's own `tsconfig.json` says (so its JSX is Preact's when the site says so, as the
+site's own `tsconfig.json` says (so its JSX is React's when the site says so, as the
 example does), and it registers with what `@platform/ui` publishes —
-`@platform/ui/fields/renderers.tsx` and `@platform/ui/fields/registry.ts`, with the types in
-`@platform/ui/fields/types.ts` and the shared helpers in `@platform/ui/fields/text.ts` and
-`@platform/ui/fields/inputs.tsx`. A site that draws with JSX depends on `preact` itself. The
+`@platform/ui/extensions` and `@platform/ui/extensions`, with the types in
+`@platform/ui/extensions` and the shared helpers in `@platform/ui/extensions` and
+`@platform/ui/extensions`. A site that draws with JSX depends on `react` itself. The
 example's renderer is said of `newsroom.articles.word_count` in the grid by the example's
 `models.ts`.
 
 ### Icons and colours
 
 The platform holds no renderer that draws an icon or a colour, but it publishes what one is
-drawn with: its icon set (`@platform/ui/ui/icons.tsx` → `itemIcons`, `iconFor`) and its
-palette (`@platform/ui/metadata/color.ts` → `familyOf`, `toneClass`; the `tone-<family>`
+drawn with: its icon set (`@platform/ui/extensions` → `itemIcons`, `iconFor`) and its
+palette (`@platform/ui/extensions` → `familyOf`, `toneClass`; the `tone-<family>`
 classes give `--tone-fill` and `--tone-ink`). The example registers three:
 
 | Name     | Draws                                                | Fits       | Options                                |
@@ -232,13 +229,12 @@ registerRenderer({
   name: 'marked',
   label: 'With an icon and a colour you pick',
   kinds: [],
-  situations: [],
   options: [
     { name: 'icon', label: 'The icon beside the value', type: 'icon' },
     { name: 'colour', label: 'The colour it is drawn in', type: 'colour' },
   ],
   render: ({ value, options }) => {
-    /* iconFor(options.icon), toneClass(options.colour) */
+    /* <ItemIcon name={options.icon} />, tone(options.colour) */
   },
 })
 ```
@@ -253,20 +249,20 @@ the values a choice may take, and the options the owner gave it.
 
 ## Where it is drawn
 
-| What                             | Where                                                                            |
-| -------------------------------- | -------------------------------------------------------------------------------- |
-| The renderers the platform holds | `packages/ui/src/fields/renderers/renderers.tsx` → `registerRenderer`            |
-| The drawings of each field type  | `packages/ui/src/fields/types/platform.tsx` → `draw`                             |
-| The saying of a field            | `packages/vocabulary/src/metadata.ts` → `parseRenderers`                         |
-| The fields of a collection       | `packages/ui/src/fields/resolve.ts` → `resolveFields`                            |
-| The drawing of a value           | `packages/ui/src/fields/renderers/renderers.tsx` → `Value`                       |
-| The records grid                 | `packages/ui/src/content/records/records.tsx` → `Value`, with `situation="list"` |
-| The record form                  | `packages/ui/src/content/item/item.tsx` → `Value`, with `situation="record"`     |
-| The editor                       | `packages/ui/src/metadata/editors/renderers.tsx` → `RenderersEditor`             |
-| The pickers of an option         | `packages/ui/src/metadata/editors/pickers.tsx` → `IconPicker`, `ColourPicker`    |
-| The marks in the field table     | `packages/ui/src/model/collection/cells.tsx` → the _Drawn as_ column             |
-| The key of the saying            | `packages/vocabulary/src/core.ts` → `renderersKey`                               |
-| An installation's own            | The module `platform.json` names as `extensions`                                 |
+| What                             | Where                                                              |
+| -------------------------------- | ------------------------------------------------------------------ |
+| The renderers the platform holds | `packages/ui/src/fields.tsx` → `registerRenderer`                  |
+| The drawings of each field type  | `packages/ui/src/fields.tsx` → `draw`                              |
+| The saying of a field            | `packages/core/src/metadata.ts` → `parseRenderers`                 |
+| The fields of a collection       | `packages/ui/src/fields.tsx` → `resolveFields`                     |
+| The drawing of a value           | `packages/ui/src/fields.tsx` → `Value`                             |
+| The records grid                 | `packages/ui/src/content.tsx` → `Value`, with `situation="list"`   |
+| The record form                  | `packages/ui/src/content.tsx` → `Value`, with `situation="record"` |
+| The editor                       | `packages/ui/src/metadata.tsx` → `RenderersEditor`                 |
+| The pickers of an option         | `packages/ui/src/metadata.tsx` → `IconPicker`, `ColourPicker`      |
+| The marks in the field table     | `packages/ui/src/model.tsx` → the _Drawn as_ column                |
+| The key of the saying            | `packages/core/src/sql.ts` → `renderersKey`                        |
+| An installation's own            | The module `platform.json` names as `extensions`                   |
 
 Every one of them reads the same saying, in the same way: the field's own metadata, read
 under PostgreSQL's row security, so the fields it names are the ones the reader may reach.

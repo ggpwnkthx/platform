@@ -1,155 +1,109 @@
-import { connect, isIP } from 'node:net'
+import { readFileSync } from 'node:fs'
+import { connect, type Socket } from 'node:net'
 import { connect as connectTls } from 'node:tls'
-import { addressList, clientAddress } from './relay/addresses.ts'
-import { counters } from './relay/counters.ts'
-import { originAllowed } from './relay/origins.ts'
-import { readRole as readRoleOf } from './relay/scan.ts'
-import { relayOptionsFromEnv } from './relay/env.ts'
-import { BEFORE_LOGIN, HELD_FOR_BROWSER, REFUSED, startupPacketIn } from './relay/startup.ts'
-import type { Relay, RelayOptions, Session } from './relay/types.ts'
 
-export { originAllowed } from './relay/origins.ts'
-export { addressList, clientAddress } from './relay/addresses.ts'
-export { startupPacketIn } from './relay/startup.ts'
-export type { Relay, RelayOptions } from './relay/types.ts'
-export { relayOptionsFromEnv } from './relay/env.ts'
+/**
+ * The WebSocket in front of PostgreSQL's port. It forwards bytes and holds no credentials:
+ * the reader's token travels inside PostgreSQL's own login, and PostgreSQL alone checks it.
+ *
+ * It does three things of its own: it answers only the site's origin, it forwards only to
+ * the one upstream it was given, and it lets a session begin only with a protocol 3 startup
+ * packet (so the page cannot send a cancel request or anything else to the port). How many
+ * sessions an address or a role may hold is the business of what already does it well: the
+ * edge in front of the relay, and PostgreSQL's own CONNECTION LIMIT and authentication_timeout.
+ */
+export interface RelayOptions {
+  upstream: { host: string; port: number; tls?: { ca?: string } }
+  port: number
+  /** Empty allows any origin: for a relay behind an edge that checks the origin itself. */
+  allowedOrigins: string[]
+  tls?: { cert: string; key: string }
+}
+const REFUSED = 1008
+const HELD_FOR_BROWSER = 16 * 1024 * 1024
+const isStartup = (bytes: Buffer) =>
+  bytes.length >= 8 && bytes.readInt32BE(0) <= 10000 && bytes.readInt32BE(4) >>> 16 === 3
 
-export function startRelay(options: RelayOptions): Relay {
-  const pendingCap = options.sessionsLoggingIn ?? 64
-  const loginTimeoutMs = options.loginTimeoutMs ?? 30000
-  const trusted = addressList(options.trustedProxies ?? [])
-  const counts = counters(options)
-  /** Opens the session's connection to PostgreSQL, in TLS if the deployment asks for it. */
-  const upstream = () => {
-    const { host, port, tls } = options.upstream
-    if (!tls) return connect({ host, port })
-    return connectTls({
-      host,
-      port,
-      // PostgreSQL takes TLS from the first byte only from a client that names its protocol.
-      ALPNProtocols: ['postgresql'],
-      ...(isIP(host) ? {} : { servername: host }),
-      ...(tls.ca ? { ca: tls.ca } : {}),
-    })
-  }
-
-  const server = Bun.serve<Session>({
+export function startRelay(options: RelayOptions) {
+  const { host, port, tls } = options.upstream
+  const upstream = () =>
+    tls
+      ? connectTls({ host, port, ALPNProtocols: ['postgresql'], servername: host, ...tls })
+      : connect({ host, port })
+  const server = Bun.serve<{ socket?: Socket }>({
     port: options.port,
     ...(options.tls ? { tls: options.tls } : {}),
     fetch(request, server) {
-      const url = new URL(request.url)
-      if (url.pathname === '/health') return new Response('ok\n')
-      if (!originAllowed(request, options.allowedOrigins))
+      if (new URL(request.url).pathname === '/health') return new Response('ok\n')
+      const origin = request.headers.get('origin')
+      if (options.allowedOrigins.length && !(origin && options.allowedOrigins.includes(origin)))
         return new Response('Origin not allowed\n', { status: 403 })
-      const address = clientAddress(
-        server.requestIP(request)?.address ?? 'unknown',
-        request.headers.get('x-forwarded-for'),
-        trusted
-      )
-      const count = counts.loggingIn.get(address) ?? 0
-      if (count >= options.sessionsPerAddress)
-        return new Response('Too many sessions from this address\n', { status: 429 })
-      if (counts.pendingCount() >= pendingCap)
-        return new Response('Too many sessions are logging in\n', { status: 503 })
-      counts.beginLogin(address)
-      const session: Session = {
-        socket: null,
-        opened: false,
-        sent: 0,
-        first: Buffer.alloc(0),
-        deadline: null,
-        address,
-        role: null,
-        loggingIn: true,
-        counted: false,
-        scan: { head: Buffer.alloc(0), body: Buffer.alloc(0), want: 0, skip: 0 },
-      }
-      if (server.upgrade(request, { data: session })) return undefined
-      counts.endLogin(address)
+      if (server.upgrade(request, { data: {} })) return undefined
       return new Response('Expected a WebSocket\n', { status: 426 })
     },
     websocket: {
-      // A browser that falls this far behind is not reading at all: its session ends
-      // rather than have what it was sent go missing from the middle of the stream.
       backpressureLimit: HELD_FOR_BROWSER,
       closeOnBackpressureLimit: true,
-      open(ws) {
-        const session = ws.data as Session
-        // PostgreSQL waits for the client to speak first, so a session that has not sent a
-        // startup packet needs no connection there, and gets none. It has this long to sign in.
-        session.deadline = setTimeout(() => {
-          session.deadline = null
-          if (session.loggingIn) ws.close(REFUSED, 'The session did not log in in time')
-        }, loginTimeoutMs)
-      },
       message(ws, message) {
-        const session = ws.data as Session
-        const bytes = typeof message === 'string' ? Buffer.from(message) : Buffer.from(message)
-        if (session.loggingIn) {
-          session.sent += bytes.length
-          if (session.sent > BEFORE_LOGIN) {
-            ws.close(REFUSED, 'Too much was sent before the session logged in')
-            return
-          }
-        }
-        let carried: Buffer = bytes
-        if (!session.opened) {
-          // The first packet is held until it is whole, and is a login or is not carried.
-          session.first = Buffer.concat([session.first, bytes])
-          const packet = startupPacketIn(session.first)
-          if (packet === 'refused') {
-            ws.close(REFUSED, 'The session did not open with a startup packet')
-            return
-          }
-          if (packet === 'partial') return
-          carried = session.first
-          session.first = Buffer.alloc(0)
-          session.opened = true
+        const bytes = Buffer.from(message as Buffer)
+        if (!ws.data.socket) {
+          if (!isStartup(bytes))
+            return ws.close(REFUSED, 'The session did not open with a startup packet')
           const socket = upstream()
-          session.socket = socket
-          socket.on('data', (chunk) => {
-            const bytes = chunk as Buffer
-            // The role is read before the bytes are carried: a session that is refused must
-            // not look to the client like a session that has signed in.
-            if (readRoleOf(session, bytes, (role) => counts.signedIn(ws, session, role))) return
-            try {
-              // The browser is behind: PostgreSQL is not read until it has caught up.
-              if (ws.sendBinary(bytes) === -1) socket.pause()
-            } catch {
-              // The browser is gone; the close handler tidies up.
-            }
+          ws.data.socket = socket
+          socket.on('data', (chunk: Buffer) => {
+            if (ws.sendBinary(chunk) === -1) socket.pause()
           })
-          // PostgreSQL has caught up: the browser is read again.
-          socket.on('drain', () => ws.resume())
           socket.on('error', () => ws.close())
           socket.on('close', () => ws.close())
         }
-        // PostgreSQL is behind: the browser is not read until it has caught up.
-        if (session.socket && !session.socket.write(carried)) ws.pause()
+        ws.data.socket.write(bytes)
       },
-      drain(ws) {
-        ;(ws.data as Session).socket?.resume()
-      },
-      close(ws) {
-        const session = ws.data as Session
-        session.socket?.end()
-        session.socket?.destroy()
-        session.socket = null
-        if (session.counted && session.role) counts.forget(counts.sessions, session.role)
-        counts.loggedIn(session)
-        session.counted = false
-      },
+      drain: (ws) => void ws.data.socket?.resume(),
+      close: (ws) => void ws.data.socket?.destroy(),
     },
   })
-  return {
-    port: server.port ?? options.port,
-    stop: () => {
-      server.stop(true)
-    },
-  }
+  return { port: server.port ?? options.port, stop: () => server.stop(true) }
 }
 
-/** Whether a host is this machine: the one place a token crosses no network on its way. */
+const isLoopback = (host: string) => /^(localhost|::1|\[::1\]|127(\.\d{1,3}){3})$/.test(host)
+export function relayOptionsFromEnv(
+  env: Record<string, string | undefined> = process.env
+): RelayOptions {
+  const [host, port] = (env.RELAY_UPSTREAM ?? '127.0.0.1:5432').split(':')
+  if (!host || !port) throw new Error('RELAY_UPSTREAM must be host:port')
+  const origins = (env.RELAY_ORIGINS ?? '')
+    .split(',')
+    .map((origin) => origin.trim().replace(/\/+$/, ''))
+    .filter((origin) => origin && origin !== '*')
+  const upstreamTls = (env.RELAY_UPSTREAM_TLS ?? '').trim().toLowerCase()
+  if (!['', 'off', 'verify'].includes(upstreamTls))
+    throw new Error('RELAY_UPSTREAM_TLS must be verify or off')
+  // A token must not cross a network in the clear by accident: off is said, never assumed.
+  if (!upstreamTls && !isLoopback(host))
+    throw new Error(
+      `RELAY_UPSTREAM_TLS must be set to reach ${host}: verify, or off where the network between the relay and PostgreSQL is one you trust with a token`
+    )
+  if (env.RELAY_UPSTREAM_CA && upstreamTls !== 'verify')
+    throw new Error('RELAY_UPSTREAM_CA needs RELAY_UPSTREAM_TLS=verify')
+  if (Boolean(env.RELAY_TLS_CERT) !== Boolean(env.RELAY_TLS_KEY))
+    throw new Error('RELAY_TLS_CERT and RELAY_TLS_KEY are both needed, or neither')
+  const file = (path: string) => readFileSync(path, 'utf8')
+  return {
+    upstream: {
+      host,
+      port: Number(port),
+      ...(upstreamTls === 'verify'
+        ? { tls: env.RELAY_UPSTREAM_CA ? { ca: file(env.RELAY_UPSTREAM_CA) } : {} }
+        : {}),
+    },
+    port: Number(env.RELAY_PORT ?? '8081'),
+    allowedOrigins: origins,
+    ...(env.RELAY_TLS_CERT && env.RELAY_TLS_KEY
+      ? { tls: { cert: file(env.RELAY_TLS_CERT), key: file(env.RELAY_TLS_KEY) } }
+      : {}),
+  }
+}
 
 if (import.meta.main) {
   const options = relayOptionsFromEnv()
@@ -160,11 +114,6 @@ if (import.meta.main) {
   console.log(
     options.allowedOrigins.length
       ? `Origins allowed: ${options.allowedOrigins.join(', ')}`
-      : 'The relay checks no origin: set RELAY_ORIGINS to the address of the site, unless what is in front of the relay refuses other origins on the WebSocket handshake itself.'
+      : 'The relay checks no origin: set RELAY_ORIGINS to the address of the site, unless what is in front of the relay refuses other origins itself.'
   )
-  console.log(
-    `Sessions: ${options.sessionsPerAddress} logging in at once per address and ${options.sessionsLoggingIn} in all, ${options.loginTimeoutMs / 1000} seconds to log in, ${options.sessionsPerRole} open at once per role.`
-  )
-  if (options.trustedProxies.length)
-    console.log(`Proxies whose X-Forwarded-For is believed: ${options.trustedProxies.join(', ')}`)
 }

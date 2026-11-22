@@ -17,6 +17,7 @@ http:
     api:
       rule: 'Host(`{{ env "PLATFORM_API_HOST" }}.{{ env "PLATFORM_DOMAIN" }}`)'
       service: api
+      middlewares: [sessions]
     # The site, only when the deployment chose a folder to deploy one from. The template's own lines
     # are written as comments, so that the file is YAML before it is rendered and after.
     # {{ if env "PLATFORM_SITE" }}
@@ -24,6 +25,16 @@ http:
       rule: 'Host(`{{ env "PLATFORM_APP_HOST" }}.{{ env "PLATFORM_DOMAIN" }}`)'
       service: app
     # {{ end }}
+  # How many sessions one client address may hold open through the relay at once. A WebSocket
+  # is in flight for as long as it is open, so this is the cap on open sessions per address.
+  # The edge sees the client's own address; behind another proxy, set ipStrategy.depth.
+  middlewares:
+    sessions:
+      inFlightReq:
+        amount: 20
+        sourceCriterion:
+          ipStrategy:
+            depth: 0
   services:
     idp:
       loadBalancer:

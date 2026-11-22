@@ -6,33 +6,34 @@
   "description": "The interface: a static site whose pages speak the database's protocol themselves.",
   "license": "MIT",
   "exports": {
-    "./access/model.ts": "./src/access/model.ts",
-    "./access/policy.ts": "./src/access/policies/draft.ts",
-    "./access/wishes.ts": "./src/access/grants/wishes.ts",
-    "./config.ts": "./src/config.ts",
-    "./fields/inputs.tsx": "./src/fields/inputs.tsx",
-    "./fields/registry.ts": "./src/fields/registry.ts",
-    "./fields/renderers.tsx": "./src/fields/renderers/renderers.tsx",
-    "./fields/text.ts": "./src/fields/text.ts",
-    "./fields/types.ts": "./src/fields/field.ts",
-    "./headers.ts": "./src/headers.ts",
-    "./metadata/color.ts": "./src/metadata/color.ts",
-    "./paths.ts": "./src/paths.ts",
-    "./prerender.tsx": "./src/prerender.tsx",
-    "./pg/connect.ts": "./src/pg/connect.ts",
-    "./ui/icons.tsx": "./src/ui/icons.tsx"
+    "./extensions": "./src/fields.tsx",
+    "./vite": "./vite.config.ts",
+    "./config": "./src/config.ts"
   },
   "dependencies": {
-    "@platform/data": "workspace:*",
-    "@platform/pg-client": "workspace:*",
-    "@platform/vocabulary": "workspace:*",
+    "@electric-sql/pglite": "0.5.17",
+    "@fontsource-variable/inter": "5.2.8",
+    "@fontsource/jetbrains-mono": "5.2.8",
+    "@mantine/core": "9.8.2",
+    "@mantine/form": "9.8.2",
+    "@mantine/hooks": "9.8.2",
+    "@mantine/notifications": "9.8.2",
+    "@neondatabase/serverless": "1.2.1",
+    "@platform/core": "workspace:*",
+    "@tanstack/react-query": "5.108.2",
+    "@vitejs/plugin-react": "6.3.0",
     "clsx": "2.1.1",
-    "lucide-preact": "1.75.0",
-    "preact": "10.27.2",
-    "preact-iso": "2.12.2",
-    "preact-render-to-string": "6.6.4"
+    "lucide-react": "1.77.0",
+    "mantine-datatable": "9.8.3",
+    "oidc-client-ts": "3.5.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-router": "8.5.2",
+    "vite": "8.3.8"
   },
-  "engines": {
-    "bun": ">=1.4.3"
+  "devDependencies": {
+    "@platform/relay": "workspace:*",
+    "@electric-sql/pglite-socket": "0.2.20",
+    "playwright": "1.63.0"
   }
 }
