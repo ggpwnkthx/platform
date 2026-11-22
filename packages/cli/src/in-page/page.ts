@@ -23,7 +23,6 @@ export function inPage(applied: Applied): {
   connect: (config: RuntimeConfig, who: Credentials) => Promise<Db>
   withoutIssuer: WithoutIssuer
 } {
-  const storageKey = `${storagePrefix}${fingerprintFor(applied)}`
   const withoutIssuer: WithoutIssuer = {
     people: peopleOf(manifestOf(applied)),
     notice: 'PostgreSQL runs inside this page, with the site installed. Choose who to be.',
@@ -41,6 +40,7 @@ export function inPage(applied: Applied): {
       location.reload()
       await new Promise(() => undefined)
     }
+    const storageKey = `${storagePrefix}${await fingerprintFor(applied)}`
     booted ??= { role: who.role, db: start(applied, storageKey, who.role) }
     const db = await booted.db
     return {

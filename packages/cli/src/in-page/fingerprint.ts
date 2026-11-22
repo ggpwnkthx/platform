@@ -4,20 +4,17 @@ import { type Applied, manifestOf } from '../folder.ts'
 /**
  * A short name for a set of texts: the same texts give the same name, and a change to any of
  * them gives another. It tells one installation from the next, and keeps nothing secret.
+ *
+ * The name is a digest of the texts, and the digest is the browser's own: the page is what
+ * asks for it, and the page may not have a server to ask.
  */
-export function fingerprintOf(texts: string[]): string {
-  let high = 0xdeadbeef
-  let low = 0x41c6ce57
-  for (const text of texts) {
-    // The length goes in first, so that where one text ends and the next begins is said.
-    for (const code of [text.length, ...Array.from(text, (c) => c.charCodeAt(0))]) {
-      high = Math.imul(high ^ code, 2654435761)
-      low = Math.imul(low ^ code, 1597334677)
-    }
-  }
-  high = Math.imul(high ^ (high >>> 16), 2246822507) ^ Math.imul(low ^ (low >>> 13), 3266489909)
-  low = Math.imul(low ^ (low >>> 16), 2246822507) ^ Math.imul(high ^ (high >>> 13), 3266489909)
-  return (4294967296 * (2097151 & low) + (high >>> 0)).toString(36)
+export async function fingerprintOf(texts: string[]): Promise<string> {
+  const bytes = new TextEncoder().encode(texts.map((text) => `${text.length}\0${text}`).join('\0'))
+  const digest = await crypto.subtle.digest('SHA-256', bytes)
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 32)
 }
 
 /**
@@ -32,7 +29,7 @@ const making = 'all at once'
  * files, and how they are installed. A database kept from an earlier build is known to be of
  * another making by it.
  */
-export function fingerprintFor(applied: Applied): string {
+export async function fingerprintFor(applied: Applied): Promise<string> {
   return fingerprintOf([
     making,
     ...MIGRATIONS.map((script) => script.sql),
