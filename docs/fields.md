@@ -98,13 +98,13 @@ is given the value and the field, never a connection, and it grants nothing.
 
 | What                                  | Where                                                                       |
 | ------------------------------------- | --------------------------------------------------------------------------- |
-| What a field and a field type are     | `packages/ui/src/fields/types.ts`                                           |
+| What a field and a field type are     | `packages/ui/src/fields/field.ts`                                           |
 | The fields of a collection            | `packages/ui/src/fields/resolve.ts` → `resolveFields`                       |
-| The types the platform holds          | `packages/ui/src/fields/builtin.tsx`                                        |
+| The types the platform holds          | `packages/ui/src/fields/types/platform.tsx`                                 |
 | The types held, and whose a column is | `packages/ui/src/fields/registry.ts` → `registerFieldType`, `fieldTypeFor`  |
 | Between the form and the database     | `packages/ui/src/fields/edit.ts` → `fieldText`, `fieldValue`, `filterValue` |
 | The inputs the types share            | `packages/ui/src/fields/inputs.tsx`, `packages/ui/src/fields/relation.tsx`  |
-| The renderers, and `Value`            | `packages/ui/src/fields/renderers.tsx`                                      |
+| The renderers, and `Value`            | `packages/ui/src/fields/renderers/renderers.tsx`                            |
 | An installation's own                 | The module `platform.json` names as `extensions`                            |
-| The records grid and the filters      | `packages/ui/src/content/records.tsx`                                       |
-| The record form                       | `packages/ui/src/content/item.tsx` → `RecordField`                          |
+| The records grid and the filters      | `packages/ui/src/content/records/records.tsx`                               |
+| The record form                       | `packages/ui/src/content/item/item.tsx` → `RecordField`                     |
