@@ -1,6 +1,6 @@
 import { type Operator, valueless } from '@platform/data'
 import { textOf, readsLong } from './text.ts'
-import type { Field, Parsed } from './types.ts'
+import type { Field, Parsed } from './field.ts'
 
 /**
  * A field between the form and the database: the text a form holds for a value, the value a

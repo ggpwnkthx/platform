@@ -1,5 +1,5 @@
-import { platformFieldTypes } from './builtin.tsx'
-import type { FieldFacts, FieldType } from './types.ts'
+import { platformFieldTypes } from './types/platform.tsx'
+import type { FieldFacts, FieldType } from './field.ts'
 
 /**
  * The field types the interface holds: the platform's own, and the installation's.

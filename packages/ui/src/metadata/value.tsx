@@ -1,6 +1,6 @@
 import { metadataCollection } from '@platform/data'
 import { TextArea } from '../ui/form.tsx'
-import type { FieldType } from '../fields/types.ts'
+import type { FieldType } from '../fields/field.ts'
 
 /**
  * The value of a piece of metadata, as a type of field.

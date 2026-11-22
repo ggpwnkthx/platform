@@ -1,7 +1,7 @@
 import type { FunctionComponent, JSX } from 'preact'
 import { Input, Select } from '../ui/form.tsx'
 import { defaultText } from './text.ts'
-import type { FilterInputProps, InputProps } from './types.ts'
+import type { FilterInputProps, InputProps } from './field.ts'
 
 /** The inputs the field types share: a line, and a choice among a few. */
 

@@ -21,7 +21,7 @@ import {
   viewsKey,
 } from '@platform/vocabulary'
 import { fieldTypeFor } from './registry.ts'
-import type { Field } from './types.ts'
+import type { Field } from './field.ts'
 
 /**
  * The fields of a collection, each read once: what the database says of the column, what the
