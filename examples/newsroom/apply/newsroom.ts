@@ -1,4 +1,5 @@
 import { newsroomAccess } from './newsroom-access.ts'
+import { newsroomTags } from './newsroom-tags.ts'
 
 /**
  * The newsroom's own schema: its collections, what each role may do with them, and the
@@ -116,6 +117,7 @@ export const newsroom = (admin: string) => ({
         },
       ],
     },
+    ...newsroomTags,
     {
       name: 'corrections',
       metadata: {

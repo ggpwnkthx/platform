@@ -10,6 +10,8 @@
 ALTER TABLE newsroom.sections DISABLE TRIGGER USER;
 ALTER TABLE newsroom.articles DISABLE TRIGGER USER;
 ALTER TABLE newsroom.corrections DISABLE TRIGGER USER;
+ALTER TABLE newsroom.tags DISABLE TRIGGER USER;
+ALTER TABLE newsroom.article_tags DISABLE TRIGGER USER;
 ALTER TABLE crm.accounts DISABLE TRIGGER USER;
 ALTER TABLE crm.contacts DISABLE TRIGGER USER;
 ALTER TABLE crm.deals DISABLE TRIGGER USER;
@@ -77,6 +79,21 @@ SELECT id, 'An earlier version of this article gave the wrong date for the meeti
 INSERT INTO newsroom.corrections (article, wording, severity)
 SELECT id, 'This article misattributed a quote to the council leader; it was said by her deputy.', 'material'
   FROM newsroom.articles WHERE status = 'published' ORDER BY title DESC LIMIT 2;
+-- The subjects stories are filed under, and which of them each story carries.
+INSERT INTO newsroom.tags (name, created_by, updated_by, created_at, updated_at)
+SELECT t, current_setting('deployment.admin'), current_setting('deployment.admin'),
+       now() - interval '40 days', now() - interval '40 days'
+  FROM unnest(ARRAY['Housing','Transport','Schools','Budget','Weather','Health','Culture','Sport']) AS t;
+INSERT INTO newsroom.article_tags (article, tag, created_by, updated_by, created_at, updated_at)
+SELECT a.id, g.id, a.created_by, a.updated_by, a.created_at, a.updated_at
+  FROM newsroom.articles a
+  JOIN newsroom.tags g ON g.name = (ARRAY['Housing','Transport','Schools','Budget','Weather','Health','Culture','Sport'])[1 + (length(a.title) % 8)]
+ WHERE a.status = 'published';
+INSERT INTO newsroom.article_tags (article, tag, created_by, updated_by, created_at, updated_at)
+SELECT a.id, g.id, a.created_by, a.updated_by, a.created_at, a.updated_at
+  FROM newsroom.articles a
+  JOIN newsroom.tags g ON g.name = 'Sport'
+ WHERE a.title ILIKE '%club%' OR a.title ILIKE '%goal%';
 UPDATE newsroom.corrections c SET created_by = current_setting('deployment.admin'), updated_by = current_setting('deployment.admin'),
        created_at = a.updated_at + interval '40 minutes', updated_at = a.updated_at + interval '40 minutes'
   FROM newsroom.articles a WHERE a.id = c.article;
@@ -155,6 +172,8 @@ SELECT at, actor, actor_oid, workspace_owner,
 ALTER TABLE newsroom.articles ENABLE TRIGGER USER;
 ALTER TABLE newsroom.corrections ENABLE TRIGGER USER;
 ALTER TABLE newsroom.sections ENABLE TRIGGER USER;
+ALTER TABLE newsroom.tags ENABLE TRIGGER USER;
+ALTER TABLE newsroom.article_tags ENABLE TRIGGER USER;
 ALTER TABLE crm.accounts ENABLE TRIGGER USER;
 ALTER TABLE crm.contacts ENABLE TRIGGER USER;
 ALTER TABLE crm.deals ENABLE TRIGGER USER;

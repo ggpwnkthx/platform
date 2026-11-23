@@ -44,6 +44,22 @@ export const newsroomAccess = {
       collection: 'corrections',
       privileges: ['select'],
     },
+    {
+      to: ['newsroom_reader', 'newsroom_writer'],
+      collection: 'tags',
+      privileges: ['select'],
+    },
+    {
+      to: 'newsroom_reader',
+      collection: 'article_tags',
+      privileges: ['select'],
+    },
+    {
+      to: 'newsroom_writer',
+      collection: 'article_tags',
+      privileges: ['insert', 'delete'],
+      columns: ['article', 'tag'],
+    },
   ],
   policies: [
     {
