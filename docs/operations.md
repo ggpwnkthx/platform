@@ -219,7 +219,10 @@ part of the path that answers on the network.
 | PLATFORM_STATEMENT_TIMEOUT_MS  | 15000                     | `statement_timeout` sent with each login                                          |
 | RELAY_UPSTREAM                 | 127.0.0.1:5432            | host:port of PostgreSQL, for the relay                                            |
 | RELAY_PORT                     | 8081                      | The port the relay listens on                                                     |
-| RELAY_ORIGINS                  | any                       | Comma-separated origins allowed to open a session; unset or `*` checks none       |
+| RELAY_ORIGINS                  | none                      | Comma-separated origins allowed to open a session; unset refuses to start         |
+| RELAY_ALLOW_ANY_ORIGIN         | unset                     | 1 says the edge in front of the relay checks the origin itself                    |
+| RELAY_SESSIONS_PER_ADDRESS     | 0                         | Sessions one client address may hold at once; 0 is no limit                       |
+| RELAY_SESSIONS_PER_ROLE        | 0                         | Sessions one role may hold at once; 0 is no limit                                 |
 | RELAY_UPSTREAM_TLS             | off, on this machine only | `verify` reaches PostgreSQL in TLS and checks its certificate; required otherwise |
 | RELAY_UPSTREAM_CA              | the system's              | The authority that certificate must come from, as a PEM file                      |
 | RELAY_TLS_CERT / RELAY_TLS_KEY | none                      | The certificate the relay serves TLS with                                         |

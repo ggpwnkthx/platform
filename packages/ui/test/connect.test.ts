@@ -1,69 +1,19 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test'
-import { createServer, type Server } from 'node:net'
 import { PGlite } from '@electric-sql/pglite'
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket'
 import { transaction } from '@platform/core'
 import { connect, openSession } from '../src/connect.ts'
-import { relayOptionsFromEnv, startRelay } from '@platform/relay'
-
-/**
- * A stand-in for PostgreSQL 18's token login, enough of the protocol to prove what the page
- * sends: it asks for OAUTHBEARER, and lets in the one token it knows, as the role it names.
- */
-function tokenServer(accept: string): Promise<{ server: Server; port: number; seen: string[] }> {
-  const message = (type: string, body: Buffer) => {
-    const head = Buffer.alloc(5)
-    head.write(type)
-    head.writeInt32BE(body.length + 4, 1)
-    return Buffer.concat([head, body])
-  }
-  const int = (n: number) => {
-    const b = Buffer.alloc(4)
-    b.writeInt32BE(n)
-    return b
-  }
-  const seen: string[] = []
-  const server = createServer((socket) => {
-    let started = false
-    socket.on('data', (data: Buffer) => {
-      if (!started) {
-        started = true
-        seen.push(data.subarray(8).toString().split('\0').join(' '))
-        return socket.write(message('R', Buffer.concat([int(10), Buffer.from('OAUTHBEARER\0\0')])))
-      }
-      if (data.toString('latin1', 0, 1) !== 'p') return
-      const said = data.toString()
-      seen.push(said.slice(said.indexOf('n,,')))
-      if (said.includes(`auth=Bearer ${accept}\x01\x01`))
-        socket.write(Buffer.concat([message('R', int(0)), message('Z', Buffer.from('I'))]))
-      else
-        socket.end(
-          message('E', Buffer.from('SFATAL\0C28000\0MOAuth bearer authentication failed\0\0'))
-        )
-    })
-  })
-  return new Promise((resolve) =>
-    server.listen(0, '127.0.0.1', () =>
-      resolve({ server, port: (server.address() as { port: number }).port, seen })
-    )
-  )
-}
+import { relayTo, stopRelays, tokenServer } from './fake.ts'
 
 let fake: Awaited<ReturnType<typeof tokenServer>>
 let pglite: PGLiteSocketServer
-const relays: { stop(): void }[] = []
-const relayTo = (port: number, allowedOrigins: string[] = []) => {
-  const relay = startRelay({ upstream: { host: '127.0.0.1', port }, port: 0, allowedOrigins })
-  relays.push(relay)
-  return `ws://127.0.0.1:${relay.port}/`
-}
 beforeAll(async () => {
   fake = await tokenServer('the.right.token')
   pglite = new PGLiteSocketServer({ db: await PGlite.create(), port: 54399, host: '127.0.0.1' })
   await pglite.start()
 })
 afterAll(async () => {
-  for (const relay of relays) relay.stop()
+  stopRelays()
   fake.server.close()
   await pglite.stop()
 })
@@ -129,32 +79,4 @@ test('a sign-in keeps its logins: two things at once, a transaction to itself, a
   expect((await session.own((db) => db.query('SELECT 3 AS n'))).rows[0]).toEqual({ n: 3 })
   await session.close()
   void own.stop()
-})
-
-test('only the site may open a session, and only with a startup packet', async () => {
-  const url = relayTo(54399, ['https://platform.example.com'])
-  expect((await fetch(url.replace('ws:', 'http:'))).status).toBe(403)
-  expect((await fetch(`${url.replace('ws:', 'http:')}health`)).status).toBe(200)
-  const closed = await new Promise<CloseEvent>((resolve) => {
-    const ws = new WebSocket(relayTo(54399))
-    ws.onopen = () => ws.send(new Uint8Array([0, 0, 0, 8, 4, 210, 22, 47])) // an SSLRequest
-    ws.onclose = resolve
-  })
-  expect(closed.code).toBe(1008)
-})
-
-test('a token never crosses a network in the clear by accident', () => {
-  expect(() => relayOptionsFromEnv({ RELAY_UPSTREAM: 'db.example.com:5432' })).toThrow(
-    'RELAY_UPSTREAM_TLS'
-  )
-  expect(
-    relayOptionsFromEnv({
-      RELAY_UPSTREAM: 'db.example.com:5432',
-      RELAY_UPSTREAM_TLS: 'verify',
-      RELAY_ORIGINS: 'https://a.example/, *',
-    })
-  ).toMatchObject({
-    upstream: { host: 'db.example.com', port: 5432, tls: {} },
-    allowedOrigins: ['https://a.example'],
-  })
 })

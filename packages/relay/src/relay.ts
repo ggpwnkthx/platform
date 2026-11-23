@@ -1,28 +1,54 @@
-import { readFileSync } from 'node:fs'
 import { connect, type Socket } from 'node:net'
 import { connect as connectTls } from 'node:tls'
+import { relaySettingsFromEnv } from './settings.ts'
+import { MAX_STARTUP, startupPacket } from './startup.ts'
+
+export { relaySettingsFromEnv as relayOptionsFromEnv } from './settings.ts'
+export type { RelaySettings } from './settings.ts'
 
 /**
  * The WebSocket in front of PostgreSQL's port. It forwards bytes and holds no credentials:
  * the reader's token travels inside PostgreSQL's own login, and PostgreSQL alone checks it.
  *
- * It does three things of its own: it answers only the site's origin, it forwards only to
- * the one upstream it was given, and it lets a session begin only with a protocol 3 startup
- * packet (so the page cannot send a cancel request or anything else to the port). How many
- * sessions an address or a role may hold is the business of what already does it well: the
- * edge in front of the relay, and PostgreSQL's own CONNECTION LIMIT and authentication_timeout.
+ * It does four things of its own: it answers only the site's origin, it forwards only to the
+ * one upstream it was given, it lets a session begin only with a protocol 3 startup packet
+ * (so the page cannot send a cancel request or anything else to the port), and it counts the
+ * sessions one address, and one role, may hold at once. How many sessions an address may
+ * hold is also the business of the edge in front of the relay; PostgreSQL's own CONNECTION
+ * LIMIT and authentication_timeout are the last word.
  */
 export interface RelayOptions {
   upstream: { host: string; port: number; tls?: { ca?: string } }
   port: number
-  /** Empty allows any origin: for a relay behind an edge that checks the origin itself. */
+  /** The origins that may open a session. Empty allows any: only with RELAY_ALLOW_ANY_ORIGIN. */
   allowedOrigins: string[]
   tls?: { cert: string; key: string }
+  /** How many sessions one client address may hold at once. 0 is no limit. */
+  sessionsPerAddress?: number
+  /** How many sessions one role may hold at once. 0 is no limit. */
+  sessionsPerRole?: number
 }
 const REFUSED = 1008
 const HELD_FOR_BROWSER = 16 * 1024 * 1024
-const isStartup = (bytes: Buffer) =>
-  bytes.length >= 8 && bytes.readInt32BE(0) <= 10000 && bytes.readInt32BE(4) >>> 16 === 3
+
+/** How many sessions each address, and each role, holds at once. */
+class Counters {
+  private readonly held = new Map<string, number>()
+  /** Takes one, and says yes; says no when the limit is reached. A limit of 0 is no limit. */
+  take(key: string, limit: number): boolean {
+    if (!limit) return true
+    const count = this.held.get(key) ?? 0
+    if (count >= limit) return false
+    this.held.set(key, count + 1)
+    return true
+  }
+  give(key: string | undefined) {
+    if (!key) return
+    const count = this.held.get(key) ?? 0
+    if (count <= 1) this.held.delete(key)
+    else this.held.set(key, count - 1)
+  }
+}
 
 export function startRelay(options: RelayOptions) {
   const { host, port, tls } = options.upstream
@@ -30,7 +56,16 @@ export function startRelay(options: RelayOptions) {
     tls
       ? connectTls({ host, port, ALPNProtocols: ['postgresql'], servername: host, ...tls })
       : connect({ host, port })
-  const server = Bun.serve<{ socket?: Socket }>({
+  const sessionsPerAddress = options.sessionsPerAddress ?? 0
+  const sessionsPerRole = options.sessionsPerRole ?? 0
+  const byAddress = new Counters()
+  const byRole = new Counters()
+  const server = Bun.serve<{
+    socket?: Socket
+    startup?: Buffer
+    role?: string
+    address?: string
+  }>({
     port: options.port,
     ...(options.tls ? { tls: options.tls } : {}),
     fetch(request, server) {
@@ -38,8 +73,16 @@ export function startRelay(options: RelayOptions) {
       const origin = request.headers.get('origin')
       if (options.allowedOrigins.length && !(origin && options.allowedOrigins.includes(origin)))
         return new Response('Origin not allowed\n', { status: 403 })
-      if (server.upgrade(request, { data: {} })) return undefined
-      return new Response('Expected a WebSocket\n', { status: 426 })
+      // The address of the client, as the relay sees it. Behind an edge it is the edge's
+      // address: the edge's own cap is the one that counts the people.
+      const address = server.requestIP(request)?.address ?? ''
+      if (!byAddress.take(address, sessionsPerAddress))
+        return new Response('Too many sessions from this address\n', { status: 429 })
+      if (!server.upgrade(request, { data: { address } })) {
+        byAddress.give(address)
+        return new Response('Expected a WebSocket\n', { status: 426 })
+      }
+      return undefined
     },
     websocket: {
       backpressureLimit: HELD_FOR_BROWSER,
@@ -47,8 +90,28 @@ export function startRelay(options: RelayOptions) {
       message(ws, message) {
         const bytes = Buffer.from(message as Buffer)
         if (!ws.data.socket) {
-          if (!isStartup(bytes))
-            return ws.close(REFUSED, 'The session did not open with a startup packet')
+          // A session begins with a startup packet, and it may arrive in pieces: hold what
+          // has come until the packet says it is whole.
+          const held = Buffer.concat([ws.data.startup ?? Buffer.alloc(0), bytes])
+          const startup = startupPacket(held)
+          if (!startup) {
+            if (startup === false) {
+              ws.close(REFUSED, 'The session did not open with a startup packet')
+              return
+            }
+            if (held.length > MAX_STARTUP) {
+              ws.close(REFUSED, 'The startup packet is longer than PostgreSQL allows')
+              return
+            }
+            ws.data.startup = held
+            return
+          }
+          // The role the client asks for. PostgreSQL is the judge of who it really is.
+          if (!byRole.take(startup.user, sessionsPerRole)) {
+            ws.close(REFUSED, 'This role holds as many sessions as it may')
+            return
+          }
+          ws.data.role = startup.user
           const socket = upstream()
           ws.data.socket = socket
           socket.on('data', (chunk: Buffer) => {
@@ -56,57 +119,24 @@ export function startRelay(options: RelayOptions) {
           })
           socket.on('error', () => ws.close())
           socket.on('close', () => ws.close())
+          socket.write(held)
+          return
         }
         ws.data.socket.write(bytes)
       },
       drain: (ws) => void ws.data.socket?.resume(),
-      close: (ws) => void ws.data.socket?.destroy(),
+      close: (ws) => {
+        ws.data.socket?.destroy()
+        byRole.give(ws.data.role)
+        byAddress.give(ws.data.address)
+      },
     },
   })
   return { port: server.port ?? options.port, stop: () => server.stop(true) }
 }
 
-const isLoopback = (host: string) => /^(localhost|::1|\[::1\]|127(\.\d{1,3}){3})$/.test(host)
-export function relayOptionsFromEnv(
-  env: Record<string, string | undefined> = process.env
-): RelayOptions {
-  const [host, port] = (env.RELAY_UPSTREAM ?? '127.0.0.1:5432').split(':')
-  if (!host || !port) throw new Error('RELAY_UPSTREAM must be host:port')
-  const origins = (env.RELAY_ORIGINS ?? '')
-    .split(',')
-    .map((origin) => origin.trim().replace(/\/+$/, ''))
-    .filter((origin) => origin && origin !== '*')
-  const upstreamTls = (env.RELAY_UPSTREAM_TLS ?? '').trim().toLowerCase()
-  if (!['', 'off', 'verify'].includes(upstreamTls))
-    throw new Error('RELAY_UPSTREAM_TLS must be verify or off')
-  // A token must not cross a network in the clear by accident: off is said, never assumed.
-  if (!upstreamTls && !isLoopback(host))
-    throw new Error(
-      `RELAY_UPSTREAM_TLS must be set to reach ${host}: verify, or off where the network between the relay and PostgreSQL is one you trust with a token`
-    )
-  if (env.RELAY_UPSTREAM_CA && upstreamTls !== 'verify')
-    throw new Error('RELAY_UPSTREAM_CA needs RELAY_UPSTREAM_TLS=verify')
-  if (Boolean(env.RELAY_TLS_CERT) !== Boolean(env.RELAY_TLS_KEY))
-    throw new Error('RELAY_TLS_CERT and RELAY_TLS_KEY are both needed, or neither')
-  const file = (path: string) => readFileSync(path, 'utf8')
-  return {
-    upstream: {
-      host,
-      port: Number(port),
-      ...(upstreamTls === 'verify'
-        ? { tls: env.RELAY_UPSTREAM_CA ? { ca: file(env.RELAY_UPSTREAM_CA) } : {} }
-        : {}),
-    },
-    port: Number(env.RELAY_PORT ?? '8081'),
-    allowedOrigins: origins,
-    ...(env.RELAY_TLS_CERT && env.RELAY_TLS_KEY
-      ? { tls: { cert: file(env.RELAY_TLS_CERT), key: file(env.RELAY_TLS_KEY) } }
-      : {}),
-  }
-}
-
 if (import.meta.main) {
-  const options = relayOptionsFromEnv()
+  const options = relaySettingsFromEnv()
   const relay = startRelay(options)
   console.log(
     `The relay is listening on port ${relay.port}, forwarding to ${options.upstream.host}:${options.upstream.port}${options.upstream.tls ? ' in TLS' : ''}.`
@@ -114,6 +144,9 @@ if (import.meta.main) {
   console.log(
     options.allowedOrigins.length
       ? `Origins allowed: ${options.allowedOrigins.join(', ')}`
-      : 'The relay checks no origin: set RELAY_ORIGINS to the address of the site, unless what is in front of the relay refuses other origins itself.'
+      : 'The relay checks no origin: the edge in front of it is trusted to check it.'
+  )
+  console.log(
+    `Sessions per address: ${options.sessionsPerAddress || 'no limit'}; per role: ${options.sessionsPerRole || 'no limit'}.`
   )
 }

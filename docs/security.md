@@ -175,18 +175,21 @@ bundled application. The interface sets its own faces from fonts bundled into th
 asks no third party for anything at runtime.
 
 A WebSocket from any Origin but the site's own is refused with 403, so another site's page
-cannot open a database session through a visitor's browser. That is with RELAY_ORIGINS set:
-unset, the relay checks no origin and leaves it to the deployment. A CORS policy does not do
-it, because a WebSocket handshake is not subject to one. What an unchecked origin gives another
-site is small: the token lives in the page's memory and not in a cookie, so a session opened
-from elsewhere has nothing to log in with. Each open WebSocket is one database
-session, and the relay counts none of them. A session has no PostgreSQL connection until it
-has sent a startup packet, and one that opens with anything else (a request for TLS inside the
-stream, a cancel) is refused. How many sessions an address may hold open is capped by the edge
+cannot open a database session through a visitor's browser. The relay refuses to start at all
+without that list, unless RELAY_ALLOW_ANY_ORIGIN=1 says that the edge in front of it checks the
+origin itself: an unchecked origin is a decision, and it is said out loud. A CORS policy does
+not do it, because a WebSocket handshake is not subject to one. What an unchecked origin gives
+another site is small: the token lives in the page's memory and not in a cookie, so a session
+opened from elsewhere has nothing to log in with. Each open WebSocket is one database
+session, and the relay counts them: RELAY_SESSIONS_PER_ADDRESS and RELAY_SESSIONS_PER_ROLE
+say how many one address, and one role, may hold at once. A session has no PostgreSQL
+connection until it has sent a startup packet, and one that opens with anything else (a
+request for TLS inside the stream, a cancel) is refused. Behind an edge the address the relay
+sees is the edge's, so how many sessions an address may hold open is also capped by the edge
 in front of the relay (20 in the shipped Traefik and ingress files), how many a role may hold
 by the role's CONNECTION LIMIT in PostgreSQL, and a login that stalls is closed by PostgreSQL's
-`authentication_timeout`. A relay exposed with no edge in front of it has no per-address cap:
-that is a deployment to avoid, and `max_connections` is then the only ceiling.
+`authentication_timeout`. A relay exposed with no edge in front of it relies on the relay's own
+cap: set RELAY_SESSIONS_PER_ADDRESS, and `max_connections` is then the last ceiling.
 Each login asks for STATEMENT_TIMEOUT_MS as `statement_timeout`,
 which a reader may change on their own session: PostgreSQL lets every role set it, so an
 `ALTER ROLE ... SET` is a default too, and not a ceiling. What a reader cannot change is how

@@ -39,6 +39,8 @@ jobs:
           RELAY_PORT: 54331
           RELAY_SESSIONS_PER_ADDRESS: 64
           RELAY_SESSIONS_PER_ROLE: 64
+          # The tests are not a browser and send no Origin: the relay's own check is off.
+          RELAY_ALLOW_ANY_ORIGIN: "1"
       - run: bun run check
         env:
           TEST_ADMIN_URL: postgres://installer%40example.com@127.0.0.1:54329/postgres

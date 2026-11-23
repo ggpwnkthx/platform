@@ -435,15 +435,18 @@ build serves every deployment. The build reads them from the environment:
 The `relay` image (Dockerfile target `relay`, based on `oven/bun`) is the only part of the
 interface's path that answers on the network. It is configured from the environment:
 
-| Variable           | Default        | Purpose                                               |
-| ------------------ | -------------- | ----------------------------------------------------- |
-| RELAY_UPSTREAM     | 127.0.0.1:5432 | host:port of PostgreSQL                               |
-| RELAY_PORT         | 8081           | The port the relay listens on                         |
-| RELAY_ORIGINS      | any            | Comma-separated origins allowed to open a session     |
-| RELAY_UPSTREAM_TLS | see below      | `verify` or `off`; required unless on this machine    |
-| RELAY_UPSTREAM_CA  | the system's   | The authority PostgreSQL's certificate must come from |
-| RELAY_TLS_CERT     | none           | The certificate the relay serves TLS with             |
-| RELAY_TLS_KEY      | none           | Its key                                               |
+| Variable                   | Default        | Purpose                                               |
+| -------------------------- | -------------- | ----------------------------------------------------- |
+| RELAY_UPSTREAM             | 127.0.0.1:5432 | host:port of PostgreSQL                               |
+| RELAY_PORT                 | 8081           | The port the relay listens on                         |
+| RELAY_ORIGINS              | none           | Comma-separated origins allowed to open a session     |
+| RELAY_ALLOW_ANY_ORIGIN     | unset          | 1 says the edge in front checks the origin itself     |
+| RELAY_SESSIONS_PER_ADDRESS | 0              | Sessions one client address may hold at once          |
+| RELAY_SESSIONS_PER_ROLE    | 0              | Sessions one role may hold at once                    |
+| RELAY_UPSTREAM_TLS         | see below      | `verify` or `off`; required unless on this machine    |
+| RELAY_UPSTREAM_CA          | the system's   | The authority PostgreSQL's certificate must come from |
+| RELAY_TLS_CERT             | none           | The certificate the relay serves TLS with             |
+| RELAY_TLS_KEY              | none           | Its key                                               |
 
 `/health` answers `ok` without touching the database. The image holds no database
 credentials and no OAuth client secret. Put it behind TLS: an ingress controller, a load
@@ -466,18 +469,21 @@ balancer, a tunnel, or the relay itself with a certificate.
   headers are written by `packages/ui/src/config.ts`, in the `_headers` file a CDN reads.
 - **Origin check.** The relay refuses a handshake whose Origin is not one of
   `RELAY_ORIGINS`, so another site's page cannot open a database session through a visitor's
-  browser. A handshake with no Origin at all is refused too when the list is not empty. Unset
-  (or `*`), the relay checks no origin, which is right where what is in front of it does. A
-  platform's CORS settings are not that: a browser sends a WebSocket handshake from any page
-  without asking, so only something that refuses the handshake by its Origin stands in for
-  the list.
-- **Session caps.** One open WebSocket is one database session, and the relay counts none of
-  them: it forwards. The caps are kept by what already keeps them well. How many sessions one
-  client address may hold open is the edge's: the local stack's Traefik holds each address to
-  20 (`inFlightReq` in `deploy/traefik/dynamic.yaml`), and `deploy/k8s/ingress.yaml` does the
-  same with `limit-connections`. How many one role may hold is PostgreSQL's own
-  `CONNECTION LIMIT` (`connections` on a user in a manifest), which counts through every relay
-  together. Size `max_connections` for the people who use the interface at once.
+  browser. A handshake with no Origin at all is refused too when the list is not empty. The
+  relay refuses to start without that list, unless `RELAY_ALLOW_ANY_ORIGIN=1` says that the
+  edge in front of it checks the origin itself: an unchecked origin is a decision, and it is
+  said out loud. A platform's CORS settings are not that: a browser sends a WebSocket
+  handshake from any page without asking, so only something that refuses the handshake by its
+  Origin stands in for the list.
+- **Session caps.** One open WebSocket is one database session. The relay counts the sessions
+  one client address, and one role, may hold (`RELAY_SESSIONS_PER_ADDRESS`,
+  `RELAY_SESSIONS_PER_ROLE`), and refuses the rest. Behind an edge the address it sees is the
+  edge's, so the edge's own cap is the one that counts the people: the local stack's Traefik
+  holds each address to 20 (`inFlightReq` in `deploy/traefik/dynamic.yaml`), and
+  `deploy/k8s/ingress.yaml` does the same with `limit-connections`. How many one role may hold
+  is PostgreSQL's own `CONNECTION LIMIT` (`connections` on a user in a manifest), which counts
+  through every relay together. Size `max_connections` for the people who use the interface at
+  once.
 - **Logins that do not finish.** A session has no connection to PostgreSQL until it has sent
   a startup packet of protocol 3. One that opens with anything else is refused: a request
   for TLS inside the stream, for GSSAPI or to cancel a statement is not a login. A login that
