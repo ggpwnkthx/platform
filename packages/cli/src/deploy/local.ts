@@ -121,6 +121,12 @@ export async function local(action: string, args: string[]): Promise<number> {
       : 'Creating the role of the administrator',
     beside(['apply', 'k8s', applies ? '--dir=/app/site' : '--administrator'])
   )
+  // The deployment is hardened as it is installed: the role catalogs are hidden from ordinary
+  // connections, and the guard that keeps a collection in row security is put in place.
+  await step(
+    'Hiding the role catalogs and guarding row security',
+    beside(['harden', 'k8s', '--events'])
+  )
   if (action === 'init') return 0
   await step('Starting the relay', run(['up', '-d', 'relay']))
   await until(

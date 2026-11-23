@@ -176,7 +176,10 @@ the interface alike.
 - Raw SQL executes with the caller's native authority. There is no sandbox and no allowlist:
   the `statement_timeout` sent with each login is a session setting, not a resource boundary.
 - Role catalogs are visible to every connection by default; `cli harden` hides them from ordinary
-  sessions while the interface keeps working.
+  sessions while the interface keeps working. The local stack hardens itself as it installs.
+- The guard (`cli harden --events`) refuses the DDL that would turn a collection out of row
+  security, or drop the triggers that write its history, to every role but a superuser and
+  the operators. Everything else a table owner may do stays theirs.
 - The audit table is append-only for ordinary roles, not tamper-proof against database owners,
   `platform_core` members or superusers. RLS is not a substitute for withholding table ownership.
 - The metadata of every workspace is kept in one collection, `platform.item_metadata`, under

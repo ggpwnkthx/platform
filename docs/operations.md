@@ -68,6 +68,16 @@ caller's own roles and memberships through the platform's functions. What it cos
 working for ordinary users; the membership graph and the privilege attributes stay hidden.
 `--restore` puts PostgreSQL's default back.
 
+`--events` installs the guard as well: an event trigger that refuses the DDL that would turn
+a collection out of row security, or drop the triggers that write its history. A table owner
+may do both by PostgreSQL's own rules, and a table owner is often an ordinary member of a
+workspace; the guard draws that line. Superusers and the operators (the members of
+`platform_core` and `platform_admins`) are not refused: they administer the deployment.
+
+The local stack hardens itself as it is installed: `bun run cli deploy local up` hides the
+role catalogs and installs the guard. A deployment does the same when its operator runs
+`harden` beside the server. `bun run cli doctor` says when either is missing.
+
 Two scopes, one caveat: `pg_auth_members` is a shared catalog, so its rule reaches every
 database in the cluster, while `pg_roles` and `pg_user` belong to this database alone. Run
 `harden` on a cluster that serves this platform alone, or accept that other databases lose

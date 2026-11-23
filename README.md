@@ -74,10 +74,14 @@ SELECT id,title,status,created_by FROM newsroom.articles;
 SELECT internal_notes FROM newsroom.articles;
 ```
 
-PostgreSQL publishes its role catalogs to every connection, so by default a psql session can
-list every role and read who belongs to which group. `bun run cli harden k8s` (as the cluster
-superuser; `bun run cli deploy local admin harden k8s` on the local stack) hides them: ordinary sessions keep their own rights and the interface keeps working,
-while the graph stays with the operators. See [operations](docs/operations.md).
+PostgreSQL publishes its role catalogs to every connection, so a psql session can list every
+role and read who belongs to which group unless they are hidden. The local stack hides them as
+it installs itself, and `bun run cli harden k8s --events` (as the cluster superuser;
+`bun run cli deploy local admin harden k8s` on the local stack) does the same for a
+deployment: ordinary sessions keep their own rights and the interface keeps working, while the
+graph stays with the operators. The same command installs the guard that refuses the DDL
+which would turn a collection out of row security, or drop the triggers that write its
+history. See [operations](docs/operations.md).
 
 ## The interface in dev mode
 

@@ -22,7 +22,7 @@ export async function doctor(db: Db, say: (line: string) => void): Promise<boole
       )[0]
     )
   )
-  let healthy = true
+  const problems: string[] = []
   const rules = await rows<{
     rule_number: number
     type: string
@@ -36,7 +36,6 @@ export async function doctor(db: Db, say: (line: string) => void): Promise<boole
   if (!rules)
     say('Authentication rules not checked: that needs a superuser or pg_read_all_settings.')
   else {
-    const problems: string[] = []
     if (
       !(
         await rows<{ v: string }>(
@@ -54,9 +53,7 @@ export async function doctor(db: Db, say: (line: string) => void): Promise<boole
         problems.push(
           `pg_hba.conf rule ${r.rule_number}: ${r.type} ${r.user_name.join(',')} ${r.auth_method} lets logins in without a token`
         )
-    for (const problem of problems) say(problem)
     if (!problems.length) say('Authentication rules: network logins are by token.')
-    healthy = !problems.length
   }
   const unasked: string[] = []
   const ask = <Row>(what: string, text: string) =>
@@ -78,8 +75,16 @@ export async function doctor(db: Db, say: (line: string) => void): Promise<boole
       )
     )[0]?.open
   )
-    note(
+    problems.push(
       'Every connection reads the role catalogs: who belongs to which group. `harden` hides them from ordinary connections.'
+    )
+  const guarded = await ask<{ on: number }>(
+    'the guard on row security',
+    "SELECT count(*)::int AS on FROM pg_event_trigger WHERE evtname IN ('platform_guard_ddl','platform_guard_drop')"
+  )
+  if (!guarded[0]?.on)
+    problems.push(
+      'No guard on row security: `harden --events` refuses the DDL that would turn a collection out of row security, or drop the triggers that write its history.'
     )
   const owned = await ask<{ name: string }>(
     'who owns the collections',
@@ -89,7 +94,7 @@ export async function doctor(db: Db, say: (line: string) => void): Promise<boole
   )
   if (owned.length)
     note(
-      `Owned by a person, who is not held to its row security and may disable its audit triggers: ${some(owned.map((t) => t.name))}. A NOLOGIN group that owns a collection owns it for its members.`
+      `Owned by a person, who is not held to its row security: ${some(owned.map((t) => t.name))}. With the guard installed, an owner may not turn that row security off, nor drop the audit triggers. A NOLOGIN group that owns a collection owns it for its members.`
     )
   const silent = await ask<{ name: string }>(
     'the audit triggers',
@@ -105,7 +110,8 @@ export async function doctor(db: Db, say: (line: string) => void): Promise<boole
     note(
       `Not checked, for want of the right to read them: ${unasked.join(', ')}. Run doctor as a superuser to check them.`
     )
-  return healthy
+  for (const problem of problems) say(problem)
+  return !problems.length
 }
 
 /** Takes a role's login away and ends its sessions, or gives the login back. */

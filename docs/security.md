@@ -12,27 +12,29 @@ network and the browser assets accordingly.
 
 ## Controls exercised by the integration tests
 
-| Boundary              | Enforcement                                                                                                              |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Identity              | PostgreSQL verifies each connection's token (signature, issuer, expiry) and logs in the LOGIN role its email claim names |
-| One way in            | Network logins are by token; a role password is not a login; forged, expired and foreign tokens fail                     |
-| Revocation            | Native REVOKE and NOLOGIN; no application token cache                                                                    |
-| Impersonation         | PostgreSQL checks SET ROLE and SET SESSION AUTHORIZATION                                                                 |
-| Workspace             | Native schema USAGE/CREATE, ownership and object grants                                                                  |
-| Fields                | Column ACLs apply to projection, predicates, sort and writes                                                             |
-| Rows                  | Native RLS USING and WITH CHECK, based on session_user                                                                   |
-| Validation            | PostgreSQL types and CHECK/NOT NULL/UNIQUE/FK constraints                                                                |
-| Write-only clients    | Writes return counts rather than RETURNING *                                                                             |
-| Revisions             | Database triggers log every write, from the interface or any client, in the same transaction                             |
-| Audit confidentiality | Revisions are readable only by workspace-owner members, and in each row only the columns the reader may SELECT           |
-| Audit integrity       | Normal users cannot write/delete/truncate audit records or disable table triggers                                        |
-| SQL construction      | Quoted identifiers; bound data values; escaped DDL literals                                                              |
-| Protocol              | The page's wire client logs in by OAUTHBEARER and runs one bound statement per query, directly and through the relay     |
-| State leakage         | One authenticated login per page; the reader's own statements run on a login of their own                                |
+| Boundary              | Enforcement                                                                                                               |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Identity              | PostgreSQL verifies each connection's token (signature, issuer, expiry) and logs in the LOGIN role its email claim names  |
+| One way in            | Network logins are by token; a role password is not a login; forged, expired and foreign tokens fail                      |
+| Revocation            | Native REVOKE and NOLOGIN; no application token cache                                                                     |
+| Impersonation         | PostgreSQL checks SET ROLE and SET SESSION AUTHORIZATION                                                                  |
+| Workspace             | Native schema USAGE/CREATE, ownership and object grants                                                                   |
+| Fields                | Column ACLs apply to projection, predicates, sort and writes                                                              |
+| Rows                  | Native RLS USING and WITH CHECK, based on session_user                                                                    |
+| Validation            | PostgreSQL types and CHECK/NOT NULL/UNIQUE/FK constraints                                                                 |
+| Write-only clients    | Writes return counts rather than RETURNING *                                                                              |
+| Revisions             | Database triggers log every write, from the interface or any client, in the same transaction                              |
+| Audit confidentiality | Revisions are readable only by workspace-owner members, and in each row only the columns the reader may SELECT            |
+| Audit integrity       | Normal users cannot write/delete/truncate audit records or disable table triggers                                         |
+| Owner restraint       | The guard refuses the DDL that would turn a collection out of row security, or drop its audit triggers, to ordinary roles |
+| SQL construction      | Quoted identifiers; bound data values; escaped DDL literals                                                               |
+| Protocol              | The page's wire client logs in by OAUTHBEARER and runs one bound statement per query, directly and through the relay      |
+| State leakage         | One authenticated login per page; the reader's own statements run on a login of their own                                 |
 
 The only SECURITY DEFINER helper that acts on the database appends real trigger records to
 platform.activity. Its owner is platform_core, with no login or role-administration
-privileges. The logged rows are read through one view of the same owner, platform.revisions,
+privileges. (The guard's helpers are a second pair: they are owned by the cluster superuser
+who installed the guard, they answer only about the caller, and they act on nothing.) The logged rows are read through one view of the same owner, platform.revisions,
 which shows a workspace's owners its history and cuts each row down to the columns the reader
 holds SELECT on in the table it was logged from (`platform.readable_row`); the rows in
 platform.activity itself are granted to nobody. Public execution is revoked on the functions that act; the read-only helpers
@@ -67,6 +69,14 @@ an owner; the project does not install a superuser event trigger to intercept al
 `bun run cli doctor` names the tables that write no revisions, because they have no audit
 trigger or it has been disabled, and the collections owned by a person rather than a group.
 
+What an owner may not do, by PostgreSQL's own rules, is turn a collection out of row security
+or drop the triggers that write its history: a table owner may do both. The guard
+(`bun run cli harden <deployment> --events`, installed by the local stack as it installs
+itself) refuses exactly those two statements to every role but a superuser and the operators
+(the members of `platform_core` and `platform_admins`). It is an event trigger: it sees the
+DDL as it runs, and says no. Everything else an owner may do — a column, a policy, a comment —
+is theirs, and stays theirs.
+
 PostgreSQL metadata normally exposes role and policy names/expressions to connected users.
 The platform does not publish the role graph through its own functions:
 `platform.visible_roles()` and `platform.visible_memberships()` return the roles and memberships
@@ -76,7 +86,8 @@ an ACL or a policy is still a role, it asks PostgreSQL for the role (`to_regrole
 catalog, and the policy on the revisions does the same, so the interface keeps working once the
 catalogs are hidden. The raw catalogs are PostgreSQL's,
 and hiding them from psql is a separate, deliberate step: `bun run cli harden <deployment>`,
-run as the cluster superuser; `doctor` says when it has not been taken. It revokes the public read of `pg_auth_members`, `pg_roles` and
+run as the cluster superuser; the local stack takes it as it installs itself, and `doctor`
+says when it has not been taken. It revokes the public read of `pg_auth_members`, `pg_roles` and
 `pg_user`; operators keep them through `platform_admins` and `platform_core`. Policy names and
 expressions stay visible, as PostgreSQL publishes them, and so do schema and table names:
 hiding the object catalogs is a separate and much wider change that breaks psql's `\d`,
