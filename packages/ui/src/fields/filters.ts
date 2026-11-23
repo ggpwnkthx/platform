@@ -13,6 +13,9 @@ export const operatorWords: Record<Operator, string> = {
   lte: 'is at most',
   in: 'is one of',
   not_in: 'is none of',
+  has_any: 'is linked to any of',
+  has_none: 'is linked to none of',
+  has_all: 'is linked to all of',
   is_null: 'is empty',
   not_null: 'is not empty',
 }

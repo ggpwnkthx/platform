@@ -2,8 +2,17 @@ import { labelColumn, relationOf, tableOf } from './catalog/labels.ts'
 import type { Catalog } from './catalog/types.ts'
 import type { Db } from './db.ts'
 import { k, sql } from './sql/kit.ts'
-import { asText, pattern, predicate, run } from './records/query.ts'
-import type { Filter } from './records/query.ts'
+import { asText, pattern, run } from './records/query.ts'
+import { predicate } from './records/conditions.ts'
+import type { Filter, RelationReach } from './records/query.ts'
+
+export {
+  countLinked,
+  insertRecordWithLinks,
+  linkedRows,
+  namesOf,
+  setLinks,
+} from './records/links.ts'
 
 export interface RecordQuery {
   schema: string
@@ -11,6 +20,8 @@ export interface RecordQuery {
   columns: string[]
   searchable?: string[]
   filter?: Filter
+  /** How each relation of the collection is reached, for the conditions that cross one. */
+  reaches?: Record<string, RelationReach>
   search?: string
   /** Column names; a leading `-` sorts descending. */
   sort?: string[]
@@ -19,7 +30,13 @@ export interface RecordQuery {
 }
 /** A page of records and the count of rows the same predicate allows under row security. */
 export async function records(db: Db, q: RecordQuery) {
-  const where = predicate(q.filter ?? {}, q.search ?? '', q.searchable ?? [])
+  const where = predicate({
+    filter: q.filter ?? {},
+    search: q.search ?? '',
+    searchable: q.searchable ?? [],
+    base: { schema: q.schema, table: q.table },
+    reaches: q.reaches ?? {},
+  })
   let page = k.withSchema(q.schema).selectFrom(q.table).select(q.columns).where(where)
   for (const name of q.sort ?? [])
     page = page.orderBy(name.replace(/^-/, ''), (o) =>
@@ -51,6 +68,7 @@ export async function insertRecord(db: Db, schema: string, table: string, values
   const query = Object.keys(values).length ? into.values(values) : into.defaultValues()
   return (await run(db, query)).rowCount ?? 0
 }
+
 /** An update made from a record the reader opened is guarded by the version they saw. */
 export async function updateRecord(
   db: Db,
@@ -83,7 +101,8 @@ export async function relationOptions(
   schema: string,
   table: string,
   label: string | null,
-  search: string
+  search: string,
+  limit = 20
 ) {
   const shown = label ? asText(label) : asText('id')
   const term = search.trim()
@@ -92,13 +111,14 @@ export async function relationOptions(
     .selectFrom(table)
     .select([asText('id').as('id'), shown.as('label')])
     .orderBy('label')
-    .limit(20)
+    .limit(limit)
   if (term)
     query = query.where((eb) =>
       eb.or([eb(shown, 'ilike', pattern(term, 'any')), eb(asText('id'), '=', term)])
     )
   return (await run<{ id: string; label: string }>(db, query)).rows
 }
+
 /** The names of the rows a page of records points at, where the reader may read them. */
 export async function relationLabels(
   db: Db,

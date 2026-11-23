@@ -11,10 +11,17 @@ export * from './metadata.ts'
 export * from './records.ts'
 export {
   operators,
+  columnOperators,
+  relationOperators,
+  isRelationOperator,
   type Operator,
+  type ColumnOperator,
+  type RelationOperator,
   valueless,
   type Condition,
   type Filter,
+  type RelationPath,
+  type RelationReach,
   run,
 } from './records/query.ts'
 export * from './sql/kit.ts'
