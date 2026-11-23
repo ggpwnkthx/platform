@@ -20,6 +20,7 @@ two things the reader was already given: the catalog, and the fields' own metada
 | --------------------- | ------------------------------------------------------------------------------------ |
 | `column`, `kind`      | The catalog: the column, and the kind of value its type holds                        |
 | `relation`, `choices` | The catalog: a foreign key, and the values a CHECK allows                            |
+| `link`                | The catalog: the rows a record is linked to, and how it reaches them                 |
 | `system`, `computed`  | The catalog: a column every collection is made with, or one PostgreSQL writes itself |
 | `label`, `named`      | The field's metadata, under `display_name` — or the column's own name                |
 | `views`, `hasViews`   | The field's metadata, under `views`; see [views](views.md)                           |
@@ -29,6 +30,27 @@ two things the reader was already given: the catalog, and the fields' own metada
 Both answers are the reader's own. PostgreSQL returned the columns they may reach and the
 sayings they may read, so a field this reader may not reach has no saying here.
 
+## What a relation is, in the interface
+
+A relation is a foreign key, and PostgreSQL holds it. The interface reads it three ways,
+and the shape of the schema says which is which — nothing is declared, and nothing is
+guessed at:
+
+| The relation | What the catalog sees                                    | The field it is                                           |
+| ------------ | -------------------------------------------------------- | --------------------------------------------------------- |
+| Many to one  | A column with a foreign key                              | `relation`: one row, held by its id                       |
+| One to many  | A foreign key in another table that points at this one   | `children`: the rows that point here, read and counted    |
+| Many to many | A table of two foreign keys and a unique index over both | `links`: the rows on the other side, written as join rows |
+
+A table is a join table when it is made of two keys and nothing else, and a unique index
+covers both of them. The pair is then one link, and it may be written with `ON CONFLICT
+DO NOTHING`. A table with a third column of its own is not a join table: it is a
+collection like any other, and the interface treats it as one.
+
+`children` and `links` have no column of their own — they are **virtual fields**, read and
+written as rows. They are shown in the record form and in the filters, and kept out of the
+grid: a grid of links would ask every row of every page for a count of its own.
+
 ## What type a field is
 
 Nothing is stored about a field's type. It is asked of what PostgreSQL says of the column, and
@@ -37,6 +59,7 @@ every type says how strongly it claims such a column:
 | Type                                                                             | Claims                                     | Weight |
 | -------------------------------------------------------------------------------- | ------------------------------------------ | ------ |
 | `relation`                                                                       | A column that is a foreign key             | 30     |
+| `links`, `children`                                                              | A relation read as rows, not as a column   | 30     |
 | `choice`                                                                         | A column a CHECK holds to a list of values | 20     |
 | `text`, `integer`, `number`, `boolean`, `date`, `time`, `moment`, `uuid`, `json` | A column that holds that kind of value     | 10     |
 | `other`                                                                          | Every column: the type of last resort      | 1      |
@@ -57,9 +80,21 @@ weight.
 | `fromForm`    | The value a column receives from what the form holds, or the error under the field                     | What the form holds |
 | `operators`   | The operators the filter builder offers                                                                | —                   |
 | `parseFilter` | The value a condition carries, from what was typed                                                     | The text itself     |
+| `FilterInput` | The input a condition is given, when text is not enough to say it                                      | A text input        |
 
 The drawings are what the `default` renderer draws. A field that names another renderer for a
 situation is drawn by that one instead; its input and its filter are still its type's.
+
+A relation's `FilterInput` is the same picker the form offers: the reader picks rows by
+their names, and the condition carries their ids. A condition that crosses a relation — is
+linked to any of them, to none of them, or to all of them — is asked of the table that holds
+the links, with `EXISTS`.
+
+A condition may be on the rows a relation reaches rather than on the rows themselves: the
+filter builder offers **…by the rows it reaches**, and the reader picks one of their own
+columns and says what it should be. The reach of the field says how the rows are found — a
+column of the record's own table, or a table of links — and the same reach is used for the
+search, which follows the names of the rows on the other side.
 
 ## A field type of the installation's own
 
@@ -96,9 +131,11 @@ is given the value and the field, never a connection, and it grants nothing.
 | The fields of a collection            | `packages/ui/src/fields/resolve.ts` → `resolveFields`                       |
 | The types the platform holds          | `packages/ui/src/fields/basic.tsx`                                          |
 | The types held, and whose a column is | `packages/ui/src/fields/registry.ts` → `registerFieldType`                  |
+| The relations, and the rows of them   | `packages/ui/src/fields/links.tsx`, `packages/ui/src/fields/relation.tsx`   |
 | Between the form and the database     | `packages/ui/src/fields/filters.ts` → `filterValue`                         |
-| The inputs the types share            | `packages/ui/src/fields/basic.tsx`                                          |
+| The inputs the types share            | `packages/ui/src/fields/basic.tsx`, `packages/ui/src/fields/picker.tsx`     |
 | The renderers, and `Value`            | `packages/ui/src/fields/renderers.tsx`                                      |
 | An installation's own                 | The module `platform.json` names as `extensions`                            |
 | The records grid and the filters      | `packages/ui/src/content/records.tsx`, `packages/ui/src/content/filter.tsx` |
 | The record form                       | `packages/ui/src/content/form.tsx`                                          |
+| The rows that point at a record       | `packages/ui/src/content/related.tsx`                                       |

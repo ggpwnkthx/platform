@@ -48,12 +48,30 @@ collections — and a gear beside the round create button opens the model view o
 the collection's fields, its metadata and its access, or the shape of every collection in the
 workspace.
 
-The record browser searches every column the reader may read, as text, case-insensitively;
+The record browser searches every column the reader may read, as text, case-insensitively,
+and the names of the rows the collection points at;
 filters on named operators; sorts by any column; pages; and counts the rows the predicate
 allows under row security. The operators are `eq`, `neq`, `contains`, `starts_with`,
 `ends_with`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `is_null` and `not_null`. The text
 operators match case-insensitively and treat `%` and `_` as literal characters. A condition on
 a column the reader may not read is refused by PostgreSQL, not hidden by the page.
+
+A condition on a relation is given as a condition on a column: the reader picks the rows it
+points at, by their names, and the condition carries their ids. A relation read as rows — the
+rows a record is linked to, and the rows that point at it — is filtered with `has_any`,
+`has_none` and `has_all`: is linked to any of them, to none of them, or to all of them. It is
+asked of the table that holds the links, with `EXISTS`, and the ids are carried in the
+address like any other condition.
+
+A condition may also be on the rows a relation reaches, rather than on the rows themselves:
+**…by the rows it reaches** asks for the stories whose section is _Sport_, or whose tag is
+_Sport_, by any of their own columns. The address carries it as
+`f.section=through.name.eq.Sport` — the column of theirs, the operator, and the value.
+
+The search follows the names too: a story is found by the name of the section it is filed
+under, or of one of its tags, and not only by the text of its own columns. The names are
+searched where the reader may read them: a section the reader may not see is not searched,
+and the search finds nothing through it.
 
 Field types offered by the collection and field builders are text, integer, bigint, decimal,
 float, boolean, date, time, timestamp, uuid, json and relation. A relation is a real foreign
@@ -61,6 +79,14 @@ key to another collection of the same workspace, with what PostgreSQL does when 
 goes (restrict, cascade or set null). Fields may be required, unique or indexed, carry a
 default, and take a maximum length, a list of choices, or a minimum and a maximum. Other schema
 changes use native SQL.
+
+A many-to-many relation is a collection of its own: two keys, one to each side, and the pair
+unique. The builder makes it in one step — **Many to many** on a collection's model page —
+and the interface then reads it as the links between the two, and writes them as rows of that
+collection. It is an ordinary collection after that: psql reads it as a table, and its
+policies and grants are its own. The one-to-many side — the rows that point at a record — is
+read, counted and left to the collection it is in: the record's own page says how many there
+are and links to them, filtered by that record.
 
 A field may have any type the database holds, not only the platform's own. The builder offers
 the types of the installation beside them: `geometry` and `geography` where PostGIS is
