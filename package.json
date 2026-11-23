@@ -20,9 +20,10 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "lint": "biome lint .",
+    "lines": "bun packages/cli/src/lines.ts",
     "format": "biome format --write .",
     "format:check": "biome format .",
-    "check": "bun run build:ui && bun run examples:newsroom:build && bun run typecheck && bun run lint && bun run format:check && bun test",
+    "check": "bun run build:ui && bun run examples:newsroom:build && bun run typecheck && bun run lint && bun run format:check && bun run lines && bun test",
     "test:e2e": "node packages/ui/test/e2e.mjs"
   },
   "devDependencies": {
