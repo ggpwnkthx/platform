@@ -7,3 +7,4 @@ platform-threat-model.md
 /.*
 !/.github
 !/.fallowrc.jsonc
+!/.impeccable

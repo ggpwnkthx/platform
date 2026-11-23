@@ -1,0 +1,1052 @@
+{
+ "schemaVersion": 2,
+ "generatedAt": "2026-11-23T18:16:56.980681Z",
+ "title": "Design System: Platform Studio",
+ "extensions": {
+  "colorMeta": {
+   "studio-orange": {
+    "role": "primary",
+    "displayName": "Studio Orange",
+    "canonical": "#f15a2b",
+    "tonalRamp": [
+     "#290000",
+     "#5c0000",
+     "#860000",
+     "#b22000",
+     "#db4b1c",
+     "#fe7750",
+     "#ffa17c",
+     "#ffdecc"
+    ]
+   },
+   "studio-orange-ink": {
+    "role": "primary",
+    "displayName": "Studio Orange Ink",
+    "canonical": "#ad401e",
+    "tonalRamp": [
+     "#ffdecc",
+     "#ffa17c",
+     "#fe7750",
+     "#db4b1c",
+     "#b22000",
+     "#860000",
+     "#5c0000",
+     "#290000"
+    ]
+   },
+   "signal-blue": {
+    "role": "secondary",
+    "displayName": "Signal Blue",
+    "canonical": "#449fd8",
+    "tonalRamp": [
+     "#000c22",
+     "#00284f",
+     "#004774",
+     "#00689c",
+     "#328bc0",
+     "#61aee1",
+     "#8cd2ff",
+     "#d4f3ff"
+    ]
+   },
+   "signal-blue-ink": {
+    "role": "secondary",
+    "displayName": "Signal Blue Ink",
+    "canonical": "#3379a5",
+    "tonalRamp": [
+     "#d4f3ff",
+     "#8cd2ff",
+     "#61aee1",
+     "#328bc0",
+     "#00689c",
+     "#004774",
+     "#00284f",
+     "#000c22"
+    ]
+   },
+   "success-green": {
+    "role": "tertiary",
+    "displayName": "Success Green",
+    "canonical": "#6cbe4f",
+    "tonalRamp": [
+     "#001200",
+     "#003200",
+     "#015200",
+     "#267500",
+     "#4a982c",
+     "#73bb5a",
+     "#9bde85",
+     "#daf9d1"
+    ]
+   },
+   "success-green-ink": {
+    "role": "tertiary",
+    "displayName": "Success Green Ink",
+    "canonical": "#3e702d",
+    "tonalRamp": [
+     "#daf9d1",
+     "#9bde85",
+     "#73bb5a",
+     "#4a982c",
+     "#267500",
+     "#015200",
+     "#003200",
+     "#001200"
+    ]
+   },
+   "warning-amber": {
+    "role": "tertiary",
+    "displayName": "Warning Amber",
+    "canonical": "#f1ad29",
+    "tonalRamp": [
+     "#1c0300",
+     "#441500",
+     "#683300",
+     "#8e5200",
+     "#b27400",
+     "#d49929",
+     "#f6be62",
+     "#ffebc4"
+    ]
+   },
+   "warning-amber-ink": {
+    "role": "tertiary",
+    "displayName": "Warning Amber Ink",
+    "canonical": "#7f5c24",
+    "tonalRamp": [
+     "#ffebc4",
+     "#f6be62",
+     "#d49929",
+     "#b27400",
+     "#8e5200",
+     "#683300",
+     "#441500",
+     "#1c0300"
+    ]
+   },
+   "danger-red": {
+    "role": "tertiary",
+    "displayName": "Danger Red",
+    "canonical": "#ee2a3d",
+    "tonalRamp": [
+     "#2d0000",
+     "#630000",
+     "#900000",
+     "#be001a",
+     "#e82f3e",
+     "#ff6466",
+     "#ff928f",
+     "#ffd9d4"
+    ]
+   },
+   "danger-red-ink": {
+    "role": "tertiary",
+    "displayName": "Danger Red Ink",
+    "canonical": "#ab1d2b",
+    "tonalRamp": [
+     "#ffd9d4",
+     "#ff928f",
+     "#ff6466",
+     "#e82f3e",
+     "#be001a",
+     "#900000",
+     "#630000",
+     "#2d0000"
+    ]
+   },
+   "garden-mint": {
+    "role": "reserved",
+    "displayName": "Garden Mint",
+    "canonical": "#65c081",
+    "tonalRamp": [
+     "#001200",
+     "#003206",
+     "#005221",
+     "#12743c",
+     "#3f975d",
+     "#6bb982",
+     "#95dda8",
+     "#d8f8df"
+    ]
+   },
+   "garden-mint-ink": {
+    "role": "reserved",
+    "displayName": "Garden Mint Ink",
+    "canonical": "#366745",
+    "tonalRamp": [
+     "#d8f8df",
+     "#95dda8",
+     "#6bb982",
+     "#3f975d",
+     "#12743c",
+     "#005221",
+     "#003206",
+     "#001200"
+    ]
+   },
+   "storm-steel": {
+    "role": "reserved",
+    "displayName": "Storm Steel",
+    "canonical": "#5379a3",
+    "tonalRamp": [
+     "#010b1c",
+     "#092643",
+     "#244466",
+     "#40648b",
+     "#6085af",
+     "#85a8d0",
+     "#abcdf2",
+     "#e1f0ff"
+    ]
+   },
+   "storm-steel-ink": {
+    "role": "reserved",
+    "displayName": "Storm Steel Ink",
+    "canonical": "#2f445c",
+    "tonalRamp": [
+     "#e1f0ff",
+     "#abcdf2",
+     "#85a8d0",
+     "#6085af",
+     "#40648b",
+     "#244466",
+     "#092643",
+     "#010b1c"
+    ]
+   },
+   "pool-cyan": {
+    "role": "reserved",
+    "displayName": "Pool Cyan",
+    "canonical": "#43c1d8",
+    "tonalRamp": [
+     "#001019",
+     "#002e3f",
+     "#004e61",
+     "#007085",
+     "#0093a8",
+     "#4cb6ca",
+     "#7dd9ec",
+     "#cff7ff"
+    ]
+   },
+   "pool-cyan-ink": {
+    "role": "reserved",
+    "displayName": "Pool Cyan Ink",
+    "canonical": "#2a7785",
+    "tonalRamp": [
+     "#cff7ff",
+     "#7dd9ec",
+     "#4cb6ca",
+     "#0093a8",
+     "#007085",
+     "#004e61",
+     "#002e3f",
+     "#001019"
+    ]
+   },
+   "lagoon-teal": {
+    "role": "reserved",
+    "displayName": "Lagoon Teal",
+    "canonical": "#60c5bc",
+    "tonalRamp": [
+     "#00110f",
+     "#00302c",
+     "#00504a",
+     "#00726b",
+     "#2e948c",
+     "#60b7ae",
+     "#8cdad2",
+     "#d5f7f3"
+    ]
+   },
+   "lagoon-teal-ink": {
+    "role": "reserved",
+    "displayName": "Lagoon Teal Ink",
+    "canonical": "#346c67",
+    "tonalRamp": [
+     "#d5f7f3",
+     "#8cdad2",
+     "#60b7ae",
+     "#2e948c",
+     "#00726b",
+     "#00504a",
+     "#00302c",
+     "#00110f"
+    ]
+   },
+   "orchid-pink": {
+    "role": "reserved",
+    "displayName": "Orchid Pink",
+    "canonical": "#ed2c8f",
+    "tonalRamp": [
+     "#2a000d",
+     "#5e0028",
+     "#8a0046",
+     "#b70066",
+     "#e12887",
+     "#ff60aa",
+     "#ff8dce",
+     "#ffd7f1"
+    ]
+   },
+   "orchid-pink-ink": {
+    "role": "reserved",
+    "displayName": "Orchid Pink Ink",
+    "canonical": "#861b51",
+    "tonalRamp": [
+     "#ffd7f1",
+     "#ff8dce",
+     "#ff60aa",
+     "#e12887",
+     "#b70066",
+     "#8a0046",
+     "#5e0028",
+     "#2a000d"
+    ]
+   },
+   "grape-purple": {
+    "role": "reserved",
+    "displayName": "Grape Purple",
+    "canonical": "#aa519f",
+    "tonalRamp": [
+     "#1c0019",
+     "#44003f",
+     "#681d61",
+     "#8f3b85",
+     "#b45da8",
+     "#d684ca",
+     "#f9abed",
+     "#ffe1ff"
+    ]
+   },
+   "grape-purple-ink": {
+    "role": "reserved",
+    "displayName": "Grape Purple Ink",
+    "canonical": "#66305f",
+    "tonalRamp": [
+     "#ffe1ff",
+     "#f9abed",
+     "#d684ca",
+     "#b45da8",
+     "#8f3b85",
+     "#681d61",
+     "#44003f",
+     "#1c0019"
+    ]
+   },
+   "aubergine-violet": {
+    "role": "reserved",
+    "displayName": "Aubergine Violet",
+    "canonical": "#8553a2",
+    "tonalRamp": [
+     "#14011f",
+     "#360e49",
+     "#562b6e",
+     "#794994",
+     "#9b6bb8",
+     "#bd8fda",
+     "#e0b5fc",
+     "#fae6ff"
+    ]
+   },
+   "aubergine-violet-ink": {
+    "role": "reserved",
+    "displayName": "Aubergine Violet Ink",
+    "canonical": "#5a3a6d",
+    "tonalRamp": [
+     "#fae6ff",
+     "#e0b5fc",
+     "#bd8fda",
+     "#9b6bb8",
+     "#794994",
+     "#562b6e",
+     "#360e49",
+     "#14011f"
+    ]
+   },
+   "night-indigo": {
+    "role": "reserved",
+    "displayName": "Night Indigo",
+    "canonical": "#5e54a3",
+    "tonalRamp": [
+     "#0b0424",
+     "#241852",
+     "#403678",
+     "#5e54a0",
+     "#7e76c5",
+     "#a09ae6",
+     "#c4c0ff",
+     "#ecebff"
+    ]
+   },
+   "night-indigo-ink": {
+    "role": "reserved",
+    "displayName": "Night Indigo Ink",
+    "canonical": "#3b3567",
+    "tonalRamp": [
+     "#ecebff",
+     "#c4c0ff",
+     "#a09ae6",
+     "#7e76c5",
+     "#5e54a0",
+     "#403678",
+     "#241852",
+     "#0b0424"
+    ]
+   },
+   "field-olive": {
+    "role": "reserved",
+    "displayName": "Field Olive",
+    "canonical": "#bebf4f",
+    "tonalRamp": [
+     "#0e0c00",
+     "#2a2700",
+     "#484500",
+     "#676600",
+     "#88880b",
+     "#aaab4b",
+     "#ced079",
+     "#f0f2cc"
+    ]
+   },
+   "field-olive-ink": {
+    "role": "reserved",
+    "displayName": "Field Olive Ink",
+    "canonical": "#6f6e2e",
+    "tonalRamp": [
+     "#f0f2cc",
+     "#ced079",
+     "#aaab4b",
+     "#88880b",
+     "#676600",
+     "#484500",
+     "#2a2700",
+     "#0e0c00"
+    ]
+   },
+   "cast-bronze": {
+    "role": "reserved",
+    "displayName": "Cast Bronze",
+    "canonical": "#be964e",
+    "tonalRamp": [
+     "#160700",
+     "#391e00",
+     "#5b3b00",
+     "#7e5a09",
+     "#a17b36",
+     "#c39f61",
+     "#e6c48a",
+     "#fcecd2"
+    ]
+   },
+   "cast-bronze-ink": {
+    "role": "reserved",
+    "displayName": "Cast Bronze Ink",
+    "canonical": "#574422",
+    "tonalRamp": [
+     "#fcecd2",
+     "#e6c48a",
+     "#c39f61",
+     "#a17b36",
+     "#7e5a09",
+     "#5b3b00",
+     "#391e00",
+     "#160700"
+    ]
+   },
+   "terracotta-clay": {
+    "role": "reserved",
+    "displayName": "Terracotta Clay",
+    "canonical": "#bf704e",
+    "tonalRamp": [
+     "#1d0200",
+     "#460f00",
+     "#6b2c0d",
+     "#924a2a",
+     "#b76c4b",
+     "#da9072",
+     "#fcb699",
+     "#ffe6d9"
+    ]
+   },
+   "terracotta-clay-ink": {
+    "role": "reserved",
+    "displayName": "Terracotta Clay Ink",
+    "canonical": "#804a33",
+    "tonalRamp": [
+     "#ffe6d9",
+     "#fcb699",
+     "#da9072",
+     "#b76c4b",
+     "#924a2a",
+     "#6b2c0d",
+     "#460f00",
+     "#1d0200"
+    ]
+   },
+   "orange-wash": {
+    "role": "primary",
+    "displayName": "Orange Wash",
+    "canonical": "#f9e0d9",
+    "tonalRamp": [
+     "#fdeee9",
+     "#f9e0d9",
+     "#f7cabc",
+     "#f3ab95",
+     "#ee8a6a",
+     "#f0714a",
+     "#f15a2b",
+     "#ad401e"
+    ]
+   },
+   "orange-wash-deep": {
+    "role": "primary",
+    "displayName": "Orange Wash Deep",
+    "canonical": "#f7cabc",
+    "tonalRamp": [
+     "#fdeee9",
+     "#f9e0d9",
+     "#f7cabc",
+     "#f3ab95",
+     "#ee8a6a",
+     "#f0714a",
+     "#f15a2b",
+     "#ad401e"
+    ]
+   },
+   "paper": {
+    "role": "neutral",
+    "displayName": "Paper",
+    "canonical": "#ffffff",
+    "tonalRamp": [
+     "#141414",
+     "#2c2c2c",
+     "#383838",
+     "#5d5e5f",
+     "#717273",
+     "#a9abae",
+     "#eaeaeb",
+     "#ffffff"
+    ]
+   },
+   "subdued-grey": {
+    "role": "neutral",
+    "displayName": "Subdued Grey",
+    "canonical": "#f4f4f5",
+    "tonalRamp": [
+     "#141414",
+     "#2c2c2c",
+     "#383838",
+     "#5d5e5f",
+     "#717273",
+     "#a9abae",
+     "#eaeaeb",
+     "#f4f4f5"
+    ]
+   },
+   "hairline": {
+    "role": "neutral",
+    "displayName": "Hairline",
+    "canonical": "#eaeaeb",
+    "tonalRamp": [
+     "#141414",
+     "#2c2c2c",
+     "#383838",
+     "#5d5e5f",
+     "#717273",
+     "#a9abae",
+     "#eaeaeb",
+     "#ffffff"
+    ]
+   },
+   "palette-grey": {
+    "role": "neutral",
+    "displayName": "Palette Grey",
+    "canonical": "#a9abae",
+    "tonalRamp": [
+     "#141414",
+     "#2c2c2c",
+     "#383838",
+     "#5d5e5f",
+     "#717273",
+     "#a9abae",
+     "#eaeaeb",
+     "#ffffff"
+    ]
+   },
+   "faint-text": {
+    "role": "neutral",
+    "displayName": "Faint Text",
+    "canonical": "#717273",
+    "tonalRamp": [
+     "#141414",
+     "#2c2c2c",
+     "#383838",
+     "#5d5e5f",
+     "#717273",
+     "#a9abae",
+     "#eaeaeb",
+     "#ffffff"
+    ]
+   },
+   "muted-text": {
+    "role": "neutral",
+    "displayName": "Muted Text",
+    "canonical": "#5d5e5f",
+    "tonalRamp": [
+     "#141414",
+     "#2c2c2c",
+     "#383838",
+     "#5d5e5f",
+     "#717273",
+     "#a9abae",
+     "#eaeaeb",
+     "#ffffff"
+    ]
+   },
+   "soft-text": {
+    "role": "neutral",
+    "displayName": "Soft Text",
+    "canonical": "#383838",
+    "tonalRamp": [
+     "#141414",
+     "#2c2c2c",
+     "#383838",
+     "#5d5e5f",
+     "#717273",
+     "#a9abae",
+     "#eaeaeb",
+     "#ffffff"
+    ]
+   },
+   "ink-raised": {
+    "role": "neutral",
+    "displayName": "Ink Raised",
+    "canonical": "#2c2c2c",
+    "tonalRamp": [
+     "#141414",
+     "#2c2c2c",
+     "#383838",
+     "#5d5e5f",
+     "#717273",
+     "#a9abae",
+     "#eaeaeb",
+     "#ffffff"
+    ]
+   },
+   "module-ink": {
+    "role": "neutral",
+    "displayName": "Module Ink",
+    "canonical": "#141414",
+    "tonalRamp": [
+     "#141414",
+     "#2c2c2c",
+     "#383838",
+     "#5d5e5f",
+     "#717273",
+     "#a9abae",
+     "#eaeaeb",
+     "#ffffff"
+    ]
+   },
+   "studio-black": {
+    "role": "neutral",
+    "displayName": "Studio Black",
+    "canonical": "#1f1f1f",
+    "tonalRamp": [
+     "#1f1f1f",
+     "#2c2c2c",
+     "#383838",
+     "#5d5e5f",
+     "#717273",
+     "#a9abae",
+     "#eaeaeb",
+     "#ffffff"
+    ]
+   },
+   "signal-blue-wash": {
+    "role": "secondary",
+    "displayName": "Signal Blue Wash",
+    "canonical": "#e0edf5",
+    "tonalRamp": [
+     "#141414",
+     "#2c2c2c",
+     "#383838",
+     "#5d5e5f",
+     "#717273",
+     "#a9abae",
+     "#eaeaeb",
+     "#ffffff"
+    ]
+   },
+   "signal-blue-wash-deep": {
+    "role": "secondary",
+    "displayName": "Signal Blue Wash Deep",
+    "canonical": "#c7e1f0",
+    "tonalRamp": [
+     "#141414",
+     "#2c2c2c",
+     "#383838",
+     "#5d5e5f",
+     "#717273",
+     "#a9abae",
+     "#eaeaeb",
+     "#ffffff"
+    ]
+   },
+   "success-green-wash": {
+    "role": "tertiary",
+    "displayName": "Success Green Wash",
+    "canonical": "#e6f2e5",
+    "tonalRamp": [
+     "#141414",
+     "#2c2c2c",
+     "#383838",
+     "#5d5e5f",
+     "#717273",
+     "#a9abae",
+     "#eaeaeb",
+     "#ffffff"
+    ]
+   },
+   "warning-amber-wash": {
+    "role": "tertiary",
+    "displayName": "Warning Amber Wash",
+    "canonical": "#f9eed9",
+    "tonalRamp": [
+     "#141414",
+     "#2c2c2c",
+     "#383838",
+     "#5d5e5f",
+     "#717273",
+     "#a9abae",
+     "#eaeaeb",
+     "#ffffff"
+    ]
+   },
+   "danger-red-wash": {
+    "role": "tertiary",
+    "displayName": "Danger Red Wash",
+    "canonical": "#f8d5d8",
+    "tonalRamp": [
+     "#141414",
+     "#2c2c2c",
+     "#383838",
+     "#5d5e5f",
+     "#717273",
+     "#a9abae",
+     "#eaeaeb",
+     "#ffffff"
+    ]
+   }
+  },
+  "typographyMeta": {
+   "display": {
+    "displayName": "Display",
+    "purpose": "The sign-in heading only."
+   },
+   "headline": {
+    "displayName": "Headline",
+    "purpose": "The page title in the sticky header, clamped to one line."
+   },
+   "title": {
+    "displayName": "Title",
+    "purpose": "Section and card headings."
+   },
+   "body": {
+    "displayName": "Body",
+    "purpose": "Interface text, table cells, control labels."
+   },
+   "body-small": {
+    "displayName": "Body Small",
+    "purpose": "Subtitles, section notes to 72 characters, captions."
+   },
+   "label": {
+    "displayName": "Label",
+    "purpose": "Breadcrumbs, table headers, statement captions, group titles."
+   },
+   "value": {
+    "displayName": "Value",
+    "purpose": "What PostgreSQL owns: identifiers, numbers, timestamps, role names."
+   },
+   "code": {
+    "displayName": "Code",
+    "purpose": "SQL in statements and policy expressions."
+   },
+   "privilege": {
+    "displayName": "Privilege",
+    "purpose": "SELECT, INSERT, UPDATE, DELETE beside their marks."
+   },
+   "badge": {
+    "displayName": "Badge",
+    "purpose": "A listed value’s pill: the word on its family’s wash."
+   },
+   "control": {
+    "displayName": "Control",
+    "purpose": "The label on a button and a control the reader presses."
+   }
+  },
+  "shadows": [
+   {
+    "name": "rest",
+    "value": "0 1px 2px rgb(20 20 20 / 6%), 0 1px 1px rgb(20 20 20 / 4%)",
+    "purpose": "A primary button at rest, and a card that asks to be pressed."
+   },
+   {
+    "name": "lift",
+    "value": "0 4px 12px rgb(20 20 20 / 8%), 0 1px 3px rgb(20 20 20 / 6%)",
+    "purpose": "A tile on hover."
+   },
+   {
+    "name": "float",
+    "value": "0 16px 40px rgb(20 20 20 / 16%), 0 4px 12px rgb(20 20 20 / 8%)",
+    "purpose": "Drawers, menus, the off-canvas navigation pane."
+   },
+   {
+    "name": "orange-glow",
+    "value": "0 4px 12px rgb(241 90 43 / 32%)",
+    "purpose": "The primary action only."
+   }
+  ],
+  "motion": [
+   {
+    "name": "state",
+    "value": "150ms",
+    "purpose": "The component library default for hover, focus and open transitions."
+   },
+   {
+    "name": "fast",
+    "value": "100ms",
+    "purpose": "Small state changes: a mark filling, a chevron turning."
+   }
+  ],
+  "breakpoints": [
+   {
+    "name": "sm",
+    "value": "48em",
+    "purpose": "The navigation pane goes off-canvas; the burger appears."
+   },
+   {
+    "name": "md",
+    "value": "62em",
+    "purpose": "The library grid turns to its middle arrangement."
+   },
+   {
+    "name": "studio-sidebar",
+    "value": "1080px",
+    "purpose": "The right sidebar drops below the content."
+   },
+   {
+    "name": "studio-gutters",
+    "value": "860px",
+    "purpose": "The page gutters shrink to 16px; the sign-in stacks."
+   }
+  ]
+ },
+ "components": [
+  {
+   "name": "Primary Button",
+   "kind": "button",
+   "refersTo": "button-primary",
+   "description": "The action the reader takes: fill Studio Orange. Its label is white today, where the law is the palette’s black — 3.4:1 against the orange, where black is 5.5:1. See Drift to Close.",
+   "html": "<button class=\"ds-btn-primary\" type=\"button\">Run</button>",
+   "css": ".ds-btn-primary { height: 36px; padding: 0 12px; border: 0; border-radius: 6px; background: #f15a2b; color: #ffffff; font: 600 13px/1.5 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif; box-shadow: 0 1px 2px rgb(20 20 20 / 6%), 0 1px 1px rgb(20 20 20 / 4%); cursor: pointer; transition: background-color 150ms ease; } .ds-btn-primary:hover { background: #e05428; } .ds-btn-primary:active { background: #ad401e; } .ds-btn-primary:focus-visible { outline: 2px solid #f7cabc; outline-offset: 2px; }"
+  },
+  {
+   "name": "Secondary Button",
+   "kind": "button",
+   "refersTo": "button-secondary",
+   "description": "A button that offers a choice without taking it: paper ground, hairline stroke.",
+   "html": "<button class=\"ds-btn-secondary\" type=\"button\">Cancel</button>",
+   "css": ".ds-btn-secondary { height: 36px; padding: 0 12px; border: 1px solid #eaeaeb; border-radius: 6px; background: #ffffff; color: #1f1f1f; font: 600 13px/1.5 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; transition: background-color 150ms ease; } .ds-btn-secondary:hover { background: #f4f4f5; } .ds-btn-secondary:focus-visible { outline: 2px solid #f7cabc; outline-offset: 2px; }"
+  },
+  {
+   "name": "Ghost Button",
+   "kind": "button",
+   "refersTo": "button-ghost",
+   "description": "A quiet action: no ground, soft text, until it is reached for.",
+   "html": "<button class=\"ds-btn-ghost\" type=\"button\">Dismiss</button>",
+   "css": ".ds-btn-ghost { height: 36px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: #383838; font: 600 13px/1.5 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; transition: background-color 150ms ease; } .ds-btn-ghost:hover { background: #f4f4f5; } .ds-btn-ghost:focus-visible { outline: 2px solid #f7cabc; outline-offset: 2px; }"
+  },
+  {
+   "name": "Danger Button",
+   "kind": "button",
+   "refersTo": "button-danger",
+   "description": "The one solid status fill: it appears only where something is destroyed.",
+   "html": "<button class=\"ds-btn-danger\" type=\"button\">Delete record</button>",
+   "css": ".ds-btn-danger { height: 36px; padding: 0 12px; border: 0; border-radius: 6px; background: #ee2a3d; color: #ffffff; font: 600 13px/1.5 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; transition: background-color 150ms ease; } .ds-btn-danger:hover { background: #ab1d2b; } .ds-btn-danger:focus-visible { outline: 2px solid #f7cabc; outline-offset: 2px; }"
+  },
+  {
+   "name": "Text Input",
+   "kind": "input",
+   "refersTo": "input",
+   "description": "A field the reader types into: 36px, 6px radius, 13px, orange focus. Its stroke is the library’s grey today, where the law is the palette’s hairline.",
+   "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Field name\" aria-label=\"Field name\" />",
+   "css": ".ds-input { height: 36px; width: 100%; padding: 0 12px; border: 1px solid #ced4da; border-radius: 6px; background: #ffffff; color: #1f1f1f; font: 400 13px/1.5 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif; transition: border-color 150ms ease; } .ds-input::placeholder { color: #717273; } .ds-input:hover { border-color: #a9abae; } .ds-input:focus-visible { outline: none; border-color: #f15a2b; box-shadow: 0 0 0 3px #f7cabc; }"
+  },
+  {
+   "name": "Search Field",
+   "kind": "input",
+   "refersTo": "search",
+   "description": "The records search: a full pill with a search icon, searching every readable column.",
+   "html": "<div class=\"ds-search\"><svg class=\"ds-search-icon\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#717273\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"11\" cy=\"11\" r=\"8\"></circle><path d=\"m21 21-4.3-4.3\"></path></svg><input class=\"ds-search-input\" type=\"text\" placeholder=\"Search every readable column\" aria-label=\"Search every readable column\" /></div>",
+   "css": ".ds-search { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border: 1px solid #eaeaeb; border-radius: 999px; background: #ffffff; transition: border-color 150ms ease; } .ds-search:hover { border-color: #a9abae; } .ds-search:focus-within { border-color: #f15a2b; box-shadow: 0 0 0 3px #f7cabc; } .ds-search-icon { flex: none; } .ds-search-input { flex: 1; border: 0; outline: none; background: transparent; color: #1f1f1f; font: 400 13px/1.5 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif; } .ds-search-input::placeholder { color: #717273; }"
+  },
+  {
+   "name": "Choice Badge",
+   "kind": "chip",
+   "refersTo": "badge",
+   "description": "A listed value, toned by what the word means — never by where it sits in the list.",
+   "html": "<span class=\"ds-badge ds-badge-settled\">published</span> <span class=\"ds-badge ds-badge-refused\">lost</span> <span class=\"ds-badge ds-badge-progress\">review</span> <span class=\"ds-badge ds-badge-plain\">lead</span>",
+   "css": ".ds-badge { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; font: 700 11px/1.5 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif; } .ds-badge-settled { background: #e6f2e5; color: #3e702d; } .ds-badge-refused { background: #f8d5d8; color: #ab1d2b; } .ds-badge-progress { background: #f9eed9; color: #7f5c24; } .ds-badge-plain { background: #f4f4f5; color: #5d5e5f; }"
+  },
+  {
+   "name": "Card",
+   "kind": "card",
+   "refersTo": "card",
+   "description": "The only box on the page: 10px corners, a hairline, no shadow at rest.",
+   "html": "<div class=\"ds-card\"><div class=\"ds-card-title\">Row policies</div><div class=\"ds-card-note\">Two policies apply to you here.</div></div>",
+   "css": ".ds-card { padding: 12px; border: 1px solid #eaeaeb; border-radius: 10px; background: #ffffff; } .ds-card-title { font: 650 16px/1.5 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif; color: #1f1f1f; } .ds-card-note { margin-top: 4px; font: 400 13px/1.55 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif; color: #5d5e5f; }"
+  },
+  {
+   "name": "Navigation Item",
+   "kind": "nav",
+   "refersTo": "nav-item",
+   "description": "A link in the navigation pane, padded 8px 12px and about 38px tall. The active one takes the orange’s light ground with the orange’s darkest step as its text.",
+   "html": "<a class=\"ds-nav-item\" href=\"#\">articles</a> <a class=\"ds-nav-item ds-nav-active\" href=\"#\">people</a>",
+   "css": ".ds-nav-item { display: inline-block; padding: 8px 12px; border-radius: 6px; color: #383838; text-decoration: none; font: 400 14px/1.55 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif; transition: background-color 150ms ease, color 150ms ease; } .ds-nav-item:hover { background: #f4f4f5; } .ds-nav-active { background: #f9e0d9; color: #7c2e15; } .ds-nav-active:hover { background: #f9e0d9; }"
+  },
+  {
+   "name": "Module Tile",
+   "kind": "nav",
+   "refersTo": "module-tile",
+   "description": "A module of the studio in the near-black bar; the active one is an orange tile with a black icon.",
+   "html": "<div class=\"ds-bar\"><a class=\"ds-tile\" href=\"#\" aria-label=\"Data\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 3v18h18\"></path><path d=\"M3 9h18\"></path><path d=\"M3 15h18\"></path></svg></a><a class=\"ds-tile ds-tile-active\" href=\"#\" aria-label=\"Access\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z\"></path></svg></a></div>",
+   "css": ".ds-bar { display: flex; flex-direction: column; gap: 6px; width: 64px; padding: 8px; background: #141414; } .ds-tile { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 6px; color: #a9abae; transition: background-color 150ms ease, color 150ms ease; } .ds-tile:hover { background: #2c2c2c; } .ds-tile-active { background: #f15a2b; color: #141414; } .ds-tile-active:hover { background: #f15a2b; }"
+  },
+  {
+   "name": "Statement",
+   "kind": "custom",
+   "refersTo": "statement",
+   "description": "The SQL a change will run, shown in the same view as the button that runs it.",
+   "html": "<figure class=\"ds-statement\"><figcaption>Runs as you, in one transaction</figcaption><pre>ALTER TABLE newsroom.articles ADD COLUMN body text;</pre></figure>",
+   "css": ".ds-statement { margin: 0; border: 1px solid #eaeaeb; border-radius: 6px; background: #f4f4f5; overflow: hidden; } .ds-statement figcaption { padding: 6px 14px; background: #ffffff; border-bottom: 1px solid #eaeaeb; font: 600 12.5px/1.5 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif; color: #5d5e5f; } .ds-statement pre { margin: 0; padding: 12px 14px; font: 400 12.5px/1.65 'JetBrains Mono', ui-monospace, SF Mono, Menlo, Consolas, monospace; color: #2c2c2c; white-space: pre-wrap; word-break: break-word; }"
+  },
+  {
+   "name": "Privilege Marks",
+   "kind": "custom",
+   "refersTo": "privilege-mark",
+   "description": "A right, drawn the same way everywhere: held whole, held on some fields, or not held.",
+   "html": "<span class=\"ds-priv\"><i class=\"ds-priv-all\"></i>SELECT</span> <span class=\"ds-priv\"><i class=\"ds-priv-some\"></i>UPDATE <span class=\"ds-priv-count\">11/12</span></span> <span class=\"ds-priv\"><i class=\"ds-priv-none\"></i>DELETE</span>",
+   "css": ".ds-priv { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font: 500 12px/1.5 'JetBrains Mono', ui-monospace, SF Mono, Menlo, Consolas, monospace; color: #1f1f1f; } .ds-priv i { width: 14px; height: 14px; flex: none; border-radius: 50%; box-sizing: border-box; } .ds-priv-all { background: #f15a2b; } .ds-priv-some { background: linear-gradient(90deg, #f15a2b 50%, #f7cabc 50%); } .ds-priv-none { border: 1.5px solid #a9abae; } .ds-priv-count { color: #5d5e5f; }"
+  },
+  {
+   "name": "Item Mark",
+   "kind": "custom",
+   "refersTo": "module-tile",
+   "description": "An item’s own icon on its own colour, and nowhere else.",
+   "html": "<span class=\"ds-mark\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#141414\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v16c0 1.1.9 2 2 2z\"></path><path d=\"M8 6h8\"></path><path d=\"M8 10h8\"></path><path d=\"M8 14h5\"></path></svg></span>",
+   "css": ".ds-mark { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 6px; background: #f15a2b; }"
+  }
+ ],
+ "narrative": {
+  "northStar": "The Granted Studio",
+  "overview": "The Platform is the whole project: PostgreSQL as the identity and authorization system, the relay that carries bytes, the CLI that installs and hardens, and the studio — the interface a reader works in. The studio is a working surface, not a canvas: light and dense on purpose, with a near-black module bar, a navigation pane that names the workspace in view, a sticky header carrying the page’s actions, and the page itself. Its character comes from what it shows rather than how it decorates: every right in PostgreSQL’s own privilege names with one full / half / empty mark, every change showing its SQL before it runs, every withheld field or filtered row saying why. Interface text is Inter; anything the database owns is JetBrains Mono, so the reader can always tell the studio’s voice from the database’s. Depth is mostly flat: hairlines and three tonal greys separate regions, and shadows are reserved for things that float.",
+  "keyCharacteristics": [
+   "Light frame: paper content, the palette’s neutral greys, a near-black module bar.",
+   "One orange primary, for action and selection, and nowhere else.",
+   "Inter for the interface; JetBrains Mono for everything the database owns.",
+   "Rights drawn as PostgreSQL privilege names with full / half / empty marks, and a legend beside.",
+   "The statement is shown before the change runs.",
+   "Unboxed sections; a card is the only box.",
+   "A pinned palette of sixteen families, eleven of them reserved for an item’s own colour."
+  ],
+  "rules": [
+   {
+    "name": "The One Orange Rule",
+    "body": "Orange means \"do this\" or \"this is chosen\". It never decorates a heading, a border at rest, or an empty state; if an element is neither an action nor a selection (nor a held privilege), it is grey or blue.",
+    "section": "colors"
+   },
+   {
+    "name": "The Bright Fill Rule",
+    "body": "A family’s bright step fills; its dark step carries the text and the small marks that sit on light grounds. Orange fills with the palette’s black for its label.",
+    "section": "colors"
+   },
+   {
+    "name": "The Action-and-Information Rule",
+    "body": "Orange is what the reader can act on; blue is what the system is telling them. A notice, a policy statement or a row-security state is blue, even where an orange badge calls out what applies to you inside it.",
+    "section": "colors"
+   },
+   {
+    "name": "The Palette-Only Rule",
+    "body": "No colour enters the interface that the pinned palette does not hold — in the chrome as well as in the data.",
+    "section": "colors"
+   },
+   {
+    "name": "The Word-Meaning Tone Rule",
+    "body": "A listed value’s badge colour follows what the word means, not its position in the list: settled words are green, ended or refused words are red, in-progress words are amber, starting words are grey, and anything else is blue. The accent never takes a value’s tone.",
+    "section": "colors"
+   },
+   {
+    "name": "The Item Colour Rule",
+    "body": "A workspace or a collection may carry a colour of its own, stored with its metadata. The colour fills that item’s mark and nowhere else: never a heading, never a border, never a ground, and never the accent.",
+    "section": "colors"
+   },
+   {
+    "name": "The Database Speaks Mono Rule",
+    "body": "If PostgreSQL owns the text (a value, a name, a privilege, a statement), it is set in JetBrains Mono; if the studio wrote it, it is Inter.",
+    "section": "typography"
+   },
+   {
+    "name": "The Float-Only Shadow Rule",
+    "body": "A surface that sits in the page has no shadow; a surface that sits over the page has Float. A card, a panel and a sign-in step are in the page, and a shadow on any of them is a mistake.",
+    "section": "elevation"
+   },
+   {
+    "name": "The Unboxed Section Rule",
+    "body": "A page section is a heading, a short description and a hairline above it; it is never a bordered box. A card is the only box on the page, so boxes never nest inside boxes.",
+    "section": "layout"
+   },
+   {
+    "name": "The Sticky First Column Rule",
+    "body": "In a record table the first field stays pinned while the rest scrolls, once there are more than three columns. A value longer than its column ends in an ellipsis at 320px, and the whole value is in its title.",
+    "section": "layout"
+   },
+   {
+    "name": "The One Rights Vocabulary Rule",
+    "body": "Rights are named only by PostgreSQL’s privileges (SELECT, INSERT, UPDATE, DELETE, TRUNCATE) and drawn only with the full / half / empty mark; never with checkmarks, toggles or invented role words.",
+    "section": "components"
+   },
+   {
+    "name": "The Statement First Rule",
+    "body": "Nothing changes the database without its SQL on screen first, in the same view as the button that runs it.",
+    "section": "components"
+   }
+  ],
+  "dos": [
+   "Do use Studio Orange only for actions, selection, focus and held privileges.",
+   "Do use Signal Blue only for what the system is telling the reader.",
+   "Do take every colour from the pinned palette, including the chrome.",
+   "Do set every database-owned string in JetBrains Mono and every studio-written string in Inter.",
+   "Do draw rights with PostgreSQL privilege names and the full / half / empty mark, with the legend nearby.",
+   "Do show the statement in a \"Runs as you\" figure before the button that runs it.",
+   "Do pin the first column of record tables, clip long values with an ellipsis, and keep the whole value in the title.",
+   "Do separate page sections with a heading and a hairline; let the card be the only box.",
+   "Do tone choice badges by what the word means.",
+   "Do let an item carry its own name, icon and colour, and draw them as its mark alone.",
+   "Do keep the frame light, sign-in included; the only dark surface is the module bar."
+  ],
+  "donts": [
+   "Don't nest a bordered box inside a section box or a card inside a card.",
+   "Don't introduce a second accent hue or use orange decoratively.",
+   "Don't put a reserved family into the chrome while no categorical data asks for it.",
+   "Don't let an item's colour spread past its mark, or take the accent's place.",
+   "Don't describe rights with checkmarks, toggles or words other than PostgreSQL's privileges.",
+   "Don't run a change whose statement the reader has not been shown.",
+   "Don't colour choice badges by their position in the list.",
+   "Don't give an in-page surface a shadow; shadows are for floating layers and the primary action.",
+   "Don't return to a dark console frame.",
+   "Don't label an orange button in white: it is 3.4:1, where the palette's black on orange is 5.5:1."
+  ]
+ }
+}
