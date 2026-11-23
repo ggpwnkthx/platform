@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import * as say from '@clack/prompts'
 import { ROOT, siteFiles } from '../site.ts'
 import { buildUi } from '../site.ts'
-import { addresses, ensureSettings, ENV_FILE } from './settings.ts'
+import { addresses, ensureSettings, ENV_FILE, readEnv } from './settings.ts'
 import { flags, sh, step, until } from './shell.ts'
 
 const LOCAL = ['up', 'init', 'admin', 'ui', 'validate', 'build', 'status', 'logs', 'down']
@@ -51,15 +51,23 @@ export async function local(action: string, args: string[]): Promise<number> {
     throw new Error(
       'No working Compose command found. Install Docker Compose or Podman Compose, or select --engine.'
     )
+  // Dex keeps one account with a password, the break-glass administrator. It is a second,
+  // weaker sign-in system, so it belongs to a development stack: a deployment on a name of
+  // its own must say DEX_LOCAL_ADMIN=1 to have one at all.
+  const asked = process.env.DEX_LOCAL_ADMIN ?? readEnv().DEX_LOCAL_ADMIN
+  const passwordDb = asked === '1' || (asked === undefined && a.PLATFORM_DOMAIN === 'localhost')
   const env = {
     ...process.env,
     ...a,
     PLATFORM_PUBLIC_ORIGIN: new URL(at.site).origin,
-    // Dex keeps one account with a password, the break-glass administrator: only its hash leaves this file.
-    DEX_ADMIN_HASH: await Bun.password.hash(a.PLATFORM_ADMIN_PASSWORD!, {
-      algorithm: 'bcrypt',
-      cost: 10,
-    }),
+    DEX_LOCAL_ADMIN: passwordDb ? '1' : '',
+    // Only its hash leaves this file.
+    DEX_ADMIN_HASH: passwordDb
+      ? await Bun.password.hash(a.PLATFORM_ADMIN_PASSWORD!, {
+          algorithm: 'bcrypt',
+          cost: 12,
+        })
+      : '',
     PLATFORM_SITE_FOLDER: at.siteFolder ?? join(ROOT, 'examples'),
     PLATFORM_SITE_DIST: at.siteFolder
       ? join(at.siteFolder, '.dist')
@@ -147,8 +155,10 @@ export async function local(action: string, args: string[]): Promise<number> {
       `Relay       ${at.relay}`,
       `PostgreSQL  ${at.database}:${a.POSTGRES_PORT}`,
       '',
-      `Sign in as ${a.PLATFORM_ADMIN}, the break-glass administrator; the password is PLATFORM_ADMIN_PASSWORD in ${ENV_FILE}.`,
-      'Everybody else signs in through a connector: add an identity provider in deploy/dex/config.yaml.tmpl.',
+      passwordDb
+        ? `Sign in as ${a.PLATFORM_ADMIN}, the break-glass administrator; the password is PLATFORM_ADMIN_PASSWORD in ${ENV_FILE}.`
+        : `Sign in as ${a.PLATFORM_ADMIN}, the administrator, through a connector: add an identity provider in deploy/dex/config.yaml.tmpl.`,
+      'Everybody else signs in through a connector too.',
       'PostgreSQL has no password: sign in with a token (`bun run cli token`), or administer the stack with `bun run cli deploy local admin <command>`.',
     ].join('\n'),
     'The stack is running'

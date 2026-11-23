@@ -51,9 +51,11 @@ services:
       DEX_ISSUER: http://${PLATFORM_IDP_HOST:-idp}.${PLATFORM_DOMAIN:-localhost}:${EDGE_PORT:-8080}
       DEX_HTTP_PORT: ${DEX_PORT:-5556}
       PLATFORM_PUBLIC_ORIGIN: ${PLATFORM_PUBLIC_ORIGIN:-http://localhost:5173}
-      # The one account with a password: the break-glass administrator. Everybody else
+      # The one account with a password: the break-glass administrator. It is a second,
+      # weaker sign-in system, so it belongs to a development stack: a deployment on a name
+      # of its own must say DEX_LOCAL_ADMIN=1 to have one at all. Everybody else
       # signs in through a connector, an identity provider that vouches for its addresses.
-      DEX_LOCAL_ADMIN: "1"
+      DEX_LOCAL_ADMIN: "${DEX_LOCAL_ADMIN:-}"
       # Who that is: the deployment's own administrator, on its own domain.
       DEX_ADMIN_EMAIL: ${PLATFORM_ADMIN:-admin@localhost}
       DEX_ADMIN_HASH: ${DEX_ADMIN_HASH:-}

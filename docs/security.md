@@ -120,11 +120,12 @@ trust boundary:
   on.
 - One account in Dex may carry a password, and it is the break-glass administrator: the one
   that gets in when the identity providers do not. The local stack keeps exactly that one
-  (`DEX_LOCAL_ADMIN`), and every other account comes from a connector. A password database
-  with more than one account is a second, weaker sign-in system sitting beside the real one:
-  it never rotates with the provider, and it is the one an attacker tries first. Keep the
-  break-glass password out of the hands of ordinary use, change it when it has been used, and
-  leave it alone otherwise.
+  (`DEX_LOCAL_ADMIN`), and every other account comes from a connector. A deployment on a name
+  of its own has no password account at all, unless its operator says `DEX_LOCAL_ADMIN=1`:
+  a password database with more than one account is a second, weaker sign-in system sitting
+  beside the real one: it never rotates with the provider, and it is the one an attacker tries
+  first. Keep the break-glass password out of the hands of ordinary use, change it when it has
+  been used, and leave it alone otherwise.
 - No login has a password, the administrator's included. The administrator is the role the
   server names in PLATFORM_ADMIN, a superuser who signs in with a token like anyone else: so
   whoever can make Dex issue a token for that address administers the server. From the relay's
