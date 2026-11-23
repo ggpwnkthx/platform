@@ -39,7 +39,7 @@ export function Item() {
   const back =
     from?.startsWith('/') && !from.startsWith('//')
       ? from
-      : place.to('/content/records', { c: place.c })
+      : place.to('/data/records', { c: place.c })
   const said = names(place.ws, place.c)
   const writer = useRecordWriter({
     ws: place.ws,

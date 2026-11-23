@@ -14,30 +14,39 @@ styles under `assets/`, the self-hosted Inter and JetBrains Mono fonts, `config.
 and a reload all land on a real page with no rewrite rule on the CDN; inside the app, links
 move between pages without a reload, which is what keeps the token in memory.
 
-| Page                  | Module     | What it is for                                                   |
-| --------------------- | ---------- | ---------------------------------------------------------------- |
-| `/`                   |            | Sign-in                                                          |
-| `/content`            | Content    | The collections of the workspace in view, as an entry point      |
-| `/content/records`    | Content    | The records of a collection: search, filters, sort, pages, count |
-| `/content/item`       | Content    | One record: read it, edit it, delete it, or write a new one      |
-| `/model`              | Data model | The collections of the workspace and their shape                 |
-| `/model/collection`   | Data model | One collection: its fields, its metadata, and its access         |
-| `/model/new`          | Data model | A new collection, with its fields                                |
-| `/workspace/new`      |            | A new workspace (a schema)                                       |
-| `/workspace/settings` |            | The workspace in view: its metadata and who may use it           |
-| `/access`             | Access     | The roles the reader may see, and a new role                     |
-| `/access/role`        | Access     | One role: memberships, what it may do in the workspace, policies |
-| `/access/grants`      | Access     | The workspace's permissions: who may use it, and every grant     |
-| `/access/policies`    | Access     | The row policies of the workspace's collections: new, changed    |
-| `/activity`           | Activity   | The revisions the reader may read, under the audit table's RLS   |
-| `/sql`                | SQL        | One statement at a time, run as the reader                       |
+| Page                     | Module   | What it is for                                                   |
+| ------------------------ | -------- | ---------------------------------------------------------------- |
+| `/`                      |          | Sign-in                                                          |
+| `/data`                  | Data     | The collections of the workspace in view, as an entry point      |
+| `/data/records`          | Data     | The records of a collection: search, filters, sort, pages, count |
+| `/data/item`             | Data     | One record: read it, edit it, delete it, or write a new one      |
+| `/data/model`            | Data     | The collections of the workspace and their shape                 |
+| `/data/model/collection` | Data     | One collection: its fields, its metadata, and its access         |
+| `/data/model/new`        | Data     | A new collection, with its fields                                |
+| `/workspace/new`         |          | A new workspace (a schema)                                       |
+| `/workspace/settings`    |          | The workspace in view: its metadata and who may use it           |
+| `/access`                | Access   | The roles the reader may see, and a new role                     |
+| `/access/role`           | Access   | One role: memberships, what it may do in the workspace, policies |
+| `/access/grants`         | Access   | The workspace's permissions: who may use it, and every grant     |
+| `/access/policies`       | Access   | The row policies of the workspace's collections: new, changed    |
+| `/activity`              | Activity | The revisions the reader may read, under the audit table's RLS   |
+| `/sql`                   | SQL      | One statement at a time, run as the reader                       |
 
-The layout is a data studio: a module bar (Content, Data model, Access, Activity, SQL), a
+The paths the interface had before the data module (`/content`, `/model` and their children) are
+still written out as pages, and each of them moves to the page it names today.
+
+The layout is a data studio: a module bar (Data, Access, Activity, SQL), a
 navigation pane with the workspace switcher and the collections of the workspace in view, a
 header with the page's actions, and a sidebar with the collection's information, the reader's
 rights on it and the row policies that apply to it. Everything is read in one workspace at a
 time. The address carries what is in view: the workspace in `?ws=`, the collection in `?c=`,
 a record in `?id=`. Roles and memberships are cluster-wide and the same in every workspace.
+
+The data module holds two views of a collection: its records and its shape. The records are what
+comes up by default — a collection opens on its records, and the workspace opens on its
+collections — and a gear beside the round create button opens the model view of the same thing:
+the collection's fields, its metadata and its access, or the shape of every collection in the
+workspace.
 
 The record browser searches every column the reader may read, as text, case-insensitively;
 filters on named operators; sorts by any column; pages; and counts the rows the predicate
@@ -157,7 +166,7 @@ mark, and a half mark says how many fields it covers.
 - **A workspace** (`/access/grants`, and the same panel in `/workspace/settings`). Who holds
   USAGE and CREATE on the schema, and for every collection the roles its ACL names and what each
   holds. A row is one role on one collection, and opens the grant it draws.
-- **A collection** (`/model/collection?tab=access`). The roles its ACL names; the roles that
+- **A collection** (`/data/model/collection?tab=access`). The roles its ACL names; the roles that
   reach it through one of those without being named; who reads and writes each field; and its
   row security, with its policies. A policy is written, changed and dropped here, and row
   security is turned on and off here.

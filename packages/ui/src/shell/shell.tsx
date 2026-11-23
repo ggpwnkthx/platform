@@ -11,15 +11,14 @@ import {
 import { useDisclosure } from '@mantine/hooks'
 import { tablesIn } from '@platform/core'
 import {
-  Boxes,
   Database,
   History,
   KeyRound,
-  Library,
   Plus,
   ScrollText,
   Settings,
   ShieldCheck,
+  Table2,
   TerminalSquare,
   Users,
 } from 'lucide-react'
@@ -31,8 +30,7 @@ import { usePlace } from '../session/hooks.ts'
 import { useNames } from './names.ts'
 
 const modules = [
-  ['content', 'Content', Library],
-  ['model', 'Data model', Boxes],
+  ['data', 'Data', Table2],
   ['access', 'Access', ShieldCheck],
   ['activity', 'Activity', History],
   ['sql', 'SQL', TerminalSquare],
@@ -48,7 +46,10 @@ export function Shell({ children }: { children: ReactNode }) {
   const [opened, nav] = useDisclosure(false)
   // biome-ignore lint/correctness/useExhaustiveDependencies: the pane closes when the address changes
   useEffect(nav.close, [pathname, search])
-  const module = pathname.split('/')[1] === 'workspace' ? 'content' : pathname.split('/')[1]
+  const first = pathname.split('/')[1]
+  const module = first === 'workspace' || first === 'content' || first === 'model' ? 'data' : first
+  // The data module has two views of a collection: its records and its shape.
+  const modeling = pathname.startsWith('/data/model')
   const collections = tablesIn(catalog, place.ws)
   const link = (path: string, label: ReactNode, icon: ReactNode, more?: Record<string, string>) => {
     const to = place.to(path, more)
@@ -119,14 +120,14 @@ export function Shell({ children }: { children: ReactNode }) {
               link('/access/grants', 'Permissions', <KeyRound size={16} />),
               link('/access/policies', 'Row policies', <ScrollText size={16} />),
             ]}
-            {(module === 'content' || module === 'model') && (
+            {module === 'data' && (
               <>
                 <Text fz={12} fw={600} c="dimmed" px="xs" py={6}>
                   Collections
                 </Text>
                 {collections.map((t) =>
                   link(
-                    module === 'model' ? '/model/collection' : '/content/records',
+                    modeling ? '/data/model/collection' : '/data/records',
                     names(t.schema, t.name).name,
                     <ItemIcon name={names(t.schema, t.name).icon} table />,
                     { c: t.name }
@@ -138,7 +139,7 @@ export function Shell({ children }: { children: ReactNode }) {
                   </Text>
                 )}
                 {place.schema?.can_create &&
-                  link('/model/new', 'New collection', <Plus size={16} />)}
+                  link('/data/model/new', 'New collection', <Plus size={16} />)}
                 <Text fz={12} fw={600} c="dimmed" px="xs" pt="md" pb={6}>
                   Workspace
                 </Text>

@@ -60,14 +60,26 @@ const theme = createTheme({
   headings: { fontWeight: '650' },
 })
 
+/** The path a page had before the data module: the same page, under its name today. */
+function Moved({ to }: { to: string }) {
+  const { search } = useLocation()
+  return <Navigate to={{ pathname: to, search }} replace />
+}
+
 const routes: Record<keyof typeof pages, () => React.ReactNode> = {
-  '/': () => <Navigate to="/content" replace />,
-  '/content': ContentHome,
-  '/content/records': Records,
-  '/content/item': Item,
-  '/model': ModelHome,
-  '/model/collection': CollectionModel,
-  '/model/new': NewCollection,
+  '/': () => <Navigate to="/data" replace />,
+  '/data': ContentHome,
+  '/data/records': Records,
+  '/data/item': Item,
+  '/data/model': ModelHome,
+  '/data/model/collection': CollectionModel,
+  '/data/model/new': NewCollection,
+  '/content': () => <Moved to="/data" />,
+  '/content/records': () => <Moved to="/data/records" />,
+  '/content/item': () => <Moved to="/data/item" />,
+  '/model': () => <Moved to="/data/model" />,
+  '/model/collection': () => <Moved to="/data/model/collection" />,
+  '/model/new': () => <Moved to="/data/model/new" />,
   '/workspace/new': NewWorkspace,
   '/workspace/settings': WorkspaceSettings,
   '/access': Roles,
@@ -97,7 +109,7 @@ function App() {
         {Object.entries(routes).map(([path, Page]) => (
           <Route key={path} path={path} element={<Page />} />
         ))}
-        <Route path="*" element={<Navigate to="/content" replace />} />
+        <Route path="*" element={<Navigate to="/data" replace />} />
       </Routes>
     </Shell>
   )

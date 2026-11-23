@@ -87,11 +87,11 @@ export function MetadataPanel({ target, canEdit }: { target: MetadataTarget; can
         note="Every other key is a row of the platform's own collection, drawn and changed like any record."
         actions={
           <>
-            <Button variant="subtle" component={Link} to={`/content/records?${filtered}`}>
+            <Button variant="subtle" component={Link} to={`/data/records?${filtered}`}>
               Open as a collection
             </Button>
             {canEdit && (
-              <Button variant="default" component={Link} to={`/content/item?${item}`}>
+              <Button variant="default" component={Link} to={`/data/item?${item}`}>
                 Add key
               </Button>
             )}
@@ -107,7 +107,7 @@ export function MetadataPanel({ target, canEdit }: { target: MetadataTarget; can
                   <Anchor
                     component={Link}
                     className="mono"
-                    to={`/content/item?${new URLSearchParams({ ws: 'platform', c: 'item_metadata', id: e.id, from: pathname + search })}`}
+                    to={`/data/item?${new URLSearchParams({ ws: 'platform', c: 'item_metadata', id: e.id, from: pathname + search })}`}
                   >
                     {e.key}
                   </Anchor>

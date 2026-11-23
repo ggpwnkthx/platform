@@ -75,7 +75,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const user = await issuer(cfg).signinCallback()
       // Back to the page the reader asked for, before anything is drawn there: the address no
       // longer carries the issuer's answer, and the sign-in finishes on the right page.
-      navigate(typeof user?.state === 'string' ? user.state : '/content', { replace: true })
+      navigate(typeof user?.state === 'string' ? user.state : '/data', { replace: true })
       // PostgreSQL's validator reads a signed token: whichever of the two is one.
       const token = [user?.access_token, user?.id_token].find((t) => t?.split('.').length === 3)
       if (!token) throw new Error('The issuer returned no signed token.')
@@ -122,7 +122,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       signOut,
       // Signing in returns the reader to the page they asked for.
       signIn: (
-        returnTo = location.pathname === '/' ? '/content' : location.pathname + location.search
+        returnTo = location.pathname === '/' ? '/data' : location.pathname + location.search
       ) => {
         if (!config) return
         setPhase('signing-in')
@@ -133,10 +133,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       signInAs: (role: string) => {
         if (!config) return
         sessionStorage.setItem(chosenKey, role)
-        enter(config, role, null).then(
-          () => location.pathname === '/' && navigate('/content'),
-          fail
-        )
+        enter(config, role, null).then(() => location.pathname === '/' && navigate('/data'), fail)
       },
     }),
     [phase, notice, config, signOut, enter, fail, navigate]

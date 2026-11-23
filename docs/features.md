@@ -11,12 +11,12 @@
 | Records                           | Parameterized SQL on the reader's own login; database ACLs and RLS are authoritative                                 |
 | Complex queries and relationships | Native SQL, foreign keys, joins and views                                                                            |
 | Audit                             | Trigger-generated transactional revisions, including direct SQL writes                                               |
-| Interface                         | Content, data model, access, activity and SQL, read one workspace at a time; the page speaks PostgreSQL's protocol   |
+| Interface                         | Data, access, activity and SQL, read one workspace at a time; the page speaks PostgreSQL's protocol                  |
 | Deployment                        | CLI for Docker/Podman Compose (PostgreSQL 18, Dex, relay) and Kubernetes; the interface is static files for a CDN    |
 
 The interface reads one workspace at a time, and inside it one collection at a time: the
-navigation pane lists the collections of the workspace in view, Content holds a collection's
-records, Data model holds its fields, its description, its row security switch and its
+navigation pane lists the collections of the workspace in view, the data module holds a collection's
+records and, behind the gear beside the create button, its fields, its description, its row security switch and its
 metadata, and Access holds the roles, the rights each holds in the workspace and the row
 policies. Each is editable only where PostgreSQL says so, and every change to the model or to
 access is shown as SQL before it runs as the reader. The settings of a workspace hold its

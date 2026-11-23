@@ -50,7 +50,7 @@ export function CollectionModel() {
     <Page
       title={said.name}
       crumbs={[
-        <Link key="m" to={place.to('/model')}>
+        <Link key="m" to={place.to('/data/model')}>
           Data model
         </Link>,
         <span key="c" className="mono">
@@ -59,11 +59,7 @@ export function CollectionModel() {
       ]}
       mark={<ItemMark {...said} size={44} table />}
       actions={
-        <Button
-          variant="default"
-          component={Link}
-          to={place.to('/content/records', { c: place.c })}
-        >
+        <Button variant="default" component={Link} to={place.to('/data/records', { c: place.c })}>
           Records
         </Button>
       }
@@ -181,7 +177,7 @@ export function CollectionModel() {
         opened={dropAll !== null}
         ready={dropAll === place.c}
         onClose={() => setDropAll(null)}
-        done={() => navigate(place.to('/model'))}
+        done={() => navigate(place.to('/data/model'))}
         statements={() => [dropCollectionStatement(place.ws, place.c)]}
       >
         <TextInput

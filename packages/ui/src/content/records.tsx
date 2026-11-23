@@ -2,7 +2,7 @@ import { ActionIcon, Button } from '@mantine/core'
 import { useDebouncedCallback } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
 import { deleteRecord, transaction } from '@platform/core'
-import { Plus, Trash2 } from 'lucide-react'
+import { Cog, Plus, Trash2 } from 'lucide-react'
 import { DataTable } from 'mantine-datatable'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
@@ -68,7 +68,7 @@ export function Records() {
     <Page
       title={said.name}
       crumbs={[
-        <Link key="c" to={place.to('/content')}>
+        <Link key="c" to={place.to('/data')}>
           {names(place.ws).name}
         </Link>,
         'Records',
@@ -92,13 +92,23 @@ export function Records() {
               size={44}
               radius="xl"
               component={Link}
-              to={place.to('/content/item', { c: place.c })}
+              to={place.to('/data/item', { c: place.c })}
               aria-label="New record"
               title="New record"
             >
               <Plus />
             </ActionIcon>
           )}
+          <ActionIcon
+            size={44}
+            radius="xl"
+            component={Link}
+            to={place.to('/data/model/collection', { c: place.c })}
+            aria-label="The data model of this collection"
+            title="The data model of this collection"
+          >
+            <Cog />
+          </ActionIcon>
         </>
       }
     >
@@ -160,7 +170,7 @@ export function Records() {
         {...(hasId
           ? {
               onRowClick: ({ record: row }: { record: Row }) =>
-                navigate(place.to('/content/item', { c: place.c, id: String(row.id) })),
+                navigate(place.to('/data/item', { c: place.c, id: String(row.id) })),
             }
           : {})}
         {...(hasId && info.can_delete

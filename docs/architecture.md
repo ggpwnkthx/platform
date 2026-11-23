@@ -155,8 +155,9 @@ never modelled. Roles and memberships stay cluster-wide: they are the same in ev
 
 Inside a workspace, a collection is the unit the interface reads: the collection in view lives
 in the address too (`?c=<collection>`), and a record in view as `?id=<uuid>`. The navigation
-pane lists the collections of the workspace in view. Content holds the records of a collection
-and the form that writes one; Data model holds its fields and the right to add another; the
+pane lists the collections of the workspace in view. The data module holds the records of a collection
+and the form that writes one, and, in its model view, the fields of a collection and the right to
+add another; the
 sidebar shows the collection's information, the reader's rights on it and the row policies
 that apply. Each is editable only where PostgreSQL says so: a reader who is not the owner is
 offered no field to add, because PostgreSQL gives ALTER on a table to its owner, and the

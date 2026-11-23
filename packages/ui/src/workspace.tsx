@@ -42,7 +42,7 @@ export function NewWorkspace() {
           disabled={!statements.length}
           onClick={() =>
             run(statements).then(
-              () => navigate(`/model?ws=${encodeURIComponent(name.trim())}`),
+              () => navigate(`/data/model?ws=${encodeURIComponent(name.trim())}`),
               setRefusal
             )
           }

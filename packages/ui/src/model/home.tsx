@@ -8,7 +8,7 @@ import { Page, Tag } from '../bits/page.tsx'
 import { useSession } from '../session/context.ts'
 import { usePlace } from '../session/hooks.ts'
 import { useNames } from '../shell/names.ts'
-/** The collections of the workspace and their shape. */
+/** The collections of the workspace and their shape: the model view of the data module. */
 export function ModelHome() {
   const { catalog } = useSession()
   const place = usePlace()
@@ -17,7 +17,12 @@ export function ModelHome() {
   return (
     <Page
       title={names(place.ws).name}
-      crumbs={['Data model']}
+      crumbs={[
+        <Link key="d" to={place.to('/data')}>
+          Data
+        </Link>,
+        'Data model',
+      ]}
       mark={<ItemMark {...names(place.ws)} size={44} />}
       actions={
         place.schema?.can_create && (
@@ -25,7 +30,7 @@ export function ModelHome() {
             size={44}
             radius="xl"
             component={Link}
-            to={place.to('/model/new')}
+            to={place.to('/data/model/new')}
             aria-label="New collection"
             title="New collection"
           >
@@ -53,7 +58,7 @@ export function ModelHome() {
                   gap="sm"
                   wrap="nowrap"
                   component={Link}
-                  {...{ to: place.to('/model/collection', { c: t.name }) }}
+                  {...{ to: place.to('/data/model/collection', { c: t.name }) }}
                   style={{ color: 'inherit', textDecoration: 'none' }}
                 >
                   <ItemMark {...names(t.schema, t.name)} size={28} table />

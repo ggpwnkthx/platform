@@ -36,7 +36,14 @@ export const runtimeConfigFrom = (
 /** The pages of the interface. Each is written out as its own file, so a reload lands on one. */
 export const pages = {
   '/': 'Sign in',
-  '/content': 'Content',
+  '/data': 'Data',
+  '/data/records': 'Records',
+  '/data/item': 'Record',
+  '/data/model': 'Data model',
+  '/data/model/collection': 'Collection',
+  '/data/model/new': 'New collection',
+  // The paths the interface had before the data module: a bookmark of one still lands on a page.
+  '/content': 'Data',
   '/content/records': 'Records',
   '/content/item': 'Record',
   '/model': 'Data model',

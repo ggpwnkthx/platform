@@ -108,11 +108,13 @@ the interface alike.
 
 **Capabilities**
 
-- The interface (`packages/ui/`): a data studio in the manner of a headless CMS — a module bar (Content,
-  Data model, Access, Activity, SQL), a navigation pane with the workspace switcher and the
+- The interface (`packages/ui/`): a data studio in the manner of a headless CMS — a module bar (Data,
+  Access, Activity, SQL), a navigation pane with the workspace switcher and the
   collections, and a sidebar with the collection's information, the reader's rights and the row
   policies that apply. Records, model inspection, runtime collection and field creation, roles,
-  memberships, row policies, activity and one-statement SQL. It reads one workspace at a time:
+  memberships, row policies, activity and one-statement SQL. The data module holds two views of
+  a collection: its records, which is what comes up by default, and its model, behind the gear
+  beside the create button. It reads one workspace at a time:
   the workspace (`?ws=`), the collection (`?c=`) and the record (`?id=`) are part of the address,
   links carry them, and every module presents that workspace alone.
 - An access module that reads only what the caller may see (the roles they may use, their

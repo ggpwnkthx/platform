@@ -26,14 +26,14 @@ export function NewCollection() {
   }
   const create = () =>
     run(statements).then(
-      () => navigate(place.to('/model/collection', { c: name.trim() })),
+      () => navigate(place.to('/data/model/collection', { c: name.trim() })),
       setRefusal
     )
   return (
     <Page
       title="New collection"
       crumbs={[
-        <Link key="m" to={place.to('/model')}>
+        <Link key="m" to={place.to('/data/model')}>
           Data model
         </Link>,
         'New',
