@@ -15,7 +15,6 @@ import {
   History,
   KeyRound,
   Plus,
-  ScrollText,
   Settings,
   ShieldCheck,
   Table2,
@@ -48,6 +47,9 @@ export function Shell({ children }: { children: ReactNode }) {
   useEffect(nav.close, [pathname, search])
   const first = pathname.split('/')[1]
   const module = first === 'workspace' || first === 'content' || first === 'model' ? 'data' : first
+  // The users and groups are the cluster's, the same in every workspace: the page reads
+  // them, not a workspace, so it is shown without the pane that picks one.
+  const withPane = pathname !== '/access'
   // The data module has two views of a collection: its records and its shape.
   const modeling = pathname.startsWith('/data/model')
   const collections = tablesIn(catalog, place.ws)
@@ -65,7 +67,14 @@ export function Shell({ children }: { children: ReactNode }) {
     )
   }
   return (
-    <AppShell navbar={{ width: 328, breakpoint: 'sm', collapsed: { mobile: !opened } }} padding={0}>
+    <AppShell
+      navbar={{
+        width: withPane ? 328 : 64,
+        breakpoint: 'sm',
+        collapsed: { mobile: !opened },
+      }}
+      padding={0}
+    >
       <AppShell.Navbar>
         <div className="frame">
           <nav className="modules" aria-label="Modules">
@@ -104,51 +113,52 @@ export function Shell({ children }: { children: ReactNode }) {
               </Menu.Dropdown>
             </Menu>
           </nav>
-          <div className="pane">
-            <Select
-              aria-label="Workspace"
-              mb="sm"
-              allowDeselect={false}
-              leftSection={<ItemIcon name={names(place.ws).icon} />}
-              data={catalog.schemas.map((s) => ({ value: s.name, label: names(s.name).name }))}
-              value={place.ws || null}
-              placeholder="No workspace"
-              onChange={(ws) => ws && navigate(`/${module}?ws=${encodeURIComponent(ws)}`)}
-            />
-            {module === 'access' && [
-              link('/access', 'Roles', <Users size={16} />),
-              link('/access/grants', 'Permissions', <KeyRound size={16} />),
-              link('/access/policies', 'Row policies', <ScrollText size={16} />),
-            ]}
-            {module === 'data' && (
-              <>
-                <Text fz={12} fw={600} c="dimmed" px="xs" py={6}>
-                  Collections
-                </Text>
-                {collections.map((t) =>
-                  link(
-                    modeling ? '/data/model/collection' : '/data/records',
-                    names(t.schema, t.name).name,
-                    <ItemIcon name={names(t.schema, t.name).icon} table />,
-                    { c: t.name }
-                  )
-                )}
-                {!collections.length && (
-                  <Text fz="sm" c="dimmed" px="xs">
-                    No collection here that you may reach.
+          {withPane && (
+            <div className="pane">
+              <Select
+                aria-label="Workspace"
+                mb="sm"
+                allowDeselect={false}
+                leftSection={<ItemIcon name={names(place.ws).icon} />}
+                data={catalog.schemas.map((s) => ({ value: s.name, label: names(s.name).name }))}
+                value={place.ws || null}
+                placeholder="No workspace"
+                onChange={(ws) => ws && navigate(`/${module}?ws=${encodeURIComponent(ws)}`)}
+              />
+              {module === 'access' && [
+                link('/access', 'Users and groups', <Users size={16} />),
+                link('/workspace/settings', 'Workspace permissions', <KeyRound size={16} />),
+              ]}
+              {module === 'data' && (
+                <>
+                  <Text fz={12} fw={600} c="dimmed" px="xs" py={6}>
+                    Collections
                   </Text>
-                )}
-                {place.schema?.can_create &&
-                  link('/data/model/new', 'New collection', <Plus size={16} />)}
-                <Text fz={12} fw={600} c="dimmed" px="xs" pt="md" pb={6}>
-                  Workspace
-                </Text>
-                {place.ws && link('/workspace/settings', 'Settings', <Settings size={16} />)}
-                {identity.can_create_workspace &&
-                  link('/workspace/new', 'New workspace', <Plus size={16} />)}
-              </>
-            )}
-          </div>
+                  {collections.map((t) =>
+                    link(
+                      modeling ? '/data/model/collection' : '/data/records',
+                      names(t.schema, t.name).name,
+                      <ItemIcon name={names(t.schema, t.name).icon} table />,
+                      { c: t.name }
+                    )
+                  )}
+                  {!collections.length && (
+                    <Text fz="sm" c="dimmed" px="xs">
+                      No collection here that you may reach.
+                    </Text>
+                  )}
+                  {place.schema?.can_create &&
+                    link('/data/model/new', 'New collection', <Plus size={16} />)}
+                  <Text fz={12} fw={600} c="dimmed" px="xs" pt="md" pb={6}>
+                    Workspace
+                  </Text>
+                  {place.ws && link('/workspace/settings', 'Settings', <Settings size={16} />)}
+                  {identity.can_create_workspace &&
+                    link('/workspace/new', 'New workspace', <Plus size={16} />)}
+                </>
+              )}
+            </div>
+          )}
         </div>
       </AppShell.Navbar>
       <AppShell.Main>

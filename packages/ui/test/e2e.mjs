@@ -101,9 +101,9 @@ await check('a grant is the difference between the ACL and what is asked', async
   await dialog().waitFor({ state: 'hidden', timeout: 15000 })
 })
 await check('a row policy is written and applies', async () => {
-  await go('/access/policies?ws=newsroom')
-  await expectText('own_articles')
-  await page.getByRole('button', { name: 'New policy' }).nth(2).click()
+  await go('/data/model/collection?ws=newsroom&c=sections&tab=access')
+  await expectText('Granted by name')
+  await page.getByRole('button', { name: 'New policy' }).first().click()
   await dialog().getByLabel('Name').fill('desk_reads')
   await dialog().getByLabel('USING').fill('desk_email IS NOT NULL')
   const sql = await statement()

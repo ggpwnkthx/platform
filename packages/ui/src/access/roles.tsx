@@ -1,110 +1,72 @@
-import { ActionIcon, Group, SegmentedControl, Table, Text, TextInput } from '@mantine/core'
-import { createRoleStatements, reservedRole } from '@platform/core'
+import { ActionIcon, SegmentedControl, Tabs, Text, TextInput } from '@mantine/core'
+import { createRoleStatements } from '@platform/core'
 import { Plus } from 'lucide-react'
 import { useState } from 'react'
 import { Change } from '../bits/change.tsx'
-import { RoleName } from '../bits/marks.tsx'
-import { Page, Problem, Tag } from '../bits/page.tsx'
+import { Page, Problem } from '../bits/page.tsx'
 import { useSession } from '../session/context.ts'
 import { usePlace } from '../session/hooks.ts'
-import { useRoles } from './shared.tsx'
+import { Groups, useRoleMap, Users } from './role-lists.tsx'
 
-export const attributes = (r: {
-  superuser: boolean
-  create_role: boolean
-  bypass_rls: boolean
-}) => (
-  <Group gap={4}>
-    {r.superuser && <Tag color="red">superuser</Tag>}
-    {r.create_role && <Tag color="blue">makes roles</Tag>}
-    {r.bypass_rls && <Tag color="yellow">bypasses row security</Tag>}
-  </Group>
-)
-
-/** The roles the reader may see — their own, or all of them for an operator — and a new one. */
+/**
+ * The roles the reader may see, kept in two kinds: the people who sign in, and the groups
+ * that hold rights for them. Each kind gets its own table, because each answers a different
+ * question — who holds what, and who belongs to whom.
+ */
 export function Roles() {
   const { identity } = useSession()
   const place = usePlace()
-  const found = useRoles()
-  const [search, setSearch] = useState('')
+  const map = useRoleMap()
   const [draft, setDraft] = useState<{ name: string; login: boolean } | null>(null)
-  const all = (found.data?.roles ?? []).filter(
-    (r) => !r.name.startsWith('pg_') && r.name.includes(search)
-  )
-  const me = found.data?.roles.find((r) => r.name === identity.username)
-  const count = (role: string, side: 'role' | 'member') =>
-    found.data?.memberships.filter((m) => m[side] === role).length ?? 0
+  const tab = place.params.get('tab') === 'groups' ? 'groups' : 'users'
+  const me = map.found.data?.roles.find((r) => r.name === identity.username)
+  const mayCreate = !!(me?.create_role || me?.superuser)
+  const counts = {
+    users: map.roles.filter((r) => r.login).length,
+    groups: map.roles.filter((r) => !r.login).length,
+  }
   return (
     <Page
-      title="Roles"
-      crumbs={['Access', 'Users and groups']}
+      title="Users and groups"
+      crumbs={['Access']}
       actions={
-        (me?.create_role || me?.superuser) && (
+        mayCreate && (
           <ActionIcon
             size={44}
             radius="xl"
-            aria-label="New role"
-            title="New role"
-            onClick={() => setDraft({ name: '', login: true })}
+            aria-label={tab === 'users' ? 'New user' : 'New group'}
+            title={tab === 'users' ? 'New user' : 'New group'}
+            onClick={() => setDraft({ name: '', login: tab === 'users' })}
           >
             <Plus />
           </ActionIcon>
         )
       }
     >
-      <TextInput
-        placeholder="Search roles"
-        radius="xl"
-        w={320}
-        mb="sm"
-        value={search}
-        onChange={(e) => setSearch(e.currentTarget.value)}
-      />
-      <Problem error={found.error} />
-      <Text fz="sm" c="dimmed" mb="sm">
-        A user is a PostgreSQL LOGIN role named after the address they sign in with; a group is a
-        NOLOGIN role.{' '}
+      <Problem error={map.found.error} />
+      <Text fz="sm" c="dimmed" mb="md" maw="72ch">
+        Users sign in. Groups hold rights for the people in them.{' '}
         {identity.is_operator ? '' : 'You see your own roles; an operator sees them all.'}
       </Text>
-      <Table highlightOnHover verticalSpacing="sm">
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Role</Table.Th>
-            <Table.Th>Kind</Table.Th>
-            <Table.Th>Member of</Table.Th>
-            <Table.Th>Members</Table.Th>
-            <Table.Th />
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {all.map((r) => (
-            <Table.Tr key={r.name}>
-              <Table.Td>
-                <RoleName
-                  name={r.name}
-                  group={!r.login}
-                  link={place.to('/access/role', { r: r.name })}
-                />
-              </Table.Td>
-              <Table.Td>
-                {r.login ? 'User' : 'Group'}
-                {reservedRole(r.name) && (
-                  <Text span c="dimmed">
-                    {' '}
-                    · the platform’s own
-                  </Text>
-                )}
-              </Table.Td>
-              <Table.Td className="mono">{count(r.name, 'member') || ''}</Table.Td>
-              <Table.Td className="mono">{count(r.name, 'role') || ''}</Table.Td>
-              <Table.Td>{attributes(r)}</Table.Td>
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
+      <Tabs value={tab} onChange={(next) => place.set({ tab: next })} keepMounted={false}>
+        <Tabs.List mb="lg">
+          <Tabs.Tab value="users" rightSection={<Count n={counts.users} />}>
+            Users
+          </Tabs.Tab>
+          <Tabs.Tab value="groups" rightSection={<Count n={counts.groups} />}>
+            Groups
+          </Tabs.Tab>
+        </Tabs.List>
+        <Tabs.Panel value="users">
+          <Users />
+        </Tabs.Panel>
+        <Tabs.Panel value="groups">
+          <Groups />
+        </Tabs.Panel>
+      </Tabs>
       {draft && (
         <Change
-          title="New role"
+          title={draft.login ? 'New user' : 'New group'}
           opened
           onClose={() => setDraft(null)}
           statements={() => createRoleStatements(draft)}
@@ -133,3 +95,10 @@ export function Roles() {
     </Page>
   )
 }
+
+/** How many roles of a kind there are, beside its name. */
+const Count = ({ n }: { n: number }) => (
+  <Text span fz="xs" c="dimmed" className="mono">
+    {n}
+  </Text>
+)

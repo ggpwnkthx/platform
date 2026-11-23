@@ -11,8 +11,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router'
-import { Grants } from './access/grants.tsx'
-import { Policies } from './access/policies-page.tsx'
 import { RoleDetail } from './access/role-detail.tsx'
 import { Roles } from './access/roles.tsx'
 import { Activity } from './activity/activity.tsx'
@@ -84,8 +82,10 @@ const routes: Record<keyof typeof pages, () => React.ReactNode> = {
   '/workspace/settings': WorkspaceSettings,
   '/access': Roles,
   '/access/role': RoleDetail,
-  '/access/grants': Grants,
-  '/access/policies': Policies,
+  // The pages the access module had before the workspace kept its own: the permissions
+  // moved to the workspace, and the row policies to the collection they belong to.
+  '/access/grants': () => <Moved to="/workspace/settings" />,
+  '/access/policies': () => <Moved to="/data/model" />,
   '/activity': Activity,
   '/sql': Sql,
 }

@@ -22,7 +22,7 @@ export function SchemaAccess({ schema }: { schema: string }) {
     (grants.data ?? []).filter((g) => !g.table && same(g.grantee, role)).map((g) => g.privilege)
   return (
     <Section
-      title="The workspace"
+      title="Who may use it"
       note="USAGE lets a role reach the collections it is granted; CREATE lets it make collections of its own."
       actions={
         owner && (

@@ -11,7 +11,7 @@ import { useNames } from '../shell/names.ts'
 import { GrantEditor } from './grant.tsx'
 import { Memberships } from './memberships.tsx'
 import { ReachTable } from './reach.tsx'
-import { attributes } from './roles.tsx'
+import { attributes } from './role-lists.tsx'
 import {
   holdsAny,
   same,

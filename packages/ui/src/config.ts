@@ -51,10 +51,12 @@ export const pages = {
   '/model/new': 'New collection',
   '/workspace/new': 'New workspace',
   '/workspace/settings': 'Workspace settings',
-  '/access': 'Roles',
+  '/access': 'Users and groups',
   '/access/role': 'Role',
-  '/access/grants': 'Permissions',
-  '/access/policies': 'Row policies',
+  // The access pages that gave way: a workspace keeps its own permissions, and a collection
+  // its own policies. A bookmark of either still lands on a page.
+  '/access/grants': 'Workspace permissions',
+  '/access/policies': 'Data model',
   '/activity': 'Activity',
   '/sql': 'SQL',
 } as const

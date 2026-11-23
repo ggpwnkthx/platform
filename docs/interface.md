@@ -25,10 +25,8 @@ move between pages without a reload, which is what keeps the token in memory.
 | `/data/model/new`        | Data     | A new collection, with its fields                                |
 | `/workspace/new`         |          | A new workspace (a schema)                                       |
 | `/workspace/settings`    |          | The workspace in view: its metadata and who may use it           |
-| `/access`                | Access   | The roles the reader may see, and a new role                     |
+| `/access`                | Access   | The users and groups the reader may see, and a new one           |
 | `/access/role`           | Access   | One role: memberships, what it may do in the workspace, policies |
-| `/access/grants`         | Access   | The workspace's permissions: who may use it, and every grant     |
-| `/access/policies`       | Access   | The row policies of the workspace's collections: new, changed    |
 | `/activity`              | Activity | The revisions the reader may read, under the audit table's RLS   |
 | `/sql`                   | SQL      | One statement at a time, run as the reader                       |
 
@@ -40,7 +38,9 @@ navigation pane with the workspace switcher and the collections of the workspace
 header with the page's actions, and a sidebar with the collection's information, the reader's
 rights on it and the row policies that apply to it. Everything is read in one workspace at a
 time. The address carries what is in view: the workspace in `?ws=`, the collection in `?c=`,
-a record in `?id=`. Roles and memberships are cluster-wide and the same in every workspace.
+a record in `?id=`, the kind of role in view in `?tab=`. Roles and memberships are cluster-wide
+and the same in every workspace, so the users and groups page is shown without the pane that
+picks one.
 
 The data module holds two views of a collection: its records and its shape. The records are what
 comes up by default — a collection opens on its records, and the workspace opens on its
@@ -156,20 +156,24 @@ thing:
 
 Access is one thing — PostgreSQL's ACLs, memberships and row policies — read from four places,
 and drawn the same way in each: a privilege is PostgreSQL's own name with a full, half or empty
-mark, and a half mark says how many fields it covers.
+mark, and a half mark says how many fields it covers. Each thing keeps its own access: a
+workspace's permissions with the workspace, a collection's with the collection, a role's with
+the role.
 
+- **A kind of role** (`/access`, in `?tab=users` or `?tab=groups`). The page keeps the two kinds
+  apart: the people who sign in, each with the groups it belongs to, and the groups, each with
+  its members and the groups it belongs to. A new role starts as the kind in view.
 - **A role** (`/access/role`). What the role may do in the workspace in view is PostgreSQL's own
   answer for it (`has_table_privilege`, `has_any_column_privilege`, `has_schema_privilege`, asked
   of that role), so a right held through a group or through PUBLIC counts, and a last column says
   where each comes from: its own grants, or the groups it inherits from. The row policies listed
   are the ones that apply to it by name, through a group, or as PUBLIC.
-- **A workspace** (`/access/grants`, and the same panel in `/workspace/settings`). Who holds
-  USAGE and CREATE on the schema, and for every collection the roles its ACL names and what each
-  holds. A row is one role on one collection, and opens the grant it draws.
+- **A workspace** (`/workspace/settings`). Who holds USAGE and CREATE on the schema, and the
+  workspace's own metadata. A grant on the schema is written here.
 - **A collection** (`/data/model/collection?tab=access`). The roles its ACL names; the roles that
   reach it through one of those without being named; who reads and writes each field; and its
-  row security, with its policies. A policy is written, changed and dropped here, and row
-  security is turned on and off here.
+  row security, with its policies. A grant on the collection, and a policy on it, are written
+  and changed here, and row security is turned on and off here.
 - **A field** (the key beside it, in the collection's Fields and Access tabs). The roles that
   hold SELECT, INSERT and UPDATE on the field, whether through the whole collection or by name.
 

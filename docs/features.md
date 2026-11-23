@@ -17,10 +17,12 @@
 The interface reads one workspace at a time, and inside it one collection at a time: the
 navigation pane lists the collections of the workspace in view, the data module holds a collection's
 records and, behind the gear beside the create button, its fields, its description, its row security switch and its
-metadata, and Access holds the roles, the rights each holds in the workspace and the row
-policies. Each is editable only where PostgreSQL says so, and every change to the model or to
-access is shown as SQL before it runs as the reader. The settings of a workspace hold its
-metadata and the access on the schema. See [interface](interface.md).
+metadata, and Access holds the roles themselves: the people who sign in and the groups that
+hold rights for them. The rights a role holds on a collection, and the row policies that
+decide which rows it reaches, live with that collection; the access on the schema lives with
+the workspace. Each is editable only where PostgreSQL says so, and every change to the model
+or to access is shown as SQL before it runs as the reader. The settings of a workspace hold
+its metadata and the access on the schema. See [interface](interface.md).
 
 Metadata is the description of an item rather than a row of it: a workspace may say what it
 is for, a collection may say how it should be read, a field may say what it holds. It is
