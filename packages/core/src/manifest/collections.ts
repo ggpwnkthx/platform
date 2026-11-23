@@ -6,6 +6,7 @@ import {
   createCollectionStatements,
   fieldStatements,
   relationStatement,
+  uniqueIndexStatement,
 } from '../sql/columns.ts'
 import { ident } from '../sql/kit.ts'
 import { collectionTarget, fieldTarget } from '../sql/metadata.ts'
@@ -40,6 +41,7 @@ export async function applyCollections(
       }
     }
     await applyCollectionSettings(run, schema, c, named)
+    await applyUniqueGroups(run, schema, c, named)
     await run.describe(collectionTarget(schema, c.name), c.metadata)
     for (const f of c.fields) await run.describe(fieldTarget(schema, c.name, f.name), f.metadata)
   }
@@ -74,6 +76,31 @@ async function applyCollectionSettings(run: Run, schema: string, c: Collection, 
   if (c.row_security !== undefined && held?.secured !== c.row_security) {
     await run.db.query(rowSecurityStatement(schema, c.name, c.row_security))
     run.changed(`${c.row_security ? 'ask' : 'stop asking'} ${named} for row policies`)
+  }
+}
+
+/**
+ * The pairs of columns that are unique together. An index PostgreSQL already holds over the
+ * same columns is left alone, so a second apply changes nothing.
+ */
+async function applyUniqueGroups(run: Run, schema: string, c: Collection, named: string) {
+  for (const group of c.unique) {
+    if (group.length < 2) continue
+    const found = await run.one(
+      `SELECT 1 FROM pg_index x JOIN pg_class c ON c.oid = x.indrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = $1 AND c.relname = $2 AND x.indisunique
+          AND (SELECT array_agg(a.attname::text ORDER BY a.attname)
+                 FROM unnest(x.indkey::int2[]) AS k(attnum)
+                 JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.attnum)
+              = (SELECT array_agg(x::text ORDER BY x::text) FROM unnest($3::text[]) AS x)`,
+      [schema, c.name, [...group]]
+    )
+    if (found) run.unchanged++
+    else {
+      await run.db.query(uniqueIndexStatement(schema, c.name, [...group]))
+      run.changed(`make ${named} hold one ${group.join(' and ')}`)
+    }
   }
 }
 

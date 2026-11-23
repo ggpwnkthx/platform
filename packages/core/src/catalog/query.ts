@@ -1,9 +1,12 @@
 import type { Db } from '../db.ts'
+import { systemFields } from '../sql/columns.ts'
 import {
   type Catalog,
   type ColumnInfo,
   type ConstraintInfo,
   type Identity,
+  type IndexInfo,
+  type JoinInfo,
   type RelationInfo,
   type SchemaInfo,
   type TableInfo,
@@ -76,7 +79,7 @@ export async function catalog(db: Db): Promise<Catalog> {
       JOIN pg_class c ON c.oid = con.conrelid JOIN pg_namespace n ON n.oid = c.relnamespace
       JOIN pg_class rc ON rc.oid = con.confrelid JOIN pg_namespace rn ON rn.oid = rc.relnamespace
       JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = con.conkey[1]
-     WHERE con.contype = 'f' AND ${usable} ORDER BY 1, 2, 3`)
+     WHERE con.contype = 'f' AND array_length(con.conkey, 1) = 1 AND ${usable} ORDER BY 1, 2, 3`)
   const constraints = await rows<ConstraintInfo>(`
     SELECT n.nspname::text AS schema, c.relname::text AS table, con.conname::text AS name,
            con.contype::text AS type, pg_get_constraintdef(con.oid) AS definition,
@@ -95,15 +98,89 @@ export async function catalog(db: Db): Promise<Catalog> {
        AND has_schema_privilege(n.oid, 'USAGE')
        AND NOT EXISTS (SELECT 1 FROM pg_type e WHERE e.oid = t.typelem AND e.typarray = t.oid)
      ORDER BY 1, 2`)
+  const indexes = await rows<IndexInfo>(`
+    SELECT n.nspname::text AS schema, c.relname::text AS table, ic.relname::text AS name,
+           ARRAY(SELECT a.attname::text
+                   FROM generate_subscripts(x.indkey, 1) AS s(i)
+                   JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = x.indkey[s.i]
+                  ORDER BY s.i) AS columns,
+           x.indisunique AS unique
+      FROM pg_index x JOIN pg_class c ON c.oid = x.indrelid
+      JOIN pg_class ic ON ic.oid = x.indexrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE ${usable} AND x.indisunique AND x.indisvalid AND x.indpred IS NULL
+     ORDER BY 1, 2, 3`)
   const visible = new Set(tables.map((t) => `${t.schema}.${t.name}`))
   const inView = <T extends { schema: string; table: string }>(all: T[]) =>
     all.filter((row) => visible.has(`${row.schema}.${row.table}`))
+  const relationsInView = inView(relations)
+  const indexesInView = inView(indexes)
   return {
     schemas,
     tables,
     columns: inView(columns),
-    relations: inView(relations),
+    relations: relationsInView,
     constraints: inView(constraints),
     types,
+    indexes: indexesInView,
+    joins: joinsOf(relationsInView, indexesInView, inView(columns)),
   }
+}
+
+/**
+ * The join tables among the relations: a table made of two foreign keys and nothing else,
+ * with a unique index over both columns, is a link between two rows and not a copy of one.
+ */
+function joinsOf(
+  relations: RelationInfo[],
+  indexes: IndexInfo[],
+  columns: ColumnInfo[]
+): JoinInfo[] {
+  const tables = new Map<string, RelationInfo[]>()
+  for (const relation of relations) {
+    const key = `${relation.schema}.${relation.table}`
+    const held = tables.get(key)
+    if (held) held.push(relation)
+    else tables.set(key, [relation])
+  }
+  const joins: JoinInfo[] = []
+  for (const [key, held] of tables) {
+    if (held.length !== 2) continue
+    const [left, right] = held as [RelationInfo, RelationInfo]
+    // A join table is made of the two keys and the columns every collection is made with.
+    const own = columns.filter(
+      (column) =>
+        column.schema === left.schema &&
+        column.table === left.table &&
+        !systemFields.includes(column.name)
+    )
+    if (own.length !== 2) continue
+    const pair = new Set([left.column, right.column])
+    const uniquePair = indexes.some(
+      (index) =>
+        index.schema === left.schema &&
+        index.table === left.table &&
+        index.columns.length === 2 &&
+        pair.has(index.columns[0]!) &&
+        pair.has(index.columns[1]!)
+    )
+    if (!uniquePair) continue
+    const [schema = '', table = ''] = key.split('.')
+    joins.push({
+      schema,
+      table,
+      left: {
+        column: left.column,
+        target_schema: left.target_schema,
+        target_table: left.target_table,
+      },
+      right: {
+        column: right.column,
+        target_schema: right.target_schema,
+        target_table: right.target_table,
+      },
+      uniquePair,
+    })
+  }
+  return joins
 }

@@ -137,7 +137,8 @@ export function collectionStatements(
   schema: string,
   name: string,
   note: string,
-  fields: readonly FieldSpec[]
+  fields: readonly FieldSpec[],
+  unique: readonly (readonly string[])[] = []
 ): string[] {
   const out = createCollectionStatements(schema, name)
   // Relations come last: a collection may point at itself, or at a field made after it.
@@ -145,11 +146,17 @@ export function collectionStatements(
   for (const field of fields)
     if (field.relation)
       out.push(relationStatement(schema, name, field.name, field.relation, field.onDelete))
+  // The pairs that are unique together: what makes a join table a link and not a copy.
+  for (const group of unique)
+    if (group.length > 1) out.push(uniqueIndexStatement(schema, name, [...group]))
   if (note.trim()) out.push(commentCollectionStatement(schema, name, note))
   return out
 }
 export const dropFieldStatement = (schema: string, table: string, field: string) =>
-  stmt`ALTER TABLE ${id(schema, table)} DROP COLUMN ${id(field)}`
+  stmt`ALTER TABLE ${id(schema, table)} DROP COLUMN ${id(field)}` /** The columns that are unique together: an index PostgreSQL holds, or a pair a join needs. */
+export const uniqueIndexStatement = (schema: string, table: string, columns: string[]) =>
+  stmt`CREATE UNIQUE INDEX ON ${id(schema, table)} (${list(columns.map((column) => id(column)))})`
+
 export const dropCollectionStatement = (schema: string, table: string) =>
   stmt`DROP TABLE ${id(schema, table)}`
 export const commentCollectionStatement = (schema: string, table: string, note: string) =>

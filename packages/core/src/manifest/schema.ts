@@ -44,6 +44,8 @@ const fieldSchema = z.object({
 export const collectionSchema = z.object({
   name,
   fields: z.array(fieldSchema).default([]),
+  /** Columns that are unique together: the pair a join table is made of. */
+  unique: z.array(z.array(name).min(2)).default([]),
   label: z.string().optional(),
   note: z.string().optional(),
   row_security: z.boolean().optional(),

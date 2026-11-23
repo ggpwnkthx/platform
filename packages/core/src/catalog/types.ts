@@ -44,6 +44,26 @@ export interface RelationInfo {
   target_table: string
   on_delete: string
 }
+/** An index PostgreSQL holds: the columns it covers, and whether it refuses duplicates. */
+export interface IndexInfo {
+  schema: string
+  table: string
+  name: string
+  columns: string[]
+  unique: boolean
+}
+/**
+ * A table that joins two others: two foreign keys, one to each, and a unique index over
+ * both. The pair is what a link is, and the index is what makes it a link and not a copy.
+ */
+export interface JoinInfo {
+  schema: string
+  table: string
+  left: { column: string; target_schema: string; target_table: string }
+  right: { column: string; target_schema: string; target_table: string }
+  /** A unique index covers both columns: the pair may be written with ON CONFLICT. */
+  uniquePair: boolean
+}
 export interface ConstraintInfo {
   schema: string
   table: string
@@ -66,6 +86,8 @@ export interface Catalog {
   relations: RelationInfo[]
   constraints: ConstraintInfo[]
   types: TypeInfo[]
+  indexes: IndexInfo[]
+  joins: JoinInfo[]
 }
 export interface Identity {
   username: string
@@ -83,5 +105,7 @@ export const emptyCatalog: Catalog = {
   relations: [],
   constraints: [],
   types: [],
+  indexes: [],
+  joins: [],
 }
 export const systemSchema = 'platform'

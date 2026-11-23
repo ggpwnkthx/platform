@@ -1,6 +1,7 @@
 export * from './access.ts'
 export * from './catalog/types.ts'
 export * from './catalog/labels.ts'
+export * from './catalog/relations.ts'
 export { identity, catalog } from './catalog/query.ts'
 export * from './db.ts'
 export * from './manifest.ts'
