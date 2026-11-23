@@ -10,8 +10,15 @@ import { chromium } from 'playwright'
 const root = fileURLToPath(new URL('../../..', import.meta.url))
 const port = 5179
 const options = (env = {}) => ({ cwd: root, env: { ...process.env, ...env }, stdio: 'ignore' })
-const build = (args, env) =>
-  spawnSync('bun', ['packages/cli/src/cli.ts', 'ui', 'build', ...args], options(env))
+const build = (args, env) => {
+  const done = spawnSync('bun', ['packages/cli/src/cli.ts', 'ui', 'build', ...args], {
+    cwd: root,
+    env: { ...process.env, ...env },
+    encoding: 'utf8',
+  })
+  if (done.status !== 0) console.log('BUILD FAILED', done.stderr, done.stdout)
+  return done
+}
 const start = (args, env) => spawn('bun', args, options(env))
 const serve = () =>
   start([
@@ -22,6 +29,24 @@ const serve = () =>
     `--port=${port}`,
   ])
 const settle = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+/** Stops a server and waits for it to let its port go: the next one wants it. */
+const stop = async (proc) => {
+  if (!proc) return
+  proc.kill()
+  await Promise.race([new Promise((resolve) => proc.on('exit', resolve)), settle(4000)])
+}
+/** Waits until nothing answers on a port: the server that held it has let it go. */
+const released = async (port) => {
+  for (let at = 0; at < 50; at++) {
+    try {
+      await fetch(`http://localhost:${port}/`)
+    } catch {
+      return true
+    }
+    await settle(200)
+  }
+  return false
+}
 
 // The dev mode: the example, with PostgreSQL in the page.
 build(['--dir=examples/newsroom'])
@@ -46,9 +71,22 @@ const check = async (name, work) => {
   } catch (error) {
     failed++
     console.log('FAIL', name, String(error).split('\n')[0])
+    console.log(
+      '  page:',
+      (
+        await page
+          .locator('body')
+          .textContent()
+          .catch(() => '')
+      )
+        .slice(0, 700)
+        .replace(/\n+/g, ' | ')
+    )
+    console.log('  url:', page.url())
   }
 }
 const statement = async () => (await page.locator('.statement pre').first().textContent()) ?? ''
+const statements = async () => await page.locator('.statement pre').allTextContents()
 const expectText = (text, timeout = 15000) => page.getByText(text).first().waitFor({ timeout })
 const dialog = () => page.getByRole('dialog')
 
@@ -150,11 +188,78 @@ await check('a record is written, read back, changed under its version, and logg
   await expectText('UPDATE by')
 })
 await check('search and a filter narrow the records, in the address', async () => {
-  await go('/data/records?ws=newsroom&c=articles&q=budget&f.status=eq.published')
-  await expectText('What the budget means for school meals')
+  await go('/data/records?ws=newsroom&c=articles&q=Ward+boundaries&f.status=eq.published')
+  await expectText('Ward boundaries: the new map, street by street')
   const rows = await page.locator('tbody tr').count()
   if (rows !== 1) throw new Error('rows: ' + rows)
   await expectText('1–1 of 1')
+})
+await check('a many-to-many is made in one step, as a table of its own', async () => {
+  await go('/data/model/collection?ws=newsroom&c=articles')
+  await page.getByRole('button', { name: 'Many to many' }).click()
+  await page.getByLabel('And the other side is').first().click()
+  await page.getByRole('option', { name: 'pitches' }).click()
+  const sql = (await statements()).join('\n')
+  if (!sql.includes(`SELECT platform.create_collection('newsroom', 'articles_pitches');`))
+    throw new Error('statement: ' + sql)
+  if (!sql.includes(`ALTER TABLE "newsroom"."articles_pitches" ADD FOREIGN KEY ("articles")`))
+    throw new Error('statement: ' + sql)
+  if (!sql.includes(`ALTER TABLE "newsroom"."articles_pitches" ADD FOREIGN KEY ("pitches")`))
+    throw new Error('statement: ' + sql)
+  if (
+    !sql.includes(`CREATE UNIQUE INDEX ON "newsroom"."articles_pitches" ("articles", "pitches");`)
+  )
+    throw new Error('statement: ' + sql)
+  await page.getByRole('button', { name: 'Run' }).click()
+  await expectText('statements ran as you')
+  await go('/data/model/collection?ws=newsroom&c=articles_pitches')
+  await expectText('Appears in')
+})
+await check('a record is linked to another, and the link is written', async () => {
+  await go('/data/records?ws=newsroom&c=articles')
+  await page.locator('tbody tr').first().click()
+  await page.getByLabel('Tags').first().waitFor({ timeout: 15000 })
+  await page.getByLabel('Tags').first().click()
+  await page.getByRole('option', { name: 'Sport' }).first().click()
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expectText('Saved.')
+  await go('/data/records?ws=newsroom&c=article_tags')
+  await expectText('Sport')
+})
+await check('the rows that point at a record are counted, and lead to them', async () => {
+  await go('/data/records?ws=newsroom&c=articles')
+  await page.locator('tbody tr').first().click()
+  await expectText('Rows that point here')
+  const count = page.getByTitle('Every corrections that points at this row')
+  await count.waitFor({ timeout: 15000 })
+  await count.click()
+  await expectText('Corrections')
+  if (!page.url().includes('c=corrections') || !page.url().includes('f.article=eq.'))
+    throw new Error(`landed on ${page.url()}`)
+})
+await check('the search follows the name of the row a record points at', async () => {
+  // 'Sport' is the name of a section and of a tag: no headline of the example says it.
+  await go('/data/records?ws=newsroom&c=articles&q=Sport')
+  await page.locator('tbody tr').first().waitFor({ timeout: 15000 })
+  const rows = await page.locator('tbody tr').count()
+  if (!rows) throw new Error('the search found no story in the Sport section')
+})
+await check('a filter may ask by the rows a record reaches', async () => {
+  await go('/data/records?ws=newsroom&c=articles')
+  await page.getByRole('button', { name: 'Filter' }).click()
+  await page.getByPlaceholder('Field').click()
+  await page.getByRole('option', { name: 'Tags', exact: true }).click()
+  await page.getByRole('switch').click()
+  await page.getByPlaceholder('Their field').click()
+  await page.getByRole('option', { name: 'name', exact: true }).click()
+  await page.getByPlaceholder('Condition').click()
+  await page.getByRole('option', { name: 'is', exact: true }).click()
+  await page.getByLabel('Value').fill('Sport')
+  await page.getByRole('button', { name: 'Add filter' }).click()
+  if (!page.url().includes('f.tags=through.name.eq.Sport'))
+    throw new Error(`landed on ${page.url()}`)
+  const rows = await page.locator('tbody tr').count()
+  if (!rows) throw new Error('the filter found no story with the Sport tag')
 })
 await check('alice is held to her grants and the policies', async () => {
   await page.getByRole('button', { name: 'Your account' }).click()
@@ -173,7 +278,8 @@ await check('alice is held to her grants and the policies', async () => {
 })
 
 // The published interface: an issuer to sign in through, and PostgreSQL behind the relay.
-server.kill()
+await stop(server)
+if (!(await released(port))) throw new Error('the port was not released')
 const published = {
   PLATFORM_ISSUER: 'http://localhost:5560',
   PLATFORM_RELAY_URL: 'ws://localhost:5181',
@@ -192,6 +298,7 @@ await check(
     await expectText('Headline', 30000)
     if (!page.url().endsWith('/data/records?ws=newsroom&c=articles'))
       throw new Error(`landed on ${page.url()}`)
+    await expectText('1–25 of 60', 30000)
     if ((await page.locator('tbody tr').count()) !== 25)
       throw new Error('the records did not arrive through the relay')
   }
@@ -211,10 +318,10 @@ await check(
     await expectText('(42601)')
   }
 )
-backend.kill()
+await stop(backend)
 
 // The site's own Content-Security-Policy is in force: anything it refused is an error here.
 if (errors.length) console.log('The page reported errors:', [...new Set(errors)])
 await browser.close()
-server.kill()
+await stop(server)
 process.exit(failed || errors.length ? 1 : 0)

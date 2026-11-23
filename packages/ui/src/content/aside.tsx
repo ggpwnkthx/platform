@@ -23,7 +23,7 @@ export function CollectionAside({
     whole: boolean,
     right: 'can_select' | 'can_insert' | 'can_update'
   ): [Hold, string] => {
-    const some = fields.filter((f) => f.column[right]).length
+    const some = fields.filter((f) => f.column?.[right]).length
     return [whole ? 'all' : some ? 'some' : 'none', `${some}/${fields.length}`]
   }
   const applying = (rules.data ?? []).filter((p) => p.applies)

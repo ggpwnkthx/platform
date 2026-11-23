@@ -10,6 +10,7 @@ import { NoCollection } from '../bits/empty.tsx'
 import { ItemMark } from '../bits/marks.tsx'
 import { Page, Problem } from '../bits/page.tsx'
 import { Value } from '../fields/renderers.tsx'
+import { conditionText } from '../fields/filters.ts'
 import { useFields } from '../fields/resolve.ts'
 import { useSession } from '../session/context.ts'
 import { usePlace } from '../session/hooks.ts'
@@ -30,7 +31,7 @@ export function Records() {
   const [confirming, setConfirming] = useState(false)
   const [refusal, setRefusal] = useState<unknown>(null)
   const search = useDebouncedCallback((q: string) => place.set({ q, page: null }), 300)
-  const { found, readable, shown, hasId, filter, q, sort, page, size } = useRecords({
+  const { found, shown, hasId, filter, q, sort, page, size } = useRecords({
     catalog,
     ws: place.ws,
     table: place.c,
@@ -87,7 +88,7 @@ export function Records() {
               Delete {selected.length}
             </Button>
           )}
-          {fields.some((f) => f.column.can_insert) && info.kind !== 'v' && hasId && (
+          {fields.some((f) => f.column?.can_insert) && info.kind !== 'v' && hasId && (
             <ActionIcon
               size={44}
               radius="xl"
@@ -113,11 +114,13 @@ export function Records() {
       }
     >
       <Toolbar
-        fields={readable.filter((f) => f.views.filter !== 'hide')}
+        fields={fields.filter(
+          (f) => f.views.filter !== 'hide' && (f.virtual || f.column?.can_select)
+        )}
         filter={filter}
         value={q}
         onSearch={search}
-        onAdd={(name, one) => place.set({ [`f.${name}`]: `${one.op}.${one.value}`, page: null })}
+        onAdd={(name, one) => place.set({ [`f.${name}`]: conditionText(one), page: null })}
         onRemove={(name) => place.set({ [`f.${name}`]: null, page: null })}
       />
       <Problem error={found.error} />

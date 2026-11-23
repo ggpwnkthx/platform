@@ -1,4 +1,4 @@
-import { type Operator, valueless } from '@platform/core'
+import { type Condition, isRelationOperator, type Operator, valueless } from '@platform/core'
 import type { Field } from './types.ts'
 
 export const operatorWords: Record<Operator, string> = {
@@ -23,7 +23,16 @@ export const operatorWords: Record<Operator, string> = {
 export function filterValue(field: Field | undefined, op: Operator, text: string): unknown {
   const parse = (one: string) => field?.type.parseFilter?.(one) ?? one
   if (valueless.includes(op)) return null
-  return op === 'in' || op === 'not_in'
-    ? text.split(',').map((one) => parse(one.trim()))
-    : parse(text)
+  if (op === 'in' || op === 'not_in' || isRelationOperator(op))
+    return text
+      .split(',')
+      .map((one) => parse(one.trim()))
+      .filter((one) => one !== '')
+  return parse(text)
 }
+
+/** The condition as the address carries it. */
+export const conditionText = (one: Condition): string =>
+  one.through
+    ? `through.${one.through.column}.${one.through.op}.${one.through.value}`
+    : `${one.op}.${one.value}`

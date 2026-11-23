@@ -1,7 +1,6 @@
 import { ActionIcon, Button, Group, Modal, Stack, Text } from '@mantine/core'
-import { activity, record } from '@platform/core'
+import { activity, linkedRows, record } from '@platform/core'
 import { Save, Trash2 } from 'lucide-react'
-import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { NoCollection } from '../bits/empty.tsx'
 import { ItemMark } from '../bits/marks.tsx'
@@ -9,20 +8,23 @@ import { Empty, Page, Problem } from '../bits/page.tsx'
 import { useFields } from '../fields/resolve.ts'
 import { textOf } from '../fields/values.tsx'
 import { useDb, usePlace } from '../session/hooks.ts'
+import { useSession } from '../session/context.ts'
 import { useNames } from '../shell/names.ts'
 import { CollectionAside } from './aside.tsx'
 import { FieldOf, Revisions, SystemFields } from './form.tsx'
+import { RelatedRows } from './related.tsx'
+import { useSeededForm } from './seed.ts'
 import type { Row } from './query.ts'
 import { useRecordWriter } from './writer.ts'
 
-/** One record: read it, edit it, delete it, or write a new one. */
 export function Item() {
   const place = usePlace()
+  const { catalog } = useSession()
   const names = useNames()
   const navigate = useNavigate()
   const { info, fields, loading } = useFields(place.ws, place.c)
   const id = place.id
-  const readable = fields.filter((f) => f.column.can_select).map((f) => f.name)
+  const readable = fields.filter((f) => f.column?.can_select).map((f) => f.name)
   const loaded = useDb(
     ['record', place.ws, place.c, id, readable],
     (one) => record(one, place.ws, place.c, readable, id),
@@ -34,6 +36,18 @@ export function Item() {
     !!id
   )
   const row = loaded.data as Row | null | undefined
+  // The rows this record is linked to, and the rows that point at it.
+  const linkFields = fields.filter((f) => f.link?.kind === 'links')
+  const childFields = fields.filter((f) => f.link?.kind === 'children')
+  const links = useDb(
+    ['links', place.ws, place.c, id],
+    async (one) => {
+      const out: Record<string, { id: string; label: string }[]> = {}
+      for (const f of linkFields) out[f.name] = await linkedRows(one, catalog, f.link!.path, id)
+      return out
+    },
+    !!id && linkFields.length > 0
+  )
   // The record form goes back to where the reader came from: a page of the interface, nowhere else.
   const from = place.params.get('from')
   const back =
@@ -49,25 +63,16 @@ export function Item() {
     row,
     fields,
   })
-  const [seeded, setSeeded] = useState<string | null>(null)
-  const seed = `${place.c}/${id}/${row ? row.version : ''}/${loading}`
-  // The form is drawn once it holds the record, so nothing the reader types is overwritten by it.
-  if (seeded !== seed && !loading && (!id || row)) {
-    // A new record may start from what the address says: v.<field>=…
-    const start = Object.fromEntries(
-      writer.inForm.map((f) => [
-        f.name,
-        f.type.toForm
-          ? f.type.toForm(row?.[f.name] ?? null)
-          : textOf(row?.[f.name] ?? place.params.get(`v.${f.name}`) ?? ''),
-      ])
-    )
-    for (const f of writer.inForm)
-      if (!id && place.params.has(`v.${f.name}`)) start[f.name] = place.params.get(`v.${f.name}`)
-    writer.form.setInitialValues(start)
-    writer.form.setValues(start)
-    setSeeded(seed)
-  }
+  const seed = `${place.c}/${id}/${row ? row.version : ''}/${loading}/${links.isLoading}`
+  const ready = useSeededForm({
+    writer,
+    row,
+    links: links.data ?? {},
+    id,
+    params: place.params,
+    loading: loading || links.isLoading,
+    seed,
+  })
   if (!info)
     return (
       <Page title="Record">
@@ -87,7 +92,7 @@ export function Item() {
         id
           ? textOf(
               row?.[
-                fields.find((f) => f.kind === 'text' && !f.system && f.column.can_select)?.name ??
+                fields.find((f) => f.kind === 'text' && !f.system && f.column?.can_select)?.name ??
                   'id'
               ]
             ) || 'Record'
@@ -133,6 +138,7 @@ export function Item() {
         id ? (
           <Stack gap="lg">
             <SystemFields fields={fields} row={row} />
+            <RelatedRows fields={childFields} id={id} />
             <Revisions history={history.data} />
           </Stack>
         ) : (
@@ -147,7 +153,7 @@ export function Item() {
         </Empty>
       )}
       <Stack maw={720}>
-        {seeded === seed &&
+        {ready &&
           writer.inForm.map((f) => (
             <FieldOf
               key={f.name}

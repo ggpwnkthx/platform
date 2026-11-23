@@ -35,7 +35,7 @@ export const jsonType: FieldType = {
       JSON.parse(text)
       return text
     } catch {
-      if (field.column.schema === 'platform' && field.column.table === 'item_metadata')
+      if (field.column?.schema === 'platform' && field.column?.table === 'item_metadata')
         return JSON.stringify(text)
       throw new Error('This is not JSON')
     }

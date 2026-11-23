@@ -8,7 +8,18 @@ import type {
   MetadataRow,
   Operator,
   RelationInfo,
+  RelationPath,
 } from '@platform/core'
+
+/**
+ * A relation read as rows rather than as one column: the rows a record is linked to, and
+ * how it reaches them. A field with no column of its own is a virtual field.
+ */
+export interface FieldLink {
+  kind: 'links' | 'children'
+  /** How a record reaches the rows. */
+  path: RelationPath
+}
 
 /**
  * A field is a column PostgreSQL holds, met in three situations: a cell in the records grid,
@@ -19,9 +30,14 @@ import type {
 export interface Field {
   name: string
   label: string
-  column: ColumnInfo
+  /** The column PostgreSQL holds. A virtual field has none: it is a relation, not a column. */
+  column: ColumnInfo | null
   kind: Kind
   relation?: RelationInfo
+  /** The rows a record is linked to, when the field is a relation read as rows. */
+  link?: FieldLink
+  /** A field with no column of its own: the interface reads and writes it as rows. */
+  virtual: boolean
   choices: string[] | null
   /** A column every collection is made with. */
   system: boolean
@@ -48,6 +64,15 @@ export interface InputProps {
   error?: ReactNode
   label?: ReactNode
 }
+/** What a condition of a filter holds, and how it is changed. */
+export interface FilterInputProps {
+  field: Field
+  op: Operator
+  value: unknown
+  onChange(value: unknown): void
+  error?: ReactNode
+  label?: ReactNode
+}
 export interface FieldType {
   name: string
   label: string
@@ -63,5 +88,7 @@ export interface FieldType {
   operators: Operator[]
   /** The value a condition carries, from what was typed. */
   parseFilter?(text: string): unknown
+  /** The input a condition is given, when text is not enough to say it. */
+  FilterInput?(props: FilterInputProps): ReactNode
 }
 export type { Catalog, MetadataRow }

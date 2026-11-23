@@ -1,44 +1,35 @@
-import { Select } from '@mantine/core'
-import { labelColumn, relationOptions } from '@platform/core'
-import { useState } from 'react'
-import { useSession } from '../session/context.ts'
-import { useDb } from '../session/hooks.ts'
-import type { FieldType, InputProps } from './types.ts'
+import type { FieldType, FilterInputProps, InputProps } from './types.ts'
 import { Clipped, Mono, textOf } from './values.tsx'
+import { RelationPicker } from './picker.tsx'
 
+/** A field that points at a row of another collection: one row, held by its id. */
 function RelationInput({ field, value, onChange, error, label }: InputProps) {
-  const { catalog, presentations } = useSession()
-  const [search, setSearch] = useState('')
-  const { target_schema: schema, target_table: table } = field.relation!
-  const shown = labelColumn(
-    catalog,
-    schema,
-    table,
-    presentations[`${schema}.${table}`]?.displayField
-  )
-  const options = useDb(['relation', schema, table, search], (db) =>
-    relationOptions(db, schema, table, shown, search)
-  )
-  const data = (options.data ?? []).map((row) => ({ value: row.id, label: row.label ?? row.id }))
-  if (value && !data.some((row) => row.value === value))
-    data.unshift({ value: String(value), label: String(value) })
+  const relation = field.relation!
   return (
-    <Select
+    <RelationPicker
+      schema={relation.target_schema}
+      table={relation.target_table}
+      value={value ? [String(value)] : []}
+      onChange={(ids) => onChange(ids[0] ?? '')}
       label={label}
-      error={
-        error ??
-        (options.error ? 'The rows it may point at are not yours to read: give an id.' : undefined)
-      }
-      data={data}
-      value={value ? String(value) : null}
-      onChange={(id) => onChange(id ?? '')}
-      searchable
-      clearable
-      searchValue={search}
-      onSearchChange={setSearch}
-      filter={({ options: all }) => all}
-      placeholder={`A row of ${table}`}
-      nothingFoundMessage="No row matches"
+      error={error}
+    />
+  )
+}
+
+/** The condition on a relation: one row, or a list of them. */
+function RelationFilter({ field, op, value, onChange, error, label }: FilterInputProps) {
+  const relation = field.relation!
+  const many = op === 'in' || op === 'not_in'
+  return (
+    <RelationPicker
+      schema={relation.target_schema}
+      table={relation.target_table}
+      value={Array.isArray(value) ? value.map(String) : value ? [String(value)] : []}
+      onChange={onChange}
+      multiple={many}
+      label={label}
+      error={error}
     />
   )
 }
@@ -63,5 +54,6 @@ export const relationType: FieldType = {
   },
   Input: RelationInput,
   fromForm: (held) => (held === '' || held === undefined ? null : held),
-  operators: ['eq', 'neq', 'is_null', 'not_null'],
+  operators: ['eq', 'neq', 'in', 'not_in', 'is_null', 'not_null'],
+  FilterInput: RelationFilter,
 }

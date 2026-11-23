@@ -8,6 +8,7 @@ import {
   fieldStatements,
   fieldTarget,
   fieldsViewsStatement,
+  tablesIn,
 } from '@platform/core'
 import { Plus } from 'lucide-react'
 import { useState } from 'react'
@@ -21,14 +22,17 @@ import type { Field } from '../fields/types.ts'
 import { MetadataPanel } from '../metadata/panel.tsx'
 import { FieldSayings } from '../metadata/sayings.tsx'
 import { usePlace } from '../session/hooks.ts'
+import { useSession } from '../session/context.ts'
 import { useNames } from '../shell/names.ts'
 import { CollectionAccess } from '../access/collection.tsx'
 import { emptyField, FieldForm, fieldOf } from './field-form.tsx'
 import { FieldTable } from './field-table.tsx'
+import { ManyToMany } from './many.tsx'
 
 /** One collection: its fields, its metadata, and its access. */
 export function CollectionModel() {
   const place = usePlace()
+  const { catalog } = useSession()
   const names = useNames()
   const navigate = useNavigate()
   const { info, fields } = useFields(place.ws, place.c)
@@ -85,6 +89,9 @@ export function CollectionModel() {
               <Button leftSection={<Plus size={16} />} onClick={() => setAdding(emptyField)}>
                 Add field
               </Button>
+            )}
+            {info.can_alter && (
+              <ManyToMany schema={place.ws} table={place.c} tables={tablesIn(catalog, place.ws)} />
             )}
           </Group>
           <FieldTable

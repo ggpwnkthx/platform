@@ -10,7 +10,7 @@ export function SystemFields({
   fields: Field[]
   row: Record<string, unknown> | null | undefined
 }) {
-  const system = fields.filter((f) => f.system && f.column.can_select)
+  const system = fields.filter((f) => f.system && f.column?.can_select)
   return (
     <Table withRowBorders={false} verticalSpacing={4}>
       <Table.Tbody>
@@ -91,32 +91,35 @@ export function FieldOf({
           onChange={onChange}
           error={error}
         />
-        {!field.column.can_select && (
+        {field.column && !field.column.can_select && (
           <Text fz="xs" c="dimmed">
             write-only: you may set it, and PostgreSQL will not show it to you
           </Text>
         )}
       </div>
     )
+  const hidden = field.column !== null && !field.column.can_select
   return (
     <div>
       <Text fz="sm" fw={500}>
         {label}
       </Text>
-      {field.column.can_select ? (
-        <Value field={field} value={value} situation="record" />
-      ) : (
+      {hidden ? (
         <Text fz="sm" c="dimmed">
           hidden from you
         </Text>
+      ) : (
+        <Value field={field} value={value} situation="record" />
       )}
-      {field.column.can_select && (
+      {!hidden && (
         <Text fz="xs" c="dimmed">
-          {field.computed
-            ? 'PostgreSQL computes it'
-            : field.views.record === 'readonly'
-              ? 'locked by the owner of the collection'
-              : 'read-only for you'}
+          {field.virtual
+            ? 'read by the interface as rows'
+            : field.computed
+              ? 'PostgreSQL computes it'
+              : field.views.record === 'readonly'
+                ? 'locked by the owner of the collection'
+                : 'read-only for you'}
         </Text>
       )}
     </div>

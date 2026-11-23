@@ -139,7 +139,7 @@ export const basicTypes: FieldType[] = [
         ]}
         value={props.value === null || props.value === '' ? null : String(props.value)}
         onChange={(v) => props.onChange(v === null ? null : v === 'true')}
-        clearable={!props.field.column.required}
+        clearable={!props.field.column?.required}
       />
     ),
     toForm: (value) => value ?? null,

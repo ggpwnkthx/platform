@@ -15,7 +15,7 @@ export const choiceType: FieldType = {
       data={props.field.choices ?? []}
       value={textOf(props.value) || null}
       onChange={(v) => props.onChange(v ?? '')}
-      clearable={!props.field.column.required}
+      clearable={!props.field.column?.required}
     />
   ),
   fromForm: (held) => (held === '' || held === undefined ? null : held),

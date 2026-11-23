@@ -14,13 +14,15 @@ export const shortType = (type: string) =>
 
 /** What PostgreSQL withholds from the reader is marked, never papered over. */
 export const withheld = (f: Field) =>
-  !f.column.can_select && !f.column.can_insert && !f.column.can_update
-    ? 'hidden from you'
-    : !f.column.can_select
-      ? 'write-only'
-      : !f.column.can_update && !f.computed && !f.system
-        ? 'read-only'
-        : null
+  !f.column
+    ? null
+    : !f.column.can_select && !f.column.can_insert && !f.column.can_update
+      ? 'hidden from you'
+      : !f.column.can_select
+        ? 'write-only'
+        : !f.column.can_update && !f.computed && !f.system
+          ? 'read-only'
+          : null
 
 /** The fields of a collection, as the reader may know them. */
 export function FieldTable({
@@ -58,10 +60,15 @@ export function FieldTable({
               {withheld(f) && <Tag color="yellow">{withheld(f)}</Tag>}
             </Table.Td>
             <Table.Td>
-              <Text className="mono">{shortType(f.column.type)}</Text>
+              <Text className="mono">{f.column ? shortType(f.column.type) : 'rows'}</Text>
               {f.relation && (
                 <Text fz="xs" c="dimmed">
                   → <span className="mono">{f.relation.target_table}</span>
+                </Text>
+              )}
+              {f.link && (
+                <Text fz="xs" c="dimmed">
+                  → <span className="mono">{f.link.path.target_table}</span>
                 </Text>
               )}
               {f.computed && (
@@ -72,16 +79,16 @@ export function FieldTable({
             </Table.Td>
             <Table.Td>
               <Group gap={4}>
-                {f.column.required && <Tag>required</Tag>}
+                {f.column?.required && <Tag>required</Tag>}
                 {f.choices && <Tag>{f.choices.length} choices</Tag>}
-                {f.column.default && (
+                {f.column?.default && (
                   <Text fz="xs" className="mono" c="dimmed">
                     default {f.column.default}
                   </Text>
                 )}
               </Group>
               <Text fz="xs" c="dimmed">
-                {f.column.comment}
+                {f.column?.comment}
               </Text>
             </Table.Td>
             <Table.Td>

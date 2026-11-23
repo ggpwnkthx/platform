@@ -1,5 +1,5 @@
 import { Group, Pill, TextInput } from '@mantine/core'
-import { type Condition, type Filter, valueless } from '@platform/core'
+import { type Condition, type Filter, isRelationOperator, valueless } from '@platform/core'
 import { Search } from 'lucide-react'
 import { operatorWords } from '../fields/filters.ts'
 import { textOf } from '../fields/values.tsx'
@@ -26,7 +26,7 @@ export function Toolbar({
   return (
     <Group mb="sm">
       <TextInput
-        placeholder="Search every readable column"
+        placeholder="Search every readable column, and the names it knows"
         leftSection={<Search size={16} />}
         radius="xl"
         w={320}
@@ -36,9 +36,13 @@ export function Toolbar({
       <FilterBuilder fields={fields} add={onAdd} />
       {Object.entries(filter).map(([name, one]) => (
         <Pill key={name} size="lg" withRemoveButton onRemove={() => onRemove(name)}>
-          {fields.find((f) => f.name === name)?.label ?? name} {operatorWords[one.op]}{' '}
+          {fields.find((f) => f.name === name)?.label ?? name}{' '}
+          {one.through ? <span className="mono">{one.through.column}</span> : null}{' '}
+          {operatorWords[one.op]}{' '}
           {valueless.includes(one.op) ? (
             ''
+          ) : isRelationOperator(one.op) ? (
+            <span className="mono">{[one.value].flat().length} rows</span>
           ) : (
             <span className="mono">{textOf([one.value].flat().join(', '))}</span>
           )}
