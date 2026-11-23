@@ -2,8 +2,9 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
 import { PGlite } from '@electric-sql/pglite'
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket'
-import { hardenSql } from '../src/database.ts'
-import { addresses, ensureSettings, renderKubernetes } from '../src/deploy.ts'
+import { hardenSql } from '../src/database/doctor.ts'
+import { addresses, ensureSettings } from '../src/deploy/settings.ts'
+import { renderKubernetes } from '../src/deploy/kubernetes.ts'
 import { readApplied, ROOT, siteFiles } from '../src/site.ts'
 
 describe('a deployment', () => {
