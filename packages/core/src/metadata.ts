@@ -2,12 +2,12 @@ import type { Db } from './db.ts'
 import {
   defaultViews,
   type MetadataScope,
+  metadataColumns,
   type MetadataTarget,
   renderersKey,
   type ViewMode,
   viewsKey,
-} from './sql.ts'
-
+} from './sql/metadata.ts'
 export interface MetadataRow {
   scope: MetadataScope
   schema_name: string
@@ -31,7 +31,7 @@ export const isReservedKey = (scope: MetadataScope, key: string) =>
   (presentationKeys as readonly string[]).includes(key) ||
   (scope === 'field' && [viewsKey, renderersKey].includes(key))
 
-const columns = 'scope, schema_name, table_name, column_name, key, value'
+const columns = metadataColumns
 /** The metadata of one item. Row security returns the rows the caller may reach, no others. */
 export async function metadata(db: Db, target: MetadataTarget) {
   const result = await db.query<MetadataEntry>(

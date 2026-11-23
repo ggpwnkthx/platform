@@ -1,94 +1,15 @@
-import type { Db } from './db.ts'
-import { systemFields } from './sql.ts'
-
-export interface SchemaInfo {
-  name: string
-  owner: string
-  kind: 'user' | 'system'
-  can_create: boolean
-  can_alter: boolean
-}
-export interface TableInfo {
-  schema: string
-  name: string
-  kind: string
-  rls: boolean
-  force_rls: boolean
-  owner: string
-  comment: string | null
-  system: boolean
-  can_select: boolean
-  can_insert: boolean
-  can_update: boolean
-  can_delete: boolean
-  can_truncate: boolean
-  can_alter: boolean
-}
-export interface ColumnInfo {
-  schema: string
-  table: string
-  name: string
-  position: number
-  type: string
-  required: boolean
-  default: string | null
-  comment: string | null
-  generated: string | null
-  identity: string | null
-  can_select: boolean
-  can_insert: boolean
-  can_update: boolean
-}
-export interface RelationInfo {
-  schema: string
-  table: string
-  column: string
-  target_schema: string
-  target_table: string
-  on_delete: string
-}
-export interface ConstraintInfo {
-  schema: string
-  table: string
-  name: string
-  type: string
-  definition: string
-  columns: string[]
-}
-export interface TypeInfo {
-  name: string
-  schema: string
-  bare: string
-  label: string
-  kind: string
-}
-export interface Catalog {
-  schemas: SchemaInfo[]
-  tables: TableInfo[]
-  columns: ColumnInfo[]
-  relations: RelationInfo[]
-  constraints: ConstraintInfo[]
-  types: TypeInfo[]
-}
-export interface Identity {
-  username: string
-  effective_role: string
-  database: string
-  platform_version: string | null
-  server_version: string
-  can_create_workspace: boolean
-  is_operator: boolean
-}
-export const emptyCatalog: Catalog = {
-  schemas: [],
-  tables: [],
-  columns: [],
-  relations: [],
-  constraints: [],
-  types: [],
-}
-export const systemSchema = 'platform'
-
+import type { Db } from '../db.ts'
+import {
+  type Catalog,
+  type ColumnInfo,
+  type ConstraintInfo,
+  type Identity,
+  type RelationInfo,
+  type SchemaInfo,
+  type TableInfo,
+  type TypeInfo,
+  systemSchema,
+} from '../catalog/types.ts'
 export async function identity(db: Db): Promise<Identity> {
   const result = await db.query<Identity>(`
     SELECT session_user::text AS username, current_user::text AS effective_role,
@@ -185,81 +106,4 @@ export async function catalog(db: Db): Promise<Catalog> {
     constraints: inView(constraints),
     types,
   }
-}
-
-export const tablesIn = (catalog: Catalog, schema: string) =>
-  catalog.tables.filter((t) => t.schema === schema)
-export const tableOf = (catalog: Catalog, schema: string, table: string) =>
-  catalog.tables.find((t) => t.schema === schema && t.name === table)
-export const columnsOf = (catalog: Catalog, schema: string, table: string) =>
-  catalog.columns.filter((c) => c.schema === schema && c.table === table)
-export const relationOf = (catalog: Catalog, schema: string, table: string, column: string) =>
-  catalog.relations.find((r) => r.schema === schema && r.table === table && r.column === column)
-
-/** The values a CHECK holds a column to, read back from the constraint PostgreSQL keeps. */
-export function choicesOf(catalog: Catalog, schema: string, table: string, column: string) {
-  const quoted = column.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const shape = new RegExp(
-    `^CHECK \\(+"?${quoted}"?\\)?(?:::text)? = ANY \\(+ARRAY\\[(.*)\\][^\\]]*$`
-  )
-  for (const constraint of catalog.constraints) {
-    if (constraint.schema !== schema || constraint.table !== table || constraint.type !== 'c')
-      continue
-    const match = constraint.definition.match(shape)
-    if (!match?.[1]) continue
-    const values = [...match[1].matchAll(/'((?:[^']|'')*)'(?:::[a-z ]+)?/g)].map((m) =>
-      m[1]!.replaceAll("''", "'")
-    )
-    if (values.length) return values
-  }
-  return null
-}
-
-const systemLabels: Record<string, string> = {
-  item_metadata: 'key',
-  activity: 'operation',
-  revisions: 'operation',
-  installation: 'version',
-}
-/** The column a row is known by: the one its owner named, or the likeliest text. */
-export function labelColumn(
-  catalog: Catalog,
-  schema: string,
-  table: string,
-  display?: string | null
-): string | null {
-  const columns = columnsOf(catalog, schema, table).filter((c) => c.can_select)
-  const has = (name?: string | null) => !!name && columns.some((c) => c.name === name)
-  if (has(display)) return display!
-  if (schema === systemSchema && has(systemLabels[table])) return systemLabels[table]!
-  const preferred = columns.find((c) => ['name', 'title', 'full_name', 'label'].includes(c.name))
-  if (preferred) return preferred.name
-  const text = columns.find(
-    (c) => !systemFields.includes(c.name) && /^(text|character varying)/.test(c.type)
-  )
-  return text?.name ?? null
-}
-
-export type Kind =
-  | 'text'
-  | 'integer'
-  | 'number'
-  | 'boolean'
-  | 'date'
-  | 'time'
-  | 'moment'
-  | 'uuid'
-  | 'json'
-  | 'other'
-export function kindOf(type: string): Kind {
-  if (/^(text|character varying|character|varchar|citext|name)/.test(type)) return 'text'
-  if (/^(integer|bigint|smallint)$/.test(type)) return 'integer'
-  if (/^(numeric|double precision|real)/.test(type)) return 'number'
-  if (type === 'boolean') return 'boolean'
-  if (type === 'date') return 'date'
-  if (/^time( without| with|$|\()/.test(type)) return 'time'
-  if (/^timestamp/.test(type)) return 'moment'
-  if (type === 'uuid') return 'uuid'
-  if (/^jsonb?$/.test(type)) return 'json'
-  return 'other'
 }
