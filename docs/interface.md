@@ -103,7 +103,7 @@ the reader signs in, closed when the sign-in ends or the token expires. Every ac
 a page's data, saving a record, running a statement — runs on it, and a second action running
 at the same time gets a login of its own rather than waiting. A login the server has closed is
 opened again the next time; a login whose session has been broken is thrown away. The reader's
-own statements (`packages/ui/src/activity.tsx`) run on a login of their own that is closed again
+own statements (`packages/ui/src/activity/sql.tsx`) run on a login of their own that is closed again
 afterwards, so a transaction or a SET ROLE they leave open cannot reach the platform's work. A
 token that has expired signs the reader out before a connection is attempted; a login
 PostgreSQL refuses signs them out with PostgreSQL's message.
@@ -112,7 +112,7 @@ What the page runs is ordinary SQL, and the questions are the platform's own, in
 `packages/core`, so that the same question may be asked of another source and mean the same
 thing:
 
-- The catalog (`packages/core/src/catalog.ts`), from PostgreSQL's privilege functions
+- The catalog (`packages/core/src/catalog/`), from PostgreSQL's privilege functions
   (`has_table_privilege`, `has_column_privilege`, `has_schema_privilege`, `pg_has_role`).
   The platform's own schema is in it, as a workspace of another kind (`kind: 'system'`): the
   switcher lists it as **Platform**, after the installation's workspaces, and its tables —
@@ -138,7 +138,7 @@ thing:
   since it was opened, otherwise a row policy refused the change or the row is gone, and the
   page says "PostgreSQL changed no row".
 - Metadata (`packages/core/src/metadata.ts`) in `platform.item_metadata`.
-- DDL and DCL built by `packages/ui/src/model.tsx` and `packages/ui/src/access.tsx`: workspaces,
+- DDL and DCL built by `packages/ui/src/model/` and `packages/ui/src/access/`: workspaces,
   collections, fields, grants, row policies, memberships and roles. The statements
   themselves are the platform's own, in `packages/core`, so that the operator's tools and
   the interface grant the same rights the same way.
@@ -230,7 +230,7 @@ The metadata of every item is kept in one table, `platform.item_metadata`, and t
 a system collection: it is listed in the platform's own workspace, and the interface has no
 second way of reading or changing it. Its model is the platform's — the interface offers no
 change to its fields — and its rows are their owners'. What an item's page shows as its metadata is that collection,
-filtered to the item (`metadataFilter` in `packages/ui/src/metadata.tsx`): read by
+filtered to the item (`packages/ui/src/metadata/panel.tsx`): read by
 the question every collection is read by, and drawn by the fields every collection is drawn
 by. A key is a link to its row, and **Add key** opens the ordinary record form with the names
 of the item filled in; a row is changed and removed there, by its `id` and its `version`, as
@@ -244,10 +244,10 @@ Three things about it are its own, and they are small:
   as a relation.
 - **The value.** It is a JSON column, typed as it is meant: a sentence is kept as a string
   and what reads as JSON as itself. That is a field type of that one column
-  (`packages/ui/src/metadata.tsx`), asked by the record form as any other is.
+  (`packages/ui/src/metadata/panel.tsx`), asked by the record form as any other is.
 - **The keys the interface reads for itself.** `display_name`, `icon`, `color`, `views` and
   `renderers` have editors of their own, held in a registry that mirrors the field types'
-  (`packages/ui/src/metadata.tsx` → `registerMetadataKeyEditor`). An editor is shown
+  (`packages/ui/src/metadata/panel.tsx`). An editor is shown
   beside the item, and under its row in the record form; a key without one is just a row. An
   installation that keeps a key of its own may register an editor for it in its extensions.
 

@@ -10,8 +10,7 @@ import {
 } from '@platform/core'
 import { fromPglite, pgliteParsers } from '@platform/core/pglite'
 import type { Session } from './connect.ts'
-import type { InPage, Person } from './session.tsx'
-
+import type { InPage, Person } from './session/types.ts'
 /**
  * The dev mode: PostgreSQL 18 inside the page (PGlite), installed with the real migration and
  * with what the site's folder applies, as a deployment installs them. The page is the identity

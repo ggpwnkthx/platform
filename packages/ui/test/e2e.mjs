@@ -52,7 +52,7 @@ const statement = async () => (await page.locator('.statement pre').first().text
 const expectText = (text, timeout = 15000) => page.getByText(text).first().waitFor({ timeout })
 const dialog = () => page.getByRole('dialog')
 
-await go('/model/collection?ws=newsroom&c=articles')
+await go('/data/model/collection?ws=newsroom&c=articles')
 await page.getByText('admin@example.com').first().click()
 await expectText('Appears in', 90000)
 
@@ -81,7 +81,7 @@ await check('a field says how it is drawn and where it appears', async () => {
   await expectText('Standfirst')
 })
 await check('a grant is the difference between the ACL and what is asked', async () => {
-  await go('/model/collection?ws=newsroom&c=articles&tab=access')
+  await go('/data/model/collection?ws=newsroom&c=articles&tab=access')
   await expectText('Granted by name')
   await page
     .getByRole('row', { name: /newsroom_writer/ })
@@ -126,7 +126,7 @@ await check('PostgreSQL refuses, and the refusal is shown with its SQLSTATE', as
   await page.keyboard.press('Escape')
 })
 await check('a new collection with a relation and choices', async () => {
-  await go('/model/new?ws=newsroom')
+  await go('/data/model/new?ws=newsroom')
   await expectText('What it is for')
   await page.getByLabel('Name').first().fill('pitches')
   const sql = await statement()
@@ -137,7 +137,7 @@ await check('a new collection with a relation and choices', async () => {
   await page.getByRole('cell', { name: 'uuid' }).first().waitFor()
 })
 await check('a record is written, read back, changed under its version, and logged', async () => {
-  await go('/content/item?ws=newsroom&c=pitches')
+  await go('/data/item?ws=newsroom&c=pitches')
   await page.getByLabel('name').first().fill('A profile of the harbour master')
   await page.getByRole('button', { name: 'Save' }).click()
   await expectText('A profile of the harbour master')
@@ -150,7 +150,7 @@ await check('a record is written, read back, changed under its version, and logg
   await expectText('UPDATE by')
 })
 await check('search and a filter narrow the records, in the address', async () => {
-  await go('/content/records?ws=newsroom&c=articles&q=budget&f.status=eq.published')
+  await go('/data/records?ws=newsroom&c=articles&q=budget&f.status=eq.published')
   await expectText('What the budget means for school meals')
   const rows = await page.locator('tbody tr').count()
   if (rows !== 1) throw new Error('rows: ' + rows)
@@ -187,10 +187,10 @@ const signIn = () => page.getByRole('button', { name: 'Sign in' })
 await check(
   'the published interface signs in through the issuer and returns to the page asked for',
   async () => {
-    await go('/content/records?ws=newsroom&c=articles')
+    await go('/data/records?ws=newsroom&c=articles')
     await signIn().click()
     await expectText('Headline', 30000)
-    if (!page.url().endsWith('/content/records?ws=newsroom&c=articles'))
+    if (!page.url().endsWith('/data/records?ws=newsroom&c=articles'))
       throw new Error(`landed on ${page.url()}`)
     if ((await page.locator('tbody tr').count()) !== 25)
       throw new Error('the records did not arrive through the relay')

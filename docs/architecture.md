@@ -96,7 +96,7 @@ statement per query and every value bound as a parameter, and text-format result
 browser the bytes go over a WebSocket (`packages/ui/src/connect.ts`) to the relay, which forwards
 them to PostgreSQL's port and understands none of them. The page opens one login when the
 reader signs in and keeps it open while they work (`packages/ui/src/connect.ts`,
-`withDb` in `packages/ui/src/session.tsx`); the reader's own statements run on a login of
+`withDb` in `packages/ui/src/session/hooks.ts`); the reader's own statements run on a login of
 their own, so that what they type cannot reach the platform's work.
 
 What the page does is ordinary SQL, and it belongs to the domain that asks for it. The
@@ -108,7 +108,7 @@ from `pg_policies`, grants from the ACLs through `aclexplode`; the revisions fro
 without RETURNING, and guarded on update by the version the reader saw
 (`WHERE id = $n AND version = $m`). The DDL and the DCL — collections, fields, grants,
 policies, memberships and roles — are the vocabulary's own, in `packages/core`, and the
-interface's pages (`packages/ui/src/model.tsx`, `packages/ui/src/access.tsx`) show them to the
+interface's pages (`packages/ui/src/model/`, `packages/ui/src/access/`) show them to the
 reader before they run. Every statement that changes the model or access is shown to the reader
 before it runs, then runs as them in one transaction.
 
@@ -140,7 +140,7 @@ a site's `platform.json` names as `extensions` in its place; the module register
 `examples/newsroom/extensions.tsx`.
 
 Sign-in is authorization code with PKCE against the one configured issuer, done by the page
-itself (`packages/ui/src/session.tsx`): the token kept in memory, the PKCE verifier held in
+itself (`packages/ui/src/session/provider.tsx`): the token kept in memory, the PKCE verifier held in
 sessionStorage only across the redirect. The page reads the issuer, client id, claim, relay
 address and database name from `/config.json`, a file served beside the pages, so that a
 deployment changes it without rebuilding the bundle.

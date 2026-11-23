@@ -90,15 +90,15 @@ is given the value and the field, never a connection, and it grants nothing.
 
 ## Where it is
 
-| What                                  | Where                                                                   |
-| ------------------------------------- | ----------------------------------------------------------------------- |
-| What a field and a field type are     | `packages/ui/src/fields.tsx`                                            |
-| The fields of a collection            | `packages/ui/src/fields.tsx` → `resolveFields`                          |
-| The types the platform holds          | `packages/ui/src/fields.tsx`                                            |
-| The types held, and whose a column is | `packages/ui/src/fields.tsx` → `registerFieldType`, `fieldTypeFor`      |
-| Between the form and the database     | `packages/ui/src/fields.tsx` → `fieldText`, `fieldValue`, `filterValue` |
-| The inputs the types share            | `packages/ui/src/fields.tsx`, `packages/ui/src/fields.tsx`              |
-| The renderers, and `Value`            | `packages/ui/src/fields.tsx`                                            |
-| An installation's own                 | The module `platform.json` names as `extensions`                        |
-| The records grid and the filters      | `packages/ui/src/content.tsx`                                           |
-| The record form                       | `packages/ui/src/content.tsx` → `RecordField`                           |
+| What                                  | Where                                                                       |
+| ------------------------------------- | --------------------------------------------------------------------------- |
+| What a field and a field type are     | `packages/ui/src/fields/types.ts`                                           |
+| The fields of a collection            | `packages/ui/src/fields/resolve.ts` → `resolveFields`                       |
+| The types the platform holds          | `packages/ui/src/fields/basic.tsx`                                          |
+| The types held, and whose a column is | `packages/ui/src/fields/registry.ts` → `registerFieldType`                  |
+| Between the form and the database     | `packages/ui/src/fields/filters.ts` → `filterValue`                         |
+| The inputs the types share            | `packages/ui/src/fields/basic.tsx`                                          |
+| The renderers, and `Value`            | `packages/ui/src/fields/renderers.tsx`                                      |
+| An installation's own                 | The module `platform.json` names as `extensions`                            |
+| The records grid and the filters      | `packages/ui/src/content/records.tsx`, `packages/ui/src/content/filter.tsx` |
+| The record form                       | `packages/ui/src/content/form.tsx`                                          |

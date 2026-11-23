@@ -6,7 +6,7 @@
   "description": "The interface: a static site whose pages speak the database's protocol themselves.",
   "license": "MIT",
   "exports": {
-    "./extensions": "./src/fields.tsx",
+    "./extensions": "./src/extensions.ts",
     "./vite": "./vite.config.ts",
     "./config": "./src/config.ts"
   },

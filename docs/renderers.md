@@ -16,7 +16,7 @@ values are drawn where it is.
 
 | Kind           | What it is                                                              | Where it comes from                                   |
 | -------------- | ----------------------------------------------------------------------- | ----------------------------------------------------- |
-| A default one  | The way the field's own type draws a value in that place                | `packages/ui/src/fields.tsx`                          |
+| A default one  | The way the field's own type draws a value in that place                | `packages/ui/src/fields/basic.tsx`                    |
 | A custom one   | A renderer of the installation's own, or one the owner configures       | `registerRenderer`, or the options the renderer takes |
 | A configurable | The choice of which renderer draws a value, in one place, for one field | The field's own metadata, under the key `renderers`   |
 
@@ -249,20 +249,20 @@ the values a choice may take, and the options the owner gave it.
 
 ## Where it is drawn
 
-| What                             | Where                                                              |
-| -------------------------------- | ------------------------------------------------------------------ |
-| The renderers the platform holds | `packages/ui/src/fields.tsx` → `registerRenderer`                  |
-| The drawings of each field type  | `packages/ui/src/fields.tsx` → `draw`                              |
-| The saying of a field            | `packages/core/src/metadata.ts` → `parseRenderers`                 |
-| The fields of a collection       | `packages/ui/src/fields.tsx` → `resolveFields`                     |
-| The drawing of a value           | `packages/ui/src/fields.tsx` → `Value`                             |
-| The records grid                 | `packages/ui/src/content.tsx` → `Value`, with `situation="list"`   |
-| The record form                  | `packages/ui/src/content.tsx` → `Value`, with `situation="record"` |
-| The editor                       | `packages/ui/src/metadata.tsx` → `RenderersEditor`                 |
-| The pickers of an option         | `packages/ui/src/metadata.tsx` → `IconPicker`, `ColourPicker`      |
-| The marks in the field table     | `packages/ui/src/model.tsx` → the _Drawn as_ column                |
-| The key of the saying            | `packages/core/src/sql.ts` → `renderersKey`                        |
-| An installation's own            | The module `platform.json` names as `extensions`                   |
+| What                             | Where                                                                    |
+| -------------------------------- | ------------------------------------------------------------------------ |
+| The renderers the platform holds | `packages/ui/src/fields/renderers.tsx` → `registerRenderer`              |
+| The drawings of each field type  | `packages/ui/src/fields/types.ts` → `draw`                               |
+| The saying of a field            | `packages/core/src/metadata.ts` → `parseRenderers`                       |
+| The fields of a collection       | `packages/ui/src/fields/resolve.ts` → `resolveFields`                    |
+| The drawing of a value           | `packages/ui/src/fields/renderers.tsx` → `Value`                         |
+| The records grid                 | `packages/ui/src/content/records.tsx` → `Value`, with `situation="list"` |
+| The record form                  | `packages/ui/src/content/form.tsx` → `Value`, with `situation="record"`  |
+| The editor                       | `packages/ui/src/metadata/sayings.tsx` → `FieldSayings`                  |
+| The pickers of an option         | `packages/ui/src/metadata/pickers.tsx` → `IconPicker`, `ColourPicker`    |
+| The marks in the field table     | `packages/ui/src/model/field-table.tsx`                                  |
+| The key of the saying            | `packages/core/src/sql/metadata.ts` → `renderersKey`                     |
+| An installation's own            | The module `platform.json` names as `extensions`                         |
 
 Every one of them reads the same saying, in the same way: the field's own metadata, read
 under PostgreSQL's row security, so the fields it names are the ones the reader may reach.

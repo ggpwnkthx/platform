@@ -1,18 +1,20 @@
 import { Button, Select, Stack, Text, TextInput } from '@mantine/core'
-import { metadataStatement, roles, schemaStatement, workspaceTarget } from '@platform/core'
+import { metadataStatement, schemaStatement, workspaceTarget } from '@platform/core'
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
-import { SchemaAccess } from './access.tsx'
-import { Empty, ItemMark, Page, Problem, Statements } from './bits.tsx'
-import { MetadataPanel } from './metadata.tsx'
-import { useDb, usePlace, useSession } from './session.tsx'
-import { useNames } from './shell.tsx'
-
+import { SchemaAccess } from './access/schema.tsx'
+import { useRoles } from './access/shared.tsx'
+import { ItemMark } from './bits/marks.tsx'
+import { Empty, Page, Problem, Statements } from './bits/page.tsx'
+import { MetadataPanel } from './metadata/panel.tsx'
+import { useSession } from './session/context.ts'
+import { usePlace } from './session/hooks.ts'
+import { useNames } from './shell/names.ts'
 /** A new workspace: a schema, owned by the reader or by a group that owns it for its members. */
 export function NewWorkspace() {
   const { identity, run } = useSession()
   const navigate = useNavigate()
-  const known = useDb(['roles'], roles)
+  const known = useRoles()
   const [name, setName] = useState('')
   const [display, setDisplay] = useState('')
   const [owner, setOwner] = useState<string | null>(null)
