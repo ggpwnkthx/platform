@@ -1,240 +1,108 @@
-# Platform 2.3.0
+# Platform 3.0.0
 
 PostgreSQL is the identity and authorization system. A user is a PostgreSQL `LOGIN` role.
 People prove who they are to [Dex](https://dexidp.io), which fronts whatever sign-in systems you
 use and is the one issuer PostgreSQL 18 trusts; PostgreSQL itself checks each token and logs its
 holder in as their own role. Groups are `NOLOGIN` roles. Permissions are native memberships,
-object/column grants and row security policies. They apply equally through the interface,
+object and column grants and row security policies. They apply equally through the interface,
 `psql`, reporting tools and any other database client.
 
 There is no application server. The interface is a static site whose pages speak PostgreSQL's
 own wire protocol: the page opens a login to PostgreSQL with the reader's own token, keeps it
 open while the reader works, and runs ordinary SQL on it. In a browser the bytes travel over a
 WebSocket to a relay, a WebSocket-to-TCP forwarder that holds no credentials and reads nothing
-but the first packet, which must be a login. Nothing
-between the page and PostgreSQL holds a **database service account, administrator password,
-user table, password hashes, session tokens, policy cache or privileged schema connection**.
-`session_user` is the actual authenticated login. No role has a password, the administrator's
-included: a token from Dex is the only way in over the network.
+but the first packet, which must be a login. Nothing between the page and PostgreSQL holds a
+database service account, an administrator password, a user table, password hashes, session
+tokens, a policy cache or a privileged schema connection. No role has a password, the
+administrator's included: a token from Dex is the only way in over the network.
 
-Install into a dedicated PostgreSQL database. Native roles, grants and policies are the single
-source of access control. See [importing data](docs/import.md) when bringing in existing records.
+Our own code is what no package does: the SQL the platform says, the questions it asks the
+catalog, the token login no driver speaks yet, the relay, and thin glue. The interface is
+[react-admin](https://marmelab.com/react-admin/) on Material UI over a data provider that runs
+on the page's own PostgreSQL connection. See [the remake](docs/remake.md).
 
-## Start locally
+## Try it, with no server
 
-Requires Bun 1.4.3+ and PostgreSQL 18+ with an OAuth token validator. The local stack builds
-both into one image (deploy/postgres) and runs Dex beside it.
+Requires Bun 1.4.3+.
 
 ```bash
 bun install --frozen-lockfile
-# Installs the database and the example roles, workspace, grants and policy. PostgreSQL is
-# given no password; what Dex asks the break-glass administrator for is generated into .env.
-# There is no .env in a checkout: the first run asks for the settings it does not know and
-# writes them down, with the secrets it generated in it. The file is yours alone and is kept
-# out of git. The deployment is named by a domain: each service answers on its own
-# sub-domain of it (idp for Dex, api for the relay, db for PostgreSQL), and the names are put
-# where they can be resolved.
-bun run cli deploy local up
+bun run dev          # http://localhost:5173
 ```
 
-The interface is a static site, not a container: build it, or serve it against the stack.
+That is the dev mode of the newsroom example: PostgreSQL 18 runs inside the page (PGlite),
+installed with the real migration and the example's own SQL files. Choose who to be —
+the administrator, alice or bob — and every grant, row policy and trigger applies to them as
+it would on a server.
+
+## Start the local stack
+
+Requires Docker Compose or Podman Compose. The stack builds PostgreSQL 18 with its token
+validator (deploy/postgres) and runs Dex, the relay and an edge beside it.
 
 ```bash
-bun run cli deploy local ui                     # build PLATFORM_SITE into its .dist
-bun run examples:newsroom:dev --relay=127.0.0.1:5432   # or serve it on http://localhost:5173/
+PLATFORM_SITE=examples/newsroom bun run deploy local up
 ```
 
-Choose Sign in. The local stack's Dex keeps exactly one account with a password: the
-break-glass administrator, `admin@localhost` (`PLATFORM_ADMIN`: `admin` on the deployment's
-own domain unless another is named), with PLATFORM_ADMIN_PASSWORD from .env. Every
-other account comes from a connector — an identity provider that vouches for the addresses it
-returns — so in the local stack you add one to Dex (deploy/dex/config.yaml.tmpl) to sign in as
-anybody else. There are no built-in credentials. A person can log in when a role named after
-their email exists. The bootstrap administrator is a database user with
-`CREATEROLE` and permission to create schemas; it has no application administrator flag.
-The deploy command builds the images, starts PostgreSQL and Dex, installs the database, then
-starts the relay. In a deployment the interface is published to a CDN and the relay is the only
-part of the path that answers on the network. Docker Compose and Podman Compose are detected
-automatically; use `--engine=podman` to choose. Local HTTP and disabled database TLS are for
-loopback development only.
+The first run settles the deployment's settings and writes them to `.env`, for you alone, with
+the one secret it generates. A deployment is named by a domain (`localhost` by default), and
+each service answers on its own sub-domain: `idp` for Dex, `api` for the relay, `db` for
+PostgreSQL, `app` for the site. The command prints the hosts-file line to add where the names
+do not resolve. It installs the database by running SQL files with psql beside the server,
+through PostgreSQL's own socket: the migration, what the site's folder applies, and the guard.
 
-Connect directly with the **same** identity and rules. psql 18 signs you in through Dex itself:
-it prints an address and a code to enter there.
+Sign in as `admin@localhost`, the break-glass administrator, with PLATFORM_ADMIN_PASSWORD from
+`.env`. It is the one account in Dex with a password; every other account comes from a
+connector you add to deploy/dex/config.yaml.tmpl. A person can log in when a role named after
+their email exists.
+
+## psql is the operator's tool
+
+Everything done to a database is SQL, run by psql. psql 18 signs in through Dex itself:
 
 ```bash
-# PGOAUTHDEBUG=UNSAFE is needed only because the local stack's Dex is plain HTTP.
-PGOAUTHDEBUG=UNSAFE psql "host=127.0.0.1 dbname=platform user=alice@example.com \
-  oauth_issuer=http://idp.localhost:5556/dex oauth_client_id=platform-psql oauth_scope='openid email'"
+psql "host=db.example.com dbname=platform user=alice@example.com \
+  oauth_issuer=https://idp.example.com oauth_client_id=platform-psql oauth_scope='openid email'"
 ```
 
-```sql
-INSERT INTO newsroom.articles(title) VALUES ('My draft');
-SELECT id,title,status,created_by FROM newsroom.articles;
--- PostgreSQL rejects this: alice has no SELECT on internal_notes.
-SELECT internal_notes FROM newsroom.articles;
-```
+| To                                             | Run                                                                                 |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Install the platform in a new database         | `psql -1 -f migrations/0001_platform.sql`                                           |
+| Apply a site's schema and demonstration        | `psql -1 -f examples/newsroom/apply/schema.sql -f examples/newsroom/apply/demo.sql` |
+| Try a file and change nothing                  | `(echo 'BEGIN;'; cat FILE.sql; echo 'ROLLBACK;') \| psql -v ON_ERROR_STOP=1`        |
+| See what a deployment has left open            | `psql -f deploy/sql/doctor.sql`                                                     |
+| Hide the role catalogs, and guard row security | `psql -1 -f deploy/sql/harden.sql -f deploy/sql/guard.sql`                          |
+| Lock a person out at once                      | `ALTER ROLE "alice@example.com" NOLOGIN`                                            |
+| Read the catalog as the interface reads it     | `SELECT * FROM platform.catalog_tables`                                             |
 
-PostgreSQL publishes its role catalogs to every connection, so a psql session can list every
-role and read who belongs to which group unless they are hidden. The local stack hides them as
-it installs itself, and `bun run cli harden k8s --events` (as the cluster superuser;
-`bun run cli deploy local admin harden k8s` on the local stack) does the same for a
-deployment: ordinary sessions keep their own rights and the interface keeps working, while the
-graph stays with the operators. The same command installs the guard that refuses the DDL
-which would turn a collection out of row security, or drop the triggers that write its
-history. See [operations](docs/operations.md).
+[Operations](docs/operations.md) has the rest.
 
-## The interface in dev mode
+## The repository
 
-The interface is a static site in `packages/ui/`: the pages are generated at build time and the client
-speaks to PostgreSQL itself. To work on it without a server, an issuer or a relay, run it in
-dev mode:
+- `migrations/0001_platform.sql` — everything the platform keeps in a database.
+- `packages/core` — what the platform says to PostgreSQL and reads back.
+- `packages/ui` — the interface. A site folder builds it: `vite build` in the folder.
+- `packages/relay` — the WebSocket in front of PostgreSQL's port.
+- `packages/cli` — `bun run deploy`: the local stack and Kubernetes, and nothing else.
+- `examples/newsroom` — a site folder: `platform.json`, SQL files, and its own renderers.
+- `deploy/` — the images, the Compose file, the Kubernetes manifests, the operator's SQL.
+
+## Checks
 
 ```bash
-bun run examples:newsroom:dev     # http://localhost:5173/
+bun run check        # builds the site, typechecks, lints, checks formatting and file size, runs the tests
+bun run test:e2e     # the interface in Chrome, under the site's own Content-Security-Policy
+bun run lines        # our own lines, by area
 ```
 
-The dev mode is the example: `examples/newsroom/platform.json` says what the folder is — the
-files it applies to a database, and the module that holds its own renderers — and every tool
-reads it.
-The dev mode runs **PostgreSQL 18 inside the page** (PGlite), installed with the real
-`migrations/*.sql` and then with the three files the example applies, as a deployment installs
-them — `models.ts` (the schema), `migration.sql` (what a manifest cannot say) and `demo.sql`
-(records and their history): the newsroom workspace with its
-sections, articles and corrections, the crm workspace owned by the group `sales` with its
-accounts, contacts and deals, and their grants, policies, revisions and metadata. The sign-in
-page offers the three example people, admin, alice and bob; choosing one logs that role in,
-and every grant, row policy and trigger applies to them as it would on a server. There is no
-issuer and no password here: the page is the identity provider, and nobody signs in with a
-secret. The database
-is kept in the browser's IndexedDB across reloads. `PORT=8080 bun run examples:newsroom:dev` chooses the port.
+`bun test` needs nothing but Bun: the suites start PostgreSQL in memory. See
+[validation](docs/validation.md) for what was and was not verified.
 
-Editing anything under `packages/ui/src` — or under `examples/newsroom` — is picked up by the
-page as it is saved. The in-page database is put in when the bundle is built, so it never
-reaches a production bundle: `bun run examples:newsroom:build --production` writes the real interface, which signs in through the
-issuer and reaches PostgreSQL through the relay. `bun run examples:newsroom:dev --relay=HOST:PORT` serves that
-real build and forwards its WebSockets to a real PostgreSQL. See [interface](docs/interface.md).
+## Documents
 
-## What is included
+[Product](PRODUCT.md) · [Design](DESIGN.md) · [Architecture](docs/architecture.md) ·
+[Security](docs/security.md) · [Interface](docs/interface.md) · [Fields](docs/fields.md) ·
+[Access](docs/access.md) · [Applying SQL](docs/apply.md) · [Operations](docs/operations.md) ·
+[The remake](docs/remake.md) · [Validation](docs/validation.md)
 
-- An interface for records, the data model, runtime collection creation, native roles,
-  memberships, row policies, activity and SQL, laid out as a data studio: a module bar
-  (Content, Data model, Access, Activity, SQL), a navigation pane with the workspace switcher
-  and the collections, and a sidebar with the collection's information, the reader's rights
-  and the row policies that apply. The access pages read the cluster's own truth: what your
-  role may do, who belongs to what, which rows a policy allows. Every statement that changes
-  the model or access is shown before it runs and then runs as you, in one transaction, with
-  PostgreSQL the only judge. It reads one workspace at a time: the workspace in view
-  (`?ws=`), the collection (`?c=`) and the record (`?id=`) are part of the address. The record
-  browser searches every readable column, filters on named operators, sorts by any column,
-  pages with a row count and keeps its state in the address. It is a static site: TypeScript
-  and React on Mantine, built by Vite and served as files.
-- Typed collection/field builders; real CHECK, NOT NULL, UNIQUE, indexes and foreign keys.
-  Use native ALTER TABLE for other schema changes and native views/joins for relationships.
-  A field may have any type the database holds — `geometry` and `geography` where PostGIS is
-  installed, an enum or a domain of your own — named with its schema and with the modifiers
-  it takes.
-- Metadata for workspaces, collections and fields: what an item is, as opposed to what it
-  holds. It is stored in the platform schema, and PostgreSQL's own rights decide it — a reader
-  reaches the metadata of the items they may reach, and only the owner of an item may change it.
-  Three keys are reserved: a workspace or a collection may carry a display name, an icon and a
-  primary colour, and the interface draws them as the item's mark wherever it appears. A field
-  carries metadata too, secured by the field's own rights: whoever holds a right on the column
-  reaches its metadata, and a field's display name is the label the interface shows for it.
-  Every field carries its own views — where it appears in the records grid, the record form
-  and the filter builder — and the owner of a collection may name views of their own beside
-  them, and say whether the field appears in those. A column PostgreSQL computes itself is
-  shown and never offered as an input.
-- Record reads and writes as parameterized SQL on the reader's own login: inserts and updates
-  without RETURNING, and updates guarded by the version the reader saw.
-- A one-statement SQL page executing as the signed-in reader. Native PostgreSQL checks every
-  GRANT, REVOKE, CREATE ROLE, CREATE POLICY and DDL statement.
-- Transactional row revisions from database triggers, including direct SQL writes and
-  TRUNCATE events. Owners can read full revisions; ordinary readers cannot use the audit log
-  to bypass column permissions. Database statement auditing is a separate operator concern.
-- Additive JSON model import, including the CRM model. Its `owner` fields hold
-  PostgreSQL role names.
-- Declarative `apply` of users, groups, workspaces, grants and policies to a deployment, in one
-  transaction, with a dry run. See [applying changes](docs/apply.md).
-- Deployment CLI for Docker/Podman Compose and Kubernetes, plus integration tests and CI
-  against PostgreSQL 18 with real token logins.
-
-New collections have RLS enabled with **no policies**. Grants alone do not make their rows
-visible to non-owners. Owners administer their tables; ordinary users must never own them.
-See [access control](docs/access.md) for concrete policies and delegation.
-
-## The packages
-
-The platform's own code is what no package does for it: the SQL it writes, the questions it
-asks PostgreSQL, and the pages that draw the answers. Everything else is somebody else's,
-actively developed, and listed here so that it stays that way.
-
-| Package             | What it is                                                                       | What it stands on                                                                                     |
-| ------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `packages/core`     | What the platform says to PostgreSQL and reads back; manifests and applying them | Kysely (SQL), Zod (manifests), jwt-decode, compare-versions                                           |
-| `packages/ui`       | The interface: a React application, and the site Vite builds of it               | Mantine, mantine-datatable, TanStack Query, React Router, lucide, oidc-client-ts, Neon's driver, Vite |
-| `packages/cli`      | The operator's tools: install, apply, harden, deploy, build the interface        | citty, clack, node-postgres, openid-client, yaml                                                      |
-| `packages/relay`    | The WebSocket in front of PostgreSQL's port: one file, no dependency             | Bun                                                                                                   |
-| `examples/newsroom` | The newsroom example: what it applies, and the renderers it adds                 | PGlite, in the dev mode                                                                               |
-
-Three things are still the platform's own because nothing does them: the OAUTHBEARER login
-that neither node-postgres nor Neon's driver speaks yet (`packages/core/src/token-client.ts`,
-forty lines over the drivers' own protocol code), the relay, and the migration. See
-[architecture](docs/architecture.md#repository) for where each thing is.
-
-## Commands
-
-```bash
-bun run check                       # build the example both ways, typecheck, lint, format, PostgreSQL integration tests
-bun run examples:newsroom:build     # generate the dev-mode interface into examples/newsroom/.dist
-bun run examples:newsroom:dev       # dev mode: the interface on http://localhost:5173/, PostgreSQL in the page
-bun run examples:newsroom:dev --relay=127.0.0.1:5432  # the real interface against a real PostgreSQL
-bun run cli ui build --dir=examples/newsroom --production  # the published interface: the relay and the issuer
-bun run cli ui dev --dir=examples/newsroom  # the same server, named by the example's configuration
-bun test               # needs nothing but Bun: the suites start PostgreSQL in memory
-bun run test:e2e       # the interface in Chrome, against the example with PostgreSQL in the page
-bun run cli deploy help
-bun run cli deploy local up
-bun run cli deploy local status
-bun run cli deploy local logs -f relay
-bun run cli deploy local down  # keeps the database volume
-bun run cli deploy local ui   # build the site PLATFORM_SITE names into its .dist, for a CDN
-bun run relay                # the WebSocket relay in front of PostgreSQL's port
-bun run cli --version  # 2.3.0
-bun run cli migrate    # installs what is missing, upgrades what is behind; needs a token
-bun run cli deploy local admin harden k8s  # hide the role catalogs from ordinary connections
-bun run cli deploy local admin doctor      # the same checks, as the stack's own superuser
-bun run cli doctor     # server version, authentication rules, installation, what is left open
-bun run cli token      # sign in through Dex from a terminal; prints a token
-bun run cli token --out=$HOME/.platform-token  # the same, into a file of your own (0600), for PGTOKEN_FILE
-bun run cli lock alice@example.com    # no login, whatever token names it; unlock gives it back
-bun run cli apply local --dir=examples/newsroom --dry-run  # users, groups, workspaces, grants
-bun run cli apply local team.json                    # a manifest of your own
-bun run cli model:apply deploy/models/crm.json
-bun run cli sql model.sql
-```
-
-Database CLI commands act as a person, with the token in `PGTOKEN` or `PGTOKEN_FILE`
-(`PGTOKEN=$(bun run --silent cli token)`), plus the database endpoint configuration. There is
-no password to give them: the administrator signs in with a token like everyone else. Tokens
-belong in operator sessions and migration jobs, never the interface or the relay. The local
-stack's own server is administered beside it, through its socket: `bun run cli deploy local
-admin <command>`. See [operations](docs/operations.md).
-
-| Document                             | Contents                                                         |
-| ------------------------------------ | ---------------------------------------------------------------- |
-| [Architecture](docs/architecture.md) | Connection identity and database layout                          |
-| [Access](docs/access.md)             | Roles, grants, RLS, delegation and revocation                    |
-| [Interface](docs/interface.md)       | Pages, the relay, configuration and the browser surface          |
-| [Fields](docs/fields.md)             | What a field is: its type, its cell, its input and its filter    |
-| [Constraints](docs/constraints.md)   | The keys, checks and emptiness a collection holds                |
-| [Views](docs/views.md)               | Where a field appears: the defaults, your own views, the saying  |
-| [Renderers](docs/renderers.md)       | How a field's values are drawn, in each place it appears         |
-| [Publishing](deploy/cdn/README.md)   | The static site on a CDN: config.json, headers, the relay        |
-| [Security](docs/security.md)         | Boundaries and practical limitations                             |
-| [Operations](docs/operations.md)     | Deploying, PostgreSQL 18, Dex, TLS and testing                   |
-| [Applying changes](docs/apply.md)    | Declaring users, groups, workspaces, grants and policies         |
-| [Importing data](docs/import.md)     | Data, identity mappings and native permissions                   |
-| [Features](docs/features.md)         | Native data and access capabilities                              |
-| [The remake](docs/remake.md)         | What was replaced by which package, and what behaves differently |
-
-MIT. See [LICENSE](LICENSE).
+MIT licensed. Free and open-source software.

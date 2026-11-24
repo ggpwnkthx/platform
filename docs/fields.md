@@ -1,152 +1,105 @@
 # Fields
 
-A field is a column PostgreSQL holds, and the interface meets it in three situations: as a
-cell in the records grid, as a value or an input in the record form, and as a condition in
-the filter builder. A **field type** owns all of it. It says how a value is drawn in each
-situation, which input changes it, what text the form holds for it and which operators a
-filter may use — so the pages that show fields ask the field, and none of them asks what kind
-of column it is drawing.
-
-Keystone gives every field type a view for each situation and a controller between the form
-and the store. The platform keeps that shape, and keeps its own rule: a field type draws and
-reads, and PostgreSQL still decides who may read a value and who may write it.
+A field is a column PostgreSQL holds, met in three situations: a cell in the records grid, a
+value or an input in the record form, a condition in the filters. PostgreSQL decides who may
+read it and who may write it; a field type decides how it is drawn and typed in.
 
 ## What a field is
 
-`resolveFields(catalog, schema, table, rows)` reads every field of a collection once, from the
-two things the reader was already given: the catalog, and the fields' own metadata.
+`fields/resolve.ts` reads a collection's columns from the catalog and their metadata, and
+gives each a type. After the columns come the relations read as rows:
 
-| A field carries       | Where it comes from                                                                  |
-| --------------------- | ------------------------------------------------------------------------------------ |
-| `column`, `kind`      | The catalog: the column, and the kind of value its type holds                        |
-| `relation`, `choices` | The catalog: a foreign key, and the values a CHECK allows                            |
-| `link`                | The catalog: the rows a record is linked to, and how it reaches them                 |
-| `system`, `computed`  | The catalog: a column every collection is made with, or one PostgreSQL writes itself |
-| `label`, `named`      | The field's metadata, under `display_name` — or the column's own name                |
-| `views`, `hasViews`   | The field's metadata, under `views`; see [views](views.md)                           |
-| `renderers`           | The field's metadata, under `renderers`; see [renderers](renderers.md)               |
-| `type`                | The field type that claims the column most strongly                                  |
+- **A relation** is a foreign key over one column. It is drawn as the name of the row it
+  points at, where the reader may read that row, and typed in by choosing one.
+- **Links** are the rows a join table links a record to. A join table is a collection with
+  two foreign keys that are unique together; the collection page makes one in a step. The
+  form holds the linked rows' ids, and writing them is a transaction of its own.
+- **Children** are the rows of another collection that point at a record. They are counted
+  beside the record, and the count leads to them.
 
-Both answers are the reader's own. PostgreSQL returned the columns they may reach and the
-sayings they may read, so a field this reader may not reach has no saying here.
+A column PostgreSQL computes itself — generated, or an identity — is shown and never offered
+as an input. The six columns every collection is made with are shown beside the record.
 
-## What a relation is, in the interface
+## Field types
 
-A relation is a foreign key, and PostgreSQL holds it. The interface reads it three ways,
-and the shape of the schema says which is which — nothing is declared, and nothing is
-guessed at:
+| Type                     | Claims                                  | Input                                                    |
+| ------------------------ | --------------------------------------- | -------------------------------------------------------- |
+| text, other              | text columns; anything unclaimed        | a line; several lines for a body, notes or a description |
+| integer, number          | whole and decimal numbers               | a number                                                 |
+| boolean                  | boolean                                 | yes, no or empty                                         |
+| date, time, moment, uuid | their PostgreSQL types                  | a line, with the browser's picker where it has one       |
+| json                     | json and jsonb                          | a document, checked as JSON                              |
+| choice                   | a text column with a `CHECK (… IN (…))` | one of the list                                          |
+| relation, links          | a foreign key; a join table             | a row, or rows, chosen by name                           |
 
-| The relation | What the catalog sees                                    | The field it is                                           |
-| ------------ | -------------------------------------------------------- | --------------------------------------------------------- |
-| Many to one  | A column with a foreign key                              | `relation`: one row, held by its id                       |
-| One to many  | A foreign key in another table that points at this one   | `children`: the rows that point here, read and counted    |
-| Many to many | A table of two foreign keys and a unique index over both | `links`: the rows on the other side, written as join rows |
-
-A table is a join table when it is made of two keys and a unique index
-covers both of them. The pair is then one link, and it may be written with `ON CONFLICT
-DO NOTHING`. A join table may carry a payload: columns of its own beside the two keys,
-holding what the link is worth or when it began. The keys are written by the interface and
-the payload by the database, so a payload column must be nullable or hold a default of its
-own; a table whose payload may not be left out is not a join table, and is a collection like
-any other.
-
-`children` and `links` have no column of their own — they are **virtual fields**, read and
-written as rows. They are shown in the record form and in the filters, and kept out of the
-grid: a grid of links would ask every row of every page for a count of its own.
-
-The key itself is PostgreSQL's, and the collection's model page holds it among the other
-constraints: what it points at, what happens when that row goes, and the index that finds
-the rows pointing at it. See [constraints](constraints.md).
-
-The links of one record are written under an advisory lock, so two people editing the same
-record do not overwrite each other's links: the second waits for the first to be done, and
-writes the links as they are then.
-
-## What type a field is
-
-Nothing is stored about a field's type. It is asked of what PostgreSQL says of the column, and
-every type says how strongly it claims such a column:
-
-| Type                                                                             | Claims                                     | Weight |
-| -------------------------------------------------------------------------------- | ------------------------------------------ | ------ |
-| `relation`                                                                       | A column that is a foreign key             | 30     |
-| `links`, `children`                                                              | A relation read as rows, not as a column   | 30     |
-| `choice`                                                                         | A column a CHECK holds to a list of values | 20     |
-| `text`, `integer`, `number`, `boolean`, `date`, `time`, `moment`, `uuid`, `json` | A column that holds that kind of value     | 10     |
-| `other`                                                                          | Every column: the type of last resort      | 1      |
-
-The type with the greatest weight is the field's. Of two that claim a column alike, the one
-added last wins, so an installation's own type takes a column from the platform's at the same
-weight.
-
-## What a field type says
-
-| It says       | For                                                                                                    | Without it          |
-| ------------- | ------------------------------------------------------------------------------------------------------ | ------------------- |
-| `draw.list`   | The cell in the records grid                                                                           | —                   |
-| `draw.record` | The value in the record and in a filter's chip: a locked field, a computed column, the sidebar's facts | —                   |
-| `numeric`     | Setting the column to the right in the grid                                                            | Set to the left     |
-| `Input`       | The input in the record form                                                                           | —                   |
-| `toForm`      | What the form holds for a stored value                                                                 | The value as text   |
-| `fromForm`    | The value a column receives from what the form holds, or the error under the field                     | What the form holds |
-| `operators`   | The operators the filter builder offers                                                                | —                   |
-| `parseFilter` | The value a condition carries, from what was typed                                                     | The text itself     |
-| `FilterInput` | The input a condition is given, when text is not enough to say it                                      | A text input        |
-
-The drawings are what the `default` renderer draws. A field that names another renderer for a
-situation is drawn by that one instead; its input and its filter are still its type's.
-
-A relation's `FilterInput` is the same picker the form offers: the reader picks rows by
-their names, and the condition carries their ids. A condition that crosses a relation — is
-linked to any of them, to none of them, or to all of them — is asked of the table that holds
-the links, with `EXISTS`.
-
-A condition may be on the rows a relation reaches rather than on the rows themselves: the
-filter builder offers **…by the rows it reaches**, and the reader picks one of their own
-columns and says what it should be. The reach of the field says how the rows are found — a
-column of the record's own table, or a table of links — and the same reach is used for the
-search, which follows the names of the rows on the other side.
-
-## A field type of the installation's own
-
-The interface is one bundle of static files, so a type is added when it is built. An
-installation registers it in the module its `platform.json` names as `extensions`, which the
-build puts in the place of the module `virtual:platform-site` (`packages/ui/vite.config.ts`) — the seam the interface imports
-before any page draws a field (see [renderers](renderers.md)):
+The type that claims a field most strongly wins. A site registers its own:
 
 ```tsx
-import { fieldTypeNamed, registerFieldType } from '@platform/ui/extensions'
+import { registerFieldType } from '@platform/ui/extensions'
 
-// Every column of the domain `public.email` is an address: a link in the grid and in the
-// record, with the input and the filters of a text.
 registerFieldType({
-  ...fieldTypeNamed('text')!,
-  name: 'email',
-  label: 'Email address',
-  claims: (field) => (field.column.type === 'public.email' ? 15 : 0),
-  draw: {
-    list: ({ value }) => <a href={`mailto:${value}`}>{String(value)}</a>,
-    record: ({ value }) => <a href={`mailto:${value}`}>{String(value)}</a>,
-  },
+  name: 'colour',
+  label: 'Colour',
+  claims: (field) => (field.name.endsWith('_colour') ? 50 : 0),
+  draw: ({ value }) => <Swatch value={value} />,
+  Input: ({ source, label }) => <TextInput source={source} label={label} />,
+  operators: ['eq', 'neq', 'is_null', 'not_null'],
 })
 ```
 
-A type that takes the name of one the platform holds replaces it. A type draws and reads; it
-is given the value and the field, never a connection, and it grants nothing.
+`Input` is a react-admin input bound by its `source`; it serves the record form and the value
+of a filter's condition alike.
 
-## Where it is
+## Filters and search
 
-| What                                  | Where                                                                       |
-| ------------------------------------- | --------------------------------------------------------------------------- |
-| What a field and a field type are     | `packages/ui/src/fields/types.ts`                                           |
-| The fields of a collection            | `packages/ui/src/fields/resolve.ts` → `resolveFields`                       |
-| The types the platform holds          | `packages/ui/src/fields/basic.tsx`                                          |
-| The types held, and whose a column is | `packages/ui/src/fields/registry.ts` → `registerFieldType`                  |
-| The relations, and the rows of them   | `packages/ui/src/fields/links.tsx`, `packages/ui/src/fields/relation.tsx`   |
-| Between the form and the database     | `packages/ui/src/fields/filters.ts` → `filterValue`                         |
-| The inputs the types share            | `packages/ui/src/fields/basic.tsx`, `packages/ui/src/fields/picker.tsx`     |
-| The renderers, and `Value`            | `packages/ui/src/fields/renderers.tsx`                                      |
-| An installation's own                 | The module `platform.json` names as `extensions`                            |
-| The records grid and the filters      | `packages/ui/src/content/records.tsx`, `packages/ui/src/content/filter.tsx` |
-| The record form                       | `packages/ui/src/content/form.tsx`                                          |
-| The rows that point at a record       | `packages/ui/src/content/related.tsx`                                       |
+A condition is a field, an operator and a value, kept in the address as
+`filter={"status":{"op":"eq","value":"published"}}`. The operators are `eq`, `neq`,
+`contains`, `starts_with`, `ends_with`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `is_null`,
+`not_null`, and for relations read as rows `has_any`, `has_none`, `has_all`. The search is
+case-insensitive across the readable columns and follows a relation to the name of the row on
+the other side.
+
+## What the owner says of a field
+
+A field's metadata is kept in `platform.item_metadata` and secured by the field's own rights:
+whoever holds a right on the column reads it, and only the collection's owner changes it. It
+narrows the interface and grants nothing.
+
+- **`display_name`** — the name people read. A reader who may not read a column never learns
+  it.
+- **`views`** — where the field appears: `{"list":"hide","record":"readonly","filter":"show"}`.
+  The grid and the filters take `show` or `hide`; the record form also takes `readonly`. A
+  field that says nothing appears everywhere, and nothing is written for it.
+- **`renderers`** — how it is drawn in the grid and in the record:
+  `{"list":{"renderer":"truncate","options":{"length":20}}}`.
+
+All three are changed from the collection's page, in the change surface, as statements.
+
+## Renderers
+
+The platform holds `text`, `truncate`, `paragraph`, `number`, `boolean`, `json`, `choice`,
+`link`, `template`, `bar` and `raw`. A site registers its own:
+
+```tsx
+import { registerRenderer, numberOf } from '@platform/ui/extensions'
+
+registerRenderer({
+  name: 'reading-time',
+  label: 'As the time it takes to read',
+  kinds: ['integer'],
+  options: [{ name: 'pace', label: 'Words read in a minute', type: 'number' }],
+  render: ({ value, options }) =>
+    `${Math.round(numberOf(value)! / (numberOf(options.pace) || 230))} min read`,
+})
+```
+
+`examples/newsroom/extensions.tsx` registers four. A listed value's tone follows what the
+word means (DESIGN.md), and an item's icon and colour are its own metadata: `icon` and `color`
+on a workspace or a collection, and `display_field` for the field a record is known by.
+
+## Keys and rules
+
+The collection page lists the constraints and indexes PostgreSQL holds and adds unique keys,
+checks, foreign keys and indexes. A constraint carries PostgreSQL's own name
+(`<table>_<field>_fkey`). A foreign key made with a field is indexed. What happens when the
+row pointed at goes is the key's `ON DELETE`: restrict, cascade or set null.

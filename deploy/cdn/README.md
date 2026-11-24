@@ -1,13 +1,13 @@
 # Publishing the interface
 
 The interface is a directory of files. There is no server to run: a site's folder — any
-folder with a `platform.json` — is built by `bun run cli ui build --dir=DIR --production` (or
-`bun run cli deploy local ui`, for the folder PLATFORM_SITE names) into `DIR/.dist`, and that
-directory is what a CDN serves. `packages/ui` is never built on its own.
+folder with a `platform.json` and a `vite.config.ts` — is built by `vite build` in the folder
+into its `.dist`, and that directory is what a CDN serves. `packages/ui` is never built on
+its own.
 
 ```
-DIR/.dist/index.html          the document; every page has a copy of it at its own address
-DIR/.dist/assets/             the client bundle, its styles, the icons and the self-hosted fonts
+DIR/.dist/index.html          the one document: the address inside the interface is a hash
+DIR/.dist/assets/             the client bundle, the icons and the self-hosted fonts
 DIR/.dist/config.json         where the pages find the issuer, the relay and the database
 DIR/.dist/_headers            the headers the site is served with
 ```
@@ -35,12 +35,11 @@ need the same headers set by their own means (CloudFront's response headers poli
 `set_headers`, Fastly's or Cloudflare's edge rules).
 
 The values in both files come from one source, `packages/ui/src/config.ts`, so the site a CDN
-serves, the development server and the tests cannot drift apart. `ui build` writes them
+serves, the development server and the tests cannot drift apart. The build writes them
 from the environment:
 
 | Variable                 | What it names                                                      |
 | ------------------------ | ------------------------------------------------------------------ |
-| `PLATFORM_PUBLIC_URL`    | the address the site is served from                                |
 | `PLATFORM_ISSUER`        | the issuer the pages sign in against                               |
 | `PLATFORM_RELAY_URL`     | the address of the relay, such as `wss://api.platform.example.com` |
 | `PLATFORM_CLIENT_ID`     | the public client the pages sign in with                           |
@@ -53,13 +52,13 @@ Any static host will do. Two rules:
 
 1. `config.json` must not be cached for long, or a deployment will keep talking to the
    previous relay; the other files may be cached for as long as you like.
-2. The headers in `_headers` must be sent with the pages. Without the policy, the browser
-   refuses the sign-in and the session.
+2. The headers in `_headers` must be sent with the pages: they are what holds the pages to
+   their own scripts, the issuer and the relay.
 
 For example, with the AWS CLI:
 
 ```
-bun run cli ui build --dir=examples/newsroom --production
+(cd examples/newsroom && bun --bun x vite build)
 aws s3 sync examples/newsroom/.dist s3://$BUCKET --delete --cache-control 'public,max-age=300'
 ```
 

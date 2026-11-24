@@ -1,98 +1,46 @@
 # Operations
 
+The operator's tools are standard ones: psql for everything done to a database, Compose and
+kubectl for what runs, Vite for the site. `bun run deploy` automates a deployment with them
+and does nothing else.
+
 ## Database installation
 
-Install in a dedicated NEW PostgreSQL 18+ database as a trusted administrator able to create
-roles, grant database privileges and create schemas. The installer takes a transaction-scoped
-advisory lock when run through `bun run cli migrate`. A first-time direct psql installation
-must use `-1 -v ON_ERROR_STOP=1`. It revokes PUBLIC database access and public-schema CREATE;
-use a dedicated database so this does not disrupt unrelated applications.
-
-The platform_core and platform_users roles are cluster-wide and can be reused across
-installation databases. Do not precreate them with elevated attributes or grant untrusted
-memberships. Never add ordinary users or model administrators to platform_core. Its owner
-privileges exist to install/maintain the audit infrastructure, not serve the interface.
-platform_admins holds the administrators who administer roles; its
-members keep reading the raw role catalogs, and nobody else does.
-
-`bun run cli migrate` installs what is missing and upgrades an installation that is behind,
-in one transaction, under an advisory lock. An installation at an unknown version is refused
-rather than modified.
-
-There is one installation script, `migrations/0001_platform.sql`, and it installs 2.3.0 in
-an empty database. The platform has not been released, so nothing earlier is brought
-forward: a database that holds a development version from before 2.3.0 is refused, and is
-made again. The next change to the schema is the next file in `migrations/`, named in
-`packages/cli/src/cli.ts`: the one list `migrate` runs, and the one a PostgreSQL in a
-page or in a test is installed from.
-
-The interface and the installation are one version. The interface reads the platform's
-schema, and a schema of another version is not one it knows. So an interface built for
-2.3.0 against an installation at 2.2.0 refuses to go further and says so:
-
-```
-This installation is at version 2.2.0 and the interface at 2.3.0.
-Run `bun run cli migrate` to install 2.3.0.
-```
-
-The local stack installs and upgrades the database itself: `bun run cli deploy local up`
-runs the installer in a one-off container, so running it again after an upgrade is what
-brings an existing database up to the version the interface expects.
-
-## Hiding the role catalogs
-
-PostgreSQL publishes the role catalogs to every connected user: `pg_auth_members` says who
-belongs to which group, and `pg_roles` says which role is privileged. The platform answers
-for itself where it can, but the catalogs themselves belong to the cluster superuser, and
-hiding them is an explicit step:
+Install into a dedicated, empty PostgreSQL 18 database, as its administrator:
 
 ```bash
-bun run cli deploy local admin harden k8s   # the local stack, beside its own server
-bun run cli harden k8s       # a deployment: needs the token of a cluster superuser
+psql -1 -v ON_ERROR_STOP=1 -f migrations/0001_platform.sql
 ```
 
-The command revokes the public read of `pg_auth_members`, `pg_roles` and `pg_user`, and
-grants the whole of them to `platform_core` and `platform_admins`. After it, an ordinary
-session can no longer ask who is in which group, and the interface keeps working: it reads the
-caller's own roles and memberships through the platform's functions. What it costs:
+The file makes the reserved roles, the `platform` schema, the revisions, the metadata and the
+views of the catalog, and marks the database with the version it holds. The interface is built
+for one version and says so when a database holds another. `platform_core` must stay an
+unprivileged NOLOGIN group, and must never be granted to workspace administrators.
 
-|                                                   | Before                        | After `harden`                |
-| ------------------------------------------------- | ----------------------------- | ----------------------------- |
-| `SELECT * FROM pg_auth_members`                   | every member of the group     | permission denied             |
-| `SELECT * FROM pg_roles`                          | every role and its attributes | permission denied             |
-| `information_schema.applicable_roles`             | the caller's roles            | the caller's roles, unchanged |
-| `psql \du`, `pg_dump` as an ordinary user         | works                         | permission denied             |
-| `psql \du`, `pg_dump` as an operator or superuser | works                         | works                         |
+A site's own schema, a deployment's administrator and the files below are applied the same
+way: see [applying SQL](apply.md).
 
-`--keep-names` leaves role names readable, so that `pg_dump` and GRANT statements keep
-working for ordinary users; the membership graph and the privilege attributes stay hidden.
-`--restore` puts PostgreSQL's default back.
+## Hiding the role catalogs, and the guard
 
-`--events` installs the guard as well: an event trigger that refuses the DDL that would turn
-a collection out of row security, or drop the triggers that write its history. A table owner
-may do both by PostgreSQL's own rules, and a table owner is often an ordinary member of a
-workspace; the guard draws that line. Superusers and the operators (the members of
-`platform_core` and `platform_admins`) are not refused: they administer the deployment.
+PostgreSQL publishes `pg_auth_members`, `pg_roles`, `pg_user` and `pg_group` to every
+connection. As the
+cluster superuser:
 
-The local stack hardens itself as it is installed: `bun run cli deploy local up` hides the
-role catalogs and installs the guard. A deployment does the same when its operator runs
-`harden` beside the server. `bun run cli doctor` says when either is missing.
+```bash
+psql -1 -f deploy/sql/harden.sql -f deploy/sql/guard.sql
+```
 
-Two scopes, one caveat: `pg_auth_members` is a shared catalog, so its rule reaches every
-database in the cluster, while `pg_roles` and `pg_user` belong to this database alone. Run
-`harden` on a cluster that serves this platform alone, or accept that other databases lose
-the ability to read role memberships as well.
-
-Bun CLI configuration: DATABASE_HOST/PORT/NAME/SSL, optional DATABASE_CA_FILE,
-STATEMENT_TIMEOUT_MS, OIDC_ISSUER (the issuer `cli token` signs in through), OIDC_CLAIM (the
-claim that names the role a token logs in as) and who to act as. PGTOKEN or PGTOKEN_FILE holds a
-person's token (`bun run cli token` prints one after a browser sign-in through OIDC_ISSUER);
-there is no other way to say who: no login has a password, and PGPASSWORD is refused. A
-DATABASE_HOST that is a directory is the server's own socket, which only a command running
-beside the server can reach; PostgreSQL lets its own superuser in there, and that is how the
-local stack installs itself. The CLI can apply models and SQL scripts as any caller with the corresponding
-native privileges. SQL files may contain explicit BEGIN/COMMIT. A file passed to `cli sql` is
-not a psql script.
+`harden.sql` revokes the public read and leaves it to the operators (`platform_core`,
+`platform_admins`); the file says how to leave role names readable so that pg_dump keeps
+working for everyone. psql's `\du` and pg_dump then need an operator or a superuser. The
+interface is unchanged: it reads roles through the platform's functions, which answer about
+the caller. `guard.sql` installs two event triggers, one before and one after every DDL
+command of an ordinary role. They compare each collection before and after, and refuse (42501)
+a command that turned its row security off, lost, disabled or changed a trigger that stamps
+its rows or writes its history, gave it a rule, or made it the parent of another table. A
+collection its owner drops leaves one revision of the drop.
+`deploy/sql/restore.sql` puts PostgreSQL's default back. The local stack applies both as it
+installs itself.
 
 ## PostgreSQL 18 and sign-in
 
@@ -104,7 +52,7 @@ PostgreSQL 18 verifies each token itself through its `oauth` authentication meth
 The database server needs three things, all of which deploy/postgres provides as an image
 (`docker build -t platform-postgres deploy/postgres`) that you can run or copy from:
 
-1. PostgreSQL 18 or newer. `migrate` and `doctor` refuse anything older.
+1. PostgreSQL 18 or newer. The migration refuses anything older.
 2. A token validator. PostgreSQL ships none; the image builds
    [pg_oidc_validator](https://github.com/percona/pg_oidc_validator) 1.1.0 from a checksummed
    release and sets `oauth_validator_libraries=pg_oidc_validator` and
@@ -124,8 +72,8 @@ The database server needs three things, all of which deploy/postgres provides as
    No login has a password. The image refuses POSTGRES_PASSWORD, and a new cluster's own
    superuser is left without one. PLATFORM_ADMIN names the administrator as the token's claim
    does (`admin@example.com`): a new cluster is given that role, a superuser, and that person
-   installs and administers the server with a token from `bun run cli token`, like anyone
-   else. An existing cluster is given one over the socket:
+   installs and administers the server with a token, like anyone else: psql signs in through
+   Dex itself. An existing cluster is given one over the socket:
    `docker exec <container> psql -U postgres -c 'CREATE ROLE "admin@example.com" LOGIN SUPERUSER'`.
    The socket is also the way in when Dex is not: it needs a shell in the container, which is
    the server's own trust and nobody's credential. Whoever can make Dex issue a token for the
@@ -157,18 +105,22 @@ The database server needs three things, all of which deploy/postgres provides as
    before your own settings, so `-c log_statement=...` of yours decides. Send that log
    somewhere the database's own administrators cannot rewrite it.
 
-`bun run cli doctor`, run as a superuser, reads the live rules and fails if any network rule
-lets a login in without a token: only `oauth` and `reject` pass. It then says, as notes that
-fail nothing, what the deployment has left open: TLS that is off or a `host` rule that takes
-a token without it, role catalogs every connection reads (`harden`), collections owned by a
-person rather than a group, and tables that write no revisions.
+`psql -f deploy/sql/doctor.sql`, run as a superuser, reads the live rules and reports as a
+problem any network rule that lets a login in without a token: only `oauth` and `reject`
+pass. It then says what the deployment has left open: TLS that is off, role catalogs every
+connection reads, no guard on row security, collections owned by a person rather than a
+group, and tables that write no revisions.
 
-`bun run cli lock ROLE` takes a role's login away and ends its open sessions; `unlock` gives
-it back. It is how a person is locked out at once, and how the administrator is kept shut
-between the times it is used: a locked role is logged in by no token. A superuser's login is
-changed by a superuser, so the administrator is unlocked from beside the server
-(`bun run cli deploy local admin unlock ROLE`, or the same command run in the server's
-container with DATABASE_HOST naming the socket's directory).
+To lock a person out at once, take the login away and end their sessions:
+
+```sql
+ALTER ROLE "alice@example.com" NOLOGIN;
+SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename = 'alice@example.com';
+```
+
+`ALTER ROLE … LOGIN` gives it back. A locked role is logged in by no token. A superuser's
+login is changed by a superuser, so the administrator is unlocked from beside the server
+(`bun run deploy local psql`, or psql in the server's container).
 
 A role and its sign-in are matched by name: the token's `email` claim must equal the role name
 exactly, so alice@example.com logs in as the role `"alice@example.com"`. Nothing is mapped or
@@ -176,11 +128,10 @@ created automatically; a person with no role cannot log in. Role names are at mo
 
 Dex's configuration is deploy/dex/config.yaml.tmpl, rendered from the environment by the Dex
 image. It declares two public clients: `platform-console` (authorization code with PKCE, used by
-the interface and redirecting to PUBLIC_URL) and `platform-psql` (device authorization, for psql
-and `cli token`). For a real deployment:
+the interface and redirecting to the site) and `platform-psql` (device authorization, for psql). For a real deployment:
 
 - Give Dex one HTTPS URL that browsers and the PostgreSQL server can both open, and use it
-  as DEX_ISSUER, PLATFORM_OIDC_ISSUER and OIDC_ISSUER.
+  as DEX_ISSUER, PLATFORM_OIDC_ISSUER and PLATFORM_ISSUER.
 - Give Dex the address of the site as PLATFORM_PUBLIC_ORIGIN: it is the origin Dex allows to
   exchange the code, and the one it redirects to after the sign-in. With the interface on a
   CDN, that is the CDN's address, not the relay's.
@@ -206,312 +157,87 @@ psql "host=db.example.com dbname=platform user=alice@example.com \
 libpq refuses an issuer that is not HTTPS unless PGOAUTHDEBUG=UNSAFE is set, which is for the
 local stack only.
 
-## Interface configuration
-
-The interface is a static site generated at build time, always as a site's folder:
-`bun run cli ui build --dir=DIR --production` writes the pages, the client bundle, the
-stylesheet, the fonts, `config.json` and `_headers` to `DIR/.dist`. A
-deployment never renders a page at runtime and runs no application server: the files are
-published to a CDN. The relay (`packages/relay/src/relay.ts`, the Dockerfile target `relay`) is the only
-part of the path that answers on the network.
-
-| Variable                       | Default                   | Purpose                                                                           |
-| ------------------------------ | ------------------------- | --------------------------------------------------------------------------------- |
-| PLATFORM_DOMAIN                | localhost                 | The domain the deployment is named by; each service answers on a sub-domain of it |
-| PLATFORM_IDP_HOST              | idp                       | The sub-domain Dex answers on: the issuer                                         |
-| PLATFORM_API_HOST              | api                       | The sub-domain the relay answers on                                               |
-| PLATFORM_DB_HOST               | db                        | The sub-domain PostgreSQL answers on                                              |
-| PLATFORM_PUBLIC_URL            | http://app.localhost:5173 | The address people open; the only origin the relay allows                         |
-| PLATFORM_ISSUER                | http://idp.localhost:8080 | Your Dex. The same issuer PostgreSQL trusts                                       |
-| PLATFORM_CLIENT_ID             | platform-console          | The public client the interface signs in with                                     |
-| PLATFORM_CLAIM                 | email                     | Token claim holding the role name; must match the validator's                     |
-| PLATFORM_RELAY_URL             | ws://api.localhost:8080   | The relay the pages open their sessions through                                   |
-| PLATFORM_DATABASE_NAME         | platform                  | The database Platform is installed in                                             |
-| PLATFORM_STATEMENT_TIMEOUT_MS  | 15000                     | `statement_timeout` sent with each login                                          |
-| RELAY_UPSTREAM                 | 127.0.0.1:5432            | host:port of PostgreSQL, for the relay                                            |
-| RELAY_PORT                     | 8081                      | The port the relay listens on                                                     |
-| RELAY_ORIGINS                  | none                      | Comma-separated origins allowed to open a session; unset refuses to start         |
-| RELAY_ALLOW_ANY_ORIGIN         | unset                     | 1 says the edge in front of the relay checks the origin itself                    |
-| RELAY_SESSIONS_PER_ADDRESS     | 0                         | Sessions one client address may hold at once; 0 is no limit                       |
-| RELAY_SESSIONS_PER_ROLE        | 0                         | Sessions one role may hold at once; 0 is no limit                                 |
-| RELAY_UPSTREAM_TLS             | off, on this machine only | `verify` reaches PostgreSQL in TLS and checks its certificate; required otherwise |
-| RELAY_UPSTREAM_CA              | the system's              | The authority that certificate must come from, as a PEM file                      |
-| RELAY_TLS_CERT / RELAY_TLS_KEY | none                      | The certificate the relay serves TLS with                                         |
-
-`ui build` writes `config.json` and the `_headers` file from these; see
-[interface](interface.md) for `config.json`, the headers and the browser surface, and
-`deploy/cdn/README.md` for publishing the site.
-
-The page keeps one login open while the reader works, and opens another when two actions run
-at the same time. It is not a shared service pool: the login is the reader's own, PostgreSQL
-checks the token when it is opened, and `session_user` is the reader's role. The reader's own
-statements run on a login of their own, so a transaction or a SET ROLE they leave open cannot
-reach the platform's work. Every open WebSocket is one PostgreSQL connection: size PostgreSQL's
-`max_connections` and per-role connection limits for the people who use the interface at once.
-The relay forwards and counts nothing. A session has no PostgreSQL connection until it has
-sent a startup packet, and one that opens with anything else is refused; a login that then
-stalls is closed by PostgreSQL's own `authentication_timeout` (30 seconds in the stack's
-image), so clients that never sign in cannot hold the database's connections for long.
-
-How many sessions one client address may hold open is the edge's to cap: the local stack's
-Traefik holds each address to 20 (`inFlightReq` in `deploy/traefik/dynamic.yaml`; behind
-another proxy, set its `ipStrategy.depth`), and `deploy/k8s/ingress.yaml` carries the same
-cap as `nginx.ingress.kubernetes.io/limit-connections`. How many sessions one role may hold
-is the role's own CONNECTION LIMIT, which is the server's and counts through every relay
-together: a manifest sets it with `connections` on a user ([apply](apply.md)). A relay put on
-the network with nothing in front of it has neither cap: put an edge in front of it.
-
-The relay connects to PostgreSQL in TLS with RELAY_UPSTREAM_TLS=verify and in plain TCP with
-RELAY_UPSTREAM_TLS=off. It has to be told which unless PostgreSQL is on the relay's own
-machine (127.0.0.1, localhost): the stream carries every reader's token, so sending it across
-a network in the clear is a choice the deployment makes, and the relay does not start without
-it. With `verify` the
-relay opens that connection in TLS from its first byte, the way PostgreSQL 17 and later accept
-it (libpq's `sslnegotiation=direct`), checks the server's certificate against
-RELAY_UPSTREAM_CA or the system's authorities, and checks that it names the host in
-RELAY_UPSTREAM. PostgreSQL needs `ssl=on` and a certificate for that name; set
-PLATFORM_HBA_HOST=hostssl beside it, so that nothing reaches the server in the clear. Without
-it, run the relay next to PostgreSQL or on a private network you trust: the same host, the same
-pod network, a service mesh with mTLS, or a tunnel. DATABASE_SSL and DATABASE_CA_FILE apply to
-the CLI's connections, not to the interface's. Name the relay's addresses to PostgreSQL
-(PLATFORM_TOKEN_ONLY_FROM or your own pg_hba rule), so that the administrator has no login
-through the relay.
-
-Connect directly to PostgreSQL for this design's authentication semantics. Do not put it
-behind a pooler using a forced backend user: that changes session_user and breaks identity
-and row policies. A pooler must preserve authenticated backend users and native role behavior,
-and requires deployment-specific verification. The supplied examples use direct connections.
-
-Each login makes PostgreSQL's validator fetch Dex's discovery document and signing keys, cached
-only for as long as Dex's Cache-Control allows. If PostgreSQL cannot reach Dex, nobody but the
-administrator can log in: treat Dex as part of the database's availability.
-
-## Deployment
-
-The deployment CLI supports Docker/Podman Compose and Kubernetes. `bun run deploy ...`
-is shorthand for `bun run cli deploy ...`.
-
-### Local containers
+## The local stack
 
 ```bash
-bun run cli deploy local validate
-bun run cli deploy local up
-bun run cli deploy local ui
-bun run cli deploy local status
-bun run cli deploy local logs -f relay
-bun run cli deploy local down
+PLATFORM_SITE=examples/newsroom bun run deploy local up
 ```
 
-A checkout carries no configuration: a deployment's settings are its own. The first run that
-needs them — `up`, `init`, `build`, `validate`, `ui`, and the Kubernetes actions that render
-or apply manifests — writes them to `.env` at the root of the checkout (or wherever
-PLATFORM_ENV_FILE says). It asks only for what it cannot work out: the domain the deployment
-is named by, the sub-domains its services answer on (idp, api, db), and the three ports,
-because those are the ones that depend on the machine. The issuer, the relay's address and
-the database's address follow from the domain and the sub-domains, so they are never asked
-for.
+| Action                   | What it does                                                                                                                |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `up`                     | Builds the images, starts PostgreSQL, Dex and the edge, installs the database, starts the relay, builds and serves the site |
+| `init`                   | The same, stopping once the database is installed                                                                           |
+| `build`, `validate`      | Builds the images; checks the Compose file                                                                                  |
+| `status`, `logs`, `down` | `compose ps`, `logs`, `down`, with what follows passed on                                                                   |
+| `psql`                   | psql beside the server, through its socket, as its superuser                                                                |
 
-The site is a question, not a default: the walkthrough asks whether one already exists, and
-a site of the operator's own is named by its full URL. Left empty, an interface is deployed
-instead, from a folder: any folder that holds a `platform.json`, which is any site built with
-`@platform/ui`. PLATFORM_SITE names it, from the root of the checkout or in full
-(`PLATFORM_SITE=examples/newsroom`, `PLATFORM_SITE=/srv/sites/desk`). The walkthrough offers
-the examples the checkout carries (there is one, `newsroom`); with none chosen, no site is
-deployed, because the interface is only ever built as a site's folder. A folder of your own is named in `.env` or the environment, and is then
-not asked for. It is deployed on a sub-domain of the deployment's own domain — `app` unless
-another is chosen — and the site's address follows from it. The folder that was chosen is the
-one `deploy local ui` builds, and `deploy local up` builds it too and serves it from the stack
-itself: a `site` container runs `platform ui serve` over the folder's `.dist`, and the edge
-routes `app.<domain>` to it, on the port the edge answers on (`http://app.localhost:8080`).
-Without a site nothing is served there. A configuration written before this, which says
-`PLATFORM_EXAMPLE=newsroom`, is told to say `PLATFORM_SITE=examples/newsroom`. For Kubernetes it asks for the domain and the image;
-the issuer and the database's address follow from the domain. The one
-password there is, the break-glass administrator's, is never asked for: it is generated and
-saved. What the command line or the environment already gave is kept and not asked for again.
-The file holds the pieces the deployment is made of, and nothing else: the domain, the
-sub-domains, the ports, the site's folder, and the site's address when one already exists.
-The addresses — the issuer, the relay, the database, the deployed site's — are made of
-those pieces at runtime, so they are never written down and never fall out of step with the
-domain: change the domain and every address follows. A file that holds such an address from
-an earlier run has it taken out, and the deployment is told which ones. The environment speaks
-last: a value there overrides the file's, and an address that has to be something else is set
-there.
+Docker Compose and Podman Compose are detected; `--engine=podman` chooses. Settings come
+from the environment, then `.env`; the first run writes `.env` for its owner alone, with
+PLATFORM_ADMIN_PASSWORD generated. Only its bcrypt hash is given to Dex.
 
-The file holds secrets, so it is written with mode 0600, it is added to `.gitignore` if it is
-not ignored already, and it is never printed. Without a terminal to ask in, the defaults are
-written instead and the secrets are generated, which is what a script or a CI run gets. A file
-that is already there is not rewritten: the settings it lacks are added to it, and the
-entries it holds are left alone. Nothing is written when a value is wrong, or when a setting
-that has no default could not be answered — the deployment then fails with the error that
-names what is missing, and the file is not left half written.
+| Setting                                                       | Default                      |                                                           |
+| ------------------------------------------------------------- | ---------------------------- | --------------------------------------------------------- |
+| PLATFORM_DOMAIN                                               | `localhost`                  | The deployment's name; each service is a sub-domain of it |
+| PLATFORM_IDP_HOST, _API_HOST, _DB_HOST, _APP_HOST             | `idp`, `api`, `db`, `app`    | The sub-domains                                           |
+| PLATFORM_SITE                                                 | none                         | A site folder to install, build and serve                 |
+| PLATFORM_PUBLIC_URL                                           | none                         | The address of a site published elsewhere                 |
+| PLATFORM_ADMIN                                                | `admin@<domain>`             | The administrator, as the token names them                |
+| EDGE_PORT, EDGE_TLS_PORT, POSTGRES_PORT, DEX_PORT, RELAY_PORT | 8080, 4433, 5432, 5556, 8081 | Ports on this machine                                     |
+| DEX_LOCAL_ADMIN                                               | `1` on localhost             | Whether Dex keeps the one password account                |
 
-The names have to answer in three places: in the browser, which opens the issuer and the
-relay; in the PostgreSQL container, which fetches the issuer's keys; and in the operator's own
-tools, which connect to the database. The Compose file gives the names to the containers
-directly (`extra_hosts`), and `deploy local` gives them to this machine: a name under
-`.localhost` is answered by the resolver itself, a name under `.local` is answered by
-multicast DNS — which may be another machine on the network, and is said so plainly — and
-for anything else that does not resolve, `deploy local` prints the line to add to the hosts
-file and leaves the file to the operator.
+Installing is one psql transaction beside the server: the migration, the SQL files the
+site's `platform.json` lists (or `deploy/sql/administrator.sql` where there is no site),
+`harden.sql` and `guard.sql`. A database that is installed already is left as it is. The
+command does not edit the hosts file: it prints the line to add.
 
-What answers on the network's usual ports is the deployment's business: here an edge
-(Traefik, in deploy/traefik/dynamic.yaml), in Kubernetes an ingress, in a cloud the
-provider's own domain settings. The services behind the edge listen on their own ports
-(DEX_PORT, RELAY_PORT), which are the edge's backends and reach nothing else. Services that
-talk to each other use the default ports: PostgreSQL on 5432, and the relay forwards to it
-there.
+Each open WebSocket is one database session. The edge holds each address to 20
+(`inFlightReq` in deploy/traefik/dynamic.yaml); a role's CONNECTION LIMIT is PostgreSQL's own
+count across every relay; PostgreSQL's `authentication_timeout` closes a login that stalls.
 
-Locally, the edge answers on ports of the operator's choosing — EDGE_PORT (8080) and
-EDGE_TLS_PORT (4433) — and the names carry the port the edge answers on:
-`http://idp.<domain>:8080` and `ws://api.<domain>:8080`. Never 80 or 443: a rootless
-container cannot bind a port below 1024, and which ports the operator's machine answers on is
-the operator's business. A deployment that terminates TLS itself — the ingress, the cloud's
-own edge — has no such port in its names at all: `https://idp.<domain>` and
-`wss://api.<domain>`.
+## The relay
 
-`up` builds the PostgreSQL, relay and installer images, starts PostgreSQL 18 and Dex, waits
-for both, runs the idempotent database installer in a one-off container (`migrate`, image
-`platform-cli:local`, Dockerfile target `cli`), installs what the deployment's site applies the same way (`apply k8s --dir=/app/site`, with the
-site's folder mounted there; `--administrator` when there is no site or it applies nothing), then
-starts the relay and waits for http://api.localhost:8081/health. The installer is given no
-credentials, because there are none: it shares the volume PostgreSQL's socket is on, where
-PostgreSQL lets its own superuser in, has no network, and is removed when it exits.
-`bun run cli deploy local admin <command>` runs any other operator command the same way
-(`admin doctor`, `admin harden k8s`, `admin lock ROLE`, `admin unlock ROLE`); it reads no file of yours, so apply your own manifests
-with a token. The relay has no PostgreSQL credentials. PostgreSQL and the relay share the
-network `relay` (10.89.71.0/24). A build or install failure returns that
-tool's exit status and stops the sequence before the relay starts. `init` runs the
-database/build portion without starting the relay; `build` builds the images only. `ui`
-builds the site PLATFORM_SITE names into its `.dist` and says what to publish, and refuses
-when no site is named; the interface is files on a CDN, not a container.
+`bun run relay`, or the `relay` target of the Dockerfile. It reads its environment:
 
-Dex is published at http://idp.localhost:5556 (DEX_PORT), on the deployment's own name
-for it. It stands in for a real sign-in
-system, and it keeps exactly one account with a password: the break-glass administrator,
-PLATFORM_ADMIN — `admin` on the deployment's own domain, so admin@localhost, unless another
-address is named — whose PLATFORM_ADMIN_PASSWORD is generated into .env (created with mode
-0600, ignored by git and by the image build) and never printed; Dex is given only its bcrypt
-hash. Every other account comes from a connector — an identity provider you add to the
-stack's Dex (deploy/dex/config.yaml.tmpl) that vouches for the addresses it returns. The
-example's roles (the administrator, alice@example.com, bob@example.com) are roles, not
-accounts: who may sign in as them is the identity provider's business. The password is Dex's,
-not PostgreSQL's: PostgreSQL sees the token Dex issues and nothing else. An issuer has one URL that both the
-browser and PostgreSQL must open, and on a developer's machine that is localhost, so the
-stack's Dex shares PostgreSQL's network namespace. The stack's data volume is `data18`: a
-volume left by an earlier PostgreSQL 16 stack is not touched or upgraded. Move its contents
-with pg_dump and pg_restore, and recreate roles under the names people sign in with.
+| Setting                                             |                                                                                                                            |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| RELAY_UPSTREAM                                      | `host:port` of PostgreSQL. Default `127.0.0.1:5432`                                                                        |
+| RELAY_UPSTREAM_TLS                                  | `verify` or `off`. Required unless the upstream is on this machine; `off` is for a network you trust with a token          |
+| RELAY_UPSTREAM_CA                                   | A certificate authority file, with `verify`                                                                                |
+| RELAY_ORIGINS                                       | The origins that may open a session: the site's. Required, unless RELAY_ALLOW_ANY_ORIGIN=1 says the edge checks the origin |
+| RELAY_PORT, RELAY_TLS_CERT, RELAY_TLS_KEY           | Where it listens, and its own certificate                                                                                  |
+| RELAY_SESSIONS_PER_ADDRESS, RELAY_SESSIONS_PER_ROLE | How many sessions one address, and one role, may hold. 0, no limit, by default                                             |
 
-Choose `--engine=docker` or `--engine=podman`, or use automatic detection. Standalone
-`docker-compose`/`podman-compose` tools are supported when present. A POSTGRES_PASSWORD left
-in .env by an earlier version is no longer read, and a volume made with one keeps a verifier
-that no rule accepts. Provision users with
-`PGTOKEN=$(bun run --silent cli token) bun run cli apply local FILE`, signed in as
-the administrator (see [applying changes](apply.md)), or with psql and the example scripts.
+## Kubernetes
 
-The Compose project name is consistently `platform`. The default relay/SQL host ports are
-8081/5432, and Dex's is 5556; override RELAY_PORT/POSTGRES_PORT/DEX_PORT to avoid
-conflicts. `--timeout=120` sets the readiness allowance per component. `status`, `logs`, and
-`down` generate nothing. `down` preserves data; explicitly passing `--volumes` removes
-the volume and its data. The supplied stack binds both published ports to loopback and is for
-local development.
-
-### Kubernetes
-
-Build and push the relay image (Dockerfile target `relay`) first, and publish the interface to
-a CDN. PostgreSQL 18 with the validator and Dex are yours to run, configured as described
-under PostgreSQL 18 and sign-in. Provision the database with `bun run cli migrate` in a
-separate operator session/job (the Dockerfile target `cli` is an image for that), and provision
-native users/grants. Then configure a pre-existing namespace, HTTPS ingress and network
-policies.
+The relay is the only part of the platform that runs in the cluster; PostgreSQL 18 and Dex
+are yours to run, and the site is files on a CDN ([deploy/cdn](../deploy/cdn/README.md)).
 
 ```bash
-export PLATFORM_IMAGE=your-registry/platform-relay:2.3.0
-export PLATFORM_DOMAIN=platform.example.com
-export PUBLIC_URL=https://platform.example.com
-export OIDC_ISSUER=https://idp.platform.example.com
-export DATABASE_HOST=your-postgres.example.com
-export DATABASE_NAME=platform
-export DATABASE_PORT=5432
-bun run cli deploy k8s render --namespace=platform
-bun run cli deploy k8s validate --namespace=platform
-bun run cli deploy k8s diff --namespace=platform
-bun run cli deploy k8s apply --namespace=platform
-bun run cli deploy k8s status --namespace=platform
-bun run cli deploy k8s logs --namespace=platform -f
+bun run deploy k8s apply --domain=platform.example.com \
+  --image=registry.example.com/platform-relay:3.0.0 --public-url=https://www.example.com
 ```
 
-The deployment is named by a domain: each service answers on its own sub-domain of it, and
-the addresses follow — `idp.<domain>` for Dex, `api.<domain>` for the relay, `db.<domain>`
-for PostgreSQL. Give the domain (`--domain`, or PLATFORM_DOMAIN) and the issuer, the relay's
-address and the database's address are worked out from it; give any of them outright and
-they are used as they are. Equivalent flags are --domain, --image, --public-url,
---oidc-issuer, --database-host, --database-port. PUBLIC_URL and OIDC_ISSUER
-must be HTTPS. The database itself is the readers' own: they name it when they sign in, so
-the deployment does not name it.
-`render` is offline. `validate` is a server-side dry run and needs cluster connectivity.
-`diff` preserves kubectl's exit 1 for differences; `apply` waits for rollout and propagates
-failure. Namespace defaults to `default`, and `--timeout=120` controls the rollout timeout.
-`down` deletes only the `platform-relay` deployment and service, not the external PostgreSQL
-database. No namespace is created automatically.
+`render` prints the manifests of deploy/k8s/deployment.yaml with the deployment's names in
+them; `validate`, `diff` and `apply` hand them to kubectl; `status`, `logs` and `down` are
+kubectl's own. The site must be https and the image must be one you built:
+`docker build --target relay -t registry.example.com/platform-relay:3.0.0 .`
+deploy/k8s/ingress.yaml is an example of an ingress for the relay, with the session cap.
 
-The renderer uses deploy/k8s/deployment.yaml, fills endpoint/image values as YAML, adds the
-selected namespace and feeds the resulting manifest to kubectl through stdin. The source
-template remains unchanged, comments and all. It is one Deployment, `platform-relay`, whose pod runs the relay, and a
-Service in front of it. The container holds no database credentials. PUBLIC_URL is the site's
-address, and the only origin the relay allows; it is not an HTTPS listener. Supply your own
-HTTPS ingress or tunnel: deploy/k8s/ingress.yaml is an example of one, and the address it
-names is the one the site's `config.json` must carry (PLATFORM_RELAY_URL).
+## Publishing the site
 
-The manifest sets RELAY_UPSTREAM_TLS=verify: the relay reaches PostgreSQL in TLS and checks its
-certificate, so PostgreSQL needs `ssl=on` and a certificate for the name the relay is given.
-Set it to `off` only where the pods reach PostgreSQL over a network you trust with a token:
-the same cluster network with network policies, a service mesh with mTLS, or a tunnel. The ingress in front of the relay caps the sessions one address may hold open
-(`limit-connections` in `deploy/k8s/ingress.yaml`). Name the pods' address range to PostgreSQL with PLATFORM_TOKEN_ONLY_FROM or your
-own pg_hba rule, so that the administrator has no login through the relay, and name your
-operators' networks with PLATFORM_ADMIN_FROM, so that the administrator has none from anywhere
-else. For Azure or another
-hosting platform, provision the same endpoint and separate operator installation through that
-platform's normal infrastructure tooling.
+```bash
+cd examples/newsroom
+PLATFORM_ISSUER=https://idp.platform.example.com PLATFORM_RELAY_URL=wss://api.platform.example.com \
+  bun --bun x vite build
+```
 
-`/health` proves the relay responds; it intentionally does not assert database health.
-Sign in through the interface, or use an external database monitor, for end-to-end readiness.
-A login can fail per role even when other roles can connect.
+Publish the folder's `.dist` with the headers its `_headers` file lists. `config.json` may be
+replaced without rebuilding. See [interface](interface.md).
 
 ## Testing
 
-`bun test` needs nothing but Bun: the suites start their own PostgreSQL in memory (PGlite, the
-real PostgreSQL compiled to WebAssembly), install it with the real migration and the newsroom
-example, and act as each person in turn.
-
-- `packages/core/test/platform.test.ts`: the security properties, as each person — the
-  catalog a reader may reach, row and column enforcement, searches, filters and sorts,
-  version-guarded writes, the audit log's privacy, roles and grants read back from PostgreSQL,
-  a collection made as its owner, metadata read and written under its own row security, and
-  an apply that converges.
-- `packages/core/test/sql.test.ts`: the SQL the platform writes — grants and their
-  differences, policies, roles, fields, metadata — and what manifests and sayings may hold.
-- `packages/ui/test/connect.test.ts`: the page's own connection through the relay — an
-  OAUTHBEARER login against a stand-in for PostgreSQL 18's token login, statements to a real
-  PostgreSQL engine and back, one statement per query, a transaction's session, the relay's
-  origin check and startup-packet rule.
-- `packages/cli/test/cli.test.ts`: the commands themselves, run as an operator runs them
-  against a PostgreSQL of their own (migrate, apply, a dry run, doctor, lock), the deployment's
-  addresses and the Kubernetes manifests.
-- `bun run test:e2e` drives the interface in Chrome, under the site's own
-  Content-Security-Policy. First the newsroom example with PostgreSQL in the page: every
-  change is checked as the statement shown and as what the database then says. Then the
-  published interface: a sign-in through a stand-in issuer, and PostgreSQL's protocol over a
-  WebSocket through the relay to a real PostgreSQL engine (`packages/ui/test/published.ts`).
-
-`bun run check` builds both sites, typechecks, lints, checks formatting and runs `bun test`.
-
-None of this starts PostgreSQL 18 with the OAuth validator, or Dex: a token login against the
-real server, `deploy local up` and a Kubernetes rollout are verified on a deployment, not by
-the suites. To do that by hand, start the stack (`bun run cli deploy local up`), sign in as the
-administrator in the interface, and run `PGTOKEN=$(bun run --silent cli token) bun run cli doctor`.
-
-Back up database data/schema plus cluster roles (`pg_dumpall --roles-only`) using protected
-storage. Restore ownership, memberships, ACLs, RLS policies, functions and triggers along with
-data. Verify direct SQL and interface access as low-privilege accounts after restoring. A
-role backup holds no password verifiers, because no role has a password. Back up Dex's storage as
-well if you rely on its refresh tokens or signing keys surviving a restore.
+`bun test` needs nothing but Bun: the suites start PostgreSQL in memory (PGlite). They cover
+the security properties as each person, the SQL the platform writes, the page's connection
+and the relay, the operator's SQL files, and the deployment's settings. `bun run test:e2e`
+is Playwright's runner: it builds the dev mode and the published site, serves both with their
+own headers, and drives them in Chrome. `bun run check` is everything but the browser.

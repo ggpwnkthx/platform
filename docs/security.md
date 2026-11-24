@@ -12,24 +12,24 @@ network and the browser assets accordingly.
 
 ## Controls exercised by the integration tests
 
-| Boundary              | Enforcement                                                                                                               |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Identity              | PostgreSQL verifies each connection's token (signature, issuer, expiry) and logs in the LOGIN role its email claim names  |
-| One way in            | Network logins are by token; a role password is not a login; forged, expired and foreign tokens fail                      |
-| Revocation            | Native REVOKE and NOLOGIN; no application token cache                                                                     |
-| Impersonation         | PostgreSQL checks SET ROLE and SET SESSION AUTHORIZATION                                                                  |
-| Workspace             | Native schema USAGE/CREATE, ownership and object grants                                                                   |
-| Fields                | Column ACLs apply to projection, predicates, sort and writes                                                              |
-| Rows                  | Native RLS USING and WITH CHECK, based on session_user                                                                    |
-| Validation            | PostgreSQL types and CHECK/NOT NULL/UNIQUE/FK constraints                                                                 |
-| Write-only clients    | Writes return counts rather than RETURNING *                                                                              |
-| Revisions             | Database triggers log every write, from the interface or any client, in the same transaction                              |
-| Audit confidentiality | Revisions are readable only by workspace-owner members, and in each row only the columns the reader may SELECT            |
-| Audit integrity       | Normal users cannot write/delete/truncate audit records or disable table triggers                                         |
-| Owner restraint       | The guard refuses the DDL that would turn a collection out of row security, or drop its audit triggers, to ordinary roles |
-| SQL construction      | Quoted identifiers; bound data values; escaped DDL literals                                                               |
-| Protocol              | The page's wire client logs in by OAUTHBEARER and runs one bound statement per query, directly and through the relay      |
-| State leakage         | One authenticated login per page; the reader's own statements run on a login of their own                                 |
+| Boundary              | Enforcement                                                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Identity              | PostgreSQL verifies each connection's token (signature, issuer, expiry) and logs in the LOGIN role its email claim names |
+| One way in            | Network logins are by token; a role password is not a login; forged, expired and foreign tokens fail                     |
+| Revocation            | Native REVOKE and NOLOGIN; no application token cache                                                                    |
+| Impersonation         | PostgreSQL checks SET ROLE and SET SESSION AUTHORIZATION                                                                 |
+| Workspace             | Native schema USAGE/CREATE, ownership and object grants                                                                  |
+| Fields                | Column ACLs apply to projection, predicates, sort and writes                                                             |
+| Rows                  | Native RLS USING and WITH CHECK, based on session_user                                                                   |
+| Validation            | PostgreSQL types and CHECK/NOT NULL/UNIQUE/FK constraints                                                                |
+| Write-only clients    | Writes return counts rather than RETURNING *                                                                             |
+| Revisions             | Database triggers log every write, from the interface or any client, in the same transaction                             |
+| Audit confidentiality | Revisions are readable only by workspace-owner members, and in each row only the columns the reader may SELECT           |
+| Audit integrity       | Normal users cannot write/delete/truncate audit records or disable table triggers                                        |
+| Owner restraint       | The guard refuses ordinary roles whatever turns a collection out of row security or lets writes pass by its history      |
+| SQL construction      | Quoted identifiers; bound data values; escaped DDL literals                                                              |
+| Protocol              | The page's wire client logs in by OAUTHBEARER and runs one bound statement per query, directly and through the relay     |
+| State leakage         | One authenticated login per page; the reader's own statements run on a login of their own                                |
 
 The only SECURITY DEFINER helper that acts on the database appends real trigger records to
 platform.activity. Its owner is platform_core, with no login or role-administration
@@ -66,16 +66,22 @@ PostgreSQL image writes connections and DDL/DCL statements to the server's log
 the server can change what it holds. Use pgAudit and an external protected log destination
 when more of those events or tamper-resistant retention are required. Tables created manually need the audit/stamp triggers installed by
 an owner; the project does not install a superuser event trigger to intercept all DDL.
-`bun run cli doctor` names the tables that write no revisions, because they have no audit
+`psql -f deploy/sql/doctor.sql` names the tables that write no revisions, because they have no audit
 trigger or it has been disabled, and the collections owned by a person rather than a group.
 
-What an owner may not do, by PostgreSQL's own rules, is turn a collection out of row security
-or drop the triggers that write its history: a table owner may do both. The guard
-(`bun run cli harden <deployment> --events`, installed by the local stack as it installs
-itself) refuses exactly those two statements to every role but a superuser and the operators
-(the members of `platform_core` and `platform_admins`). It is an event trigger: it sees the
-DDL as it runs, and says no. Everything else an owner may do — a column, a policy, a comment —
-is theirs, and stays theirs.
+A table owner may, by PostgreSQL's own rules, turn a collection out of row security, and
+drop, disable or rewrite the triggers that write its history. The guard
+(`deploy/sql/guard.sql`, installed by the local stack as it installs itself) refuses that to
+every role but a superuser and the operators (the members of `platform_core` and
+`platform_admins`). It is a pair of event triggers that read the catalogs before and after
+each DDL command, not the statement's text, so a comment inside the statement, dynamic SQL in
+a DO block, a renamed trigger, `DISABLE TRIGGER ALL` and `CREATE OR REPLACE TRIGGER` are all
+the same to it. It also refuses a rule on a collection and a child table of one: both let
+writes pass by the history. A collection dropped whole is its owner's to drop, and leaves one
+revision that says so. Everything else an owner may do — a column, a policy, a comment — is
+theirs, and stays theirs. An owner can still add a BEFORE trigger that runs after the stamp
+trigger and overwrites `created_by` or `updated_by`; a revision still names the role that
+wrote it.
 
 PostgreSQL metadata normally exposes role and policy names/expressions to connected users.
 The platform does not publish the role graph through its own functions:
@@ -85,10 +91,10 @@ the interface is never shown who belongs to which group. Where it must know whet
 an ACL or a policy is still a role, it asks PostgreSQL for the role (`to_regrole`) and reads no
 catalog, and the policy on the revisions does the same, so the interface keeps working once the
 catalogs are hidden. The raw catalogs are PostgreSQL's,
-and hiding them from psql is a separate, deliberate step: `bun run cli harden <deployment>`,
+and hiding them from psql is a separate, deliberate step: `deploy/sql/harden.sql`,
 run as the cluster superuser; the local stack takes it as it installs itself, and `doctor`
-says when it has not been taken. It revokes the public read of `pg_auth_members`, `pg_roles` and
-`pg_user`; operators keep them through `platform_admins` and `platform_core`. Policy names and
+says when it has not been taken. It revokes the public read of `pg_auth_members`, `pg_roles`,
+`pg_user` and `pg_group`; operators keep them through `platform_admins` and `platform_core`. Policy names and
 expressions stay visible, as PostgreSQL publishes them, and so do schema and table names:
 hiding the object catalogs is a separate and much wider change that breaks psql's `\d`,
 `pg_dump` and most administration tools. RLS also has PostgreSQL's usual unique/FK constraint
@@ -103,13 +109,10 @@ hidden by a policy is still a collection whose rows may be found out this way. W
 matters, keep the right to write the pointing column away from the readers who may not read
 the pointed-at collection, or hold the target in a workspace the reader cannot use.
 
-A folder is code, not data, and applying one runs it. Its `models.ts` is loaded and run by
-`apply --dir`, with the operator's own rights. Its `migration.sql` and `demo.sql` are run as
-they are, beside the server, and only where the caller is the server's own superuser, so a
-folder's SQL carries the server's authority and not the operator's. Its `extensions.tsx` is put
-in the place of the interface's own extensions module by `ui build --dir`, and runs in every
-reader's browser. Take a folder from a source you would run code from, and keep the folder a
-deployment applies one your own trust holds.
+A site folder is code, not data. Its SQL files are run as they are, beside the server, by the
+server's own superuser, so they carry the server's authority. Its `extensions.tsx` and its
+`vite.config.ts` are part of the build, and what they register runs in every reader's
+browser. Take a folder from a source you would run code from.
 
 ## Sign-in and its limits
 
@@ -118,7 +121,7 @@ trust boundary:
 
 - A token is a bearer credential. Whoever holds one is that person until it expires (one hour
   as shipped). Removing someone upstream stops new tokens, not ones already issued: use NOLOGIN
-  to lock a person out at once (`bun run cli lock ROLE`, which also ends the sessions they
+  to lock a person out at once (`ALTER ROLE … NOLOGIN`; `pg_terminate_backend` ends the sessions they
   hold). There is no token revocation list.
 - The validator, pg_oidc_validator, checks signature, issuer and expiry. It does not check the
   audience, so a token Dex issues to any of its clients is accepted. Run a Dex for Platform
@@ -146,7 +149,7 @@ trust boundary:
 - An administrator that is reached from anywhere need not be reachable all the time. Locked
   (`lock`), no token logs it in, whoever issued it and wherever it comes from; it is unlocked
   from beside the server, through the socket, for as long as it is needed
-  (`bun run cli deploy local admin unlock ROLE`, or the same command in the server's own
+  (`bun run deploy local psql`, or psql in the server's own
   container). A superuser's login is a superuser's to change, so nothing over the network
   gives it back.
 - The one way in without a token is the server's own socket, inside its container: it makes
@@ -162,7 +165,7 @@ trust boundary:
 
 Use only the authentication rules in [operations](operations.md): tokens for the network and
 nothing else, never a password and never trust, and from the relay's network no
-administrator. `bun run cli doctor` checks that no network rule admits a login without a token. Require
+administrator. `deploy/sql/doctor.sql` reports any network rule that admits a login without a token. Require
 HTTPS for the interface and for Dex, and expose the interface only through an HTTPS reverse
 proxy or ingress; PUBLIC_URL itself does not enable an HTTPS listener. Do not log WebSocket
 payloads or proxy request bodies: the `/pg` stream carries tokens, statements and rows.
@@ -211,13 +214,13 @@ in front of the relay (20 in the shipped Traefik and ingress files), how many a 
 by the role's CONNECTION LIMIT in PostgreSQL, and a login that stalls is closed by PostgreSQL's
 `authentication_timeout`. A relay exposed with no edge in front of it relies on the relay's own
 cap: set RELAY_SESSIONS_PER_ADDRESS, and `max_connections` is then the last ceiling.
-Each login asks for STATEMENT_TIMEOUT_MS as `statement_timeout`,
+Each login asks for the site's `statementTimeoutMs` as `statement_timeout`,
 which a reader may change on their own session: PostgreSQL lets every role set it, so an
 `ALTER ROLE ... SET` is a default too, and not a ceiling. What a reader cannot change is how
-many sessions their role holds: a role's CONNECTION LIMIT (`connections` in a manifest's
-`users[]`) is PostgreSQL's own count, across every relay. See [interface](interface.md) for the whole
+many sessions their role holds: a role's CONNECTION LIMIT (`ALTER ROLE … CONNECTION LIMIT`)
+is PostgreSQL's own count, across every relay. See [interface](interface.md) for the whole
 browser surface.
 
-The relay never reads PGTOKEN or an administrator URL, and
-hold no database credentials and no OAuth client secret. Keep CLI secrets out of their
-environment and manifests. Neither talks to Dex: the page does, from the browser.
+The relay holds no database credentials and no OAuth client secret, and it does not talk to
+Dex: the page does, from the browser. The deployment CLI holds one secret, the break-glass
+administrator's password in `.env`, and gives Dex its hash alone.
