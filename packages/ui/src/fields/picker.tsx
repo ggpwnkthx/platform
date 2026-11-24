@@ -18,6 +18,7 @@ export function RelationPicker({
   label,
   error,
   placeholder,
+  column = 'id',
 }: {
   schema: string
   table: string
@@ -28,6 +29,8 @@ export function RelationPicker({
   label?: React.ReactNode
   error?: React.ReactNode
   placeholder?: string
+  /** The column of the other table the key points at: usually its `id`. */
+  column?: string
 }) {
   const { catalog, presentations } = useSession()
   const [search, setSearch] = useState('')
@@ -38,12 +41,12 @@ export function RelationPicker({
     presentations[`${schema}.${table}`]?.displayField
   )
   const options = useDb(['relation', schema, table, search], (db) =>
-    relationOptions(db, schema, table, shown, search)
+    relationOptions(db, schema, table, shown, search, 20, column)
   )
   // The rows that are held are named too: they may be past the first page of names.
   const held = useDb(
     ['relation-held', schema, table, value.join(',')],
-    (db) => namesOf(db, catalog, schema, table, value),
+    (db) => namesOf(db, catalog, schema, table, value, column),
     value.length > 0
   )
   const data = [

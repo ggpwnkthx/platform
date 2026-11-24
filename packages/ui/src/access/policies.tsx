@@ -3,6 +3,7 @@ import {
   type PolicyDraft,
   type PolicyInfo,
   dropPolicyStatement,
+  forceRowSecurityStatement,
   policies as readPolicies,
   rowSecurityStatement,
   tablesIn,
@@ -54,14 +55,31 @@ export function PolicyCards({ schema, table }: { schema: string; table?: string 
               title={<span className="mono">{t.name}</span>}
               note={
                 t.rls
-                  ? own.length
-                    ? 'A row is reached when a policy that applies to the role allows it.'
-                    : 'Row security is on and there is no policy: only the owner reaches a row.'
+                  ? `${own.length ? 'A row is reached when a policy that applies to the role allows it.' : 'Row security is on and there is no policy: only the owner reaches a row.'} ${
+                      t.force_rls
+                        ? 'The owner is held to it as well.'
+                        : 'The owner is not held to it: it reads every row.'
+                    }`
                   : 'Row security is off: grants alone decide which rows are reached.'
               }
               actions={
                 t.can_alter && (
                   <>
+                    {t.rls && (
+                      <Button
+                        variant="subtle"
+                        onClick={() =>
+                          setChange({
+                            title: t.force_rls
+                              ? `The owner of ${t.name} is exempt again`
+                              : `The owner of ${t.name} is held to its row security`,
+                            statements: [forceRowSecurityStatement(schema, t.name, !t.force_rls)],
+                          })
+                        }
+                      >
+                        {t.force_rls ? 'Exempt the owner' : 'Hold the owner to it'}
+                      </Button>
+                    )}
                     <Button
                       variant="subtle"
                       onClick={() =>

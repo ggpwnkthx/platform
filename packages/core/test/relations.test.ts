@@ -136,6 +136,28 @@ describe('a join table', () => {
     const links = await linkedRows(db, cat, path(), String(article.id))
     expect(links.map((one) => one.id).sort()).toEqual([...wanted].sort())
   })
+
+  test('the links are written inside a transaction, and are refused outside one', async () => {
+    const db = await w.as('alice@example.com')
+    const tags = await records(db, {
+      schema: 'newsroom',
+      table: 'tags',
+      columns: ['id'],
+      limit: 1,
+    })
+    const article = (
+      await records(db, { schema: 'newsroom', table: 'articles', columns: ['id'], limit: 1 })
+    ).rows[0]!
+    const wanted = [String(tags.rows[0]!.id)]
+    // Outside a transaction the lock that holds the read and the write against another
+    // writer is gone before the read begins: the links are refused rather than written
+    // in a way another writer may undo.
+    expect(setLinks(db, path(), String(article.id), wanted)).rejects.toThrow(/transaction/)
+    // Inside one, they are written.
+    await transaction(db, () => setLinks(db, path(), String(article.id), wanted))
+    const links = await linkedRows(db, await catalog(db), path(), String(article.id))
+    expect(links.map((one) => one.id)).toContain(wanted[0]!)
+  })
 })
 
 describe('a condition that crosses a relation', () => {

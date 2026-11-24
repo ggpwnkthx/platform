@@ -9,6 +9,25 @@ export const columnsOf = (catalog: Catalog, schema: string, table: string) =>
   catalog.columns.filter((c) => c.schema === schema && c.table === table)
 export const relationOf = (catalog: Catalog, schema: string, table: string, column: string) =>
   catalog.relations.find((r) => r.schema === schema && r.table === table && r.column === column)
+/** The constraints a collection holds: the rules PostgreSQL keeps about its rows. */
+export const constraintsOf = (catalog: Catalog, schema: string, table: string) =>
+  catalog.constraints.filter((c) => c.schema === schema && c.table === table)
+/** The indexes a collection holds: the ways its rows are found without a scan. */
+export const indexesOf = (catalog: Catalog, schema: string, table: string) =>
+  catalog.indexes.filter((i) => i.schema === schema && i.table === table)
+
+/**
+ * The rule that decides what happens to a row that points at a row that goes, as
+ * PostgreSQL keeps it: the letter of the catalog, said the way a reader says it.
+ */
+export const deleteRule = (code: string) =>
+  ({
+    a: 'no action',
+    r: 'restrict',
+    c: 'cascade',
+    n: 'set null',
+    d: 'set default',
+  })[code] ?? code
 
 /** The values a CHECK holds a column to, read back from the constraint PostgreSQL keeps. */
 export function choicesOf(catalog: Catalog, schema: string, table: string, column: string) {

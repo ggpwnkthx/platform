@@ -3,8 +3,11 @@ import { fieldSpec } from './schema.ts'
 import type { Run } from './run.ts'
 import {
   commentCollectionStatement,
+  coveredFields,
   createCollectionStatements,
+  deleteCodes,
   fieldStatements,
+  relationIndexStatement,
   relationStatement,
   uniqueIndexStatement,
 } from '../sql/columns.ts'
@@ -45,21 +48,80 @@ export async function applyCollections(
     await run.describe(collectionTarget(schema, c.name), c.metadata)
     for (const f of c.fields) await run.describe(fieldTarget(schema, c.name, f.name), f.metadata)
   }
+  const covered = coveredFields(collections)
   for (const r of relationsOf(collections, relations)) {
-    const found = await run.one(
-      `SELECT 1 FROM pg_constraint con
+    const found = await run.one<{
+      name: string
+      on_delete: string
+      target_schema: string
+      target_table: string
+    }>(
+      `SELECT con.conname::text AS name, con.confdeltype::text AS on_delete,
+              rn.nspname::text AS target_schema, rc.relname::text AS target_table
+         FROM pg_constraint con
+         JOIN pg_class c ON c.oid = con.conrelid
+         JOIN pg_class rc ON rc.oid = con.confrelid
+         JOIN pg_namespace rn ON rn.oid = rc.relnamespace
          JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = con.conkey[1]
         WHERE con.contype = 'f' AND con.conrelid = to_regclass($1) AND a.attname = $2`,
       [ident(schema, r.collection), r.field]
     )
-    if (found) run.unchanged++
-    else {
+    if (r.state === 'absent') {
+      // The relation is gone: the key is dropped, and the two collections are apart.
+      if (!found) {
+        run.unchanged++
+        continue
+      }
       await run.db.query(
-        relationStatement(schema, r.collection, r.field, r.related, r.on_delete ?? r.onDelete)
+        `ALTER TABLE ${ident(schema, r.collection)} DROP CONSTRAINT ${ident(found.name)}`
       )
+      run.changed(`unrelate ${schema}.${r.collection}.${r.field} from ${r.related}`)
+      continue
+    }
+    const onDelete = r.on_delete ?? r.onDelete ?? 'restrict'
+    if (found) {
+      // The key is there. It is the key the manifest says only when it points at the same
+      // collection and goes the same way: a key made by hand, or one left over from a
+      // different manifest, is brought to what is said, and the change is named.
+      const same =
+        found.target_schema === schema &&
+        found.target_table === r.related &&
+        found.on_delete === deleteCodes[onDelete]
+      if (same) run.unchanged++
+      else {
+        await run.db.query(
+          `ALTER TABLE ${ident(schema, r.collection)} DROP CONSTRAINT ${ident(found.name)}`
+        )
+        await run.db.query(
+          relationStatement(schema, r.collection, r.field, r.related, onDelete, found.name)
+        )
+        run.changed(`repoint ${schema}.${r.collection}.${r.field} to ${r.related} (${onDelete})`)
+      }
+    } else {
+      await run.db.query(relationStatement(schema, r.collection, r.field, r.related, onDelete))
       run.changed(`relate ${schema}.${r.collection}.${r.field} to ${r.related}`)
     }
+    // The key is indexed: PostgreSQL makes no index for the key it does not make, and a
+    // row that points at another is found by a scan without one.
+    if (!covered.has(`${r.collection}.${r.field}`))
+      await applyRelationIndex(run, schema, r.collection, r.field)
   }
+}
+
+/** The index a foreign key needs, made once and left alone afterwards. */
+async function applyRelationIndex(run: Run, schema: string, table: string, field: string) {
+  const found = await run.one(
+    `SELECT 1 FROM pg_index x
+       JOIN pg_attribute a ON a.attrelid = x.indrelid AND a.attnum = x.indkey[0]
+      WHERE x.indrelid = to_regclass($1) AND a.attname = $2 AND x.indisvalid`,
+    [ident(schema, table), field]
+  )
+  if (found) {
+    run.unchanged++
+    return
+  }
+  await run.db.query(relationIndexStatement(schema, table, field))
+  run.changed(`index ${schema}.${table}.${field}`)
 }
 
 /** What the manifest says of a collection itself: what it is for, and whether it asks for policies. */
@@ -104,21 +166,26 @@ async function applyUniqueGroups(run: Run, schema: string, c: Collection, named:
   }
 }
 
-/** The relations the manifest names, and those its fields carry. */
-const relationsOf = (collections: Collection[], relations: Relation[]): Relation[] => [
-  ...relations,
-  ...collections.flatMap((c) =>
-    c.fields.flatMap((f) =>
-      f.relation
-        ? [
-            {
-              collection: c.name,
-              field: f.name,
-              related: f.relation.collection,
-              on_delete: f.relation.on_delete,
-            },
-          ]
-        : []
-    )
-  ),
-]
+/**
+ * The relations the manifest names, and those its fields carry. A relation named at the
+ * top of the workspace is said once there, and wins over the field that carries it: a
+ * workspace may say that a field is no longer related at all.
+ */
+const relationsOf = (collections: Collection[], relations: Relation[]): Relation[] => {
+  const byKey = new Map<string, Relation>()
+  for (const relation of relations) byKey.set(`${relation.collection}.${relation.field}`, relation)
+  for (const c of collections)
+    for (const f of c.fields) {
+      if (!f.relation) continue
+      const key = `${c.name}.${f.name}`
+      if (byKey.has(key)) continue
+      byKey.set(key, {
+        collection: c.name,
+        field: f.name,
+        related: f.relation.collection,
+        on_delete: f.relation.on_delete,
+        state: 'present',
+      })
+    }
+  return [...byKey.values()]
+}

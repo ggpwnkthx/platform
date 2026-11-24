@@ -25,8 +25,19 @@ export interface Db {
   exec?(script: string): Promise<unknown>
 }
 
+/**
+ * The connections that are inside a transaction of the platform's own making. A statement
+ * that writes more than one row needs one: without it, the read and the write that follow
+ * each other are two transactions, and another writer may come between them.
+ */
+const inside = new WeakSet<object>()
+
+/** Whether this connection is inside a transaction: the one `transaction()` opens. */
+export const inTransaction = (db: Db): boolean => inside.has(db as object)
+
 export async function transaction<T>(db: Db, work: () => Promise<T>, dryRun = false): Promise<T> {
   await db.query('BEGIN')
+  inside.add(db as object)
   try {
     const result = await work()
     await db.query(dryRun ? 'ROLLBACK' : 'COMMIT')
@@ -34,6 +45,8 @@ export async function transaction<T>(db: Db, work: () => Promise<T>, dryRun = fa
   } catch (error) {
     await db.query('ROLLBACK').catch(() => undefined)
     throw error
+  } finally {
+    inside.delete(db as object)
   }
 }
 

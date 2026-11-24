@@ -57,6 +57,8 @@ export const relationSchema = z.object({
   related: name,
   on_delete: onDelete.optional(),
   onDelete: onDelete.optional(),
+  /** `absent` drops the foreign key: the two collections are no longer related. */
+  state: z.enum(['present', 'absent']).default('present'),
 })
 const userSchema = z.strictObject({
   name,

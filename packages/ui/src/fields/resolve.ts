@@ -126,6 +126,8 @@ function relationsOf(
           target: 'id',
           target_schema: relation.schema,
           target_table: relation.table,
+          // The rows are the children's own, found by their own key.
+          target_column: 'id',
         },
       })
     )
@@ -148,6 +150,9 @@ function relationsOf(
           target: other.column,
           target_schema: other.target_schema,
           target_table: other.target_table,
+          // The column of the other table the link's key points at: usually `id`.
+          target_column: other.target_column,
+          payload: join.payload,
         },
       })
     )

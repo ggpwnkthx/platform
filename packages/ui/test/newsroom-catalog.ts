@@ -48,6 +48,7 @@ const relation = (of: string, name: string, target: string): RelationInfo => ({
   column: name,
   target_schema: schema,
   target_table: target,
+  target_column: 'id',
   on_delete: 'a',
 })
 
@@ -79,15 +80,22 @@ export const catalog: Catalog = {
       name: 'article_tags_article_tag_idx',
       columns: ['article', 'tag'],
       unique: true,
+      primary: false,
     },
   ],
   joins: [
     {
       schema,
       table: 'article_tags',
-      left: { column: 'article', target_schema: schema, target_table: 'articles' },
-      right: { column: 'tag', target_schema: schema, target_table: 'tags' },
+      left: {
+        column: 'article',
+        target_schema: schema,
+        target_table: 'articles',
+        target_column: 'id',
+      },
+      right: { column: 'tag', target_schema: schema, target_table: 'tags', target_column: 'id' },
       uniquePair: true,
+      payload: [],
     },
   ],
 }

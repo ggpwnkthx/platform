@@ -37,7 +37,11 @@ function relationCondition(
   if (reach.kind === 'column') {
     const column = `${base.schema}.${base.table}.${reach.column}`
     if (op === 'has_any') return eb(column, 'in', wanted)
-    if (op === 'has_none') return eb(column, 'not in', wanted)
+    // A row with no link is linked to none of them: a column with nothing in it says so.
+    if (op === 'has_none') return eb.or([eb(column, 'is', null), eb(column, 'not in', wanted)])
+    // All of them: a column holds one row, so it is linked to all of them only if there is
+    // one of them, and it points at that one.
+    if (wanted.length === 1) return eb(column, '=', wanted[0])
     return eb.lit(false)
   }
   const rel = eb.selectFrom(`${reach.schema}.${reach.table}`).selectAll().as('rel')
@@ -77,25 +81,23 @@ function throughCondition(
 ): Expression<SqlBool> {
   const one: Condition = { op: through.op, value: through.value }
   if (reach.kind === 'column') {
+    const key = reach.target_column ?? 'id'
     const rel = eb.selectFrom(`${reach.schema}.${reach.table}`).selectAll().as('rel')
     return eb.exists(
       eb
         .selectFrom(rel)
         .select(sql.lit(1).as('one'))
-        .where(
-          eb.ref(`rel.${reach.id}`),
-          '=',
-          eb.ref(`${base.schema}.${base.table}.${reach.column}`)
-        )
+        .where(eb.ref(`rel.${key}`), '=', eb.ref(`${base.schema}.${base.table}.${reach.column}`))
         .where((eb2) => condition(eb2, `rel.${through.column}`, one))
     )
   }
+  const key = reach.target_column ?? 'id'
   const rel = eb.selectFrom(`${reach.schema}.${reach.table}`).selectAll().as('rel')
   const other = eb.selectFrom(`${reach.target_schema}.${reach.target_table}`).selectAll().as('t')
   return eb.exists(
     eb
       .selectFrom(rel)
-      .innerJoin(other, 't.id', `rel.${reach.target}`)
+      .innerJoin(other, `t.${key}`, `rel.${reach.target}`)
       .select(sql.lit(1).as('one'))
       .where(eb.ref(`rel.${reach.fk}`), '=', eb.ref(`${base.schema}.${base.table}.id`))
       .where((eb2) => condition(eb2, `t.${through.column}`, one))
@@ -115,17 +117,14 @@ function labelCondition(
   const label = reach.label
   if (!label) return null
   const found = pattern(term, 'any')
+  const key = reach.target_column ?? 'id'
   if (reach.kind === 'column') {
     const rel = eb.selectFrom(`${reach.schema}.${reach.table}`).selectAll().as('rel')
     return eb.exists(
       eb
         .selectFrom(rel)
         .select(sql.lit(1).as('one'))
-        .where(
-          eb.ref(`rel.${reach.id}`),
-          '=',
-          eb.ref(`${base.schema}.${base.table}.${reach.column}`)
-        )
+        .where(eb.ref(`rel.${key}`), '=', eb.ref(`${base.schema}.${base.table}.${reach.column}`))
         .where((eb2) => eb2(asText(`rel.${label}`), 'ilike', found))
     )
   }
@@ -134,7 +133,7 @@ function labelCondition(
   return eb.exists(
     eb
       .selectFrom(rel)
-      .innerJoin(other, 't.id', `rel.${reach.target}`)
+      .innerJoin(other, `t.${key}`, `rel.${reach.target}`)
       .select(sql.lit(1).as('one'))
       .where(eb.ref(`rel.${reach.fk}`), '=', eb.ref(`${base.schema}.${base.table}.id`))
       .where((eb2) => eb2(asText(`t.${label}`), 'ilike', found))

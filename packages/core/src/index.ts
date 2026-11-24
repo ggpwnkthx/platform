@@ -9,6 +9,7 @@ export { manifestSchema, parseManifest, fieldSpec, type Manifest } from './manif
 export { Run, type ApplyResult } from './manifest/run.ts'
 export * from './metadata.ts'
 export * from './records.ts'
+export type { LinkedRow } from './records/links.ts'
 export {
   operators,
   columnOperators,
@@ -25,6 +26,7 @@ export {
   run,
 } from './records/query.ts'
 export * from './sql/kit.ts'
+export * from './sql/constraints.ts'
 export * from './sql/privileges.ts'
 export * from './sql/policies.ts'
 export * from './sql/roles.ts'

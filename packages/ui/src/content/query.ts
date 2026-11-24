@@ -8,6 +8,19 @@ import type { Field } from '../fields/types.ts'
 export type Row = Record<string, unknown>
 export const pageSizes = [25, 50, 100]
 
+/**
+ * A relation read as rows is drawn as the rows it is: what the page read, and not the ids
+ * the form holds. The form keeps the ids, which is what a write needs.
+ */
+export const drawnValue = (
+  field: Field,
+  links: Record<string, unknown[]>,
+  values: Record<string, unknown>
+): unknown =>
+  field.virtual && field.link?.kind === 'links'
+    ? (links[field.name] ?? [])
+    : (values[field.name] ?? '')
+
 /** The filters the address says: `f.<field>=<operator>.<value>`. */
 export function filterOf(
   params: URLSearchParams,

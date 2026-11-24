@@ -1,8 +1,6 @@
-import { Button, Group, Tabs, Text, Textarea, TextInput } from '@mantine/core'
+import { Button, Group, Text, TextInput } from '@mantine/core'
 import {
   type FieldSpec,
-  collectionTarget,
-  commentCollectionStatement,
   dropCollectionStatement,
   dropFieldStatement,
   fieldStatements,
@@ -19,7 +17,6 @@ import { ItemMark } from '../bits/marks.tsx'
 import { Page, Section } from '../bits/page.tsx'
 import { useFields } from '../fields/resolve.ts'
 import type { Field } from '../fields/types.ts'
-import { MetadataPanel } from '../metadata/panel.tsx'
 import { FieldSayings } from '../metadata/sayings.tsx'
 import { usePlace } from '../session/hooks.ts'
 import { useSession } from '../session/context.ts'
@@ -27,6 +24,9 @@ import { useNames } from '../shell/names.ts'
 import { CollectionAccess } from '../access/collection.tsx'
 import { emptyField, FieldForm, fieldOf } from './field-form.tsx'
 import { FieldTable } from './field-table.tsx'
+import { CollectionMetadata } from './collection-metadata.tsx'
+import { CollectionParts, partOf } from './collection-parts.tsx'
+import { Constraints } from './constraints.tsx'
 import { ManyToMany } from './many.tsx'
 
 /** One collection: its fields, its metadata, and its access. */
@@ -40,7 +40,6 @@ export function CollectionModel() {
   const [saying, setSaying] = useState<Field | null>(null)
   const [dropping, setDropping] = useState<string | null>(null)
   const [dropAll, setDropAll] = useState<string | null>(null)
-  const [note, setNote] = useState<string | null>(null)
   const [mending, setMending] = useState(false)
   if (!info)
     return (
@@ -50,6 +49,7 @@ export function CollectionModel() {
     )
   const said = names(place.ws, place.c)
   const unsaid = fields.filter((f) => !f.hasViews)
+  const part = partOf(place.params.get('tab'))
   return (
     <Page
       title={said.name}
@@ -62,23 +62,10 @@ export function CollectionModel() {
         </span>,
       ]}
       mark={<ItemMark {...said} size={44} table />}
-      actions={
-        <Button variant="default" component={Link} to={place.to('/data/records', { c: place.c })}>
-          Records
-        </Button>
-      }
+      actions={<CollectionParts place={place} part={part} />}
     >
-      <Tabs
-        value={place.params.get('tab') ?? 'fields'}
-        onChange={(tab) => place.set({ tab })}
-        keepMounted={false}
-      >
-        <Tabs.List mb="lg">
-          <Tabs.Tab value="fields">Fields</Tabs.Tab>
-          <Tabs.Tab value="metadata">Metadata</Tabs.Tab>
-          <Tabs.Tab value="access">Access</Tabs.Tab>
-        </Tabs.List>
-        <Tabs.Panel value="fields">
+      {part === 'fields' && (
+        <>
           <Group justify="flex-end" mb="sm">
             {info.can_alter && unsaid.length > 0 && (
               <Button variant="subtle" onClick={() => setMending(true)}>
@@ -107,27 +94,18 @@ export function CollectionModel() {
               </Button>
             </Section>
           )}
-        </Tabs.Panel>
-        <Tabs.Panel value="metadata">
-          <Section
-            title="What it is for"
-            note="Kept as the table's comment."
-            actions={
-              info.can_alter && (
-                <Button variant="default" onClick={() => setNote(info.comment ?? '')}>
-                  Change
-                </Button>
-              )
-            }
-          >
-            <Text c={info.comment ? undefined : 'dimmed'}>{info.comment ?? 'Nothing said.'}</Text>
-          </Section>
-          <MetadataPanel target={collectionTarget(place.ws, place.c)} canEdit={info.can_alter} />
-        </Tabs.Panel>
-        <Tabs.Panel value="access">
-          <CollectionAccess schema={place.ws} table={place.c} fields={fields} />
-        </Tabs.Panel>
-      </Tabs>
+        </>
+      )}
+      {part === 'constraints' && <Constraints schema={place.ws} table={place.c} fields={fields} />}
+      {part === 'metadata' && (
+        <CollectionMetadata
+          schema={place.ws}
+          table={place.c}
+          comment={info.comment ?? null}
+          canAlter={info.can_alter}
+        />
+      )}
+      {part === 'access' && <CollectionAccess schema={place.ws} table={place.c} fields={fields} />}
 
       <Change
         title="Add field"
@@ -168,14 +146,6 @@ export function CollectionModel() {
         <Text fz="sm" c="dimmed">
           The column and every value in it are gone when this runs.
         </Text>
-      </Change>
-      <Change
-        title="What it is for"
-        opened={note !== null}
-        onClose={() => setNote(null)}
-        statements={() => [commentCollectionStatement(place.ws, place.c, note ?? '')]}
-      >
-        <Textarea autosize value={note ?? ''} onChange={(e) => setNote(e.currentTarget.value)} />
       </Change>
       <Change
         title={`Drop ${place.c}`}

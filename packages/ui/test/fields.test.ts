@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type { Catalog } from '@platform/core'
 import { resolveFields } from '../src/fields/resolve.ts'
 import { catalog } from './newsroom-catalog.ts'
-import { filterOf } from '../src/content/query.ts'
+import { drawnValue, filterOf } from '../src/content/query.ts'
 
 const fieldsOf = (table: string) => resolveFields(catalog, 'newsroom', table)
 
@@ -23,6 +23,7 @@ describe('the relations of a collection', () => {
       table: 'corrections',
       fk: 'article',
       target: 'id',
+      target_column: 'id',
       target_schema: 'newsroom',
       target_table: 'corrections',
     })
@@ -38,8 +39,10 @@ describe('the relations of a collection', () => {
       table: 'article_tags',
       fk: 'article',
       target: 'tag',
+      target_column: 'id',
       target_schema: 'newsroom',
       target_table: 'tags',
+      payload: [],
     })
     // And the other side of the same join is a link of its own.
     const back = fieldsOf('tags').find((f) => f.link?.kind === 'links')!
@@ -106,5 +109,25 @@ describe('a condition on a relation, as the address carries it', () => {
   test('a condition on a column is left alone', () => {
     const filter = filterOf(new URLSearchParams('f.title=contains.river'), byName)
     expect(filter.title).toEqual({ op: 'contains', value: 'river' })
+  })
+})
+
+describe('a relation read as rows, as it is drawn', () => {
+  const byName = Object.fromEntries(fieldsOf('articles').map((f) => [f.name, f]))
+  const links = byName.tags!
+  const title = byName.title!
+
+  test('the rows it is linked to are drawn, and not the ids the form holds', () => {
+    const rows = [{ id: 'one', label: 'Politics' }]
+    const drawn = drawnValue(links, { tags: rows }, { tags: ['one'] })
+    expect(drawn).toBe(rows)
+  })
+
+  test('a column is drawn as the form holds it', () => {
+    expect(drawnValue(title, { tags: [] }, { title: 'A story' })).toBe('A story')
+  })
+
+  test('a relation with no rows drawn is drawn as nothing', () => {
+    expect(drawnValue(links, {}, { tags: [] })).toEqual([])
   })
 })

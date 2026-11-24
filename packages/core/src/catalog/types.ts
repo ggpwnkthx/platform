@@ -42,6 +42,12 @@ export interface RelationInfo {
   column: string
   target_schema: string
   target_table: string
+  /**
+   * The column of the target the key points at. Usually `id`, but a key made by hand may
+   * point at any other column — a natural key, say — and the platform reads the key as it
+   * is written rather than assuming the target's `id`.
+   */
+  target_column: string
   on_delete: string
 }
 /** An index PostgreSQL holds: the columns it covers, and whether it refuses duplicates. */
@@ -51,6 +57,8 @@ export interface IndexInfo {
   name: string
   columns: string[]
   unique: boolean
+  /** The key of the table itself: the index every row is found by. */
+  primary: boolean
 }
 /**
  * A table that joins two others: two foreign keys, one to each, and a unique index over
@@ -59,10 +67,16 @@ export interface IndexInfo {
 export interface JoinInfo {
   schema: string
   table: string
-  left: { column: string; target_schema: string; target_table: string }
-  right: { column: string; target_schema: string; target_table: string }
+  left: { column: string; target_schema: string; target_table: string; target_column: string }
+  right: { column: string; target_schema: string; target_table: string; target_column: string }
   /** A unique index covers both columns: the pair may be written with ON CONFLICT. */
   uniquePair: boolean
+  /**
+   * The columns the link carries beside its two keys: what the link is worth, or when it
+   * began. They are written by the database, not by the link, so each is nullable or has
+   * a default of its own.
+   */
+  payload: string[]
 }
 export interface ConstraintInfo {
   schema: string
@@ -71,6 +85,12 @@ export interface ConstraintInfo {
   type: string
   definition: string
   columns: string[]
+  /** For a foreign key: the collection it points at. A key over several columns points
+   * at one collection too, and is read as a constraint rather than as a relation. */
+  target_schema?: string | null
+  target_table?: string | null
+  /** For a foreign key: the letter PostgreSQL keeps the delete rule by. */
+  on_delete?: string | null
 }
 export interface TypeInfo {
   name: string

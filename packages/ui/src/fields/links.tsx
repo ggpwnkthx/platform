@@ -1,4 +1,4 @@
-import { Group, Text } from '@mantine/core'
+import { Stack, Text } from '@mantine/core'
 import type { FieldType, FilterInputProps, InputProps } from './types.ts'
 import { Clipped, Mono, textOf } from './values.tsx'
 import { RelationPicker } from './picker.tsx'
@@ -10,15 +10,29 @@ const idsOf = (value: unknown): string[] =>
       ? String((one as { id: unknown }).id)
       : String(one)
   )
-/** The names of a set of rows, when the page holds the rows themselves. */
-const labelsOf = (value: unknown): string[] =>
-  (Array.isArray(value) ? value : [])
-    .map((one) =>
-      typeof one === 'object' && one !== null && 'label' in one
-        ? String((one as { label: unknown }).label)
-        : String(one)
-    )
-    .filter(Boolean)
+
+/**
+ * The rows a record is linked to, as the page holds them: an id, the name the row is
+ * known by, and what the link carries beside its two keys.
+ */
+interface Linked {
+  id: string
+  label?: string
+  payload?: Record<string, unknown> | null
+}
+const linkedOf = (value: unknown): Linked[] =>
+  (Array.isArray(value) ? value : []).map((one) =>
+    typeof one === 'object' && one !== null && 'id' in one ? (one as Linked) : { id: String(one) }
+  )
+
+/** What a link carries beside its keys, said as it is. */
+const carried = (payload: Record<string, unknown> | null | undefined): string => {
+  if (!payload) return ''
+  return Object.entries(payload)
+    .filter(([, value]) => value !== null && value !== undefined && value !== '')
+    .map(([key, value]) => `${key}: ${textOf(value)}`)
+    .join(' · ')
+}
 
 /** The rows a record is linked to: a picker of the other side of a join. */
 function LinksInput({ field, value, onChange, error, label }: InputProps) {
@@ -32,6 +46,7 @@ function LinksInput({ field, value, onChange, error, label }: InputProps) {
       multiple
       label={label}
       error={error}
+      column={path.target_column}
     />
   )
 }
@@ -48,6 +63,7 @@ function LinksFilter({ field, value, onChange, error, label }: FilterInputProps)
       multiple
       label={label}
       error={error}
+      column={path.target_column}
     />
   )
 }
@@ -61,18 +77,26 @@ export const linksType: FieldType = {
   label: 'Links',
   claims: (field) => (field.link?.kind === 'links' ? 30 : 0),
   draw: {
-    list: ({ value }) => <Clipped text={`${labelsOf(value).length} links`} />,
+    list: ({ value }) => <Clipped text={`${linkedOf(value).length} links`} />,
     record: ({ value }) => {
-      const labels = labelsOf(value)
-      if (!labels.length) return <Text c="dimmed">Not linked to anything</Text>
+      const rows = linkedOf(value)
+      if (!rows.length) return <Text c="dimmed">Not linked to anything</Text>
       return (
-        <Group gap={6}>
-          {labels.map((one) => (
-            <Text key={one} size="sm">
-              {one}
-            </Text>
-          ))}
-        </Group>
+        <Stack gap={4}>
+          {rows.map((row) => {
+            const payload = carried(row.payload)
+            return (
+              <div key={row.id}>
+                <Text size="sm">{row.label ?? row.id}</Text>
+                {payload && (
+                  <Text size="xs" c="dimmed">
+                    {payload}
+                  </Text>
+                )}
+              </div>
+            )
+          })}
+        </Stack>
       )
     },
   },

@@ -8,16 +8,22 @@ import type { Field } from './types.ts'
 export function reachOf(catalog: Catalog, field: Field): RelationReach | null {
   if (field.link) {
     const path = field.link.path
-    return { ...path, label: labelOf(catalog, path.target_schema, path.target_table) }
+    return {
+      ...path,
+      target_column: path.target_column ?? 'id',
+      label: labelOf(catalog, path.target_schema, path.target_table),
+    }
   }
   if (field.relation) {
-    const { target_schema, target_table } = field.relation
+    const { target_schema, target_table, target_column } = field.relation
     return {
       kind: 'column',
       schema: target_schema,
       table: target_table,
       column: field.name,
-      id: 'id',
+      // The column of theirs the key points at: usually `id`, but a key made by hand may
+      // point at another column, and the reach follows the key as it is written.
+      target_column: target_column ?? 'id',
       label: labelOf(catalog, target_schema, target_table),
     }
   }

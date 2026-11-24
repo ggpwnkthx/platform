@@ -54,3 +54,21 @@ export function grantee(name: string) {
   if (!who) throw new InvalidName('Choose who receives it')
   return who.toLowerCase() === 'public' ? sql.raw('PUBLIC') : id(who)
 }
+
+/**
+ * A name PostgreSQL would give, held to the length it holds names to: 63 bytes, and not
+ * one character more. A name cut here is cut on a character, as PostgreSQL's own is.
+ */
+export function pgName(name: string): string {
+  const bytes = new TextEncoder().encode(name)
+  if (bytes.length <= 63) return name
+  let out = ''
+  let used = 0
+  for (const char of name) {
+    const size = new TextEncoder().encode(char).length
+    if (used + size > 63) break
+    out += char
+    used += size
+  }
+  return out
+}

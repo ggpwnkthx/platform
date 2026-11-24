@@ -1,5 +1,5 @@
 import { ActionIcon, Button, Group, Modal, Stack, Text } from '@mantine/core'
-import { activity, linkedRows, record } from '@platform/core'
+import { activity, linkedRows, record, type LinkedRow } from '@platform/core'
 import { Save, Trash2 } from 'lucide-react'
 import { Link, useNavigate } from 'react-router'
 import { NoCollection } from '../bits/empty.tsx'
@@ -14,7 +14,7 @@ import { CollectionAside } from './aside.tsx'
 import { FieldOf, Revisions, SystemFields } from './form.tsx'
 import { RelatedRows } from './related.tsx'
 import { useSeededForm } from './seed.ts'
-import type { Row } from './query.ts'
+import { drawnValue, type Row } from './query.ts'
 import { useRecordWriter } from './writer.ts'
 
 export function Item() {
@@ -42,7 +42,7 @@ export function Item() {
   const links = useDb(
     ['links', place.ws, place.c, id],
     async (one) => {
-      const out: Record<string, { id: string; label: string }[]> = {}
+      const out: Record<string, LinkedRow[]> = {}
       for (const f of linkFields) out[f.name] = await linkedRows(one, catalog, f.link!.path, id)
       return out
     },
@@ -158,7 +158,7 @@ export function Item() {
             <FieldOf
               key={f.name}
               field={f}
-              value={writer.form.values[f.name] ?? ''}
+              value={drawnValue(f, links.data ?? {}, writer.form.values)}
               writable={writer.writable(f)}
               error={writer.form.errors[f.name]}
               onChange={(value) => writer.form.setFieldValue(f.name, value)}

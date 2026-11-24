@@ -13,6 +13,7 @@ function RelationInput({ field, value, onChange, error, label }: InputProps) {
       onChange={(ids) => onChange(ids[0] ?? '')}
       label={label}
       error={error}
+      column={relation.target_column}
     />
   )
 }
@@ -30,6 +31,7 @@ function RelationFilter({ field, op, value, onChange, error, label }: FilterInpu
       multiple={many}
       label={label}
       error={error}
+      column={relation.target_column}
     />
   )
 }

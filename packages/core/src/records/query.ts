@@ -49,8 +49,11 @@ export type RelationReach =
       table: string
       /** The column of the record that points at them. */
       column: string
-      /** The column of theirs that holds their id. */
-      id: string
+      /**
+       * The column of theirs the key points at: usually `id`. A key made by hand may
+       * point at another column, and the reach follows the key as it is written.
+       */
+      target_column?: string
       /** The column of theirs that is searched, when the search follows it. */
       label?: string
     }
@@ -66,6 +69,11 @@ export type RelationReach =
       /** The table the other row lives in. */
       target_schema: string
       target_table: string
+      /**
+       * The column of the other table the link's key points at: usually `id`. The link
+       * holds the value of that column, and the other row is found by it.
+       */
+      target_column?: string
       /** The column of theirs that is searched, when the search follows it. */
       label?: string
     }
@@ -86,6 +94,16 @@ export interface RelationPath {
   /** The table the other row lives in. */
   target_schema: string
   target_table: string
+  /**
+   * The column of the other table the link's key points at: usually `id`. The link holds
+   * the value of that column, and the other row is found by it.
+   */
+  target_column?: string
+  /**
+   * The columns of the link that carry something of its own, beside the two keys: what
+   * the link is worth, or when it began. They are read, never written here.
+   */
+  payload?: readonly string[]
 }
 
 /** Runs what Kysely wrote on the caller's own connection. */

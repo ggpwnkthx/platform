@@ -1,6 +1,6 @@
-import { labelColumn } from '../catalog/labels.ts'
+import { columnsOf, labelColumn } from '../catalog/labels.ts'
 import type { Catalog } from '../catalog/types.ts'
-import type { Db } from '../db.ts'
+import { type Db, inTransaction } from '../db.ts'
 import { id, k, list, sql } from '../sql/kit.ts'
 import { asText, run } from './query.ts'
 import type { RelationPath } from './query.ts'
@@ -10,27 +10,12 @@ import type { RelationPath } from './query.ts'
  * table of children. The same path reads them, writes them, and filters by them.
  */
 
-/** The names of the rows a picker holds, where the reader may read them. */
-export async function namesOf(
-  db: Db,
-  catalog: Catalog,
-  schema: string,
-  table: string,
-  ids: string[]
-): Promise<{ id: string; label: string }[]> {
-  const wanted = [...new Set(ids.filter((one) => one !== ''))]
-  if (!wanted.length) return []
-  const label = labelColumn(catalog, schema, table)
-  const found = await run<{ id: string; label: string }>(
-    db,
-    k
-      .withSchema(schema)
-      .selectFrom(table)
-      .select([asText('id').as('id'), (label ? asText(label) : asText('id')).as('label')])
-      .where(asText('id'), 'in', wanted)
-  ).catch(() => null) // a row policy or a column grant may refuse: the ids are shown instead
-  const names = new Map((found?.rows ?? []).map((row) => [row.id, row.label]))
-  return wanted.map((one) => ({ id: one, label: names.get(one) ?? one }))
+/** A row a record is linked to: its id, the name it is known by, and what the link carries. */
+export interface LinkedRow {
+  id: string
+  label: string
+  /** The columns of the link beside its two keys, when it carries any. */
+  payload: Record<string, unknown> | null
 }
 
 /**
@@ -42,28 +27,44 @@ export async function linkedRows(
   catalog: Catalog,
   path: RelationPath,
   baseId: string
-): Promise<{ id: string; label: string }[]> {
-  const links = await run<{ id: string }>(
+): Promise<LinkedRow[]> {
+  // The payload is read only where the reader may read it: a column they may not see is
+  // not named in the statement, which PostgreSQL would refuse.
+  const payload = (path.payload ?? []).filter((column) =>
+    columnsOf(catalog, path.schema, path.table).some((one) => one.name === column && one.can_select)
+  )
+  const links = await run<Record<string, unknown>>(
     db,
     k
       .withSchema(path.schema)
       .selectFrom(path.table)
-      .select(asText(path.target).as('id'))
+      .select([
+        asText(path.target).as('id'),
+        ...payload.map((column) => sql`${sql.ref(column)}`.as(column)),
+      ])
       .where(path.fk, '=', baseId)
   )
-  const ids = links.rows.map((row) => row.id)
+  const ids = links.rows.map((row) => String(row.id))
   if (!ids.length) return []
+  // The other row is found by the column the link's key points at: usually its `id`, but
+  // a key made by hand may point at another column, and the row is found by that one.
+  const key = path.target_column ?? 'id'
   const label = labelColumn(catalog, path.target_schema, path.target_table)
   const found = await run<{ id: string; label: string }>(
     db,
     k
       .withSchema(path.target_schema)
       .selectFrom(path.target_table)
-      .select([asText('id').as('id'), (label ? asText(label) : asText('id')).as('label')])
-      .where(asText('id'), 'in', ids)
+      .select([asText(key).as('id'), (label ? asText(label) : asText(key)).as('label')])
+      .where(asText(key), 'in', ids)
   ).catch(() => null) // a row policy or a column grant may refuse: the ids are shown instead
   const names = new Map((found?.rows ?? []).map((row) => [row.id, row.label]))
-  return ids.map((one) => ({ id: one, label: names.get(one) ?? one }))
+  return links.rows.map((row) => {
+    const id = String(row.id)
+    const carried: Record<string, unknown> = {}
+    for (const column of payload) carried[column] = row[column]
+    return { id, label: names.get(id) ?? id, payload: payload.length ? carried : null }
+  })
 }
 
 /** How many rows a record is linked to. */
@@ -80,6 +81,30 @@ export async function countLinked(db: Db, path: RelationPath, baseId: string): P
 }
 
 /**
+ * The links of one record, held while they are written. Two editors of the same record
+ * would otherwise overwrite each other's links: the second one writes the set it read,
+ * and the first one's changes are gone.
+ *
+ * The lock is an advisory one, taken on the record's own name, because a row lock would
+ * need a right on the table that a reader of the links does not always hold: the platform
+ * grants its rights field by field, and a lock is asked for over the whole table.
+ *
+ * The lock is held until the transaction ends, so the links are written inside one: the
+ * lock is what holds the read and the write against another writer, and outside a
+ * transaction it is gone before the read begins.
+ */
+async function lockLinks(db: Db, path: RelationPath, baseId: string) {
+  if (!inTransaction(db))
+    throw new Error(
+      'The links of a record are written inside a transaction: run this in transaction().'
+    )
+  const key = `${path.schema}.${path.table}.${baseId}`
+  const statement = sql`SELECT pg_advisory_xact_lock(hashtextextended(${sql.val(key)}, 0))`
+  const { sql: text, parameters } = statement.compile(k)
+  await db.query(text, [...parameters])
+}
+
+/**
  * The links of a record, as they are now written: the ones added, and the ones taken away.
  * The pair is unique where the join says so, so a link written twice is one link.
  */
@@ -89,6 +114,7 @@ export async function setLinks(
   baseId: string,
   ids: string[]
 ): Promise<{ added: number; removed: number }> {
+  await lockLinks(db, path, baseId)
   const held = await run<{ id: string }>(
     db,
     k

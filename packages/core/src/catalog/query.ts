@@ -1,12 +1,11 @@
 import type { Db } from '../db.ts'
-import { systemFields } from '../sql/columns.ts'
+import { joinsOf } from './joins.ts'
 import {
   type Catalog,
   type ColumnInfo,
   type ConstraintInfo,
   type Identity,
   type IndexInfo,
-  type JoinInfo,
   type RelationInfo,
   type SchemaInfo,
   type TableInfo,
@@ -74,19 +73,26 @@ export async function catalog(db: Db): Promise<Catalog> {
   const relations = await rows<RelationInfo>(`
     SELECT n.nspname::text AS schema, c.relname::text AS table, a.attname::text AS column,
            rn.nspname::text AS target_schema, rc.relname::text AS target_table,
+           ta.attname::text AS target_column,
            con.confdeltype::text AS on_delete
       FROM pg_constraint con
       JOIN pg_class c ON c.oid = con.conrelid JOIN pg_namespace n ON n.oid = c.relnamespace
       JOIN pg_class rc ON rc.oid = con.confrelid JOIN pg_namespace rn ON rn.oid = rc.relnamespace
       JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = con.conkey[1]
+      JOIN pg_attribute ta ON ta.attrelid = con.confrelid AND ta.attnum = con.confkey[1]
      WHERE con.contype = 'f' AND array_length(con.conkey, 1) = 1 AND ${usable} ORDER BY 1, 2, 3`)
   const constraints = await rows<ConstraintInfo>(`
     SELECT n.nspname::text AS schema, c.relname::text AS table, con.conname::text AS name,
            con.contype::text AS type, pg_get_constraintdef(con.oid) AS definition,
            ARRAY(SELECT a.attname::text FROM pg_attribute a
-                  WHERE a.attrelid = con.conrelid AND a.attnum = ANY(con.conkey)) AS columns
+                  WHERE a.attrelid = con.conrelid AND a.attnum = ANY(con.conkey)) AS columns,
+           CASE WHEN con.contype = 'f' THEN rn.nspname::text END AS target_schema,
+           CASE WHEN con.contype = 'f' THEN rc.relname::text END AS target_table,
+           CASE WHEN con.contype = 'f' THEN con.confdeltype::text END AS on_delete
       FROM pg_constraint con
       JOIN pg_class c ON c.oid = con.conrelid JOIN pg_namespace n ON n.oid = c.relnamespace
+      LEFT JOIN pg_class rc ON con.contype = 'f' AND rc.oid = con.confrelid
+      LEFT JOIN pg_namespace rn ON rn.oid = rc.relnamespace
      WHERE ${usable} AND con.contype IN ('c','u','p','f','x') ORDER BY 1, 2, 3`)
   const types = await rows<TypeInfo>(`
     SELECT n.nspname::text AS schema, t.typname::text AS bare,
@@ -104,11 +110,11 @@ export async function catalog(db: Db): Promise<Catalog> {
                    FROM generate_subscripts(x.indkey, 1) AS s(i)
                    JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = x.indkey[s.i]
                   ORDER BY s.i) AS columns,
-           x.indisunique AS unique
+           x.indisunique AS unique, x.indisprimary AS primary
       FROM pg_index x JOIN pg_class c ON c.oid = x.indrelid
       JOIN pg_class ic ON ic.oid = x.indexrelid
       JOIN pg_namespace n ON n.oid = c.relnamespace
-     WHERE ${usable} AND x.indisunique AND x.indisvalid AND x.indpred IS NULL
+     WHERE ${usable} AND x.indisvalid AND x.indpred IS NULL
      ORDER BY 1, 2, 3`)
   const visible = new Set(tables.map((t) => `${t.schema}.${t.name}`))
   const inView = <T extends { schema: string; table: string }>(all: T[]) =>
@@ -125,62 +131,4 @@ export async function catalog(db: Db): Promise<Catalog> {
     indexes: indexesInView,
     joins: joinsOf(relationsInView, indexesInView, inView(columns)),
   }
-}
-
-/**
- * The join tables among the relations: a table made of two foreign keys and nothing else,
- * with a unique index over both columns, is a link between two rows and not a copy of one.
- */
-function joinsOf(
-  relations: RelationInfo[],
-  indexes: IndexInfo[],
-  columns: ColumnInfo[]
-): JoinInfo[] {
-  const tables = new Map<string, RelationInfo[]>()
-  for (const relation of relations) {
-    const key = `${relation.schema}.${relation.table}`
-    const held = tables.get(key)
-    if (held) held.push(relation)
-    else tables.set(key, [relation])
-  }
-  const joins: JoinInfo[] = []
-  for (const [key, held] of tables) {
-    if (held.length !== 2) continue
-    const [left, right] = held as [RelationInfo, RelationInfo]
-    // A join table is made of the two keys and the columns every collection is made with.
-    const own = columns.filter(
-      (column) =>
-        column.schema === left.schema &&
-        column.table === left.table &&
-        !systemFields.includes(column.name)
-    )
-    if (own.length !== 2) continue
-    const pair = new Set([left.column, right.column])
-    const uniquePair = indexes.some(
-      (index) =>
-        index.schema === left.schema &&
-        index.table === left.table &&
-        index.columns.length === 2 &&
-        pair.has(index.columns[0]!) &&
-        pair.has(index.columns[1]!)
-    )
-    if (!uniquePair) continue
-    const [schema = '', table = ''] = key.split('.')
-    joins.push({
-      schema,
-      table,
-      left: {
-        column: left.column,
-        target_schema: left.target_schema,
-        target_table: left.target_table,
-      },
-      right: {
-        column: right.column,
-        target_schema: right.target_schema,
-        target_table: right.target_table,
-      },
-      uniquePair,
-    })
-  }
-  return joins
 }

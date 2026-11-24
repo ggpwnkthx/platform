@@ -19,7 +19,7 @@ export function useSeededForm({
 }: {
   writer: ReturnType<typeof useRecordWriter>
   row: Row | null | undefined
-  links: Record<string, { id: string; label: string }[]>
+  links: Record<string, unknown[]>
   id: string
   params: URLSearchParams
   loading: boolean

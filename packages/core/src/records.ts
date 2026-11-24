@@ -10,9 +10,9 @@ export {
   countLinked,
   insertRecordWithLinks,
   linkedRows,
-  namesOf,
   setLinks,
 } from './records/links.ts'
+export { namesOf } from './records/names.ts'
 
 export interface RecordQuery {
   schema: string
@@ -102,19 +102,20 @@ export async function relationOptions(
   table: string,
   label: string | null,
   search: string,
-  limit = 20
+  limit = 20,
+  column = 'id'
 ) {
-  const shown = label ? asText(label) : asText('id')
+  const shown = label ? asText(label) : asText(column)
   const term = search.trim()
   let query = k
     .withSchema(schema)
     .selectFrom(table)
-    .select([asText('id').as('id'), shown.as('label')])
+    .select([asText(column).as('id'), shown.as('label')])
     .orderBy('label')
     .limit(limit)
   if (term)
     query = query.where((eb) =>
-      eb.or([eb(shown, 'ilike', pattern(term, 'any')), eb(asText('id'), '=', term)])
+      eb.or([eb(shown, 'ilike', pattern(term, 'any')), eb(asText(column), '=', term)])
     )
   return (await run<{ id: string; label: string }>(db, query)).rows
 }
@@ -136,13 +137,16 @@ export async function relationLabels(
     const label = labelColumn(catalog, relation.target_schema, relation.target_table)
     if (!label || !tableOf(catalog, relation.target_schema, relation.target_table)?.can_select)
       continue
+    // The rows are found by the column the key points at: usually the target's `id`, but a
+    // key made by hand may point at another column, and the row is found by that one.
+    const key = relation.target_column
     const found = await run<{ id: string; label: string }>(
       db,
       k
         .withSchema(relation.target_schema)
         .selectFrom(relation.target_table)
-        .select([asText('id').as('id'), asText(label).as('label')])
-        .where(asText('id'), 'in', ids)
+        .select([asText(key).as('id'), asText(label).as('label')])
+        .where(asText(key), 'in', ids)
     ).catch(() => null) // a row policy or a column grant may refuse: the ids are shown instead
     if (found) out[column] = Object.fromEntries(found.rows.map((r) => [r.id, r.label]))
   }

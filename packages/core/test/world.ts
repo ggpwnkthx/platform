@@ -23,8 +23,12 @@ export async function world() {
     await pg.query(`SET SESSION AUTHORIZATION ${ident(role)}`)
     return db
   }
+  // PGlite's RESET SESSION AUTHORIZATION does not give the session back to the user it
+  // was opened by, so the one it was opened as is named here and set again.
+  const opened = ((await pg.query(`SELECT session_user::text AS name`)).rows[0] as { name: string })
+    .name
   const root = async (): Promise<Db> => {
-    await pg.query('RESET SESSION AUTHORIZATION')
+    await pg.query(`SET SESSION AUTHORIZATION ${ident(opened)}`)
     return db
   }
   return { pg, db, as, root, applied, first }
