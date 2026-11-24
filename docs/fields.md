@@ -42,14 +42,25 @@ guessed at:
 | One to many  | A foreign key in another table that points at this one   | `children`: the rows that point here, read and counted    |
 | Many to many | A table of two foreign keys and a unique index over both | `links`: the rows on the other side, written as join rows |
 
-A table is a join table when it is made of two keys and nothing else, and a unique index
+A table is a join table when it is made of two keys and a unique index
 covers both of them. The pair is then one link, and it may be written with `ON CONFLICT
-DO NOTHING`. A table with a third column of its own is not a join table: it is a
-collection like any other, and the interface treats it as one.
+DO NOTHING`. A join table may carry a payload: columns of its own beside the two keys,
+holding what the link is worth or when it began. The keys are written by the interface and
+the payload by the database, so a payload column must be nullable or hold a default of its
+own; a table whose payload may not be left out is not a join table, and is a collection like
+any other.
 
 `children` and `links` have no column of their own — they are **virtual fields**, read and
 written as rows. They are shown in the record form and in the filters, and kept out of the
 grid: a grid of links would ask every row of every page for a count of its own.
+
+The key itself is PostgreSQL's, and the collection's model page holds it among the other
+constraints: what it points at, what happens when that row goes, and the index that finds
+the rows pointing at it. See [constraints](constraints.md).
+
+The links of one record are written under an advisory lock, so two people editing the same
+record do not overwrite each other's links: the second waits for the first to be done, and
+writes the links as they are then.
 
 ## What type a field is
 

@@ -70,6 +70,29 @@ Data modeling is available at runtime. Constraints, indexes, relations, renames 
 native SQL when not covered by typed collection/field builders. Descriptive text is stored
 as native COMMENTs where the builders support it. Use views for reusable projections.
 
+A relation is a foreign key PostgreSQL holds, and the platform reads it out of the catalog
+rather than keeping a model of its own: a key made by hand is read exactly as a key made by
+a manifest. A field of type `m2o` holds the id of one row and points at it, as a real
+`FOREIGN KEY` with the `ON DELETE` action the manifest names. A key may point at any column,
+not only at an `id`: the platform asks the catalog which column the key points at, and the
+names of the rows, the conditions that cross a key and the search that follows them all use
+that column. A key over more than one column is read as a constraint rather than as a
+relation, because there is no single row of it to reach; it is listed among the constraints,
+and PostgreSQL holds every row to it. A table made of two keys,
+with a unique index over the pair, is read as a link between two rows and not as a copy of
+one: the interface reads the rows a record is linked to, counts them, writes them and filters
+by them — `has_any`, `has_none` and `has_all` — and the search follows the names of the rows
+on the other side. A link may carry payload: columns beside the two keys, holding what the
+link is worth or when it began. The keys are written by the interface and the payload by the
+database, so a payload column must be nullable or hold a default of its own; a table whose
+payload may not be left out is read as an ordinary collection, and its rows are held one at a
+time. The rows that point at a collection are read as related rows, and are left to the
+collection they are in.
+
+A condition may cross a relation: on the row a record points at, or on the rows it is linked
+to. The filter builder asks of the other side's own columns, and the statement is an
+`EXISTS` over the table that holds the links.
+
 A field may have any type the database holds, not only the platform's own dozen: `geometry`
 and `geography` where PostGIS is installed, an enum or a domain of the installation's own.
 Such a type is named with the schema it lives in and may carry the modifiers it takes, and

@@ -1,13 +1,15 @@
 # Publishing the interface
 
-The interface is a directory of files. There is no server to run: `bun run build:ui` (or
-`bun run cli deploy local ui`) writes `packages/ui/dist`, and that directory is what a CDN serves.
+The interface is a directory of files. There is no server to run: a site's folder — any
+folder with a `platform.json` — is built by `bun run cli ui build --dir=DIR --production` (or
+`bun run cli deploy local ui`, for the folder PLATFORM_SITE names) into `DIR/.dist`, and that
+directory is what a CDN serves. `packages/ui` is never built on its own.
 
 ```
-packages/ui/dist/index.html          the document; every page has a copy of it at its own address
-packages/ui/dist/assets/             the client bundle, its styles, the icons and the self-hosted fonts
-packages/ui/dist/config.json         where the pages find the issuer, the relay and the database
-packages/ui/dist/_headers            the headers the site is served with
+DIR/.dist/index.html          the document; every page has a copy of it at its own address
+DIR/.dist/assets/             the client bundle, its styles, the icons and the self-hosted fonts
+DIR/.dist/config.json         where the pages find the issuer, the relay and the database
+DIR/.dist/_headers            the headers the site is served with
 ```
 
 ## The two files that differ per deployment
@@ -33,8 +35,8 @@ need the same headers set by their own means (CloudFront's response headers poli
 `set_headers`, Fastly's or Cloudflare's edge rules).
 
 The values in both files come from one source, `packages/ui/src/config.ts`, so the site a CDN
-serves, the development server and the tests cannot drift apart. `bun run build:ui` writes
-them from the environment:
+serves, the development server and the tests cannot drift apart. `ui build` writes them
+from the environment:
 
 | Variable                 | What it names                                                      |
 | ------------------------ | ------------------------------------------------------------------ |
@@ -57,8 +59,8 @@ Any static host will do. Two rules:
 For example, with the AWS CLI:
 
 ```
-bun run build:ui
-aws s3 sync packages/ui/dist s3://$BUCKET --delete --cache-control 'public,max-age=300'
+bun run cli ui build --dir=examples/newsroom --production
+aws s3 sync examples/newsroom/.dist s3://$BUCKET --delete --cache-control 'public,max-age=300'
 ```
 
 ## The relay is the only part of ours that answers on the network

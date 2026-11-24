@@ -96,8 +96,8 @@ of, and it is honest about refusals rather than hiding them behind a policy laye
   when a PostgreSQL role named after their email exists.
 - psql 18 signs in through Dex itself: it prints an address and a code. `PGOAUTHDEBUG=UNSAFE` is
   needed only because the local Dex is plain HTTP.
-- The interface is a static site in `packages/ui/`, built by Vite (`bun run build:ui` →
-  `packages/ui/dist`) and published to a CDN: it is files, not a container. The build carries
+- The interface is a static site in `packages/ui/`, never built on its own: a site folder
+  builds it with Vite (`bun run cli ui build --dir=DIR` → `DIR/.dist`) and publishes it to a CDN: it is files, not a container. The build carries
   the self-hosted Inter and JetBrains Mono fonts, `config.json` and `_headers` beside the pages.
   Each page is a copy of one document, so a bookmark, a new tab and a reload all land on a real
   page with no rewrite rule on the CDN; inside the app, links move between pages without a
@@ -295,7 +295,7 @@ not of how it feels — which future work may keep or replace.
 - Real content: the newsroom example (`examples/newsroom/platform.json`, `apply/models.ts`,
   `apply/migration.sql`, `apply/demo.sql`, `apply/newsroom.ts`, `apply/newsroom-access.ts`,
   `apply/crm.ts`, `extensions.tsx`), `deploy/models/crm.json`, the product documents in `docs/`,
-  and the generated interface pages in `packages/ui/dist`.
+  and the generated interface pages in `examples/newsroom/.dist`.
 - Real demonstrations: the local stack with its example roles and its break-glass
   administrator; `bun test` (37 tests,
   137 assertions) and the nine browser scenarios of `bun run test:e2e`; CI against PostgreSQL 18

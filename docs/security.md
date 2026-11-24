@@ -94,6 +94,15 @@ hiding the object catalogs is a separate and much wider change that breaks psql'
 `pg_dump` and most administration tools. RLS also has PostgreSQL's usual unique/FK constraint
 side channels.
 
+A foreign key is one of those side channels, and it is worth naming plainly: PostgreSQL
+checks a key with the rights of the table that owns the constraint, and the check is not
+subject to the reader's row policies. A reader who may write a column that points at another
+collection can therefore learn whether a row they may not read exists — the write is accepted
+for a row that is there and refused for one that is not — and a collection whose rows are
+hidden by a policy is still a collection whose rows may be found out this way. Where that
+matters, keep the right to write the pointing column away from the readers who may not read
+the pointed-at collection, or hold the target in a workspace the reader cannot use.
+
 A folder is code, not data, and applying one runs it. Its `models.ts` is loaded and run by
 `apply --dir`, with the operator's own rights. Its `migration.sql` and `demo.sql` are run as
 they are, beside the server, and only where the caller is the server's own superuser, so a

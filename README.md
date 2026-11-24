@@ -40,7 +40,7 @@ bun run cli deploy local up
 The interface is a static site, not a container: build it, or serve it against the stack.
 
 ```bash
-bun run cli deploy local ui                     # build it into packages/ui/dist
+bun run cli deploy local ui                     # build PLATFORM_SITE into its .dist
 bun run examples:newsroom:dev --relay=127.0.0.1:5432   # or serve it on http://localhost:5173/
 ```
 
@@ -110,7 +110,7 @@ is kept in the browser's IndexedDB across reloads. `PORT=8080 bun run examples:n
 
 Editing anything under `packages/ui/src` — or under `examples/newsroom` — is picked up by the
 page as it is saved. The in-page database is put in when the bundle is built, so it never
-reaches a production bundle: `bun run build:ui` writes the real interface, which signs in through the
+reaches a production bundle: `bun run examples:newsroom:build --production` writes the real interface, which signs in through the
 issuer and reaches PostgreSQL through the relay. `bun run examples:newsroom:dev --relay=HOST:PORT` serves that
 real build and forwards its WebSockets to a real PostgreSQL. See [interface](docs/interface.md).
 
@@ -184,12 +184,11 @@ forty lines over the drivers' own protocol code), the relay, and the migration. 
 ## Commands
 
 ```bash
-bun run check                       # build the interface, typecheck, lint, format, PostgreSQL integration tests
-bun run build:ui                    # generate the static interface into packages/ui/dist
+bun run check                       # build the example both ways, typecheck, lint, format, PostgreSQL integration tests
 bun run examples:newsroom:build     # generate the dev-mode interface into examples/newsroom/.dist
 bun run examples:newsroom:dev       # dev mode: the interface on http://localhost:5173/, PostgreSQL in the page
 bun run examples:newsroom:dev --relay=127.0.0.1:5432  # the real interface against a real PostgreSQL
-bun run cli ui build                # the published interface: no configuration, the relay and the issuer
+bun run cli ui build --dir=examples/newsroom --production  # the published interface: the relay and the issuer
 bun run cli ui dev --dir=examples/newsroom  # the same server, named by the example's configuration
 bun test               # needs nothing but Bun: the suites start PostgreSQL in memory
 bun run test:e2e       # the interface in Chrome, against the example with PostgreSQL in the page
@@ -198,7 +197,7 @@ bun run cli deploy local up
 bun run cli deploy local status
 bun run cli deploy local logs -f relay
 bun run cli deploy local down  # keeps the database volume
-bun run cli deploy local ui   # build the static interface into packages/ui/dist, for a CDN
+bun run cli deploy local ui   # build the site PLATFORM_SITE names into its .dist, for a CDN
 bun run relay                # the WebSocket relay in front of PostgreSQL's port
 bun run cli --version  # 2.3.0
 bun run cli migrate    # installs what is missing, upgrades what is behind; needs a token
@@ -227,6 +226,7 @@ admin <command>`. See [operations](docs/operations.md).
 | [Access](docs/access.md)             | Roles, grants, RLS, delegation and revocation                    |
 | [Interface](docs/interface.md)       | Pages, the relay, configuration and the browser surface          |
 | [Fields](docs/fields.md)             | What a field is: its type, its cell, its input and its filter    |
+| [Constraints](docs/constraints.md)   | The keys, checks and emptiness a collection holds                |
 | [Views](docs/views.md)               | Where a field appears: the defaults, your own views, the saying  |
 | [Renderers](docs/renderers.md)       | How a field's values are drawn, in each place it appears         |
 | [Publishing](deploy/cdn/README.md)   | The static site on a CDN: config.json, headers, the relay        |

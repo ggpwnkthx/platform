@@ -8,7 +8,7 @@ and any other client.
 
 ## Pages
 
-`bun run build:ui` builds the interface with Vite into `packages/ui/dist`: one bundle and its
+`bun run cli ui build --dir=DIR` builds the interface, as the site in DIR, with Vite into `DIR/.dist`: one bundle and its
 styles under `assets/`, the self-hosted Inter and JetBrains Mono fonts, `config.json` and
 `_headers`. Each page is its own file — a copy of the one document — so a bookmark, a new tab
 and a reload all land on a real page with no rewrite rule on the CDN; inside the app, links
@@ -200,7 +200,7 @@ the role.
   reach it through one of those without being named; who reads and writes each field; and its
   row security, with its policies. A grant on the collection, and a policy on it, are written
   and changed here, and row security is turned on and off here.
-- **A field** (the key beside it, in the collection's Fields and Access tabs). The roles that
+- **A field** (the key beside it, in the collection's Fields and Access views). The roles that
   hold SELECT, INSERT and UPDATE on the field, whether through the whole collection or by name.
 
 The grant editor is the same wherever it is opened: one role on one collection, each privilege
@@ -443,7 +443,7 @@ the relay is a different origin from the pages.
 
 ## Publishing the site
 
-The interface is files, not a container. `bun run build:ui` writes `packages/ui/dist`: one HTML file
+The interface is files, not a container. `ui build --dir=DIR --production` writes `DIR/.dist`: one HTML file
 per page, the client bundle, the styles, the fonts, `config.json` and `_headers`. A CDN
 serves that directory; there is nothing to run. `deploy/cdn/README.md` has the details.
 
@@ -580,9 +580,9 @@ with the relay and the issuer. Where it runs is the deployment's to say, in its 
 (see [config.json](#configjson)). A key the file does not know is refused. The site is
 written to `.dist` in the folder.
 
-`bun run cli ui build` and `bun run cli ui dev` take the file in the working directory or
-in `--dir=DIR`. Without one, the interface is built as it is published, in
-`packages/ui/dist`.
+`bun run cli ui build` and `bun run cli ui dev` take the file in `--dir=DIR`, which they
+require: `packages/ui` is never built on its own. A folder whose `platform.json` is `{}` is the
+platform's interface and nothing more.
 
 In it, PostgreSQL 18 runs inside the page: PGlite (`@electric-sql/pglite`, a dependency of the
 CLI, which builds the site),
@@ -614,7 +614,7 @@ production seam has none. The
 dev-mode server's CSP adds `'wasm-unsafe-eval'` to `script-src`, there only, because PGlite is
 WebAssembly.
 
-`bun run examples:newsroom:dev --relay=HOST:PORT` serves the real build from `packages/ui/dist` instead and forwards
+`bun run examples:newsroom:dev --relay=HOST:PORT` serves the folder's published interface instead and forwards
 `/pg` WebSockets to a PostgreSQL at HOST:PORT, byte for byte, as the deployment's relay does.
 Sign-in then goes through the issuer the environment names (`PLATFORM_ISSUER`), or the
 platform's default, `http://idp.localhost:5556`. Use it to work against the local stack.

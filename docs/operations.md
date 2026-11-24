@@ -208,8 +208,9 @@ local stack only.
 
 ## Interface configuration
 
-The interface is a static site generated at build time: `bun run build:ui` writes the pages,
-the client bundle, the stylesheet, the fonts, `config.json` and `_headers` to `packages/ui/dist`. A
+The interface is a static site generated at build time, always as a site's folder:
+`bun run cli ui build --dir=DIR --production` writes the pages, the client bundle, the
+stylesheet, the fonts, `config.json` and `_headers` to `DIR/.dist`. A
 deployment never renders a page at runtime and runs no application server: the files are
 published to a CDN. The relay (`packages/relay/src/relay.ts`, the Dockerfile target `relay`) is the only
 part of the path that answers on the network.
@@ -237,7 +238,7 @@ part of the path that answers on the network.
 | RELAY_UPSTREAM_CA              | the system's              | The authority that certificate must come from, as a PEM file                      |
 | RELAY_TLS_CERT / RELAY_TLS_KEY | none                      | The certificate the relay serves TLS with                                         |
 
-`bun run build:ui` writes `config.json` and the `_headers` file from these; see
+`ui build` writes `config.json` and the `_headers` file from these; see
 [interface](interface.md) for `config.json`, the headers and the browser surface, and
 `deploy/cdn/README.md` for publishing the site.
 
@@ -315,8 +316,8 @@ a site of the operator's own is named by its full URL. Left empty, an interface 
 instead, from a folder: any folder that holds a `platform.json`, which is any site built with
 `@platform/ui`. PLATFORM_SITE names it, from the root of the checkout or in full
 (`PLATFORM_SITE=examples/newsroom`, `PLATFORM_SITE=/srv/sites/desk`). The walkthrough offers
-the examples the checkout carries (there is one, `newsroom`) and the platform's own interface
-if none is chosen; a folder of your own is named in `.env` or the environment, and is then
+the examples the checkout carries (there is one, `newsroom`); with none chosen, no site is
+deployed, because the interface is only ever built as a site's folder. A folder of your own is named in `.env` or the environment, and is then
 not asked for. It is deployed on a sub-domain of the deployment's own domain — `app` unless
 another is chosen — and the site's address follows from it. The folder that was chosen is the
 one `deploy local ui` builds, and `deploy local up` builds it too and serves it from the stack
@@ -381,8 +382,8 @@ with a token. The relay has no PostgreSQL credentials. PostgreSQL and the relay 
 network `relay` (10.89.71.0/24). A build or install failure returns that
 tool's exit status and stops the sequence before the relay starts. `init` runs the
 database/build portion without starting the relay; `build` builds the images only. `ui`
-builds the static interface into `packages/ui/dist` and says what to publish; the interface is
-files on a CDN, not a container.
+builds the site PLATFORM_SITE names into its `.dist` and says what to publish, and refuses
+when no site is named; the interface is files on a CDN, not a container.
 
 Dex is published at http://idp.localhost:5556 (DEX_PORT), on the deployment's own name
 for it. It stands in for a real sign-in

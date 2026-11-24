@@ -44,6 +44,8 @@ still authorizes every explicit projection, predicate, sort, relation and write.
 - Workspace: a PostgreSQL schema. Its owner controls model administration.
 - Collection: a table. Fields are columns; relations are foreign keys. Existing tables/views
   can also be queried from the SQL page or any client if their native grants permit it.
+  The keys, checks and emptiness of a collection are PostgreSQL's own, and the interface
+  manages them; see [constraints](constraints.md).
 - User: LOGIN role; group: NOLOGIN role. Membership lives in pg_auth_members.
 - Table/column permissions: native ACLs. Row policies: CREATE POLICY and ALTER TABLE RLS.
 - `platform`: helper functions, installation marker and transactional row audit/revisions.
@@ -80,8 +82,8 @@ same transaction. Failed and rolled-back changes leave no committed revision.
 
 ## Interface
 
-The interface is a static site in `packages/ui/`: a TypeScript React application that Vite
-builds into `packages/ui/dist` — one bundle and its styles, the self-hosted Inter and JetBrains
+The interface is a static site in `packages/ui/`: a TypeScript React application that is never
+built on its own. A site's folder builds it with Vite into the folder's `.dist` — one bundle and its styles, the self-hosted Inter and JetBrains
 Mono fonts, `config.json`, `_headers`, and one copy of the document per page, so every address
 is a real file.
 
