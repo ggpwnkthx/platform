@@ -276,11 +276,11 @@ of, and it is honest about refusals rather than hiding them behind a policy laye
   conditions on a field of the row a relation reaches; views of the owner's own; editors for
   an installation's own metadata keys. `docs/remake.md` lists them.
 
-**Open decisions** (explicitly undecided; do not invent them):
+**Designed surfaces beyond the interface** (settled):
 
-- Whether the CLI's own output is a designed surface or only reference material. (`docs/` is
-  settled: it is a designed surface and must reflect the actual code and the end user's
-  experience.)
+- The CLI's own output (`bun run deploy`) is a designed surface, held to the same care as the
+  interface: what it prints is part of the operator's experience.
+- `docs/` is a designed surface and must reflect the actual code and the end user's experience.
 
 ## Brand Commitments
 
