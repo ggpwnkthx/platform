@@ -4,15 +4,11 @@
     "includes": [
       "**",
       "!**/node_modules",
-      "!**/.pg",
-      "!**/.tofu",
-      "!**/.fallow",
-      "!**/deploy/tofu/**/.terraform",
       "!DESIGN.md",
       "!**/.dist",
-      "!**/.impeccable",
-      "!deploy/dex/password.html",
-      "!fallow-baselines"
+      "!**/.dist-published",
+      "!test-results",
+      "!deploy/dex/password.html"
     ]
   },
   "linter": {
@@ -61,11 +57,11 @@
       }
     },
     {
-      "includes": ["packages/ui/src/styles.css"],
+      "includes": ["e2e/**"],
       "linter": {
         "rules": {
-          "style": {
-            "noDescendingSpecificity": "off"
+          "suspicious": {
+            "noExplicitAny": "off"
           }
         }
       }

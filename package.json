@@ -1,6 +1,6 @@
 {
   "name": "platform",
-  "version": "2.3.0",
+  "version": "3.0.0",
   "private": true,
   "type": "module",
   "description": "PostgreSQL-native identity, modeling, grants and row security, with a static interface that speaks to PostgreSQL itself.",
@@ -10,29 +10,27 @@
     "examples/*"
   ],
   "scripts": {
-    "examples:newsroom:build": "bun packages/cli/src/cli.ts ui build --dir=examples/newsroom",
-    "examples:newsroom:dev": "bun packages/cli/src/cli.ts ui dev --dir=examples/newsroom",
-    "cli": "bun packages/cli/src/cli.ts",
+    "dev": "bun --bun run --cwd examples/newsroom vite",
+    "build": "bun --bun run --cwd examples/newsroom vite build",
     "relay": "bun packages/relay/src/relay.ts",
-    "migrate": "bun packages/cli/src/cli.ts migrate",
-    "deploy": "bun packages/cli/src/cli.ts deploy",
+    "deploy": "bun packages/cli/src/cli.ts",
     "test": "bun test",
+    "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit",
     "lint": "biome lint .",
-    "lines": "bun packages/cli/src/lines.ts",
+    "lines": "bun scripts/lines.ts",
     "format": "biome format --write .",
     "format:check": "biome format .",
-    "check": "bun run examples:newsroom:build --production && bun run examples:newsroom:build && bun run typecheck && bun run lint && bun run format:check && bun run lines && bun test",
-    "test:e2e": "node packages/ui/test/e2e.mjs"
+    "check": "bun run build && bun run typecheck && bun run lint && bun run format:check && bun run lines && bun test"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.8",
     "@electric-sql/pglite": "0.5.17",
     "@electric-sql/pglite-socket": "0.2.20",
+    "@playwright/test": "1.65.1",
     "@types/bun": "1.4.4",
-    "@types/pg": "8.23.1",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "typescript": "7.0.2"
   },
   "engines": {

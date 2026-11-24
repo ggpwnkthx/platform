@@ -1,6 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
 import {
-  applyManifest,
   catalog,
   checkConstraintStatement,
   dropConstraintStatement,
@@ -84,61 +83,5 @@ describe('the constraints a collection holds', () => {
     await db.query(dropConstraintStatement('newsroom', 'sections', 'sections_desk_email_key'))
     const gone = await catalog(await w.root())
     expect(gone.constraints.find((c) => c.name === 'sections_desk_email_key')).toBeUndefined()
-  })
-
-  test('a relation that goes another way is brought to what the manifest says', async () => {
-    const changed = await applyManifest(await w.root(), {
-      workspaces: [
-        {
-          slug: 'newsroom',
-          relations: [
-            {
-              collection: 'articles',
-              field: 'section',
-              related: 'sections',
-              on_delete: 'cascade',
-            },
-          ],
-        },
-      ],
-    })
-    expect(changed.changes.some((one) => one.includes('repoint'))).toBe(true)
-    const held = await catalog(await w.root())
-    expect(
-      held.relations.find((r) => r.table === 'articles' && r.column === 'section')
-    ).toMatchObject({ on_delete: 'c' })
-    // And back again: the manifest is the truth, and a second apply changes nothing.
-    const back = await applyManifest(await w.root(), {
-      workspaces: [
-        {
-          slug: 'newsroom',
-          relations: [
-            {
-              collection: 'articles',
-              field: 'section',
-              related: 'sections',
-              on_delete: 'restrict',
-            },
-          ],
-        },
-      ],
-    })
-    expect(back.changes.some((one) => one.includes('repoint'))).toBe(true)
-    const again = await applyManifest(await w.root(), {
-      workspaces: [
-        {
-          slug: 'newsroom',
-          relations: [
-            {
-              collection: 'articles',
-              field: 'section',
-              related: 'sections',
-              on_delete: 'restrict',
-            },
-          ],
-        },
-      ],
-    })
-    expect(again.changes).toEqual([])
   })
 })

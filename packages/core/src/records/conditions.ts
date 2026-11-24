@@ -1,12 +1,10 @@
 import { type Expression, sql, type SqlBool } from 'kysely'
 import {
   asText,
-  type Condition,
   condition,
   type Eb,
   type Filter,
   isRelationOperator,
-  type Operator,
   pattern,
   type RelationReach,
   type RelationOperator,
@@ -67,41 +65,6 @@ function relationCondition(
       return eb(counted, '=', wanted.length)
     }
   }
-}
-
-/**
- * A condition on the rows a relation reaches: the record is one of the rows that point at
- * them. It is asked with EXISTS, over the other rows and their own columns.
- */
-function throughCondition(
-  eb: Eb,
-  base: { schema: string; table: string },
-  reach: RelationReach,
-  through: { column: string; op: Operator; value: unknown }
-): Expression<SqlBool> {
-  const one: Condition = { op: through.op, value: through.value }
-  if (reach.kind === 'column') {
-    const key = reach.target_column ?? 'id'
-    const rel = eb.selectFrom(`${reach.schema}.${reach.table}`).selectAll().as('rel')
-    return eb.exists(
-      eb
-        .selectFrom(rel)
-        .select(sql.lit(1).as('one'))
-        .where(eb.ref(`rel.${key}`), '=', eb.ref(`${base.schema}.${base.table}.${reach.column}`))
-        .where((eb2) => condition(eb2, `rel.${through.column}`, one))
-    )
-  }
-  const key = reach.target_column ?? 'id'
-  const rel = eb.selectFrom(`${reach.schema}.${reach.table}`).selectAll().as('rel')
-  const other = eb.selectFrom(`${reach.target_schema}.${reach.target_table}`).selectAll().as('t')
-  return eb.exists(
-    eb
-      .selectFrom(rel)
-      .innerJoin(other, `t.${key}`, `rel.${reach.target}`)
-      .select(sql.lit(1).as('one'))
-      .where(eb.ref(`rel.${reach.fk}`), '=', eb.ref(`${base.schema}.${base.table}.id`))
-      .where((eb2) => condition(eb2, `t.${through.column}`, one))
-  )
 }
 
 /**
@@ -166,8 +129,6 @@ export const predicate =
     return eb.and([
       ...Object.entries(filter).map(([column, one]) => {
         const reach = paths[column]
-        if (one.through)
-          return reach && base ? throughCondition(eb, base, reach, one.through) : eb.lit(false)
         if (isRelationOperator(one.op)) {
           if (!reach || !base) return eb.lit(false)
           return relationCondition(eb, base, reach, one.op, [one.value].flat().map(String))

@@ -1,5 +1,5 @@
 -- PostgreSQL 18+. Run once, as the database administrator, in a NEW database.
--- Installs Platform 2.3.0 in a dedicated empty database.
+-- Installs Platform 3.0.0 in a dedicated empty database.
 --
 -- Everything the platform keeps in a database is made here, in the order it depends on
 -- itself: the reserved roles; the platform's own schema, with its marker, its revisions and
@@ -48,10 +48,10 @@ ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
 -- The marker: the one version this database holds. The interface and the operator's tools
 -- are built for one version, and refuse an installation of another.
 CREATE TABLE platform.installation (
-  version text PRIMARY KEY CONSTRAINT installation_version_check CHECK (version = '2.3.0'),
+  version text PRIMARY KEY CONSTRAINT installation_version_check CHECK (version = '3.0.0'),
   installed_at timestamptz NOT NULL DEFAULT now()
 );
-INSERT INTO platform.installation VALUES ('2.3.0', now());
+INSERT INTO platform.installation VALUES ('3.0.0', now());
 GRANT SELECT ON platform.installation TO platform_users;
 
 CREATE TABLE platform.activity (
@@ -449,6 +449,196 @@ GRANT EXECUTE ON FUNCTION platform.metadata_relation(text,text), platform.metada
   platform.has_item_right(oid), platform.can_read_field(text,text,text),
   platform.can_read_metadata(text,text,text,text), platform.owns_metadata(text,text,text,text) TO platform_users;
 
+-- ---------------------------------------------------------------------------------------
+-- The catalog and the access rules, as the caller may see them.
+--
+-- These are the questions the interface asks, written once, so that psql gets the answers
+-- the interface gets: SELECT * FROM platform.catalog_tables. Each view reads PostgreSQL's
+-- catalogs with the caller's own rights (security_invoker) and asks PostgreSQL's own
+-- privilege functions, which answer for the caller. Nothing here decides a right.
+--
+-- A workspace is a schema the caller may use that is not PostgreSQL's own; the platform's
+-- schema is the one system workspace, whose model nobody may change.
+
+CREATE VIEW platform.session WITH (security_invoker) AS
+  SELECT session_user::text AS username, current_user::text AS effective_role,
+         current_database()::text AS database,
+         (SELECT version FROM platform.installation) AS platform_version,
+         current_setting('server_version') AS server_version,
+         has_database_privilege(current_database(), 'CREATE') AS can_create_workspace,
+         platform.is_operator() AS is_operator,
+         -- The roles the caller may admit members to: held WITH ADMIN OPTION, PostgreSQL says.
+         ARRAY(SELECT r.name FROM platform.visible_roles() r
+                WHERE pg_has_role(r.name::name, 'MEMBER WITH ADMIN OPTION') ORDER BY 1) AS admits;
+
+CREATE VIEW platform.catalog_schemas WITH (security_invoker) AS
+  SELECT n.oid, n.nspname::text AS name, pg_get_userbyid(n.nspowner)::text AS owner,
+         CASE WHEN n.nspname = 'platform' THEN 'system' ELSE 'user' END AS kind,
+         has_schema_privilege(n.oid, 'CREATE') AND n.nspname <> 'platform' AS can_create,
+         pg_has_role(current_user, n.nspowner, 'USAGE') AND n.nspname <> 'platform' AS can_alter,
+         -- Who may grant is PostgreSQL's answer: the owner, or a holder WITH GRANT OPTION.
+         has_schema_privilege(n.oid, 'USAGE WITH GRANT OPTION, CREATE WITH GRANT OPTION')
+           AND n.nspname <> 'platform' AS can_grant
+    FROM pg_namespace n
+   WHERE n.nspname NOT LIKE 'pg\_%' ESCAPE '\' AND n.nspname NOT IN ('information_schema','public')
+     AND has_schema_privilege(n.oid, 'USAGE');
+
+-- The relations of those workspaces: the platform's own views of the catalog are not collections, nor are the guard's notes.
+CREATE VIEW platform.catalog_relations WITH (security_invoker) AS
+  SELECT c.oid, s.name AS schema, c.relname::text AS name, s.kind = 'system' AS system, c.relkind,
+         c.relrowsecurity, c.relforcerowsecurity, c.relowner
+    FROM pg_class c JOIN platform.catalog_schemas s ON s.oid = c.relnamespace
+   WHERE c.relkind IN ('r','p','v')
+     AND NOT (s.kind = 'system' AND c.relname ~ '^(catalog|access|guard)_|^session$');
+
+CREATE VIEW platform.catalog_tables WITH (security_invoker) AS
+  SELECT c.schema, c.name, c.relkind::text AS kind, c.relrowsecurity AS rls,
+         c.relforcerowsecurity AS force_rls, pg_get_userbyid(c.relowner)::text AS owner,
+         obj_description(c.oid, 'pg_class') AS comment, c.system,
+         has_table_privilege(c.oid, 'SELECT') AS can_select,
+         has_table_privilege(c.oid, 'INSERT') AS can_insert,
+         has_table_privilege(c.oid, 'UPDATE') AS can_update,
+         has_table_privilege(c.oid, 'DELETE') AS can_delete,
+         has_table_privilege(c.oid, 'TRUNCATE') AND NOT c.system AS can_truncate,
+         pg_has_role(current_user, c.relowner, 'USAGE') AND NOT c.system AS can_alter,
+         NOT c.system AND (
+           has_table_privilege(c.oid, 'SELECT WITH GRANT OPTION, INSERT WITH GRANT OPTION, UPDATE WITH GRANT OPTION, DELETE WITH GRANT OPTION, TRUNCATE WITH GRANT OPTION, REFERENCES WITH GRANT OPTION, TRIGGER WITH GRANT OPTION')
+           OR has_any_column_privilege(c.oid, 'SELECT WITH GRANT OPTION, INSERT WITH GRANT OPTION, UPDATE WITH GRANT OPTION, REFERENCES WITH GRANT OPTION')) AS can_grant
+    FROM platform.catalog_relations c
+   WHERE has_any_column_privilege(c.oid, 'SELECT,INSERT,UPDATE')
+      OR has_table_privilege(c.oid, 'DELETE,TRUNCATE')
+      OR pg_has_role(current_user, c.relowner, 'USAGE');
+
+CREATE VIEW platform.catalog_columns WITH (security_invoker) AS
+  SELECT c.schema, c.name AS "table", a.attname::text AS name, a.attnum::int AS position,
+         format_type(a.atttypid, a.atttypmod) AS type, a.attnotnull AS required,
+         pg_get_expr(d.adbin, d.adrelid) AS "default", col_description(c.oid, a.attnum) AS comment,
+         a.attgenerated::text AS generated, a.attidentity::text AS identity,
+         has_column_privilege(c.oid, a.attnum, 'SELECT') AS can_select,
+         has_column_privilege(c.oid, a.attnum, 'INSERT') AS can_insert,
+         has_column_privilege(c.oid, a.attnum, 'UPDATE') AS can_update
+    FROM platform.catalog_relations c
+    JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+    LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = a.attnum;
+
+-- Every constraint, as PostgreSQL defines it. A foreign key says where it points; a key over
+-- one column also says which column of the target it points at, which is what a relation is.
+CREATE VIEW platform.catalog_constraints WITH (security_invoker) AS
+  SELECT c.schema, c.name AS "table", con.conname::text AS name, con.contype::text AS type,
+         pg_get_constraintdef(con.oid) AS definition,
+         ARRAY(SELECT a.attname::text FROM unnest(con.conkey) WITH ORDINALITY k(attnum, i)
+                 JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = k.attnum
+                ORDER BY k.i) AS columns,
+         rn.nspname::text AS target_schema, rc.relname::text AS target_table,
+         (SELECT a.attname::text FROM pg_attribute a
+           WHERE a.attrelid = con.confrelid AND a.attnum = con.confkey[1]) AS target_column,
+         CASE WHEN con.contype = 'f' THEN con.confdeltype::text END AS on_delete
+    FROM pg_constraint con
+    JOIN platform.catalog_relations c ON c.oid = con.conrelid
+    LEFT JOIN pg_class rc ON con.contype = 'f' AND rc.oid = con.confrelid
+    LEFT JOIN pg_namespace rn ON rn.oid = rc.relnamespace
+   WHERE con.contype IN ('c','u','p','f','x');
+
+CREATE VIEW platform.catalog_indexes WITH (security_invoker) AS
+  SELECT c.schema, c.name AS "table", ic.relname::text AS name,
+         ARRAY(SELECT a.attname::text FROM unnest(x.indkey::int2[]) WITH ORDINALITY k(attnum, i)
+                 JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.attnum
+                ORDER BY k.i) AS columns,
+         x.indisunique AS "unique", x.indisprimary AS "primary"
+    FROM pg_index x
+    JOIN platform.catalog_relations c ON c.oid = x.indrelid
+    JOIN pg_class ic ON ic.oid = x.indexrelid
+   WHERE x.indisvalid AND x.indpred IS NULL;
+
+-- The types a field may be given beside PostgreSQL's own: enums, domains, ranges, composites.
+CREATE VIEW platform.catalog_types WITH (security_invoker) AS
+  SELECT n.nspname::text AS schema, t.typname::text AS bare, n.nspname || '.' || t.typname AS name,
+         t.typtype::text AS kind, format_type(t.oid, NULL) AS label
+    FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+   WHERE t.typtype IN ('b','c','d','e','r','m') AND t.typrelid = 0
+     AND n.nspname NOT IN ('pg_catalog','information_schema','pg_toast')
+     AND has_schema_privilege(n.oid, 'USAGE')
+     AND NOT EXISTS (SELECT 1 FROM pg_type e WHERE e.oid = t.typelem AND e.typarray = t.oid);
+
+-- Every grant, from the ACLs themselves: on a workspace, on its collections, on their fields.
+CREATE VIEW platform.access_grants WITH (security_invoker) AS
+  SELECT x.schema, x."table", x."column",
+         CASE WHEN g.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(g.grantee)::text END AS grantee,
+         g.privilege_type::text AS privilege, pg_get_userbyid(g.grantor)::text AS grantor,
+         g.is_grantable AS grantable
+    FROM (
+      SELECT s.name AS schema, NULL::text AS "table", NULL::text AS "column",
+             coalesce(n.nspacl, acldefault('n', n.nspowner)) AS acl
+        FROM platform.catalog_schemas s JOIN pg_namespace n ON n.oid = s.oid
+      UNION ALL
+      SELECT c.schema, c.name, NULL, coalesce(k.relacl, acldefault('r', k.relowner))
+        FROM platform.catalog_relations c JOIN pg_class k ON k.oid = c.oid
+      UNION ALL
+      SELECT c.schema, c.name, a.attname::text, a.attacl
+        FROM platform.catalog_relations c
+        JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+       WHERE a.attacl IS NOT NULL
+    ) x, LATERAL aclexplode(x.acl) g;
+
+-- Row policies, and whether each applies to the caller: by name, through a group, or as PUBLIC.
+CREATE VIEW platform.access_policies WITH (security_invoker) AS
+  SELECT schemaname::text AS schema, tablename::text AS "table", policyname::text AS name,
+         permissive, roles::text[] AS roles, cmd AS command, qual AS "using", with_check AS "check",
+         EXISTS (SELECT 1 FROM unnest(roles) r
+                  WHERE r = 'public'
+                     OR pg_has_role(session_user, to_regrole(quote_ident(r::text))::oid, 'MEMBER')) AS applies
+    FROM pg_policies;
+
+-- The roles worth asking about in a workspace: the ones the caller sees and the ones its
+-- ACLs name, where each is still a role. PUBLIC is asked about as a role named public.
+CREATE FUNCTION platform.roles_in(p_schema text) RETURNS TABLE(name text)
+LANGUAGE sql STABLE SET search_path = pg_catalog, pg_temp AS $$
+  SELECT known.name FROM (
+    SELECT r.name FROM platform.visible_roles() r WHERE r.name NOT LIKE 'pg\_%' ESCAPE '\'
+    UNION SELECT g.grantee FROM platform.access_grants g
+           WHERE g.schema = p_schema AND g.grantee <> 'PUBLIC'
+    UNION SELECT 'public') known
+   WHERE known.name = 'public' OR to_regrole(quote_ident(known.name)) IS NOT NULL
+$$;
+
+-- What each role may do with each collection of a workspace: PostgreSQL's own answer for that
+-- role, so a right held through a group or through PUBLIC counts. A privilege that may be
+-- held on fields is all, some or none of them.
+CREATE FUNCTION platform.reach(p_schema text, p_role text DEFAULT NULL, p_table text DEFAULT NULL)
+RETURNS TABLE(role text, "table" text, usage boolean, "select" text, "insert" text, "update" text,
+              "references" text, "delete" boolean, "truncate" boolean, "trigger" boolean)
+LANGUAGE sql STABLE SET search_path = pg_catalog, pg_temp AS $$
+  SELECT w.name, c.name, has_schema_privilege(w.name::name, p_schema, 'USAGE'),
+         h.held[1], h.held[2], h.held[3], h.held[4],
+         has_table_privilege(w.name::name, c.oid, 'DELETE'),
+         has_table_privilege(w.name::name, c.oid, 'TRUNCATE'),
+         has_table_privilege(w.name::name, c.oid, 'TRIGGER')
+    FROM platform.roles_in(p_schema) w, platform.catalog_relations c,
+         LATERAL (SELECT array_agg(CASE
+                    WHEN has_table_privilege(w.name::name, c.oid, p) THEN 'all'
+                    WHEN has_any_column_privilege(w.name::name, c.oid, p) THEN 'some'
+                    ELSE 'none' END ORDER BY i) AS held
+                    FROM unnest(ARRAY['SELECT','INSERT','UPDATE','REFERENCES']) WITH ORDINALITY x(p, i)) h
+   WHERE c.schema = p_schema AND (p_role IS NULL OR w.name = p_role)
+     AND (p_table IS NULL OR c.name = p_table)
+   ORDER BY 2, 1
+$$;
+
+CREATE FUNCTION platform.schema_reach(p_schema text)
+RETURNS TABLE(role text, usage boolean, "create" boolean)
+LANGUAGE sql STABLE SET search_path = pg_catalog, pg_temp AS $$
+  SELECT w.name, has_schema_privilege(w.name::name, p_schema, 'USAGE'),
+         has_schema_privilege(w.name::name, p_schema, 'CREATE')
+    FROM platform.roles_in(p_schema) w ORDER BY 1
+$$;
+
+GRANT SELECT ON platform.session, platform.catalog_schemas, platform.catalog_relations,
+  platform.catalog_tables, platform.catalog_columns, platform.catalog_constraints,
+  platform.catalog_indexes, platform.catalog_types, platform.access_grants,
+  platform.access_policies TO platform_users;
+GRANT EXECUTE ON FUNCTION platform.roles_in(text), platform.reach(text, text, text),
+  platform.schema_reach(text) TO platform_users;
+
 RESET ROLE;
 
 -- Only these functions read the catalogs for a caller. Each one answers about the caller alone,
@@ -457,23 +647,3 @@ GRANT EXECUTE ON FUNCTION platform.is_operator(), platform.visible_roles(), plat
   platform.role_attributes(text), platform.is_member(text, text), platform.has_admin_option(text)
   TO PUBLIC, platform_users, platform_admins;
 GRANT USAGE ON SCHEMA platform TO platform_admins;
-
--- The operators that already administer roles keep the raw catalogs, so that `apply` and the
--- operator's own psql session still read them.
-DO $$
-DECLARE
-  member name;
-BEGIN
-  FOR member IN
-    SELECT pg_get_userbyid(m.member) FROM pg_auth_members m
-      JOIN pg_roles g ON g.oid = m.roleid
-      JOIN pg_roles r ON r.oid = m.member
-     WHERE g.rolname = 'platform_users' AND m.admin_option AND r.rolcreaterole
-  LOOP
-    BEGIN
-      EXECUTE format('GRANT platform_admins TO %I WITH ADMIN OPTION', member);
-    EXCEPTION WHEN insufficient_privilege THEN
-      RAISE NOTICE 'Could not add % to platform_admins; grant it by hand.', member;
-    END;
-  END LOOP;
-END $$;

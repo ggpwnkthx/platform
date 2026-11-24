@@ -1,6 +1,6 @@
 {
   "name": "@platform/relay",
-  "version": "2.3.0",
+  "version": "3.0.0",
   "private": true,
   "type": "module",
   "description": "The WebSocket in front of PostgreSQL's port: bytes in, bytes out, and nothing else.",

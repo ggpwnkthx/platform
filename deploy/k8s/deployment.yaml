@@ -4,6 +4,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: platform-relay
+  namespace: ${NAMESPACE}
   labels: { app: platform }
 spec:
   replicas: 2
@@ -22,13 +23,13 @@ spec:
         # Forwards each WebSocket to PostgreSQL's port, byte for byte. No credentials, no SQL:
         # the reader's token travels inside the stream and PostgreSQL checks it.
         - name: relay
-          image: YOUR_REGISTRY/platform-relay:2.3.0
+          image: ${IMAGE}
           ports: [{ containerPort: 8081 }]
           env:
-            - { name: RELAY_UPSTREAM, value: "db.YOUR_DOMAIN:5432" }
+            - { name: RELAY_UPSTREAM, value: "${UPSTREAM}" }
             - { name: RELAY_PORT, value: "8081" }
             # The only origin allowed to open a session: the address of the site on the CDN.
-            - { name: RELAY_ORIGINS, value: "https://platform.example.com" }
+            - { name: RELAY_ORIGINS, value: "${ORIGIN}" }
             # The relay forwards and counts nothing. How many sessions one address may hold is
             # the ingress's to cap (see ingress.yaml), how many one role may hold is
             # PostgreSQL's (ALTER ROLE ... CONNECTION LIMIT, or `connections` in a manifest),
@@ -60,6 +61,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: platform-relay
+  namespace: ${NAMESPACE}
   labels: { app: platform }
 spec:
   selector: { app: platform }

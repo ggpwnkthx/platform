@@ -72,48 +72,17 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
-  # The installer: the operator's tools, beside PostgreSQL. It is given no credentials, because
-  # there are none: it shares the server's socket, where PostgreSQL lets its own superuser in.
-  # It runs through `compose --profile install run`, and is never part of `up`.
-  migrate:
-    profiles: [install]
+
+  site:
     build:
       context: ../..
-      target: cli
-    image: platform-cli:local
-    command: [migrate]
-    environment:
-      # A directory, not a name: the socket in it is the way in.
-      DATABASE_HOST: /var/run/postgresql
-      DATABASE_NAME: platform
-      DATABASE_SSL: disable
-      PGUSER: postgres
-      # The administrator the site's roles are made for: the account Dex keeps.
-      PLATFORM_ADMIN: ${PLATFORM_ADMIN:-}
-      PLATFORM_DOMAIN: ${PLATFORM_DOMAIN:-localhost}
+      target: site
+    image: platform-site:local
+    command: [packages/cli/src/serve.ts, /site, "8080"]
     volumes:
-      - socket:/var/run/postgresql
-      # The folder of the site the deployment chose, read and never written: `apply
-      # --dir=/app/site` reads its platform.json and the files it says it applies. It is
-      # any folder on this machine; the image carries the tools alone. A deployment that
-      # chose no site reads nothing here.
-      - ${PLATFORM_SITE_FOLDER:-../../examples}:/app/site:ro
-    # The socket is on a volume, not on a network: the installer needs none.
-    network_mode: none
-    read_only: true
-    cap_drop: [ALL]
-    security_opt: [no-new-privileges:true]
-  # The site, when the deployment chose a folder to deploy one from: its built files, served
-  # as a CDN would serve them, with the headers the build wrote beside them. It is started
-  # only then; a site that already exists is published to a CDN and is not a container.
-  # The image is the installer's: the operator's tools carry the server.
-  site:
-    image: platform-cli:local
-    command: [ui, serve, --dir=/site, --port=8080]
-    volumes:
-      # The files `ui build` wrote into the site's folder on this machine, read and never
+      # The files `vite build` wrote into the site's folder on this machine, read and never
       # written. A deployment that chose no site never starts this service.
-      - ${PLATFORM_SITE_DIST:-./no-site}:/site:ro
+      - ${PLATFORM_SITE_DIST:-.}:/site:ro
     # Not published: the edge, below, is how the site is reached, by its own name.
     restart: unless-stopped
     read_only: true

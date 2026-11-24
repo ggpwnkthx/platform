@@ -1,18 +1,32 @@
-import { compareVersions, validate } from 'compare-versions'
-import { jwtDecode } from 'jwt-decode'
-
 /** Public package/database version. Keep aligned with package.json and the installation SQL. */
-export const VERSION = '2.3.0'
+export const VERSION = '3.0.0'
 
 export interface Field {
   name: string
   dataTypeID: number
+}
+/** What PostgreSQL said beside a statement that it ran: a WARNING, a NOTICE, an INFO. */
+export interface Notice {
+  severity?: string
+  message?: string
+  code?: string
 }
 export interface Result<Row = Record<string, unknown>> {
   rows: Row[]
   fields: Field[]
   command: string
   rowCount: number | null
+  /** What PostgreSQL said while the statement ran. */
+  notices?: Notice[]
+}
+/**
+ * A GRANT or REVOKE that changed nothing — the caller holds no GRANT OPTION, or another role
+ * made the grant — is only warned of (01007, 01006). The warning is PostgreSQL's answer that
+ * the change was not made, so it is raised as the refusal it is.
+ */
+export function unchanged(result: Result): void {
+  const warned = result.notices?.find((n) => /^0100[67]$/.test(n.code ?? ''))
+  if (warned) throw Object.assign(new Error(warned.message), { code: warned.code })
 }
 
 /**
@@ -75,9 +89,12 @@ export function broken(error: unknown): boolean {
   return /^(25P02|25001|08...|28...|57P0[123])$/.test(code)
 }
 
+/** What a token says, unverified: PostgreSQL verifies it. Read only to name the role to ask for. */
 export function claims(token: string): Record<string, unknown> {
   try {
-    return jwtDecode<Record<string, unknown>>(token) ?? {}
+    const payload = token.split('.')[1]!.replace(/-/g, '+').replace(/_/g, '/')
+    const bytes = Uint8Array.from(atob(payload), (c) => c.charCodeAt(0))
+    return JSON.parse(new TextDecoder().decode(bytes)) ?? {}
   } catch {
     return {}
   }
@@ -93,17 +110,12 @@ export function expiresAt(token: string): number | null {
   return typeof exp === 'number' ? exp * 1000 : null
 }
 
+/** The interface is built for one version of the database, and says which way another differs. */
 export type VersionMismatch = 'older' | 'newer'
 export function versionMismatch(installation?: string | null, built: string = VERSION) {
-  if (!installation || !validate(installation) || !validate(built)) return null
-  const compared = compareVersions(installation, built)
-  return compared === 0 ? null : ((compared < 0 ? 'older' : 'newer') as VersionMismatch)
-}
-export async function requireInstalledVersion(db: Db): Promise<void> {
-  const found = await db.query<{ version: string }>('SELECT version FROM platform.installation')
-  const version = found.rows[0]?.version
-  if (version !== VERSION)
-    throw new Error(
-      `This installation is at version ${version ?? 'none'}. Run \`bun run cli migrate\` first.`
-    )
+  const parts = (v: string) => v.split('.').map(Number)
+  if (!installation || [installation, built].some((v) => !/^\d+\.\d+\.\d+$/.test(v))) return null
+  const [a, b] = [parts(installation), parts(built)]
+  const at = [0, 1, 2].find((i) => a[i] !== b[i])
+  return at === undefined ? null : ((a[at]! < b[at]! ? 'older' : 'newer') as VersionMismatch)
 }

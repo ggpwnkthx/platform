@@ -12,14 +12,19 @@ jobs:
         with:
           bun-version: 1.4.4
       - run: bun install --frozen-lockfile
-      # PostgreSQL 18 with the token validator, trusting the issuer the tests run in-process.
-      # It has no password: the tests' administrator signs in with a token, like everyone else.
-      # Host networking lets the server reach that issuer on the runner's loopback.
+      # The images of the stack, built here so that a pruned workspace or a missing dependency
+      # is caught by the checks, and not on a developer's machine.
       - run: docker build -t platform-postgres:test deploy/postgres
-      # The images the local stack builds, built here so that a pruned workspace or a missing
-      # dependency is caught by the checks, and not on a developer's machine.
-      - run: docker build -t platform-cli:test --target cli .
       - run: docker build -t platform-relay:test --target relay .
+      - run: >-
+          docker build -t platform-site:test --target site
+          --build-context site-folder=examples/newsroom
+          --build-arg PLATFORM_ISSUER=https://idp.example.com
+          --build-arg PLATFORM_RELAY_URL=wss://api.example.com .
+      # PostgreSQL 18 with the token validator, trusting the issuer that
+      # packages/cli/test/login.ci.test.ts runs in process. It has no password: the installer
+      # signs in with a token, like everyone else. Host networking lets the server reach that
+      # issuer on the runner's loopback.
       - run: >-
           docker run -d --name postgres --network host
           -e PGPORT=54329
@@ -27,22 +32,7 @@ jobs:
           -e PLATFORM_OIDC_ISSUER=http://127.0.0.1:54330
           platform-postgres:test postgres -c listen_addresses=127.0.0.1
       - run: timeout 60 sh -c 'until docker exec postgres pg_isready -p 54329 -U postgres; do sleep 1; done'
-      # The relay the interface reaches PostgreSQL through, for the wire client's tests.
-      - run: |
-          nohup bun packages/relay/src/relay.ts > /tmp/relay.log 2>&1 &
-          for i in $(seq 1 30); do
-            curl -fsS http://127.0.0.1:54331/health && break
-            sleep 1
-          done
-        env:
-          RELAY_UPSTREAM: 127.0.0.1:54329
-          RELAY_PORT: 54331
-          RELAY_SESSIONS_PER_ADDRESS: 64
-          RELAY_SESSIONS_PER_ROLE: 64
-          # The tests are not a browser and send no Origin: the relay's own check is off.
-          RELAY_ALLOW_ANY_ORIGIN: "1"
       - run: bun run check
         env:
           TEST_ADMIN_URL: postgres://installer%40example.com@127.0.0.1:54329/postgres
           TEST_OIDC_ISSUER: http://127.0.0.1:54330
-          TEST_RELAY_URL: ws://127.0.0.1:54331

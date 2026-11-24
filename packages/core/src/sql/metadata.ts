@@ -36,7 +36,7 @@ export const defaultViews = { list: 'show', record: 'show', filter: 'show' } as 
 /** The row that holds one saying of one item: its place, its key, and what was said. */
 export const metadataColumns = 'scope, schema_name, table_name, column_name, key, value'
 /** The key of an item's saying: its place, and its key. */
-export const metadataConflict =
+const metadataConflict =
   "(scope, schema_name, coalesce(table_name, ''), coalesce(column_name, ''), key)"
 
 const targetRow = (t: MetadataTarget, key: string, value: unknown) =>
@@ -49,49 +49,15 @@ DO UPDATE SET value = EXCLUDED.value`
 export const metadataStatement = (target: MetadataTarget, key: string, value: unknown) =>
   upsert([targetRow(target, key, value)])
 
-/**
- * The same saying, written once: what an owner has since said of an item is theirs to keep.
- * The statement is given as text and parameters, so the caller may ask whether it wrote.
- */
-export const metadataStatementOnce = (
-  target: MetadataTarget,
-  key: string,
-  value: unknown
-): { text: string; params: unknown[] } => ({
-  text: `INSERT INTO platform.item_metadata (${metadataColumns})
-VALUES ($1,$2,$3,$4,$5,$6::jsonb)
-ON CONFLICT ${metadataConflict}
-DO NOTHING`,
-  params: [
-    target.scope,
-    target.schema,
-    target.table,
-    target.column,
-    key,
-    JSON.stringify(value ?? null),
-  ],
-})
 export const metadataRemoval = (t: MetadataTarget, key: string) =>
   stmt`DELETE FROM platform.item_metadata
  WHERE scope = ${lit(t.scope)} AND schema_name = ${lit(t.schema)}
    AND table_name IS NOT DISTINCT FROM ${lit(t.table)}
    AND column_name IS NOT DISTINCT FROM ${lit(t.column)} AND key = ${lit(key)}`
-/** A null value takes the key away; anything else is written. */
-export const metadataStatements = (
-  target: MetadataTarget,
-  changes: readonly { key: string; value: unknown }[]
-) =>
-  changes.map((change) =>
-    change.value === null
-      ? metadataRemoval(target, change.key)
-      : metadataStatement(target, change.key, change.value)
-  )
-/** Where a field appears. Every field carries its own saying, so nothing is inferred. */
+/** Where a field appears: what the owner says, over the default of appearing everywhere. */
 export function fieldViewsStatement(target: MetadataTarget, views: Record<string, string> = {}) {
   for (const [name, mode] of Object.entries(views))
     if (!viewModes.includes(mode as ViewMode))
       throw new InvalidName(`${name}: a view is shown, hidden or shown and locked`)
   return metadataStatement(target, viewsKey, { ...defaultViews, ...views })
 }
-export const fieldsViewsStatement = (targets: readonly MetadataTarget[]) =>
-  upsert(targets.map((target) => targetRow(target, viewsKey, defaultViews)))

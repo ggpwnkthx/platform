@@ -1,8 +1,4 @@
 {
-  "apply": {
-    "models": "apply/models.ts",
-    "migration": "apply/migration.sql",
-    "demo": "apply/demo.sql"
-  },
+  "apply": ["apply/schema.sql", "apply/demo.sql"],
   "extensions": "extensions.tsx"
 }

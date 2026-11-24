@@ -124,6 +124,27 @@ spacing:
   xl: "24px"
   "2xl": "32px"
   "3xl": "48px"
+shadows:
+  rest: "0 1px 2px rgb(20 20 20 / 6%), 0 1px 1px rgb(20 20 20 / 4%)"
+  lift: "0 4px 12px rgb(20 20 20 / 8%), 0 1px 3px rgb(20 20 20 / 6%)"
+  float: "0 16px 40px rgb(20 20 20 / 16%), 0 4px 12px rgb(20 20 20 / 8%)"
+  glow: "0 4px 12px rgb(241 90 43 / 32%)"
+layout:
+  module-bar: "64px"
+  nav-pane: "264px"
+  aside: "312px"
+  drawer: "560px"
+  header: "64px"
+  control: "36px"
+  row: "40px"
+  module-tile: "44px"
+  item-mark: "34px"
+  privilege-mark: "14px"
+  icon: "16px"
+  measure: "72ch"
+  cell: "320px"
+  ring: "1.5px"
+  form: "720px"
 components:
   button-primary:
     backgroundColor: "{colors.studio-orange}"
@@ -178,6 +199,9 @@ components:
     backgroundColor: "{colors.paper}"
     rounded: "{rounded.md}"
     padding: "12px"
+  table-cell:
+    padding: "7px 10px"
+    typography: "{typography.body}"
   nav-item:
     backgroundColor: "transparent"
     textColor: "{colors.soft-text}"
@@ -238,16 +262,17 @@ reserved for things that float and for the orange primary action's glow.
 - Unboxed sections; a card is the only box.
 - A pinned palette of sixteen families, eleven of them reserved for an item's own colour.
 
-**What this file is.** Colours and depth are the system's law: the pinned palette in
-`packages/ui/src/bits/palette.ts` and the four shadows below are what the studio must look
-like. Measurements are as built — the frame, the type scale, the control sizes and the radii are
-what the interface does today. Where the build has not yet reached the law, the gap is named
-under **Drift to Close**, at the end of this file, rather than smoothed over.
+**What this file is.** The frontmatter above is the system's law, and the build reads it:
+`packages/ui/vite.ts` hands it to the interface as `virtual:design-tokens`, the theme
+(`packages/ui/src/theme.ts`) is made from it, and a test refuses a colour, a size or a shadow
+written anywhere else in the interface. A value changed here changes the interface; a value
+that is not here cannot be drawn. The prose below describes the interface as built on those
+tokens: react-admin on Material UI, themed.
 
 ## Colors
 
 Sixteen families, each with a bright step that fills and a dark step that carries text, held in
-`packages/ui/src/bits/palette.ts`. Five of them are the studio's own; eleven are reserved for
+the frontmatter and read by `packages/ui/src/kit/palette.ts`. Five of them are the studio's own; eleven are reserved for
 categorical data — an item that carries its own colour.
 
 ### Primary
@@ -371,25 +396,24 @@ statement), it is set in JetBrains Mono; if the studio wrote it, it is Inter.
 ## Layout
 
 A four-column frame: the module bar (64px), the navigation pane (264px), the main column, and
-on collection pages a right sidebar (312px). The bar and the pane are one container of 328px;
-the users-and-groups page has no workspace in view and drops the pane, leaving the bar alone.
+on collection and record pages an aside (312px). The users-and-groups pages have no workspace
+in view and drop the pane, leaving the bar alone.
 
-The header is sticky at the top of the main column: at least 76px tall, padded 12px 32px, a 94%
-white ground blurred by 6px with a hairline beneath, carrying the breadcrumbs, the title and the
-page's actions in one band. The page body is padded 24px 32px 48px.
+The header is sticky at the top of the main column: 64px tall, padded 32px either side, on
+Paper with a hairline beneath, carrying the item's mark, where the page belongs, and its
+title. A page's actions sit in the toolbar under it, to the right of the search and the
+filters. The page body is padded 24px 32px 48px.
 
-The sidebar carries what is known about the collection in view — its information, the reader's
-rights on it, the policies that apply to it — padded 20px on the same Subdued Grey as the
-navigation pane, with a hairline on its left. The body of the page and the sidebar sit side by
-side as a `1fr / 312px` grid.
+The aside carries what is known about the thing in view — a collection's information, the
+reader's rights on it and the policies that apply; a record's stamps, the rows that point at
+it and its revisions — on a 10px-cornered card of Subdued Grey, padded 20px, beside the page.
 
-Spacing runs on the library's scale — 10, 12, 16, 20, 32 — with the studio's own 24, 28 and 48
-for page gutters, section gaps and the sign-in.
+Spacing runs on a 4px step — 10, 12, 16, 20, 24, 32, 48 — named in the frontmatter.
 
-**Responsive behaviour.** Under 1080px the sidebar drops below the content and becomes a
-bordered block of its own. Under 860px the gutters shrink to 16px and the sign-in stacks its art
-above the form. The navigation pane is off-canvas under 768px, opened by a burger in the header,
-so the module bar stays and the pane is drawn over the page.
+**Responsive behaviour.** Under 1200px the aside is not drawn. Under 900px the navigation
+pane is a drawer: the module bar stays, with a menu button that opens the pane over the page,
+and going somewhere closes it. Tabs scroll sideways where they do not fit. Under 900px the
+sign-in stacks its steps above the form.
 
 **The Unboxed Section Rule.** A page section is a heading, a short description and a hairline
 above it; it is never a bordered box. A card (panel, tile, table wrapper) is the only box on the
@@ -437,26 +461,31 @@ tile is the palette's black or its white.
 
 - **Shape:** gently rounded (6px), 36px tall, 12px of padding either side (18px before a
   leading icon), 13px text at 600 weight.
-- **Primary:** Studio Orange; its label is white today, where the law is the palette's black —
-  see Drift to Close. Hover deepens to the orange's darker step.
+- **Primary:** Studio Orange, labelled in the palette's black. Hover deepens to the orange's
+  darker step and takes the Orange Glow.
 - **Secondary (default):** Paper with a hairline stroke; hover greys the ground.
 - **Ghost (subtle):** no ground, soft text; hover takes the Subdued Grey.
-- **Light:** a tint of the colour it carries, for a choice that is offered rather than taken.
+- **Text:** react-admin's own action in a toolbar — add a filter — is the orange's dark step
+  on no ground.
+- **Where they sit:** what a page is for doing is at the right of its header, its one primary
+  button last; what a section adds is a secondary button at the right of its heading.
 - **Danger:** solid Danger Red, and it appears only where something is destroyed.
 
 ### Inputs / Fields
 
 - **Style:** 36px, 12px of padding, 6px radius, Paper ground, a hairline stroke at 13px; values
   are set in JetBrains Mono at 13px when PostgreSQL owns them.
+- **Label:** above the input, always, in Label type and the palette's black. It never floats
+  into the stroke, and the stroke is whole.
 - **Focus:** the stroke takes the orange, with the focus ring in Orange Wash Deep.
-- **Search:** a full pill, 36px tall and 320px wide, with a 16px search icon at the left and
-  the placeholder "Search every readable column".
+- **Search:** an input like any other, at the left of the toolbar, with the placeholder
+  "Search every readable column".
 - **Disabled:** Subdued Grey ground, soft stroke.
 
 ### Chips and Pills
 
-- **Filter chips:** a 28px pill in the neutral grey with a remove button, naming the field,
-  the operator and the value it is set to.
+- **Filter conditions:** beside the search, each a field's name over the operator it is held
+  to, the value it is given, and a button that removes it.
 - **Badges:** a light ground in the family's tint with the family's dark step as the text, a
   full pill 20px tall at 11px and padded 0 10px, never uppercase, 700 weight, or 600 where the
   studio sets it.
@@ -473,21 +502,26 @@ tile is the palette's black or its white.
 - **Module bar:** a near-black column of 44px icon tiles, 6px apart, each a 6px-cornered square
   with a 20px icon in the palette's grey. Hover takes the raised ink; the active module is an
   orange tile with the palette's black icon. The brand cell sits at the top in the raised ink
-  with the database mark in orange, and the reader's initials sit at the foot.
+  with the database mark in orange. At the foot a round paper tile carries the reader's
+  initials; it opens who is signed in to PostgreSQL, in mono, and the way out.
 - **Navigation pane:** Subdued Grey with a hairline on the right, padded 12px. The workspace
   switcher is at the top; the collections and the workspace's own links follow under 12px grey
   group titles. A link is padded 8px 12px and stands about 38px tall with no corner rounding;
   hover takes the greyer ground, and the active link takes the orange's light ground with the
-  orange's darkest step as its text.
-- **Tabs:** 13px labels in the studio's own text colour, 35px tall, padded 10px 16px; the active
-  tab is underlined in orange.
+  orange's darkest step as its text. The pane is drawn in the modules read one workspace at a
+  time, Data and Activity, and not in Access or SQL.
+- **Tabs:** a page too long to read at once is in tabs under its header, in Control type, the
+  current one underlined in orange. The address says which.
 
 ### Data Table
 
-A bordered table with 10px corners, rows about 41px tall and cells padded 7px 10px, rows
-highlighted on hover, the first column pinned when there are more than three columns, numeric
-columns right-aligned and set in mono, a null shown as a faint mono `null`. Columns sort from
-their header. The table wrapper is a card: it is the only box on the page.
+One table, `kit/Table.tsx`, lists records and every kind of thing: bordered, with 10px
+corners, rows 40px tall and cells padded 7px 10px, rows highlighted on hover, the first column
+pinned, a row's actions pinned at the right, numeric columns right-aligned and set in mono, a
+null shown as a faint mono `null`. Columns sort from their header. Rows chosen with their
+checkboxes are acted on from a bar of Orange Wash over the table's heading. A thin bar across its top says it is loading; an empty one
+says why in one sentence; a refusal takes its place. The table wrapper is a card: it is the
+only box on the page.
 
 ### Privilege Marks (signature)
 
@@ -500,8 +534,8 @@ by name: small tags in mono, a role that holds the whole collection quieter than
 the field by name. A role is drawn the same wherever access is read: a person, a group or
 everyone as its icon, and its name in mono.
 
-The marks describe; they do not edit. A grant is changed in a drawer, where each privilege is
-chosen as not held, the whole collection or chosen fields, and the mark beside the privilege
+The marks describe; they do not edit. A grant is changed in the change surface, where each privilege
+is chosen as not held, the whole collection or chosen fields, and the mark beside the privilege
 follows the choice, so the drawer reads like the table it came from.
 
 **The One Rights Vocabulary Rule.** Rights are named only by PostgreSQL's privileges (SELECT,
@@ -511,9 +545,10 @@ checkmarks, toggles or invented role words.
 ### Statement (signature)
 
 A figure with a hairline, 6px corners and a Subdued Grey ground: a white caption band reading
-"Runs as you, in one transaction" over the SQL in Code type. It appears in every drawer and
-confirmation that changes something, live-updating as the form changes, and policy expressions
-use the same mono-on-grey treatment.
+"Runs as you, in one transaction" over the SQL in Code type. It appears in the change surface
+(`kit/Change.tsx`), the one drawer every change to the model or to access goes through,
+live-updating as the form changes, with PostgreSQL's answer under it; policy expressions use
+the same mono-on-grey treatment.
 
 **The Statement First Rule.** Nothing changes the database without its SQL on screen first, in
 the same view as the button that runs it.
@@ -522,9 +557,8 @@ the same view as the button that runs it.
 
 A workspace or a collection may present itself: a display name, an icon and a colour, kept in
 its own metadata and drawn by the interface wherever the item appears. The mark is a rounded
-tile — 34px on a collection tile, 44px in a page header — filled with the item's colour and
-carrying its icon in the ink that reads on it. Without a colour the mark keeps the ground its
-place gives it: ink in the switcher, orange wash on a tile, Subdued Grey in a header. The icon
+tile of 34px, in a page header and beside a collection's name, filled with the item's colour
+and carrying its icon in the ink that reads on it. Without a colour the mark is Subdued Grey. The icon
 set is the studio's own, one stroke and one weight, named by the metadata (`newspaper`,
 `file-text`, `building-2`); an icon the studio does not draw falls back to the generic mark. The
 navigation pane keeps its list quiet: the item's icon there, in the neutral grey, and the colour
@@ -544,16 +578,16 @@ field keeps its raw name and nothing else.
 A field is drawn in three places — the records table, the record form and the filter builder —
 and the owner of a collection says which of them a field belongs to, in the field's own
 metadata, so PostgreSQL keeps the rules: only the owner changes it, and it narrows the interface
-without granting anything. Every field carries its own saying; the editor is a drawer section
-of three choices — shown, hidden, and, in the record, shown and locked — with the statements
-that will run below them, like every other change. A column PostgreSQL computes itself — a
+without granting anything. A field that says nothing appears everywhere; the editor is three
+choices in the change surface — shown, hidden, and, in the record, shown and locked — with
+the statements that will run below them, like every other change. A column PostgreSQL computes itself — a
 generated column, an identity column — is shown and locked whatever the owner says, because the
 database writes it.
 
 ### Drawers and Menus
 
-Drawers slide in from the right at 560px on Paper, with a 19px title, a scrolling body and a
-right-aligned footer of buttons. Menus are 10px-cornered, float-shadowed, and open from the
+The change surface slides in from the right at 560px on Paper, with a Title heading, the
+form, the statement, and a right-aligned pair of buttons. Menus are 10px-cornered, float-shadowed, and open from the
 element that owns them.
 
 ### Sign-in
@@ -598,23 +632,14 @@ paragraph and the people who may sign in.
 
 ## Drift to Close
 
-Where the built interface has not yet reached the law above. Each item names what the build
-does today, what the law says, and what closing it means.
+Nothing is open. The five items the 2.3.0 build had left are closed in the theme, and because
+the theme is read from this file they cannot reopen without a change here:
 
-1. **Status and information tones.** Refusals, notices, toasts, tags and the word-meaning
-   badges run on the component library's named colours — red, blue, yellow, grey — rather than
-   the pinned families, their dark steps and their washes, which are the law for status. The
-   words still map to the right meaning; the hues are the library's. Closing it means mapping
-   each status to its family: ink on wash, never a solid fill except the destructive button.
-2. **Depth.** The interface has no bespoke shadows: drawers, menus and the sign-in's cards take
-   the library's scale. The four shadows above are the law, and the sign-in cards in particular
-   carry a shadow on a surface that sits in the page, which the Float-Only Shadow Rule forbids.
-3. **The chrome's greys.** Input strokes, the hover ground of a navigation link and a few
-   library surfaces take the library's grey scale rather than the palette's hairline and
-   subdued grey. The Palette-Only Rule covers the chrome as well as the data.
-4. **The primary button's label.** The orange button labels itself in white, which is 3.4:1
-   against Studio Orange — under the 4.5:1 that body text needs, and against the system's own
-   reason for the rule that the palette's white cannot sit on its bright step. The law is the
-   palette's black on orange, 5.5:1. Closing it is one line in the theme: the label's colour.
-5. **The active link's ink.** The active item in the navigation pane takes the orange's lightest
-   step as its text, one step darker than the Orange Ink the palette holds.
+1. **Status and information tones** are the pinned families: ink on wash for a refusal, a
+   notice, a tag and a word-meaning badge; the destructive button is the only solid fill.
+2. **Depth** is the four shadows of the frontmatter. A surface in the page has none: the
+   sign-in's cards among them.
+3. **The chrome's greys** are the palette's: Hairline for every stroke and divider, Subdued
+   Grey for the hover ground, the pane, the aside and a table's header.
+4. **The primary button's label** is the palette's black on Studio Orange.
+5. **The active link's ink** is Orange Ink on Orange Wash.

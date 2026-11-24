@@ -16,6 +16,13 @@
     "allowImportingTsExtensions": true,
     "jsx": "react-jsx"
   },
-  "include": ["packages/*/src", "packages/*/test", "packages/ui/vite.config.ts", "examples"],
+  "include": [
+    "packages/*/src",
+    "packages/*/test",
+    "packages/ui/vite.ts",
+    "examples",
+    "scripts",
+    "e2e"
+  ],
   "exclude": ["node_modules", "**/.dist"]
 }

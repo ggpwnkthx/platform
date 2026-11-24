@@ -26,11 +26,6 @@ export interface MetadataEntry {
 }
 
 export const presentationKeys = ['display_name', 'icon', 'color'] as const
-/** The keys the interface reads for itself, and so edits with editors of their own. */
-export const isReservedKey = (scope: MetadataScope, key: string) =>
-  (presentationKeys as readonly string[]).includes(key) ||
-  (scope === 'field' && [viewsKey, renderersKey].includes(key))
-
 const columns = metadataColumns
 /** The metadata of one item. Row security returns the rows the caller may reach, no others. */
 export async function metadata(db: Db, target: MetadataTarget) {
@@ -113,11 +108,8 @@ export const situationModes: Record<Situation, ViewMode[]> = {
   record: ['show', 'readonly', 'hide'],
   filter: ['show', 'hide'],
 }
-/** A view of the owner's own may be shown, hidden, or shown and locked. */
-export const customModes: ViewMode[] = ['show', 'readonly', 'hide']
 export type FieldViews = Record<Situation, ViewMode> & Record<string, ViewMode | undefined>
 export const everyView: FieldViews = { ...defaultViews }
-export const isCustomView = (name: string) => !situations.includes(name as Situation)
 export const validViewName = (name: string) => /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(name.trim())
 const modeOf = (value: unknown): ViewMode | null =>
   value === true

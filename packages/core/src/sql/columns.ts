@@ -1,18 +1,6 @@
 import { id, list, lit, pgName, sql, stmt } from './kit.ts'
-import {
-  columnSql,
-  type FieldSpec,
-  type OnDelete,
-  onDeleteActions,
-  systemFields,
-} from './column.ts'
-import {
-  fieldsViewsStatement,
-  fieldTarget,
-  fieldViewsStatement,
-  metadataStatement,
-  renderersKey,
-} from './metadata.ts'
+import { columnSql, type FieldSpec, type OnDelete, onDeleteActions } from './column.ts'
+import { fieldTarget, fieldViewsStatement, metadataStatement, renderersKey } from './metadata.ts'
 export * from './column.ts'
 
 export const relationStatement = (
@@ -42,22 +30,6 @@ export const relationIndexStatement = (schema: string, table: string, field: str
 export const coveredByUnique = (groups: readonly (readonly string[])[]) =>
   new Set(groups.filter((group) => group.length > 1).map((group) => group[0]!))
 
-/**
- * The same, by the collection each field is in: a field named `article` in one collection
- * is not the field named `article` in another, and the unique index over the pair of one
- * says nothing about the other.
- */
-export const coveredFields = (
-  collections: readonly { name: string; unique: readonly (readonly string[])[] }[]
-) =>
-  new Set(
-    collections.flatMap((collection) =>
-      collection.unique
-        .filter((group) => group.length > 1)
-        .map((group) => `${collection.name}.${group[0]!}`)
-    )
-  )
-
 /** Everything a new field is: the column, its index, its key, its note and its sayings. */
 export function fieldStatements(
   schema: string,
@@ -77,14 +49,14 @@ export function fieldStatements(
   }
   if (field.note?.trim())
     out.push(stmt`COMMENT ON COLUMN ${id(schema, table, field.name)} IS ${lit(field.note.trim())}`)
-  out.push(fieldViewsStatement(target, field.views))
+  // A field that says nothing appears everywhere: only what narrows that is written.
+  if (Object.keys(field.views ?? {}).length) out.push(fieldViewsStatement(target, field.views))
   if (field.renderers && Object.keys(field.renderers).length)
     out.push(metadataStatement(target, renderersKey, field.renderers))
   return out
 }
 export const createCollectionStatements = (schema: string, name: string): string[] => [
   stmt`SELECT platform.create_collection(${lit(schema)}, ${lit(name)})`,
-  fieldsViewsStatement(systemFields.map((column) => fieldTarget(schema, name, column))),
 ]
 export function collectionStatements(
   schema: string,

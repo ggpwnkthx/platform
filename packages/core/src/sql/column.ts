@@ -28,7 +28,6 @@ export const columnTypes = {
 } as const
 export const onDeleteActions = { restrict: 'RESTRICT', cascade: 'CASCADE', set_null: 'SET NULL' }
 /** The letter PostgreSQL keeps a delete rule by: the same rules, as the catalog has them. */
-export const deleteCodes: Record<OnDelete, string> = { restrict: 'r', cascade: 'c', set_null: 'n' }
 export type OnDelete = keyof typeof onDeleteActions
 
 export interface FieldSpec {

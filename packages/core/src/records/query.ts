@@ -29,11 +29,6 @@ export const isRelationOperator = (op: Operator): op is RelationOperator =>
 export interface Condition {
   op: Operator
   value: unknown
-  /**
-   * When the condition is on the rows a relation reaches: the column of theirs that is
-   * tested, and the condition on it. The rows are found by the reach of the field.
-   */
-  through?: { column: string; op: Operator; value: unknown }
 }
 export type Filter = Record<string, Condition>
 

@@ -2,3 +2,8 @@
 exact = true
 # One node_modules, at the root: no per-package node_modules of symlinks.
 linker = "hoisted"
+
+[test]
+# The browser suite is Playwright's (`bun run test:e2e`), not Bun's.
+root = "packages"
+preload = ["./packages/ui/test/setup.ts"]

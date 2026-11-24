@@ -1,6 +1,8 @@
-import { Badge, Code, Text } from '@mantine/core'
-import type { ReactNode } from 'react'
+import { Box, Chip } from '@mui/material'
+import tokens from 'virtual:design-tokens'
+import { Mono } from '../kit/marks.tsx'
 
+/** How values are said: as text, as numbers, clipped, and as the choice a word is. */
 export const textOf = (value: unknown): string =>
   value === null || value === undefined
     ? ''
@@ -15,45 +17,48 @@ export const grouped = (value: unknown) => {
     ? textOf(value)
     : new Intl.NumberFormat('en-US', { maximumFractionDigits: 20 }).format(n)
 }
+/** A moment, to the minute. */
 export const minute = (value: unknown) =>
   textOf(value).replace(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}).*$/, '$1 $2')
-export const Mono = ({ children, title }: { children: ReactNode; title?: string }) => (
-  <span className="mono" title={title}>
-    {children}
-  </span>
-)
 export const Clipped = ({ text, length = 60 }: { text: string; length?: number }) => (
   <span title={text}>{text.length > length ? `${text.slice(0, length)}…` : text}</span>
 )
 
-/** A listed value's colour follows what the word means, never its place in the list. */
-const meanings: [RegExp, string][] = [
+/** A listed value's tone follows what the word means, not its place in the list. */
+const meanings: [RegExp, 'success' | 'error' | 'warning' | undefined][] = [
   [
     /^(published|active|paid|done|won|approved|complete|completed|customer|closed[ _-]won)$/,
-    'green',
+    'success',
   ],
   [
-    /^(lost|rejected|closed|blocked|cancelled|canceled|failed|archived|churned|closed[ _-]lost)$/,
-    'red',
+    /^(lost|rejected|closed|blocked|cancelled|canceled|failed|archived|churned|retraction|closed[ _-]lost)$/,
+    'error',
   ],
-  [/^(review|negotiat\w*|partner|in[ _-]progress|qualified|proposal)$/, 'yellow'],
-  [/^(draft|new|pending|lead|prospect|open)$/, 'gray'],
+  [/^(review|negotiat\w*|partner|in[ _-]progress|qualified|proposal|material)$/, 'warning'],
+  [/^(draft|new|pending|lead|prospect|open|minor)$/, undefined],
 ]
-export const Choice = ({ value }: { value: unknown }) => (
-  <Badge
-    variant="light"
-    radius="xl"
-    tt="none"
-    color={meanings.find(([word]) => word.test(textOf(value).toLowerCase()))?.[1] ?? 'blue'}
-  >
-    {textOf(value)}
-  </Badge>
-)
-/** A document, drawn as one. */
+export function Choice({ value }: { value: unknown }) {
+  const found = meanings.find(([word]) => word.test(textOf(value).toLowerCase()))
+  return <Chip label={textOf(value)} color={found ? (found[1] ?? 'default') : 'info'} />
+}
 export const Document = ({ value }: { value: unknown }) => (
-  <Code block>{JSON.stringify(value, null, 2)}</Code>
+  <Box
+    component="pre"
+    sx={{
+      m: 0,
+      p: 3,
+      bgcolor: 'grey.100',
+      borderRadius: 1,
+      overflow: 'auto',
+      ...tokens.typography.code,
+    }}
+  >
+    {JSON.stringify(value, null, 2)}
+  </Box>
 )
-/** A value in the record form: its own text, kept as it was typed. */
 export const Paragraph = ({ value }: { value: unknown }) => (
-  <Text style={{ whiteSpace: 'pre-wrap' }}>{textOf(value)}</Text>
+  <Box component="span" sx={{ whiteSpace: 'pre-wrap' }}>
+    {textOf(value)}
+  </Box>
 )
+export { Mono }

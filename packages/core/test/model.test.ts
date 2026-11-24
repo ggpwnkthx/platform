@@ -5,8 +5,8 @@ import {
   fieldStatements,
   fieldTarget,
   membershipStatement,
-  metadataStatements,
-  parseManifest,
+  metadataRemoval,
+  metadataStatement,
   parseRenderers,
   parseViews,
   policyStatement,
@@ -59,7 +59,8 @@ describe('policies, roles and the model', () => {
       'CREATE INDEX ON "newsroom"."places" ("spot");',
       `COMMENT ON COLUMN "newsroom"."places"."spot" IS 'Where it''s at';`,
     ])
-    expect(statements[3]).toContain(`'{"list":"show","record":"show","filter":"show"}'::jsonb`)
+    // A field that says nothing appears everywhere, and nothing is written of it.
+    expect(statements).toHaveLength(3)
     expect(() => fieldStatements('n', 't', { name: 'id', type: 'text' })).toThrow(
       'made with every collection'
     )
@@ -68,19 +69,16 @@ describe('policies, roles and the model', () => {
     ).toThrow('not a number')
   })
   test('metadata is written by the item’s names, and a null takes a key away', () => {
-    const [set, unset] = metadataStatements(collectionTarget('newsroom', 'articles'), [
-      { key: 'icon', value: 'file-text' },
-      { key: 'color', value: null },
-    ])
-    expect(set).toContain(
+    const articles = collectionTarget('newsroom', 'articles')
+    expect(metadataStatement(articles, 'icon', 'file-text')).toContain(
       `VALUES ('collection', 'newsroom', 'articles', NULL, 'icon', '"file-text"'::jsonb)`
     )
-    expect(unset).toStartWith('DELETE FROM platform.item_metadata')
-    expect(metadataStatements(fieldTarget('n', 't', 'c'), [])).toEqual([])
+    expect(metadataRemoval(articles, 'color')).toStartWith('DELETE FROM platform.item_metadata')
+    expect(metadataStatement(fieldTarget('n', 't', 'c'), 'display_name', 'C')).toContain("'field'")
   })
 })
 
-describe('what fields and manifests say', () => {
+describe('what fields say', () => {
   test('views are read leniently and held to what a situation knows', () => {
     expect(
       parseViews({ list: false, record: 'readonly', filter: 'readonly', export: 'hide', junk: 3 })
@@ -101,25 +99,5 @@ describe('what fields and manifests say', () => {
       list: 'truncate',
       record: { renderer: 'template', options: { template: '» {value}' } },
     })
-  })
-  test('a manifest is strict about what it may say', () => {
-    expect(
-      parseManifest({ workspace: { slug: 'crm' }, collections: [{ name: 'accounts' }] })
-        .workspaces[0]
-    ).toMatchObject({ slug: 'crm', collections: [{ name: 'accounts', fields: [] }] })
-    expect(() => parseManifest({ collections: [] })).toThrow('belong to a workspace')
-    expect(() => parseManifest({ users: [{ name: 'a', password: 'x' }] })).toThrow()
-    expect(() =>
-      parseManifest({
-        workspaces: [
-          {
-            slug: 'w',
-            collections: [
-              { name: 'c', fields: [{ name: 'f', type: 'text', metadata: { views: {} } }] },
-            ],
-          },
-        ],
-      })
-    ).toThrow('views')
   })
 })

@@ -6,12 +6,15 @@ import {
   columnsOf,
   fieldMetadata,
   grants,
+  grantStatement,
+  identity,
   indexFields,
   policies,
   reach,
   roles,
   sqlState,
   transaction,
+  unchanged,
 } from '../src/index.ts'
 import { admin, world } from './world.ts'
 
@@ -58,6 +61,32 @@ describe('access', () => {
     const rules = await policies(await w.as('alice@example.com'), 'newsroom', 'articles')
     expect(rules.map((p) => p.name)).toEqual(['own_articles', 'published_articles'])
     expect(rules.every((p) => p.applies)).toBe(true)
+  })
+
+  test('who may grant and admit is PostgreSQL’s answer, and a grant that changes nothing is refused', async () => {
+    const root = await w.as(admin)
+    await root.query('GRANT SELECT ON newsroom.sections TO "alice@example.com" WITH GRANT OPTION')
+    expect((await identity(root)).admits).toContain('newsroom_writer')
+    const db = await w.as('alice@example.com')
+    expect((await identity(db)).admits).toEqual([])
+    const seen = await catalog(db)
+    const may = (name: string) => seen.tables.find((t) => t.name === name)?.can_grant
+    expect([may('sections'), may('articles')]).toEqual([true, false])
+    expect(seen.schemas.find((s) => s.name === 'newsroom')?.can_grant).toBe(false)
+    const grant = (table: string) =>
+      db.query(
+        grantStatement({
+          schema: 'newsroom',
+          table,
+          privileges: ['SELECT'],
+          grantee: 'bob@example.com',
+        })
+      )
+    // Held WITH GRANT OPTION, the grant is made. Without it PostgreSQL only warns (01007).
+    expect(() => grant('sections').then(unchanged)).not.toThrow()
+    const warned = await grant('articles')
+    expect(warned.notices?.[0]).toMatchObject({ severity: 'WARNING', code: '01007' })
+    expect(() => unchanged(warned)).toThrow('no privileges were granted')
   })
 
   test('only others see the whole role graph when they are operators', async () => {
@@ -123,7 +152,8 @@ describe('the model and its metadata', () => {
     const said = indexFields(await fieldMetadata(db, 'crm', 'visits'))
     expect(said.place?.views).toMatchObject({ list: 'hide', record: 'show' })
     expect(said.place?.renderers).toEqual({ list: { renderer: 'truncate', options: {} } })
-    expect(said.id?.views).toMatchObject({ list: 'show' })
+    // A field that says nothing appears everywhere: only what narrows that is written.
+    expect(said.id?.views).toBeUndefined()
     // New collections have row security and no policies: a grant alone shows no row.
     expect(cat.tables.find((t) => t.name === 'visits')).toMatchObject({
       rls: true,

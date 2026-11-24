@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
-import { catalog, linkedRows, records, relationLabels } from '../src/index.ts'
+import { catalog, linkedRows, records } from '../src/index.ts'
 import { world } from './world.ts'
 
 let w: Awaited<ReturnType<typeof world>>
@@ -85,37 +85,8 @@ describe('a key that points at a column of its own', () => {
     expect(found.total).toBeGreaterThan(0)
   })
 
-  test('a condition on the other side of the key finds the row', async () => {
+  test('a condition finds the records that point at a row by its natural key', async () => {
     const db = await withNaturalKey()
-    const reach = {
-      kind: 'column' as const,
-      schema: 'newsroom',
-      table: 'sections',
-      column: 'section_code',
-      target_column: 'code',
-    }
-    // The condition is on a column of the section the article points at: the row is found
-    // by the column the key points at, and not by the section's id.
-    const found = await records(db, {
-      schema: 'newsroom',
-      table: 'articles',
-      columns: ['id'],
-      filter: {
-        section_code: {
-          op: 'eq',
-          value: 'politics',
-          through: { column: 'name', op: 'eq', value: 'Politics' },
-        },
-      },
-      reaches: { section_code: reach },
-      limit: 50,
-    })
-    expect(found.total).toBeGreaterThan(0)
-  })
-
-  test('the names of the rows a record points at are the names of those rows', async () => {
-    const db = await withNaturalKey()
-    const cat = await catalog(db)
     const page = await records(db, {
       schema: 'newsroom',
       table: 'articles',
@@ -132,10 +103,7 @@ describe('a key that points at a column of its own', () => {
       },
       limit: 5,
     })
-    const labels = await relationLabels(db, cat, 'newsroom', 'articles', page.rows, [
-      'section_code',
-    ])
-    expect(labels.section_code?.politics).toBe('Politics')
+    expect(page.rows.length).toBeGreaterThan(0)
   })
 
   test('a link that points at a code is read by that code', async () => {

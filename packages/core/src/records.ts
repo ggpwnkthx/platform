@@ -1,8 +1,6 @@
-import { labelColumn, relationOf, tableOf } from './catalog/labels.ts'
-import type { Catalog } from './catalog/types.ts'
 import type { Db } from './db.ts'
 import { k, sql } from './sql/kit.ts'
-import { asText, pattern, run } from './records/query.ts'
+import { run } from './records/query.ts'
 import { predicate } from './records/conditions.ts'
 import type { Filter, RelationReach } from './records/query.ts'
 
@@ -93,62 +91,4 @@ export async function deleteRecord(
   let query = k.withSchema(schema).deleteFrom(table).where('id', '=', id)
   if (version !== undefined) query = query.where('version', '=', version)
   return (await run(db, query)).rowCount ?? 0
-}
-
-/** The rows a relation may point at, by the column they are known by. */
-export async function relationOptions(
-  db: Db,
-  schema: string,
-  table: string,
-  label: string | null,
-  search: string,
-  limit = 20,
-  column = 'id'
-) {
-  const shown = label ? asText(label) : asText(column)
-  const term = search.trim()
-  let query = k
-    .withSchema(schema)
-    .selectFrom(table)
-    .select([asText(column).as('id'), shown.as('label')])
-    .orderBy('label')
-    .limit(limit)
-  if (term)
-    query = query.where((eb) =>
-      eb.or([eb(shown, 'ilike', pattern(term, 'any')), eb(asText(column), '=', term)])
-    )
-  return (await run<{ id: string; label: string }>(db, query)).rows
-}
-
-/** The names of the rows a page of records points at, where the reader may read them. */
-export async function relationLabels(
-  db: Db,
-  catalog: Catalog,
-  schema: string,
-  table: string,
-  rows: Record<string, unknown>[],
-  columns: string[]
-) {
-  const out: Record<string, Record<string, string>> = {}
-  for (const column of columns) {
-    const relation = relationOf(catalog, schema, table, column)
-    const ids = [...new Set(rows.map((r) => r[column]).filter((v) => v != null))].map(String)
-    if (!relation || !ids.length) continue
-    const label = labelColumn(catalog, relation.target_schema, relation.target_table)
-    if (!label || !tableOf(catalog, relation.target_schema, relation.target_table)?.can_select)
-      continue
-    // The rows are found by the column the key points at: usually the target's `id`, but a
-    // key made by hand may point at another column, and the row is found by that one.
-    const key = relation.target_column
-    const found = await run<{ id: string; label: string }>(
-      db,
-      k
-        .withSchema(relation.target_schema)
-        .selectFrom(relation.target_table)
-        .select([asText(key).as('id'), asText(label).as('label')])
-        .where(asText(key), 'in', ids)
-    ).catch(() => null) // a row policy or a column grant may refuse: the ids are shown instead
-    if (found) out[column] = Object.fromEntries(found.rows.map((r) => [r.id, r.label]))
-  }
-  return out
 }

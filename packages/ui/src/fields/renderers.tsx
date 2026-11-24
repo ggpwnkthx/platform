@@ -1,9 +1,15 @@
-import { Anchor, Progress, Text } from '@mantine/core'
+import { LinearProgress, Link } from '@mui/material'
 import type { Kind } from '@platform/core'
+import { useRecordContext } from 'react-admin'
 import type { ReactNode } from 'react'
-import type { Field, DrawProps } from './types.ts'
+import tokens from 'virtual:design-tokens'
+import type { DrawProps, Field, Situation } from './types.ts'
 import { Choice, Clipped, Document, grouped, Mono, numberOf, Paragraph, textOf } from './values.tsx'
 
+/**
+ * A renderer draws a value its own way, in one situation, where a field's owner asks for it.
+ * A site registers its own beside these, through `@platform/ui/extensions`.
+ */
 export interface RendererOption {
   name: string
   label: string
@@ -13,13 +19,12 @@ export interface RendererOption {
 export interface Renderer {
   name: string
   label: string
-  /** The kinds of value it fits; none means every kind. */
+  /** The kinds of field it draws; none means any. */
   kinds: Kind[]
   options?: RendererOption[]
   render(props: DrawProps): ReactNode
 }
 const renderers = new Map<string, Renderer>()
-/** Adds a renderer: one of the platform's, or one of the installation's own, from its extensions. */
 export const registerRenderer = (renderer: Renderer) => void renderers.set(renderer.name, renderer)
 export const renderersFor = (field: Field) =>
   [...renderers.values()].filter((r) => !r.kinds.length || r.kinds.includes(field.kind))
@@ -29,9 +34,9 @@ const filled = (template: unknown, value: unknown, fallback: string) =>
     textOf(value)
   )
 const numbers: Kind[] = ['integer', 'number']
+const any: Kind[] = []
 
-/** The renderers the platform offers: a value drawn each of the ways it is worth drawing. */
-export const platformRenderers: Renderer[] = [
+const platformRenderers: Renderer[] = [
   {
     name: 'text',
     label: 'The text, in full',
@@ -47,12 +52,7 @@ export const platformRenderers: Renderer[] = [
       <Clipped text={textOf(value)} length={numberOf(options.length) ?? 20} />
     ),
   },
-  {
-    name: 'paragraph',
-    label: 'The text, as it was typed',
-    kinds: ['text'],
-    render: ({ value }) => <Paragraph value={value} />,
-  },
+  { name: 'paragraph', label: 'The text, as it was typed', kinds: ['text'], render: Paragraph },
   {
     name: 'number',
     label: 'The number, with its thousands marked',
@@ -63,26 +63,9 @@ export const platformRenderers: Renderer[] = [
     name: 'boolean',
     label: 'Yes or no, in words',
     kinds: ['boolean'],
-    render: ({ value }) => (value === null ? '' : value ? 'Yes' : 'No'),
+    render: ({ value }) => (value ? 'Yes' : 'No'),
   },
-  {
-    name: 'moment',
-    label: 'The whole moment',
-    kinds: ['moment', 'date', 'time'],
-    render: ({ value }) => <Mono>{textOf(value)}</Mono>,
-  },
-  {
-    name: 'uuid',
-    label: 'The whole uuid',
-    kinds: ['uuid'],
-    render: ({ value }) => <Mono>{textOf(value)}</Mono>,
-  },
-  {
-    name: 'json',
-    label: 'The document, as a document',
-    kinds: ['json'],
-    render: ({ value }) => <Document value={value} />,
-  },
+  { name: 'json', label: 'The document, as a document', kinds: ['json'], render: Document },
   { name: 'choice', label: 'The value, as the choice it is', kinds: ['text'], render: Choice },
   {
     name: 'link',
@@ -98,20 +81,18 @@ export const platformRenderers: Renderer[] = [
     ],
     render({ value, options }) {
       const href = filled(options.href, value, '{value}')
-      // A value is never trusted to be an address: only http(s) and mailto are links.
-      return /^(https?:|mailto:)/i.test(href) ? (
-        <Anchor href={href} target="_blank" rel="noreferrer">
+      if (!/^(https?:|mailto:)/i.test(href)) return textOf(value)
+      return (
+        <Link href={href} target="_blank" rel="noreferrer">
           {textOf(value)}
-        </Anchor>
-      ) : (
-        textOf(value)
+        </Link>
       )
     },
   },
   {
     name: 'template',
     label: 'The value, in a text of your own',
-    kinds: [],
+    kinds: any,
     options: [
       {
         name: 'template',
@@ -128,53 +109,34 @@ export const platformRenderers: Renderer[] = [
     kinds: numbers,
     options: [{ name: 'max', label: 'The whole', type: 'number', placeholder: '100' }],
     render: ({ value, options }) => (
-      <Progress
-        value={((numberOf(value) ?? 0) / (numberOf(options.max) || 100)) * 100}
+      <LinearProgress
+        variant="determinate"
         title={textOf(value)}
-        miw={80}
+        value={Math.min(100, ((numberOf(value) ?? 0) / (numberOf(options.max) || 100)) * 100)}
+        sx={{ minWidth: tokens.layout['module-bar'] }}
       />
     ),
   },
   {
     name: 'raw',
     label: 'The value, as PostgreSQL wrote it',
-    kinds: [],
+    kinds: any,
     render: ({ value }) => <Mono>{textOf(value)}</Mono>,
   },
 ]
-
 for (const renderer of platformRenderers) registerRenderer(renderer)
 
-/**
- * A value, drawn where it is. The field's own saying picks the renderer for the situation; one
- * the platform does not hold, or that does not fit the kind of value, draws nothing, and the
- * field's type draws the value its own way.
- */
-export function Value({
-  field,
-  value,
-  situation,
-  label,
-}: {
-  field: Field
-  value: unknown
-  situation: 'list' | 'record' | 'filter'
-  label?: string
-}) {
-  if (value === null || value === undefined)
+/** A value as its field draws it in a situation: its renderer where one is said, its type otherwise. */
+export function Value({ field, situation }: { field: Field; situation: Situation }) {
+  const value = useRecordContext()?.[field.name]
+  if ((value === null || value === undefined) && !field.virtual)
     return (
-      <Text span c="dimmed" className="mono">
-        null
-      </Text>
+      <Mono>
+        <span data-null>null</span>
+      </Mono>
     )
   const choice = field.renderers[situation]
   const renderer = choice && renderersFor(field).find((r) => r.name === choice.renderer)
-  const props: DrawProps = { value, field, situation, options: choice?.options ?? {}, label }
-  return (
-    <>
-      {renderer
-        ? renderer.render(props)
-        : field.type.draw[situation === 'list' ? 'list' : 'record'](props)}
-    </>
-  )
+  const props: DrawProps = { value, field, situation, options: choice?.options ?? {} }
+  return <>{renderer ? renderer.render(props) : field.type.draw(props)}</>
 }

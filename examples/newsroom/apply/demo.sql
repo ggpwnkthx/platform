@@ -1,10 +1,8 @@
 -- The demonstration: the records of the example's collections, and the history they would
--- have. It is run once, when the example is first installed, after models.ts and
--- migration.sql, as the server's own superuser.
+-- have. It is run once, after schema.sql, as the server's own superuser.
 --
 -- The rows are written with the triggers off and the stamps set to who would have written
--- them: a session cannot become each author in turn and back (the in-page PostgreSQL cannot
--- hand a session back once it has become someone else), and a trigger would stamp the
+-- them: a session cannot become each author in turn and back, and a trigger would stamp the
 -- installer. Their revisions are recorded afterwards, as the triggers would have recorded
 -- them, at the times the rows say.
 ALTER TABLE newsroom.sections DISABLE TRIGGER USER;

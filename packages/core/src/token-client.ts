@@ -1,4 +1,4 @@
-import type { Db, Result } from './db.ts'
+import type { Db, Notice, Result } from './db.ts'
 
 /**
  * Token logins for node-postgres and the drivers built on it (`pg` in the CLI, Neon's
@@ -54,7 +54,12 @@ export const typeParsers = (types: { getTypeParser(oid: number, format?: string)
 })
 
 type Callback = (error: Error | null, result: unknown) => void
-type PgClient = { query(query: object | string, callback?: Callback): unknown }
+type Heard = (said: Notice) => void
+type PgClient = {
+  query(query: object | string, callback?: Callback): unknown
+  on?(event: 'notice', heard: Heard): unknown
+  off?(event: 'notice', heard: Heard): unknown
+}
 type QueryClass = new (config: {
   text: string
   values: unknown[]
@@ -71,9 +76,15 @@ export function fromPg(client: PgClient): Db {
       new Promise<Result<Row>>((resolve, reject) => {
         const query = new Query({ text, values: params })
         query.requiresPreparation = () => true
-        client.query(query, (error, result) =>
-          error ? reject(error) : resolve(result as Result<Row>)
-        )
+        // What PostgreSQL says while this statement runs: a session runs one at a time.
+        const notices: Notice[] = []
+        const heard: Heard = (said) => notices.push(said)
+        client.on?.('notice', heard)
+        client.query(query, (error, result) => {
+          client.off?.('notice', heard)
+          if (error) reject(error)
+          else resolve(Object.assign(result as Result<Row>, { notices }))
+        })
       }),
     exec: async (text) => client.query(text),
   }

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test'
 import { PGlite } from '@electric-sql/pglite'
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket'
 import { transaction } from '@platform/core'
-import { connect, openSession } from '../src/connect.ts'
+import { connect, openSession } from '../src/session/connect.ts'
 import { relayTo, stopRelays, tokenServer } from './fake.ts'
 
 let fake: Awaited<ReturnType<typeof tokenServer>>

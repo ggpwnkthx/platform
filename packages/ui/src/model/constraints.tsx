@@ -1,192 +1,149 @@
-import { Group, Select, Text } from '@mantine/core'
 import {
-  columnsOf,
+  checkConstraintStatement,
+  columnTypes,
   constraintsOf,
+  deleteRule,
   dropConstraintStatement,
+  dropIndexStatement,
   foreignKeyStatement,
   indexesOf,
-  onDeleteActions,
+  indexStatement,
+  InvalidName,
   type OnDelete,
-  relationOf,
-  tableOf,
+  uniqueConstraintStatement,
 } from '@platform/core'
-import { useState } from 'react'
-import { AddButton } from '../bits/add.tsx'
-import { Change } from '../bits/change.tsx'
-import { Section } from '../bits/page.tsx'
-import type { Field } from '../fields/types.ts'
-import { useSession } from '../session/context.ts'
-import { ConstraintEditor } from './constraint-editor.tsx'
-import { ForeignKeys, UniqueKeys } from './constraint-keys.tsx'
-import { Checks, Indexes, RequiredFields } from './constraint-rules.tsx'
+import { SelectArrayInput, SelectInput, TextInput } from 'react-admin'
+import { useWatch } from 'react-hook-form'
+import { defineKind } from '../data/kinds.ts'
+import { Mono } from '../kit/marks.tsx'
+import { useSession } from '../session/session.ts'
 import {
-  type Change as ConstraintChange,
-  type Draft,
-  emptyDraft,
-  ruleOf,
-  sameColumns,
-  systemish,
-} from './constraint-shared.ts'
+  CollectionInput,
+  choices,
+  mono,
+  onDelete,
+  ownsTable,
+  type Place,
+  required,
+} from './collections.tsx'
 
-/**
- * The constraints of one collection: the keys it points by, the rules its rows are held by,
- * and the ways its rows are found. Every change is shown as the SQL it will run, and runs
- * as the reader, in one transaction.
- */
-export function Constraints({
-  schema,
-  table,
-  fields,
-}: {
-  schema: string
-  table: string
-  fields: Field[]
-}) {
-  const { catalog } = useSession()
-  const constraints = constraintsOf(catalog, schema, table)
-  const indexes = indexesOf(catalog, schema, table)
-  const columns = columnsOf(catalog, schema, table).filter((c) => !systemish(c.name))
-  const relations = catalog.relations.filter((r) => r.schema === schema && r.table === table)
-  const [adding, setAdding] = useState<Draft | null>(null)
-  const [change, setChange] = useState<ConstraintChange | null>(null)
-  const [rule, setRule] = useState<{ name: string; column: string; onDelete: OnDelete } | null>(
-    null
-  )
-  // A key may point at a collection of another workspace: every collection the reader may
-  // use is offered, and the one it belongs to is named with it.
-  const tables = catalog.tables
-    .filter((t) => t.kind !== 'v' && t.schema !== 'platform')
-    .map((t) => ({ schema: t.schema, name: t.name }))
-  // Only the owner of a collection may change its constraints: PostgreSQL asks the owner
-  // for every one of these statements.
-  const canAlter = tableOf(catalog, schema, table)?.can_alter ?? false
-  // An index that backs a key is the key's own: it is dropped with it, and is not listed twice.
-  const backed = new Set(
-    constraints
-      .filter((c) => c.type === 'u')
-      .flatMap((c) => indexes.filter((i) => i.unique && sameColumns(i.columns, c.columns)))
-  )
-  const plain = indexes.filter((i) => !i.primary && !backed.has(i))
-
-  return (
-    <>
-      <Group justify="flex-end" mb="sm">
-        {canAlter && <AddButton onClick={() => setAdding(emptyDraft())}>New constraint</AddButton>}
-      </Group>
-      <Section
-        title="Foreign keys"
-        note="The rows this collection points at. What happens to a row when the one it points at goes is set on the key."
-      >
-        <ForeignKeys
-          schema={schema}
-          table={table}
-          constraints={constraints}
-          relations={relations}
-          canAlter={canAlter}
-          onChange={setChange}
-          onRule={(key, relation) =>
-            setRule({
-              name: key.name,
-              column: relation.column,
-              onDelete: ruleOf(relation.on_delete),
-            })
-          }
-        />
-      </Section>
-
-      <Section title="Unique keys" note="The rows a combination of fields is held once by.">
-        <UniqueKeys
-          schema={schema}
-          table={table}
-          constraints={constraints}
-          canAlter={canAlter}
-          onChange={setChange}
-        />
-      </Section>
-
-      <Section title="Checks" note="The expression every row is held by.">
-        <Checks
-          schema={schema}
-          table={table}
-          constraints={constraints}
-          canAlter={canAlter}
-          onChange={setChange}
-        />
-      </Section>
-
-      <Section
-        title="Required fields"
-        note="The fields a row may not leave empty. PostgreSQL refuses the change while any row is empty."
-      >
-        <RequiredFields
-          schema={schema}
-          table={table}
-          columns={columns}
-          canAlter={canAlter}
-          onChange={setChange}
-        />
-      </Section>
-
-      <Section
-        title="Indexes"
-        note="The ways the rows of this collection are found without a scan. A key's own index is dropped with the key."
-      >
-        <Indexes schema={schema} indexes={plain} canAlter={canAlter} onChange={setChange} />
-      </Section>
-
-      {adding && (
-        <ConstraintEditor
-          schema={schema}
-          table={table}
-          fields={fields}
-          tables={tables}
-          draft={adding}
-          onChange={setAdding}
-          onClose={() => setAdding(null)}
-        />
-      )}
-      {change && (
-        <Change
-          title={change.title}
-          opened
-          danger={change.danger}
-          onClose={() => setChange(null)}
-          statements={() => change.statements}
-        />
-      )}
-      {rule && (
-        <Change
-          title={`What happens to ${rule.column}`}
-          opened
-          onClose={() => setRule(null)}
-          statements={() => {
-            const relation = relationOf(catalog, schema, table, rule.column)
-            if (!relation) throw new Error('That key is not there any more.')
-            return [
-              dropConstraintStatement(schema, table, rule.name),
-              foreignKeyStatement(
-                schema,
-                table,
-                rule.column,
-                { schema: relation.target_schema, table: relation.target_table },
-                rule.onDelete,
-                rule.name
-              ),
-            ]
-          }}
-        >
-          <Select
-            label="When the row it points at goes"
-            allowDeselect={false}
-            data={Object.keys(onDeleteActions)}
-            value={rule.onDelete}
-            onChange={(next) => setRule({ ...rule, onDelete: (next as OnDelete) ?? 'restrict' })}
-          />
-          <Text fz="xs" c="dimmed">
-            The key is dropped and made again with the new rule: the rows are left as they are.
-          </Text>
-        </Change>
-      )}
-    </>
-  )
+/** The keys and rules of a collection: its constraints and its indexes. */
+interface ConstraintRow {
+  name: string
+  type: string
+  definition: string
+  index: boolean
 }
+const constraintTypes = [
+  { id: 'unique', name: 'Unique: no two rows hold the same' },
+  { id: 'check', name: 'Check: every row passes a test' },
+  { id: 'foreign', name: 'Foreign key: the field points at a row' },
+  { id: 'index', name: 'Index: the rows are found without a scan' },
+]
+const typeWords: Record<string, string> = {
+  p: 'Primary key',
+  u: 'Unique',
+  c: 'Check',
+  f: 'Foreign key',
+  x: 'Exclusion',
+}
+export const constraints = defineKind<
+  ConstraintRow,
+  Place,
+  { type: string; columns: string[]; expression: string; target: string; on_delete: OnDelete }
+>({
+  name: 'constraints',
+  title: 'Keys and rules',
+  note: 'The constraints and indexes PostgreSQL holds the collection to.',
+  noun: 'key or rule',
+  empty: 'This collection holds no key and no rule.',
+  async read(_db, { schema, table }, { catalog }) {
+    const held = constraintsOf(catalog, schema, table)
+    const backing = new Set(held.map((c) => c.name))
+    return [
+      ...held.map((c) => ({
+        name: c.name,
+        type: typeWords[c.type] ?? c.type,
+        definition: c.definition + (c.on_delete ? ` — ${deleteRule(c.on_delete)}` : ''),
+        index: false,
+      })),
+      ...indexesOf(catalog, schema, table)
+        .filter((i) => !backing.has(i.name))
+        .map((i) => ({
+          name: i.name,
+          type: i.unique ? 'Unique index' : 'Index',
+          definition: `(${i.columns.join(', ')})`,
+          index: true,
+        })),
+    ]
+  },
+  key: (row) => row.name,
+  columns: [
+    { source: 'name', label: 'Name', render: (row) => <Mono>{row.name}</Mono> },
+    { source: 'type', label: 'Kind' },
+    {
+      source: 'definition',
+      label: 'As PostgreSQL holds it',
+      render: (row) => <Mono title={row.definition}>{row.definition}</Mono>,
+    },
+  ],
+  may: ownsTable,
+  defaults: () => ({ type: 'unique', columns: [], on_delete: 'restrict' }),
+  Inputs({ where }) {
+    const { catalog } = useSession()
+    const type = useWatch({ name: 'type' })
+    const fields = catalog.columns
+      .filter((c) => c.schema === where.schema && c.table === where.table)
+      .map((c) => c.name)
+    return (
+      <>
+        <SelectInput source="type" label="Kind" choices={constraintTypes} helperText={false} />
+        {type !== 'check' && (
+          <SelectArrayInput
+            source="columns"
+            label={type === 'foreign' ? 'Field' : 'Fields'}
+            choices={choices(fields)}
+            {...mono}
+          />
+        )}
+        {type === 'check' && (
+          <TextInput source="expression" label="The test, in SQL" multiline minRows={2} {...mono} />
+        )}
+        {type === 'foreign' && (
+          <CollectionInput source="target" label="Points at" schema={where.schema} />
+        )}
+        {type === 'foreign' && (
+          <SelectInput
+            source="on_delete"
+            label="When that row is deleted"
+            choices={onDelete}
+            helperText={false}
+          />
+        )}
+      </>
+    )
+  },
+  create(form, { schema, table }) {
+    const columns = form.columns ?? []
+    if (form.type === 'check')
+      return [checkConstraintStatement(schema, table, form.expression ?? '')]
+    if (form.type === 'index') return [indexStatement(schema, table, columns)]
+    if (form.type === 'unique') return [uniqueConstraintStatement(schema, table, columns)]
+    if (columns.length !== 1)
+      throw new InvalidName('A relation is one field that points at one row.')
+    const target = required(form.target, 'Choose the collection the field points at.')
+    return [
+      foreignKeyStatement(schema, table, columns[0]!, { schema, table: target }, form.on_delete),
+    ]
+  },
+  remove: (row, { schema, table }) => [
+    row.index
+      ? dropIndexStatement(schema, row.name)
+      : dropConstraintStatement(schema, table, row.name),
+  ],
+})
+
+export const fieldTypeChoices = [
+  ...Object.keys(columnTypes).map((id) => ({ id, name: id })),
+  { id: 'relation', name: 'relation: points at a row of another collection' },
+]

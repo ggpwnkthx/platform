@@ -1,22 +1,20 @@
 import { PGlite } from '@electric-sql/pglite'
-import { applyFolder, type Db, deploymentVariables, ident, transaction } from '../src/index.ts'
+import { type Db, ident } from '../src/index.ts'
 import { fromPglite, pgliteParsers } from '../src/pglite.ts'
-import models from '../../../examples/newsroom/apply/models.ts'
 
 const text = (path: string) => Bun.file(new URL(`../../../${path}`, import.meta.url)).text()
-export const admin = deploymentVariables().admin
+export const admin = 'admin@example.com'
 
 /** The newsroom example installed in a PostgreSQL of its own, in memory, as a deployment installs it. */
 export async function world() {
   const pg = await PGlite.create({ parsers: pgliteParsers })
   const db = fromPglite(pg)
-  await pg.exec(await text('migrations/0001_platform.sql'))
-  const applied = {
-    models,
-    migration: await text('examples/newsroom/apply/migration.sql'),
-    demo: await text('examples/newsroom/apply/demo.sql'),
-  }
-  const first = await transaction(db, () => applyFolder(db, applied))
+  for (const file of [
+    'migrations/0001_platform.sql',
+    'examples/newsroom/apply/schema.sql',
+    'examples/newsroom/apply/demo.sql',
+  ])
+    await pg.exec(await text(file))
   /** PGlite holds one session: become a person the way the dev mode does. */
   const as = async (role: string): Promise<Db> => {
     await pg.query('RESET SESSION AUTHORIZATION')
@@ -31,5 +29,5 @@ export async function world() {
     await pg.query(`SET SESSION AUTHORIZATION ${ident(opened)}`)
     return db
   }
-  return { pg, db, as, root, applied, first }
+  return { pg, db, as, root }
 }

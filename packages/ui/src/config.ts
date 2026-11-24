@@ -15,51 +15,28 @@ export const defaultRuntimeConfig: RuntimeConfig = {
   database: 'platform',
   statementTimeoutMs: 15000,
 }
-/** The deployment's answer: the platform's defaults, then the environment it runs in. */
-export const runtimeConfigFrom = (
-  env: Record<string, string | undefined>,
-  relay?: string
-): RuntimeConfig => ({
-  issuer: (env.PLATFORM_ISSUER ?? env.OIDC_ISSUER ?? defaultRuntimeConfig.issuer).replace(
-    /\/+$/,
-    ''
-  ),
+/** The deployment's answer: the platform's defaults, then the environment it is built in. */
+export const runtimeConfigFrom = (env: Record<string, string | undefined>): RuntimeConfig => ({
+  issuer: (env.PLATFORM_ISSUER ?? defaultRuntimeConfig.issuer).replace(/\/+$/, ''),
   clientId: env.PLATFORM_CLIENT_ID ?? defaultRuntimeConfig.clientId,
   claim: env.PLATFORM_CLAIM ?? defaultRuntimeConfig.claim,
-  relay: relay ?? env.PLATFORM_RELAY_URL ?? defaultRuntimeConfig.relay,
+  relay: env.PLATFORM_RELAY_URL ?? defaultRuntimeConfig.relay,
   database: env.PLATFORM_DATABASE_NAME ?? defaultRuntimeConfig.database,
   statementTimeoutMs: Number(
     env.PLATFORM_STATEMENT_TIMEOUT_MS ?? defaultRuntimeConfig.statementTimeoutMs
   ),
 })
 
-/** The pages of the interface. Each is written out as its own file, so a reload lands on one. */
-export const pages = {
-  '/': 'Sign in',
-  '/data': 'Data',
-  '/data/records': 'Records',
-  '/data/item': 'Record',
-  '/data/model': 'Data model',
-  '/data/model/collection': 'Collection',
-  '/data/model/new': 'New collection',
-  // The paths the interface had before the data module: a bookmark of one still lands on a page.
-  '/content': 'Data',
-  '/content/records': 'Records',
-  '/content/item': 'Record',
-  '/model': 'Data model',
-  '/model/collection': 'Collection',
-  '/model/new': 'New collection',
-  '/workspace/new': 'New workspace',
-  '/workspace/settings': 'Workspace settings',
-  '/access': 'Users and groups',
-  '/access/role': 'Role',
-  // The access pages that gave way: a workspace keeps its own permissions, and a collection
-  // its own policies. A bookmark of either still lands on a page.
-  '/access/grants': 'Workspace permissions',
-  '/access/policies': 'Data model',
-  '/activity': 'Activity',
-  '/sql': 'SQL',
-} as const
+/** The configuration the page was published with, with the relay as a WebSocket address. */
+export async function loadConfig(): Promise<RuntimeConfig> {
+  const response = await fetch('/config.json', { cache: 'no-store' })
+  if (!response.ok) throw new Error('The interface has no configuration: config.json is missing.')
+  const config = { ...defaultRuntimeConfig, ...(await response.json()) } as RuntimeConfig
+  const relay = new URL(config.relay, location.href)
+  if (!/^wss?:$/.test(relay.protocol))
+    relay.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return { ...config, issuer: config.issuer.replace(/\/+$/, ''), relay: relay.toString() }
+}
 
 /** The headers a CDN serves the site with: the pages reach the issuer and the relay, nothing else. */
 export function headersFile(config: RuntimeConfig, inPage = false): string {
@@ -75,11 +52,12 @@ export function headersFile(config: RuntimeConfig, inPage = false): string {
       "default-src 'self'",
       // The in-page PostgreSQL of the dev mode is WebAssembly; the published interface has none.
       `script-src 'self'${inPage ? " 'wasm-unsafe-eval'" : ''}`,
-      // The component library styles elements inline.
+      // The component library writes its styles into the document as it draws.
       "style-src 'self' 'unsafe-inline'",
       "font-src 'self'",
-      "img-src 'self' data:",
+      "img-src 'self'",
       `connect-src 'self' ${origin(config.issuer)} ${origin(config.relay)}`.trim(),
+      "object-src 'none'",
       "frame-ancestors 'none'",
       "base-uri 'none'",
       "form-action 'self'",

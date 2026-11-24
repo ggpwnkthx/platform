@@ -1,9 +1,6 @@
-node_modules/
-*.local
-coverage/
-.dist/
-platform-threat-model.md
-/.*
-!/.github
-!/.fallowrc.jsonc
-!/.impeccable
+.dist
+.dist-published
+node_modules
+test-results
+playwright-report
+.env

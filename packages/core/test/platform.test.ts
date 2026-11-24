@@ -1,7 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
 import {
   activity,
-  applyFolder,
   catalog,
   choicesOf,
   columnsOf,
@@ -11,10 +10,8 @@ import {
   insertRecord,
   record,
   records,
-  relationLabels,
   sqlState,
   tablesIn,
-  transaction,
   updateRecord,
 } from '../src/index.ts'
 import { admin, world } from './world.ts'
@@ -32,18 +29,29 @@ const refused = async (work: Promise<unknown>) =>
   )
 
 describe('the example, applied', () => {
-  test('installs, and a second apply changes nothing', async () => {
-    expect(w.first.changes.length).toBeGreaterThan(20)
-    const again = await transaction(await w.root(), () => applyFolder(w.db, w.applied))
-    expect(again.changes).toEqual([])
-    expect(again.notes.join(' ')).toContain('demo.sql was not run')
+  test('installs from SQL files: the migration, the schema, the demonstration', async () => {
+    const held = await catalog(await w.root())
+    expect(tablesIn(held, 'newsroom').map((t) => t.name)).toEqual([
+      'article_tags',
+      'articles',
+      'corrections',
+      'sections',
+      'tags',
+    ])
+    // The platform's own views of the catalog are questions, not collections.
+    expect(tablesIn(held, 'platform').map((t) => t.name)).toEqual([
+      'activity',
+      'installation',
+      'item_metadata',
+      'revisions',
+    ])
   })
 
   test('a person is their own PostgreSQL role', async () => {
     const me = await identity(await w.as('alice@example.com'))
     expect(me).toMatchObject({
       username: 'alice@example.com',
-      platform_version: '2.3.0',
+      platform_version: '3.0.0',
       is_operator: false,
     })
     expect((await identity(await w.as(admin))).is_operator).toBe(true)
@@ -94,9 +102,6 @@ describe('records', () => {
     expect(page.rows).toHaveLength(5)
     const titles = page.rows.map((r) => String(r.title))
     expect(titles).toEqual([...titles].sort().reverse())
-    const cat = await catalog(db)
-    const labels = await relationLabels(db, cat, 'newsroom', 'articles', page.rows, ['section'])
-    expect(Object.values(labels.section ?? {}).length).toBeGreaterThan(0)
   })
 
   test('a withheld column is refused by PostgreSQL, not hidden by the page', async () => {

@@ -55,6 +55,26 @@ export interface Held {
   whole: boolean
   columns: string[]
 }
+/** What a role holds on a collection by the ACL itself: on the whole of it, or on named fields. */
+export function heldBy(
+  grants: readonly {
+    table: string | null
+    column: string | null
+    grantee: string
+    privilege: string
+  }[],
+  table: string,
+  role: string
+): Record<string, Held> {
+  const held: Record<string, Held> = {}
+  const named = (grantee: string) => grantee.toLowerCase() === role.toLowerCase()
+  for (const grant of grants.filter((g) => g.table === table && named(g.grantee))) {
+    held[grant.privilege] ??= { whole: false, columns: [] }
+    if (grant.column) held[grant.privilege]!.columns.push(grant.column)
+    else held[grant.privilege]!.whole = true
+  }
+  return held
+}
 /** What is asked for one privilege: none of it, the whole collection, or these fields. */
 export type Wanted = 'none' | 'all' | string[]
 export interface GrantChange {

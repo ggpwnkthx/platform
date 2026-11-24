@@ -4,6 +4,7 @@ export interface SchemaInfo {
   kind: 'user' | 'system'
   can_create: boolean
   can_alter: boolean
+  can_grant: boolean
 }
 export interface TableInfo {
   schema: string
@@ -20,6 +21,7 @@ export interface TableInfo {
   can_delete: boolean
   can_truncate: boolean
   can_alter: boolean
+  can_grant: boolean
 }
 export interface ColumnInfo {
   schema: string
@@ -89,6 +91,8 @@ export interface ConstraintInfo {
    * at one collection too, and is read as a constraint rather than as a relation. */
   target_schema?: string | null
   target_table?: string | null
+  /** For a foreign key: the column of the target its first column points at. */
+  target_column?: string | null
   /** For a foreign key: the letter PostgreSQL keeps the delete rule by. */
   on_delete?: string | null
 }
@@ -117,15 +121,7 @@ export interface Identity {
   server_version: string
   can_create_workspace: boolean
   is_operator: boolean
-}
-export const emptyCatalog: Catalog = {
-  schemas: [],
-  tables: [],
-  columns: [],
-  relations: [],
-  constraints: [],
-  types: [],
-  indexes: [],
-  joins: [],
+  /** The roles the caller may admit members to. */
+  admits: string[]
 }
 export const systemSchema = 'platform'

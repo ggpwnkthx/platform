@@ -1,4 +1,4 @@
-import { connect, type Socket } from 'node:net'
+import { connect, isIP, type Socket } from 'node:net'
 import { connect as connectTls } from 'node:tls'
 import { relaySettingsFromEnv } from './settings.ts'
 import { MAX_STARTUP, startupPacket } from './startup.ts'
@@ -54,7 +54,14 @@ export function startRelay(options: RelayOptions) {
   const { host, port, tls } = options.upstream
   const upstream = () =>
     tls
-      ? connectTls({ host, port, ALPNProtocols: ['postgresql'], servername: host, ...tls })
+      ? connectTls({
+          host,
+          port,
+          ALPNProtocols: ['postgresql'],
+          // A certificate is checked against a name; an address is not one to ask for.
+          ...(isIP(host) ? {} : { servername: host }),
+          ...tls,
+        })
       : connect({ host, port })
   const sessionsPerAddress = options.sessionsPerAddress ?? 0
   const sessionsPerRole = options.sessionsPerRole ?? 0
@@ -117,12 +124,14 @@ export function startRelay(options: RelayOptions) {
           socket.on('data', (chunk: Buffer) => {
             if (ws.sendBinary(chunk) === -1) socket.pause()
           })
+          socket.on('drain', () => ws.resume())
           socket.on('error', () => ws.close())
           socket.on('close', () => ws.close())
           socket.write(held)
           return
         }
-        ws.data.socket.write(bytes)
+        // Browser to PostgreSQL: stop reading the WebSocket while the socket is full.
+        if (!ws.data.socket.write(bytes)) ws.pause()
       },
       drain: (ws) => void ws.data.socket?.resume(),
       close: (ws) => {

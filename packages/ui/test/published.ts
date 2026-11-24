@@ -8,25 +8,20 @@
  */
 import { PGlite } from '@electric-sql/pglite'
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket'
-import { applyFolder, transaction } from '@platform/core'
-import { fromPglite, pgliteParsers } from '@platform/core/pglite'
+import { pgliteParsers } from '@platform/core/pglite'
 import { startRelay } from '@platform/relay'
-import models from '../../../examples/newsroom/apply/models.ts'
 
 const text = (path: string) => Bun.file(new URL(`../../../${path}`, import.meta.url)).text()
 const site = `http://localhost:${process.env.PLATFORM_SITE_PORT ?? 5180}`
 const issuer = 'http://localhost:5560'
 
 const pg = await PGlite.create({ parsers: pgliteParsers })
-await pg.exec(await text('migrations/0001_platform.sql'))
-const db = fromPglite(pg)
-await transaction(db, async () =>
-  applyFolder(db, {
-    models,
-    migration: await text('examples/newsroom/apply/migration.sql'),
-    demo: await text('examples/newsroom/apply/demo.sql'),
-  })
-)
+for (const file of [
+  'migrations/0001_platform.sql',
+  'examples/newsroom/apply/schema.sql',
+  'examples/newsroom/apply/demo.sql',
+])
+  await pg.exec(await text(file))
 await new PGLiteSocketServer({ db: pg, port: 54420, host: '127.0.0.1', maxConnections: 10 }).start()
 const relay = startRelay({
   upstream: { host: '127.0.0.1', port: 54420 },
@@ -34,12 +29,31 @@ const relay = startRelay({
   allowedOrigins: [site],
 })
 
-const jwt = (claims: object) =>
-  `${btoa('{"alg":"none"}')}.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.sig`
+// The token is signed as an issuer signs one, with a key made for the occasion.
+const key = await crypto.subtle.generateKey(
+  {
+    name: 'RSASSA-PKCS1-v1_5',
+    modulusLength: 2048,
+    publicExponent: new Uint8Array([1, 0, 1]),
+    hash: 'SHA-256',
+  },
+  false,
+  ['sign', 'verify']
+)
+const part = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url')
+const jwt = async (claims: object) => {
+  const signed = `${part({ alg: 'RS256', typ: 'JWT' })}.${part(claims)}`
+  const signature = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5',
+    key.privateKey,
+    Buffer.from(signed)
+  )
+  return `${signed}.${Buffer.from(signature).toString('base64url')}`
+}
 const cors = { 'access-control-allow-origin': site }
 Bun.serve({
   port: 5560,
-  fetch(request) {
+  async fetch(request) {
     const url = new URL(request.url)
     if (url.pathname === '/.well-known/openid-configuration')
       return Response.json(
@@ -56,7 +70,8 @@ Bun.serve({
       {
         token_type: 'Bearer',
         expires_in: 3600,
-        id_token: jwt({ ...claims, iat: now, exp: now + 3600 }),
+        access_token: 'opaque',
+        id_token: await jwt({ ...claims, iat: now, exp: now + 3600 }),
       },
       { headers: cors }
     )
