@@ -17,5 +17,5 @@
     "jsx": "react-jsx"
   },
   "include": ["packages/*/src", "packages/*/test", "packages/ui/vite.config.ts", "examples"],
-  "exclude": ["node_modules", "packages/ui/dist", "examples/*/.dist"]
+  "exclude": ["node_modules", "**/.dist"]
 }

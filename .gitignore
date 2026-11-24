@@ -1,8 +1,7 @@
 node_modules/
 *.local
 coverage/
-packages/ui/dist/
-examples/newsroom/.dist/
+.dist/
 platform-threat-model.md
 /.*
 !/.github

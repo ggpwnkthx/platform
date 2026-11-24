@@ -50,25 +50,26 @@ export async function readApplied(dir: string): Promise<Applied> {
 }
 
 export interface UiOptions {
-  dir?: string
+  /** The site's folder, which holds platform.json: the interface is only ever built as a site. */
+  dir: string
   production?: boolean
   relay?: string
   port?: number
 }
 /**
- * The site of a folder — or the platform's own interface where there is none. A folder that
- * applies something is built as the dev mode, with PostgreSQL in the page, unless the
- * published interface is asked for.
+ * The site of a folder, built into the folder's `.dist`. A folder that applies something is
+ * built as the dev mode, with PostgreSQL in the page, unless the published interface is asked
+ * for. A folder whose platform.json is `{}` is the platform's interface and nothing more.
  */
 async function site(options: UiOptions, relayUrl?: string) {
   const { runtimeConfigFrom } = await import('@platform/ui/config')
-  const files = options.dir ? siteFiles(options.dir) : null
-  if (options.dir && !files) throw new Error(`There is no platform.json in ${resolve(options.dir)}`)
+  const files = siteFiles(options.dir)
+  if (!files) throw new Error(`There is no platform.json in ${resolve(options.dir)}`)
   return {
-    files: files ?? undefined,
-    inPage: !!files?.apply && !options.production && !options.relay,
+    files,
+    inPage: !!files.apply && !options.production && !options.relay,
     runtime: runtimeConfigFrom(process.env, relayUrl),
-    outDir: options.dir ? join(resolve(options.dir), '.dist') : join(ROOT, 'packages/ui/dist'),
+    outDir: join(resolve(options.dir), '.dist'),
   }
 }
 export async function buildUi(options: UiOptions): Promise<string> {

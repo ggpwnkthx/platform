@@ -1,3 +1,4 @@
 [install]
 exact = true
-
+# One node_modules, at the root: no per-package node_modules of symlinks.
+linker = "hoisted"

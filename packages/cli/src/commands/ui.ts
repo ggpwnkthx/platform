@@ -8,8 +8,8 @@ export const ui = {
     {
       dir: {
         type: 'string',
-        description:
-          'The directory that holds platform.json; without one, the published interface is built into packages/ui/dist',
+        description: 'The directory that holds platform.json; the site is written to its .dist',
+        required: true,
       },
       production: {
         type: 'boolean',
@@ -22,7 +22,11 @@ export const ui = {
   dev: command(
     'Serve the site, rebuilding it on every change. A folder that applies something runs PostgreSQL inside the page.',
     {
-      dir: { type: 'string', description: 'The directory that holds platform.json' },
+      dir: {
+        type: 'string',
+        description: 'The directory that holds platform.json',
+        required: true,
+      },
       relay: {
         type: 'string',
         description:

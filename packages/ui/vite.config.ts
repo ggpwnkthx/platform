@@ -1,9 +1,14 @@
 import { copyFileSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import react from '@vitejs/plugin-react'
-import { build, createServer, defineConfig, type InlineConfig, type Plugin } from 'vite'
-import { headersFile, pages, type RuntimeConfig, runtimeConfigFrom } from './src/config.ts'
+import { build, createServer, type InlineConfig, type Plugin } from 'vite'
+import { headersFile, pages, type RuntimeConfig } from './src/config.ts'
 
+/**
+ * The interface is never built on its own: a site — a folder with a platform.json — builds it,
+ * through `buildSite` and `devSite`, into that folder's `.dist`. This file exports no Vite
+ * config of its own, so `vite` run here has nothing to build.
+ */
 const root = import.meta.dirname
 const migrations = join(root, '../../migrations/0001_platform.sql')
 
@@ -77,6 +82,8 @@ export const siteConfig = (options: SiteOptions): InlineConfig => ({
   root,
   configFile: false,
   plugins: [react(), platformSite(options)],
+  // The one node_modules is the workspace's: Vite's cache goes there, not beside this package.
+  cacheDir: join(root, '../../node_modules/.vite'),
   // PGlite finds its own WebAssembly beside itself; pre-bundling would move it away.
   optimizeDeps: { exclude: ['@electric-sql/pglite'] },
   // Nothing is inlined as a data: address: the site's own headers let the pages load 'self' alone.
@@ -97,10 +104,6 @@ export const siteConfig = (options: SiteOptions): InlineConfig => ({
     },
   },
 })
-
-export default defineConfig(
-  siteConfig({ runtime: runtimeConfigFrom(process.env), outDir: join(root, 'dist') })
-)
 
 /** Writes a site out as the files a CDN is given. */
 export const buildSite = (options: SiteOptions) => build(siteConfig(options))

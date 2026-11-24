@@ -75,7 +75,7 @@ export const settings: Setting[] = [
     name: 'PLATFORM_SITE',
     on: both,
     ownSite: true,
-    question: 'Folder of the site to deploy (empty for the platform’s own interface)',
+    question: 'Folder of the site to deploy (empty for none)',
     fallback: '',
     check: folder,
   },

@@ -25,12 +25,18 @@ export async function local(action: string, args: string[]): Promise<number> {
     PLATFORM_RELAY_URL: at.relay,
     PLATFORM_PUBLIC_URL: at.site,
   }
-  const buildSite = () => {
+  const buildSite = (dir: string) => {
     Object.assign(process.env, siteEnv)
-    return buildUi({ dir: at.siteFolder ?? undefined, production: true })
+    return buildUi({ dir, production: true })
   }
   if (action === 'ui') {
-    const out = await buildSite()
+    if (!at.siteFolder)
+      throw new Error(
+        a.PLATFORM_PUBLIC_URL
+          ? `The site is ${a.PLATFORM_PUBLIC_URL}, built where it lives: there is none to build here.`
+          : `There is no site to build: name its folder as PLATFORM_SITE in ${ENV_FILE}.`
+      )
+    const out = await buildSite(at.siteFolder)
     console.log(
       `The site is built in ${out}: publish that folder. Its config.json points the pages at ${at.relay} and ${at.issuer}.`
     )
@@ -69,9 +75,7 @@ export async function local(action: string, args: string[]): Promise<number> {
         })
       : '',
     PLATFORM_SITE_FOLDER: at.siteFolder ?? join(ROOT, 'examples'),
-    PLATFORM_SITE_DIST: at.siteFolder
-      ? join(at.siteFolder, '.dist')
-      : join(ROOT, 'packages/ui/dist'),
+    PLATFORM_SITE_DIST: at.siteFolder ? join(at.siteFolder, '.dist') : '',
   }
   const compose = (more: string[], profile: string[] = []) => [
     ...tool,
@@ -143,14 +147,15 @@ export async function local(action: string, args: string[]): Promise<number> {
     async () =>
       (await fetch(`${at.issuer.replace(a.PLATFORM_IDP_HOST!, a.PLATFORM_API_HOST!)}/health`)).ok
   )
-  if (!a.PLATFORM_PUBLIC_URL) {
+  if (at.siteFolder) {
     say.log.step('Building the site')
-    await buildSite()
+    await buildSite(at.siteFolder)
     await step('Serving the site', run(['up', '-d', 'site']))
-  }
+  } else if (!a.PLATFORM_PUBLIC_URL)
+    say.log.warn(`No site is deployed: name its folder as PLATFORM_SITE in ${ENV_FILE}.`)
   say.note(
     [
-      ...(a.PLATFORM_PUBLIC_URL ? [] : [`Site        ${at.site}`]),
+      ...(at.siteFolder ? [`Site        ${at.site}`] : []),
       `Issuer      ${at.issuer}`,
       `Relay       ${at.relay}`,
       `PostgreSQL  ${at.database}:${a.POSTGRES_PORT}`,
@@ -163,7 +168,7 @@ export async function local(action: string, args: string[]): Promise<number> {
     ].join('\n'),
     'The stack is running'
   )
-  say.outro(a.PLATFORM_PUBLIC_URL ? 'The stack is running' : `The site is at ${at.site}`)
+  say.outro(at.siteFolder ? `The site is at ${at.site}` : 'The stack is running')
   return 0
 }
 

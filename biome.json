@@ -9,8 +9,7 @@
       "!**/.fallow",
       "!**/deploy/tofu/**/.terraform",
       "!DESIGN.md",
-      "!packages/ui/dist",
-      "!examples/newsroom/.dist",
+      "!**/.dist",
       "!**/.impeccable",
       "!deploy/dex/password.html",
       "!fallow-baselines"

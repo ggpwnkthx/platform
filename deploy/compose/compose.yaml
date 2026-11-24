@@ -111,8 +111,9 @@ services:
     image: platform-cli:local
     command: [ui, serve, --dir=/site, --port=8080]
     volumes:
-      # The files `ui build` wrote on this machine, read and never written.
-      - ${PLATFORM_SITE_DIST:-../../packages/ui/dist}:/site:ro
+      # The files `ui build` wrote into the site's folder on this machine, read and never
+      # written. A deployment that chose no site never starts this service.
+      - ${PLATFORM_SITE_DIST:-./no-site}:/site:ro
     # Not published: the edge, below, is how the site is reached, by its own name.
     restart: unless-stopped
     read_only: true
