@@ -23,6 +23,7 @@ import { Link, useLocation } from 'react-router-dom'
 import tokens from 'virtual:design-tokens'
 import { useSession, useSigned } from '../session/session.ts'
 import { iconSize } from './marks.tsx'
+import { HeaderRight, HeaderSlot } from './Page.tsx'
 import { Pane } from './Pane.tsx'
 import { useWorkspace } from './place.ts'
 
@@ -57,6 +58,7 @@ function Framed({ children }: { children: ReactNode }) {
   const wide = useMediaQuery((theme) => theme.breakpoints.up('md'))
   const [menu, setMenu] = useState(false)
   const [who, setWho] = useState<HTMLElement | null>(null)
+  const [slot, setSlot] = useState<HTMLElement | null>(null)
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new address closes the drawer
   useEffect(() => setMenu(false), [pathname])
   const pane = /^\/(roles|sql)/.test(pathname) ? null : <Pane ws={ws} />
@@ -158,7 +160,11 @@ function Framed({ children }: { children: ReactNode }) {
             zIndex: 2,
             minHeight: layout.header,
             px: { xs: 4, md: 8 },
+            py: { xs: 3, md: 0 },
             display: 'flex',
+            // Under the pane's breakpoint the title keeps the first row; what the page is for
+            // doing takes the second.
+            flexWrap: { xs: 'wrap', md: 'nowrap' },
             alignItems: 'center',
             gap: 3,
             borderBottom: 1,
@@ -171,13 +177,18 @@ function Framed({ children }: { children: ReactNode }) {
             variant="h2"
             sx={{
               display: 'flex',
+              flex: 1,
+              minWidth: 0,
               '& span:not(.MuiBox-root)': { display: 'flex', flex: 1, minWidth: 0 },
               '& > span:not(:has(.MuiBox-root))': { display: 'none' },
             }}
           />
+          <HeaderRight onSlot={setSlot} />
         </Box>
         <Box sx={{ px: { xs: 4, md: 8 }, pt: 6, pb: 12 }}>
-          <Suspense fallback={<Loading />}>{children}</Suspense>
+          <HeaderSlot.Provider value={slot}>
+            <Suspense fallback={<Loading />}>{children}</Suspense>
+          </HeaderSlot.Provider>
         </Box>
       </Box>
     </Box>

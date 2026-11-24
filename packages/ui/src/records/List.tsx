@@ -7,10 +7,10 @@ import {
   CreateButton,
   DataTable,
   FilterButton,
+  FilterContext,
   List,
   SearchInput,
   SelectInput,
-  TopToolbar,
   useListContext,
 } from 'react-admin'
 import { useFormContext, useWatch } from 'react-hook-form'
@@ -105,6 +105,10 @@ export function RecordList() {
               >
                 <Settings2 size={iconSize} />
               </IconButton>
+              {/* The title is drawn outside the toolbar that gives the filters to its button. */}
+              <FilterContext.Provider value={filters}>
+                <FilterButton disableSaveQuery />
+              </FilterContext.Provider>
               {writes && fields.some((f) => f.column?.can_insert) && (
                 <CreateButton label="New record" variant="contained" />
               )}
@@ -123,11 +127,7 @@ export function RecordList() {
       }
       empty={false}
       aside={<CollectionAside />}
-      actions={
-        <TopToolbar>
-          <FilterButton disableSaveQuery />
-        </TopToolbar>
-      }
+      actions={false}
     >
       <Table
         empty={info.rls && !info.can_alter ? 'No record that a policy lets you see' : 'No record'}

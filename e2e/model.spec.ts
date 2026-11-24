@@ -29,7 +29,7 @@ test('a field says what it is called and where it appears', async ({ app }) => {
 })
 
 test('a grant is the difference between the ACL and what is asked', async ({ app }) => {
-  await app.getByRole('tab', { name: 'Access' }).click()
+  await app.getByRole('button', { name: 'Access', exact: true }).click()
   await app.getByRole('button', { name: 'Change newsroom_writer on articles' }).click()
   await choose(app, 'Held on', 'Not held', change(app).locator('[data-privilege=DELETE]'))
   expect((await statement(app)).trim()).toBe(
@@ -75,9 +75,9 @@ test('a new collection, with a relation and choices', async ({ app }) => {
   await run(app)
   await go(app, '/w/newsroom/pitches')
   await expect(app.getByRole('cell', { name: 'uuid', exact: true }).first()).toBeVisible()
-  await app.getByRole('tab', { name: 'Access' }).click()
+  await app.getByRole('button', { name: 'Access', exact: true }).click()
   await expect(app.getByText('On: policies decide which rows a role reaches')).toBeVisible()
-  await app.getByRole('tab', { name: 'Fields' }).click()
+  await app.getByRole('button', { name: 'Fields', exact: true }).click()
   for (const field of ['name', 'stage', 'section']) {
     await app.getByRole('button', { name: 'Add a field' }).click()
     await change(app).getByLabel('Name').fill(field)

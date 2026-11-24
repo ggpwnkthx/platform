@@ -100,7 +100,30 @@ export const components = (): ThemeOptions['components'] => ({
       root: { backgroundColor: c['ink-raised'], color: c.paper, boxShadow: shadows.float },
     },
   },
-  MuiTab: { styleOverrides: { root: { ...type('control'), color: c['soft-text'] } } },
+  // A page's sections, switched from its header: secondary buttons joined, the one in view on
+  // the orange's light ground, as the navigation pane marks where the reader is.
+  MuiToggleButton: {
+    styleOverrides: {
+      root: {
+        ...type('control'),
+        textTransform: 'none',
+        height: layout.control,
+        paddingBlock: 0,
+        paddingInline: tokens.spacing.sm,
+        color: c['soft-text'],
+        borderColor: c.hairline,
+        backgroundColor: c.paper,
+        '&:hover': { backgroundColor: c['subdued-grey'] },
+        '&.Mui-selected, &.Mui-selected:hover': {
+          backgroundColor: c['orange-wash'],
+          color: c['studio-orange-ink'],
+        },
+      },
+    },
+  },
+  MuiToggleButtonGroup: {
+    styleOverrides: { root: { borderRadius: px(rounded.sm!) } },
+  },
   MuiTooltip: {
     styleOverrides: { tooltip: { backgroundColor: c['ink-raised'], ...type('body-small') } },
   },

@@ -6,6 +6,7 @@ import type { Kind } from '../data/kinds.ts'
 import { useSession } from '../session/session.ts'
 import { Change } from './Change.tsx'
 import { iconSize } from './marks.tsx'
+import { HeaderActions } from './Page.tsx'
 import { Section } from './said.tsx'
 import { Table } from './Table.tsx'
 
@@ -14,9 +15,15 @@ type Open = { action: 'create' | 'update' | 'remove'; row?: Record<string, unkno
  * The rows of a kind, in the one table, with its changes offered where PostgreSQL would
  * accept them: add at the heading's right, change and remove on each row, each through the
  * change surface. It is a section of its page, under the kind's own heading unless the page
- * says another.
+ * says another. The kind a page leads with adds from the header, as the page's primary action.
  */
-export function KindTable(props: { kind: Kind; where: object; add?: string; title?: string }) {
+export function KindTable(props: {
+  kind: Kind
+  where: object
+  add?: string
+  title?: string
+  lead?: boolean
+}) {
   const { kind, where } = props
   const { db: _db, ...ctx } = useSession()
   const [open, setOpen] = useState<Open>(null)
@@ -25,10 +32,10 @@ export function KindTable(props: { kind: Kind; where: object; add?: string; titl
   const acts = (may || kind.mayRow) && (kind.update || kind.remove)
   const add = may && kind.create && (
     <Button
-      variant="outlined"
+      variant={props.lead ? 'contained' : 'outlined'}
       startIcon={<Plus size={iconSize} />}
       onClick={() => setOpen({ action: 'create' })}
-      sx={{ flex: 'none', alignSelf: 'flex-end' }}
+      sx={{ flex: 'none', alignSelf: props.lead ? 'center' : 'flex-end' }}
     >
       {props.add ?? kind.add ?? `Add a ${kind.noun}`}
     </Button>
@@ -87,10 +94,11 @@ export function KindTable(props: { kind: Kind; where: object; add?: string; titl
       <Section
         title={props.title ?? kind.title}
         note={props.title ? undefined : kind.note}
-        action={add}
+        action={props.lead ? undefined : add}
       >
         {table}
       </Section>
+      {props.lead && add && <HeaderActions>{add}</HeaderActions>}
       {open && <KindChange kind={kind} where={where} open={open} onClose={() => setOpen(null)} />}
     </ListBase>
   )

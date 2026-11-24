@@ -44,7 +44,7 @@ export function WorkspaceModel() {
     >
       <Tabbed
         tabs={{
-          Collections: <KindTable kind={collections} where={where} />,
+          Collections: <KindTable kind={collections} where={where} lead />,
           Access: (
             <>
               <KindTable kind={schemaGrants} where={where} />
@@ -92,7 +92,7 @@ export function CollectionModel() {
         tabs={{
           Fields: (
             <>
-              <KindTable kind={fields} where={where} />
+              <KindTable kind={fields} where={where} lead />
               <KindTable kind={links} where={where} />
             </>
           ),

@@ -8,7 +8,7 @@ import { memberships, roles } from './roles.tsx'
 /** Users and groups: PostgreSQL's roles, as the caller may see them. They are the same in every workspace. */
 export const RoleList = () => (
   <Page title="Users and groups" crumb="Access">
-    <KindTable kind={roles} where={{}} />
+    <KindTable kind={roles} where={{}} lead />
     <KindTable kind={memberships} where={{}} />
   </Page>
 )

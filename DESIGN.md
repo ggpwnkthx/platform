@@ -401,8 +401,10 @@ in view and drop the pane, leaving the bar alone.
 
 The header is sticky at the top of the main column: 64px tall, padded 32px either side, on
 Paper with a hairline beneath, carrying the item's mark, where the page belongs, and its
-title. A page's actions sit in the toolbar under it, to the right of the search and the
-filters. The page body is padded 24px 32px 48px.
+title on the left, and at the right what the page is for doing — a list's filter, a record's
+Delete and Save, the add of the table a page leads with — its one primary button last. A page
+in sections switches them from there too, before its actions. A section's other adds stay at
+its heading. The page body is padded 24px 32px 48px.
 
 The aside carries what is known about the thing in view — a collection's information, the
 reader's rights on it and the policies that apply; a record's stamps, the rows that point at
@@ -412,8 +414,7 @@ Spacing runs on a 4px step — 10, 12, 16, 20, 24, 32, 48 — named in the front
 
 **Responsive behaviour.** Under 1200px the aside is not drawn. Under 900px the navigation
 pane is a drawer: the module bar stays, with a menu button that opens the pane over the page,
-and going somewhere closes it. Tabs scroll sideways where they do not fit. Under 900px the
-sign-in stacks its steps above the form.
+and going somewhere closes it. Under 900px the sign-in stacks its steps above the form.
 
 **The Unboxed Section Rule.** A page section is a heading, a short description and a hairline
 above it; it is never a bordered box. A card (panel, tile, table wrapper) is the only box on the
@@ -510,8 +511,10 @@ tile is the palette's black or its white.
   hover takes the greyer ground, and the active link takes the orange's light ground with the
   orange's darkest step as its text. The pane is drawn in the modules read one workspace at a
   time, Data and Activity, and not in Access or SQL.
-- **Tabs:** a page too long to read at once is in tabs under its header, in Control type, the
-  current one underlined in orange. The address says which.
+- **Sections:** a page too long to read at once is in sections, switched from its header by a
+  joined row of secondary buttons in Control type, before what the page is for doing so its
+  one primary button stays last. The section in view takes the orange's light ground with the
+  orange's darkest step as its text, as the pane's active link does. The address says which.
 
 ### Data Table
 

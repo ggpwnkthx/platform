@@ -8,7 +8,6 @@ import {
   Labeled,
   SaveButton,
   SimpleForm,
-  Toolbar,
   useNotify,
   useRecordContext,
   useRedirect,
@@ -81,24 +80,26 @@ function RecordForm({
   const read = creating || fields.every((f) => f.link?.kind !== 'links' || record?.[f.name])
   if (!read) return <LinearProgress data-loading />
   return (
-    <SimpleForm
-      sx={{ maxWidth: tokens.layout.form }}
-      toolbar={
-        <Toolbar sx={{ bgcolor: 'transparent', px: 0, gap: 2 }}>
-          {inForm.some(writable) && <SaveButton />}
-          {!creating && info?.can_delete && (
-            <DeleteButton
-              mutationMode="pessimistic"
-              mutationOptions={{ onError: onRefused, onSuccess: () => redirect('list', resource) }}
-            />
-          )}
-        </Toolbar>
-      }
-    >
+    <SimpleForm sx={{ maxWidth: tokens.layout.form }} toolbar={false}>
       <PageTitle
         title={creating ? `New in ${said.name}` : textOf(record?.[named]) || 'Record'}
         crumb={<Link to={`/${resource}`}>{said.name}</Link>}
         mark={<ItemMark {...said} table />}
+        actions={
+          <>
+            {!creating && info?.can_delete && (
+              <DeleteButton
+                mutationMode="pessimistic"
+                mutationOptions={{
+                  onError: onRefused,
+                  onSuccess: () => redirect('list', resource),
+                }}
+              />
+            )}
+            {/* Drawn outside the form's element, so it submits through the form's context. */}
+            {inForm.some(writable) && <SaveButton type="button" />}
+          </>
+        }
       />
       <Refusal error={refusal} />
       {inForm.map((f) =>
