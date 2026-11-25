@@ -1,6 +1,6 @@
-import { Box, IconButton } from '@mui/material'
+import { Box, Button } from '@mui/material'
 import { valueless } from '@platform/core'
-import { Settings2 } from 'lucide-react'
+import { Plus, Settings2 } from 'lucide-react'
 import { useEffect } from 'react'
 import {
   BulkDeleteButton,
@@ -18,6 +18,7 @@ import { Link } from 'react-router-dom'
 import { Value } from '../fields/renderers.tsx'
 import type { Field } from '../fields/types.ts'
 import { ItemMark, iconSize } from '../kit/marks.tsx'
+import { Tip } from '../kit/Header.tsx'
 import { PageTitle } from '../kit/Page.tsx'
 import { Table } from '../kit/Table.tsx'
 import { CollectionAside } from './Aside.tsx'
@@ -97,20 +98,29 @@ export function RecordList() {
           mark={<ItemMark {...said} table />}
           actions={
             <>
-              <IconButton
-                component={Link}
-                to={`/w/${schema}/${table}`}
-                aria-label="Data model"
-                title="Data model and access"
-              >
-                <Settings2 size={iconSize} />
-              </IconButton>
+              <Tip title="Data model and access">
+                <Button
+                  component={Link}
+                  to={`/w/${schema}/${table}`}
+                  variant="outlined"
+                  aria-label="Data model"
+                  startIcon={<Settings2 size={iconSize} />}
+                />
+              </Tip>
               {/* The title is drawn outside the toolbar that gives the filters to its button. */}
               <FilterContext.Provider value={filters}>
-                <FilterButton disableSaveQuery />
+                <Tip title="Add filter">
+                  <FilterButton disableSaveQuery variant="outlined" />
+                </Tip>
               </FilterContext.Provider>
               {writes && fields.some((f) => f.column?.can_insert) && (
-                <CreateButton label="New record" variant="contained" />
+                <Tip title="New record">
+                  <CreateButton
+                    label="New record"
+                    variant="contained"
+                    icon={<Plus size={iconSize} />}
+                  />
+                </Tip>
               )}
             </>
           }

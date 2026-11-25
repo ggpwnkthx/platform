@@ -23,7 +23,7 @@ import { Link, useLocation } from 'react-router-dom'
 import tokens from 'virtual:design-tokens'
 import { useSession, useSigned } from '../session/session.ts'
 import { iconSize } from './marks.tsx'
-import { HeaderRight, HeaderSlot } from './Page.tsx'
+import { HeaderRight, HeaderSlot } from './Header.tsx'
 import { Pane } from './Pane.tsx'
 import { useWorkspace } from './place.ts'
 

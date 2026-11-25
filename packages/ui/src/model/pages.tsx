@@ -1,6 +1,6 @@
 import { Button } from '@mui/material'
 import { collectionTarget, tableOf, workspaceTarget } from '@platform/core'
-import { Rows3 } from 'lucide-react'
+import { Columns3, Info, KeyRound, Rows3, ShieldUser, Table2 } from 'lucide-react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { grants } from '../access/grants.tsx'
 import { schemaGrants } from '../access/workspace-grants.tsx'
@@ -8,7 +8,8 @@ import { policies, rowSecurity } from '../access/policies.tsx'
 import { useNames } from '../kit/place.ts'
 import { Empty } from '../kit/said.tsx'
 import { ItemMark, iconSize } from '../kit/marks.tsx'
-import { Page, Tabbed } from '../kit/Page.tsx'
+import { Tabbed, Tip } from '../kit/Header.tsx'
+import { Page } from '../kit/Page.tsx'
 import { KindChange, KindTable } from '../kit/Kinds.tsx'
 import { useSession } from '../session/session.ts'
 import { fields } from './fields.tsx'
@@ -43,6 +44,11 @@ export function WorkspaceModel() {
       mark={<ItemMark {...said} />}
     >
       <Tabbed
+        icons={{
+          Collections: <Table2 size={iconSize} />,
+          Access: <ShieldUser size={iconSize} />,
+          Metadata: <Info size={iconSize} />,
+        }}
         tabs={{
           Collections: <KindTable kind={collections} where={where} lead />,
           Access: (
@@ -78,17 +84,26 @@ export function CollectionModel() {
       crumb={<Link to={`/w/${ws}`}>{names(ws).name}</Link>}
       mark={<ItemMark {...said} table />}
       actions={
-        <Button
-          component={Link}
-          to={`/${ws}.${table}`}
-          variant="outlined"
-          startIcon={<Rows3 size={iconSize} />}
-        >
-          Records
-        </Button>
+        <Tip title="Records">
+          <Button
+            component={Link}
+            to={`/${ws}.${table}`}
+            variant="outlined"
+            aria-label="Records"
+            startIcon={<Rows3 size={iconSize} />}
+          >
+            Records
+          </Button>
+        </Tip>
       }
     >
       <Tabbed
+        icons={{
+          Fields: <Columns3 size={iconSize} />,
+          'Keys and rules': <KeyRound size={iconSize} />,
+          Access: <ShieldUser size={iconSize} />,
+          Metadata: <Info size={iconSize} />,
+        }}
         tabs={{
           Fields: (
             <>

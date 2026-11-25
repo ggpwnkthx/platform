@@ -10,8 +10,10 @@ import {
 } from 'react-admin'
 import type { Provider } from '../data/provider.ts'
 import { textOf } from '../fields/values.tsx'
-import { Mono } from '../kit/marks.tsx'
+import { Play } from 'lucide-react'
+import { Mono, iconSize } from '../kit/marks.tsx'
 import { Refusal, Section } from '../kit/said.tsx'
+import { Tip } from '../kit/Header.tsx'
 import { Page } from '../kit/Page.tsx'
 import { Table } from '../kit/Table.tsx'
 
@@ -54,14 +56,18 @@ export function Sql() {
       title="Ask the database"
       crumb="SQL"
       actions={
-        <Button
-          variant="contained"
-          loading={run.isPending}
-          disabled={!text.trim()}
-          onClick={() => run.mutate(text)}
-        >
-          Run
-        </Button>
+        <Tip title="Run">
+          <Button
+            variant="contained"
+            aria-label="Run"
+            loading={run.isPending}
+            disabled={!text.trim()}
+            startIcon={<Play size={iconSize} />}
+            onClick={() => run.mutate(text)}
+          >
+            Run
+          </Button>
+        </Tip>
       }
     >
       <Section

@@ -16,7 +16,7 @@ import { SelectInput, TextInput } from 'react-admin'
 import { Link } from 'react-router-dom'
 import { defineKind } from '../data/kinds.ts'
 import { useNames } from '../kit/place.ts'
-import { ItemMark, Mono, RoleName, Tag } from '../kit/marks.tsx'
+import { ItemMark, RoleName, Tag } from '../kit/marks.tsx'
 import { useSession } from '../session/session.ts'
 
 /** The model of a workspace, as kinds: its collections, their keys and rules, their links. */
@@ -72,9 +72,8 @@ export function CollectionName({ schema, name }: { schema: string; name: string 
       }}
     >
       <ItemMark {...said} table />
-      <span>
-        {said.name} <Mono>{said.name === name ? '' : name}</Mono>
-      </span>
+      {/* The name people read; the table's own is in the address, the SQL and the title. */}
+      <span title={said.name === name ? undefined : name}>{said.name}</span>
     </Box>
   )
 }

@@ -470,6 +470,9 @@ tile is the palette's black or its white.
   on no ground.
 - **Where they sit:** what a page is for doing is at the right of its header, its one primary
   button last; what a section adds is a secondary button at the right of its heading.
+- **In the header:** a button is its icon alone, a 36px square: secondary ones hairline on
+  Paper, Delete's icon in Danger Red Ink, the primary filled orange. Its name is its accessible
+  name and a tooltip on hover and focus. The section switcher is drawn the same way.
 - **Danger:** solid Danger Red, and it appears only where something is destroyed.
 
 ### Inputs / Fields
@@ -512,7 +515,7 @@ tile is the palette's black or its white.
   orange's darkest step as its text. The pane is drawn in the modules read one workspace at a
   time, Data and Activity, and not in Access or SQL.
 - **Sections:** a page too long to read at once is in sections, switched from its header by a
-  joined row of secondary buttons in Control type, before what the page is for doing so its
+  joined row of 36px icon squares, each named in a tip, before what the page is for doing so its
   one primary button stays last. The section in view takes the orange's light ground with the
   orange's darkest step as its text, as the pane's active link does. The address says which.
 

@@ -6,7 +6,7 @@ import type { Kind } from '../data/kinds.ts'
 import { useSession } from '../session/session.ts'
 import { Change } from './Change.tsx'
 import { iconSize } from './marks.tsx'
-import { HeaderActions } from './Page.tsx'
+import { HeaderActions, Tip } from './Header.tsx'
 import { Section } from './said.tsx'
 import { Table } from './Table.tsx'
 
@@ -30,14 +30,16 @@ export function KindTable(props: {
   const may = kind.may?.(where, ctx) ?? true
   const mayRow = (row: object) => kind.mayRow?.(row, where, ctx) ?? may
   const acts = (may || kind.mayRow) && (kind.update || kind.remove)
+  const label = props.add ?? kind.add ?? `Add a ${kind.noun}`
   const add = may && kind.create && (
     <Button
       variant={props.lead ? 'contained' : 'outlined'}
       startIcon={<Plus size={iconSize} />}
+      aria-label={label}
       onClick={() => setOpen({ action: 'create' })}
       sx={{ flex: 'none', alignSelf: props.lead ? 'center' : 'flex-end' }}
     >
-      {props.add ?? kind.add ?? `Add a ${kind.noun}`}
+      {label}
     </Button>
   )
   const act = (action: 'update' | 'remove', row: Record<string, unknown>) => (
@@ -98,7 +100,11 @@ export function KindTable(props: {
       >
         {table}
       </Section>
-      {props.lead && add && <HeaderActions>{add}</HeaderActions>}
+      {props.lead && add && (
+        <HeaderActions>
+          <Tip title={label}>{add}</Tip>
+        </HeaderActions>
+      )}
       {open && <KindChange kind={kind} where={where} open={open} onClose={() => setOpen(null)} />}
     </ListBase>
   )

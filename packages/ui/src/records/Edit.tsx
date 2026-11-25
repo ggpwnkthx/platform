@@ -1,5 +1,6 @@
 import { LinearProgress, Typography } from '@mui/material'
 import { columnsOf, tableOf } from '@platform/core'
+import { Save, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import {
   Create,
@@ -19,8 +20,9 @@ import tokens from 'virtual:design-tokens'
 import { Value } from '../fields/renderers.tsx'
 import type { Field } from '../fields/types.ts'
 import { textOf } from '../fields/values.tsx'
-import { ItemMark } from '../kit/marks.tsx'
+import { ItemMark, iconSize } from '../kit/marks.tsx'
 import { Refusal } from '../kit/said.tsx'
+import { Tip } from '../kit/Header.tsx'
 import { PageTitle } from '../kit/Page.tsx'
 import { useSession } from '../session/session.ts'
 import { RecordAside } from './Aside.tsx'
@@ -88,16 +90,24 @@ function RecordForm({
         actions={
           <>
             {!creating && info?.can_delete && (
-              <DeleteButton
-                mutationMode="pessimistic"
-                mutationOptions={{
-                  onError: onRefused,
-                  onSuccess: () => redirect('list', resource),
-                }}
-              />
+              <Tip title="Delete">
+                <DeleteButton
+                  mutationMode="pessimistic"
+                  variant="outlined"
+                  icon={<Trash2 size={iconSize} />}
+                  mutationOptions={{
+                    onError: onRefused,
+                    onSuccess: () => redirect('list', resource),
+                  }}
+                />
+              </Tip>
             )}
             {/* Drawn outside the form's element, so it submits through the form's context. */}
-            {inForm.some(writable) && <SaveButton type="button" />}
+            {inForm.some(writable) && (
+              <Tip title="Save">
+                <SaveButton type="button" icon={<Save size={iconSize} />} />
+              </Tip>
+            )}
           </>
         }
       />
