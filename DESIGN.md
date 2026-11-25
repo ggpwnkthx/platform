@@ -477,9 +477,11 @@ tile is the palette's black or its white.
   on no ground.
 - **Where they sit:** what a page is for doing is at the right of its header, its one primary
   button last; what a section adds is a secondary button at the right of its heading.
-- **In the header:** a button is its icon alone, a 36px square: secondary ones hairline on
-  Paper, Delete's icon in Danger Red Ink, the primary filled orange. Its name is its accessible
-  name and a tooltip on hover and focus. The section switcher is drawn the same way.
+- **In the header:** a secondary button is its icon alone, a 36px square, hairline on Paper,
+  Delete's icon in Danger Red Ink; its name is its accessible name and a tooltip on hover and
+  focus. The one primary button, filled orange, keeps its words from the md breakpoint up and is
+  an icon square only on a phone: what a page is for is read, not guessed. A tooltip never
+  catches a click, and never replaces the name of what it describes.
 - **Danger:** solid Danger Red, and it appears only where something is destroyed.
 
 ### Inputs / Fields
@@ -520,10 +522,10 @@ tile is the palette's black or its white.
   group titles. A link is padded 8px 12px and stands about 38px tall with no corner rounding;
   hover takes the greyer ground, and the active link takes the orange's light ground with the
   orange's darkest step as its text. The pane is drawn in the modules read one workspace at a
-  time, Data and Activity, and not in Access or SQL.
+  time, Data and Activity, and not in Users and groups or SQL.
 - **Sections:** a page too long to read at once is in sections, switched from its header by a
-  joined row of 36px icon squares, each named in a tip, before what the page is for doing so its
-  one primary button stays last. The section in view takes the orange's light ground with the
+  joined row of icons that carry their names from the lg breakpoint up and a tip below it,
+  before what the page is for doing so its one primary button stays last. The section in view takes the orange's light ground with the
   orange's darkest step as its text, as the pane's active link does. The address says which.
 
 ### Data Table
@@ -597,10 +599,11 @@ in the places where the item is presented.
 
 A field may carry a display name: the word the interface shows for a column where people read
 it — the header of a records table, the label of a record's own field. The name is the studio's
-word for the column, so it is set in Inter; the column's own name stays in JetBrains Mono
-beside it, in the address and in the SQL. The name reaches only the readers who may read the
-column: PostgreSQL does not return the metadata of a field they may not reach, so a hidden
-field keeps its raw name and nothing else.
+word for the column, so it is set in Inter, and it is drawn alone: the column's own name is
+its title, and stays in the address and the SQL. A field without one shows its column's name,
+in JetBrains Mono; a collection is named the same way. The name reaches only the readers who may
+read the column: PostgreSQL does not return the metadata of a field they may not reach, so a
+hidden field keeps its raw name and nothing else.
 
 ### Where a Field Appears
 
@@ -625,6 +628,59 @@ The sign-in is light like the rest: a Subdued Grey art panel with three steps �
 PostgreSQL, your role and rows — each in a bordered card, the middle one outlined in orange
 with "PostgreSQL" in the orange's dark step; and a white panel with the Display heading, a lead
 paragraph and the people who may sign in.
+
+## Words and Icons
+
+One thing has one name, and one icon means one thing, everywhere it appears: in the module
+bar, the pane, a header, a tab, a table and a drawer. An action's name is a verb and the thing
+it acts on; the drawer it opens carries the same words as the button that opened it.
+
+| Icon (lucide) | Means | Named |
+| --- | --- | --- |
+| `Rows3` | the records of a collection | Data (module), Records |
+| `Table2` | a collection | Collections, a collection's default mark |
+| `Database` | a workspace | a workspace's default mark, the brand cell |
+| `Settings2` | a model and who may reach it | Data model and access |
+| `Columns3` | fields | Fields |
+| `KeyRound` | constraints and indexes | Keys and rules |
+| `ShieldUser` | grants and row policies | Access |
+| `Info` | what an item says of itself | Metadata |
+| `Users` / `User` | roles: groups / users | Users and groups |
+| `History` | the revisions log | Activity |
+| `TerminalSquare` | one statement as the reader | SQL |
+| `Plus` | make one | Add a … |
+| `Pencil` | change one | Change … |
+| `Trash2` | destroy one | Delete … |
+| `Save` | write the form | Save |
+| `Play` | run the statement | Run |
+
+- **Add** makes a thing, **Change** alters it and **Delete** destroys it: never New, Create,
+  Edit, Remove, or a verb of PostgreSQL's (Grant, Link) on a button. PostgreSQL's words stay
+  in the SQL, in a privilege mark and in a note that explains.
+- **Record** is the reader's word for a row of a collection, wherever records are read;
+  **row** is PostgreSQL's, kept for row security and row policies.
+- **Access** is a section: who holds what on a workspace or a collection. The roles themselves
+  are **Users and groups**.
+- **The reader's words lead; PostgreSQL's follow.** A label or a note says what a thing does
+  first and gives PostgreSQL's term after it, in brackets: "Which records it shows (USING)",
+  "Reach (USAGE)". Where a table shows a value PostgreSQL spells for itself, the reader's word
+  is drawn and PostgreSQL's is its title: a field's type (Date and time, `timestamptz`), what a
+  revision did (Added, Changed, Deleted for `INSERT`, `UPDATE`, `DELETE`), a metadata key the
+  interface reads (Name people read, `display_name`). The words live in `kit/words.ts`.
+- **A privilege mark says what it lets a role do** in its tip: "Read records (SELECT): held on 11
+  of 12 fields".
+- **A refusal says what to do next** for the refusals people meet most, in one line under
+  PostgreSQL's own words and SQLSTATE, which are shown once.
+- **A Delete that takes data with it says so** in a warning above its statement: a field takes
+  its value in every record, a collection its records, a link table its links.
+- **A collection is named as people read it in every table** — grants, row policies, Activity,
+  a relation's type — and a role is drawn as what it is, a user or a group, wherever it owns
+  something. A revision reads as its record's name, then each changed field by its name:
+  "Status: review → published". A field's default is said in words where it is a value
+  ("Starts as draft"). A field whose three privileges are all held says "Read, add and change"
+  rather than drawing three full marks.
+- **An empty table offers what fills it** when that action lives in the header, far from it:
+  the records of a collection, and the lead table of a model page.
 
 ## Do's and Don'ts
 

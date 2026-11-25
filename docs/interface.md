@@ -19,14 +19,15 @@ workspace in view is part of the address, and every link carries it.
 | `#/activity/newsroom`                  | The revisions of the workspace                                                        |
 | `#/sql`                                | One statement, as the reader                                                          |
 
-The frame is a module bar (Data, Access, Activity, SQL), a navigation pane, a sticky header,
+The frame is a module bar (Data, Users and groups, Activity, SQL), a navigation pane, a sticky header,
 and the page. The pane belongs to the modules read one workspace at a time: in Data it holds
 the workspace switcher and the collections, in Activity the same collections choose whose
-revisions are read, and Access and SQL have none. On a screen under 900px the pane is a
+revisions are read, and Users and groups and SQL have none. On a screen under 900px the pane is a
 drawer behind a menu button. The foot of the module bar says who is signed in, and signs out.
 
 The header carries the page's name and, at its right, what the page is for doing: its one
-primary action first (New record, Run). A page too long to read at once is in tabs, and the
+one primary action last (Add a record, Run), which keeps its words where there is room; the
+others are icons with their names in a tip. A page too long to read at once is in tabs, and the
 address says which (`?tab=Access`): a collection's model is Fields, Keys and rules, Access and
 Metadata. An input's name stands above it, always.
 
