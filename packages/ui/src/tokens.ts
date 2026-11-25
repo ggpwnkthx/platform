@@ -12,6 +12,7 @@ export interface Tokens {
   rounded: Record<string, string>
   spacing: Record<string, string>
   shadows: Record<string, string>
+  motion: Record<string, string>
   layout: Record<string, string>
   components: Record<string, Record<string, string>>
 }

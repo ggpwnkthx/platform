@@ -3,43 +3,9 @@ import { describe } from '@platform/core'
 import type { ReactNode } from 'react'
 import tokens from 'virtual:design-tokens'
 
-const { colors, layout, rounded } = tokens
+const { layout } = tokens
 /** What the studio says one way everywhere: a statement, a refusal, an empty place, a section. */
-/** The SQL a change runs, shown before the button that runs it. */
-export function Statement({ sql, caption }: { sql: string[]; caption?: string }) {
-  if (!sql.length) return null
-  return (
-    <Box
-      component="figure"
-      data-statement
-      sx={{ m: 0, border: 1, borderColor: 'divider', borderRadius: rounded.sm, overflow: 'hidden' }}
-    >
-      <Typography
-        component="figcaption"
-        variant="subtitle2"
-        sx={{ px: 3.5, py: 2, borderBottom: 1, borderColor: 'divider', color: 'text.secondary' }}
-      >
-        {caption ?? 'Runs as you, in one transaction'}
-      </Typography>
-      <Box
-        component="pre"
-        sx={{
-          m: 0,
-          px: 3.5,
-          py: 3,
-          bgcolor: 'grey.100',
-          color: colors['ink-raised'],
-          ...tokens.typography.code,
-          whiteSpace: 'pre-wrap',
-          overflowWrap: 'anywhere',
-        }}
-      >
-        {sql.join('\n')}
-      </Box>
-    </Box>
-  )
-}
-
+export { type Standing, Statement } from './Statement.tsx'
 /** What PostgreSQL refused, in its own words, with its SQLSTATE. The one way a refusal is shown. */
 export function Refusal({ error }: { error: unknown }) {
   if (!error) return null

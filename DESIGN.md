@@ -129,6 +129,11 @@ shadows:
   lift: "0 4px 12px rgb(20 20 20 / 8%), 0 1px 3px rgb(20 20 20 / 6%)"
   float: "0 16px 40px rgb(20 20 20 / 16%), 0 4px 12px rgb(20 20 20 / 8%)"
   glow: "0 4px 12px rgb(241 90 43 / 32%)"
+motion:
+  ease-out: "cubic-bezier(0.16, 1, 0.3, 1)"
+  state: "240ms"
+  settle: "1400ms"
+  hold: "700ms"
 layout:
   module-bar: "64px"
   nav-pane: "264px"
@@ -144,6 +149,8 @@ layout:
   measure: "72ch"
   cell: "320px"
   ring: "1.5px"
+  offset: "4px"
+  rise: "2px"
   form: "720px"
 components:
   button-primary:
@@ -558,6 +565,22 @@ the same mono-on-grey treatment.
 
 **The Statement First Rule.** Nothing changes the database without its SQL on screen first, in
 the same view as the button that runs it.
+
+The figure keeps a standing, and its hairline and caption say it: shown (Hairline, the caption
+above), running (Studio Orange, an indeterminate bar along the top, "Running as you…"), ran
+(Success Green, a drawn tick, "Ran as you, committed", held for `motion.hold` before the drawer
+closes) and refused (Danger Red, "Refused, nothing changed"). A refusal is marked inside the
+SQL: among several statements the refused one takes Danger Red Wash, and the word PostgreSQL
+points at — by its position, or else by the one name its message quotes when that name appears
+exactly once — takes a wavy Danger Red underline on the wash. The marks hold only while the
+statement shown is the one that was refused.
+
+**The Lit Statement Rule.** This is the studio's one authored motion. When the form changes, the
+words it just wrote into the statement light in Studio Orange Ink on Orange Wash Deep and settle
+to the code ink over `motion.settle` on `motion.ease-out`; what did not change stays still.
+Nothing else in the interface animates for its own sake: other changes of state are a
+`motion.state` cross-fade or a colour change, and under reduced motion the tick, the caption and
+the scroll to a refusal arrive without moving.
 
 ### Item Marks (signature)
 

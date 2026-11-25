@@ -8,11 +8,20 @@ import * as rows from './records.ts'
 export class Refused extends Error {
   code?: string
   detail?: string
+  /** Which of the statements PostgreSQL refused, and where in it, when it said. */
+  fault?: { statement: number; position?: number; named?: string }
   constructor(cause: unknown) {
     const said = describe(cause)
     super(said.title)
     this.code = sqlState(cause)
     this.detail = said.detail
+    const { statement, position } = cause as { statement?: number; position?: string | number }
+    if (typeof statement === 'number')
+      this.fault = {
+        statement,
+        position: Number(position) || undefined,
+        named: /"([^"]+)"/.exec(String((cause as Error).message))?.[1],
+      }
   }
 }
 const asked = async <T>(work: () => Promise<T>) => {
@@ -102,7 +111,12 @@ export const dataProvider: Provider = {
       await session.get()!.db.exclusive((one: Db) =>
         transaction(one, async () => {
           // A GRANT or REVOKE that PostgreSQL only warns changed nothing undoes the whole change.
-          for (const statement of statements) unchanged(await one.query(statement))
+          for (const [at, statement] of statements.entries())
+            try {
+              unchanged(await one.query(statement))
+            } catch (error) {
+              throw Object.assign(error as object, { statement: at })
+            }
         })
       )
       await session.refresh()
