@@ -56,7 +56,7 @@ export function Sql() {
       title="Ask the database"
       crumb="SQL"
       actions={
-        <Tip title="Run">
+        <Tip title="Run" labelled>
           <Button
             variant="contained"
             aria-label="Run"

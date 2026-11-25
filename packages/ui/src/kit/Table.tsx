@@ -12,9 +12,15 @@ const { layout, rounded, colors } = tokens
  */
 export function Table({
   empty,
+  then,
   children,
   ...props
-}: DataTableProps & { empty: string; children: ReactNode }) {
+}: DataTableProps & {
+  empty: string
+  /** What fills an empty table: offered under the empty words, unless a search emptied it. */
+  then?: ReactNode
+  children: ReactNode
+}) {
   const { error, isPending, isFetching, filterValues } = useListContext()
   // An empty page says what emptied it: the search and conditions, where there are any.
   const narrowed = Object.keys(filterValues ?? {}).length > 0
@@ -52,8 +58,9 @@ export function Table({
         <DataTable
           hover
           empty={
-            <Box sx={{ px: 4 }}>
+            <Box sx={{ px: 4, pb: then && !narrowed ? 4 : 0 }}>
               <Empty>{said}</Empty>
+              {!narrowed && then}
             </Box>
           }
           {...props}

@@ -1,16 +1,18 @@
-import { Box, ToggleButton, ToggleButtonGroup, Tooltip } from '@mui/material'
+import { Box, ToggleButton, ToggleButtonGroup, Tooltip, useMediaQuery } from '@mui/material'
+import type { Theme } from '@mui/material/styles'
 import { createContext, Fragment, type ReactNode, useContext } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import tokens from 'virtual:design-tokens'
-import { iconAlone } from '../theme.ts'
+import { iconAlone, wordsFromMd } from '../theme.ts'
 
 /** The place at the header's right where what the page in view is for doing is drawn. */
 export const HeaderSlot = createContext<HTMLElement | null>(null)
 /**
  * The header's right, which the frame draws and the page in view fills. A button here is drawn
  * as its icon alone, a square of the control's height, whoever wrote it — react-admin's own
- * among them — and says its name to a screen reader and, in a tip, to the eye.
+ * among them — and says its name to a screen reader and, in a tip, to the eye. The one primary
+ * button keeps its words wherever there is room: what the page is for is read, not guessed.
  */
 export const HeaderRight = (props: { onSlot(slot: HTMLElement | null): void }) => (
   <Box
@@ -31,6 +33,12 @@ export const HeaderRight = (props: { onSlot(slot: HTMLElement | null): void }) =
         px: 0,
         ...iconAlone,
         '& .MuiButton-startIcon, & .MuiButton-endIcon': { m: 0 },
+      },
+      '& .MuiButton-contained.MuiButton-colorPrimary': {
+        width: { md: 'auto' },
+        px: { md: 3 },
+        ...wordsFromMd,
+        '& .MuiButton-startIcon': { mr: { md: 1.5 } },
       },
       '& .ra-delete-button': { color: tokens.colors['danger-red-ink'] },
       // react-admin draws its filter button with Material's icon; it takes lucide's, as the rest,
@@ -57,14 +65,20 @@ export const HeaderRight = (props: { onSlot(slot: HTMLElement | null): void }) =
     }}
   />
 )
-/** The name of a header button whose label is its icon, shown on hover and on focus. */
-export const Tip = ({ title, children }: { title: string; children: ReactNode }) => (
-  <Tooltip title={title}>
-    <Box component="span" sx={{ display: 'inline-flex', flex: 'none' }}>
-      {children}
-    </Box>
-  </Tooltip>
-)
+/**
+ * The name of a header button whose label is its icon, shown on hover and on focus. The primary
+ * button is `labelled` where there is room, and its tip is then not drawn twice.
+ */
+export function Tip(props: { title: string; labelled?: boolean; children: ReactNode }) {
+  const roomy = useMediaQuery((theme: Theme) => theme.breakpoints.up('md'))
+  return (
+    <Tooltip title={props.labelled && roomy ? '' : props.title} disableInteractive>
+      <Box component="span" sx={{ display: 'inline-flex', flex: 'none' }}>
+        {props.children}
+      </Box>
+    </Tooltip>
+  )
+}
 /**
  * Buttons for the header's right, from wherever on the page they belong. They keep the context
  * they are written in — a list's filters, a record's form — and leave with the part that drew them.
@@ -83,10 +97,11 @@ export function Tabbed({
   icons,
 }: {
   tabs: Record<string, ReactNode>
-  /** Each part's icon: in the header it is drawn alone, its name in a tip, as a button is. */
+  /** Each part's icon: beside its name where there is room, alone with its name in a tip where not. */
   icons: Record<string, ReactNode>
 }) {
   const [params, setParams] = useSearchParams()
+  const roomy = useMediaQuery((theme: Theme) => theme.breakpoints.up('lg'))
   const names = Object.keys(tabs)
   const at = names.find((name) => name === params.get('tab')) ?? names[0]!
   return (
@@ -101,16 +116,19 @@ export function Tabbed({
             order: -1,
             flex: 'none',
             '& .MuiToggleButton-root': {
-              width: tokens.layout.control,
+              minWidth: tokens.layout.control,
               height: tokens.layout.control,
               p: 0,
+              px: { lg: 3 },
+              gap: 1.5,
             },
           }}
         >
           {names.map((name) => (
-            <Tooltip key={name} title={name}>
+            <Tooltip key={name} title={roomy ? '' : name} disableInteractive>
               <ToggleButton value={name} aria-label={name}>
                 {icons[name]}
+                {roomy && name}
               </ToggleButton>
             </Tooltip>
           ))}

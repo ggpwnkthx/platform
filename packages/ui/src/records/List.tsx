@@ -4,13 +4,13 @@ import { Plus, Settings2 } from 'lucide-react'
 import { useEffect } from 'react'
 import {
   BulkDeleteButton,
-  CreateButton,
   DataTable,
   FilterButton,
   FilterContext,
   List,
   SearchInput,
   SelectInput,
+  useCreatePath,
   useListContext,
 } from 'react-admin'
 import { useFormContext, useWatch } from 'react-hook-form'
@@ -71,6 +71,7 @@ function DeleteChosen() {
 /** The records of a collection: search, filters, sort, pages and a count — all kept in the address. */
 export function RecordList() {
   const { resource, schema, table, fields, info, said, workspace, hasId } = useCollection()
+  const createPath = useCreatePath()
   if (!info) return <PageTitle title={table} crumb="No such collection that you may reach" />
   const shown = fields.filter((f) => f.column?.can_select && f.views.list !== 'hide')
   const filters = [
@@ -114,12 +115,17 @@ export function RecordList() {
                 </Tip>
               </FilterContext.Provider>
               {writes && fields.some((f) => f.column?.can_insert) && (
-                <Tip title="New record">
-                  <CreateButton
-                    label="New record"
+                // Drawn here, not as react-admin's, which floats over a phone's page instead.
+                <Tip title="Add a record" labelled>
+                  <Button
+                    component={Link}
+                    to={createPath({ resource, type: 'create' })}
                     variant="contained"
-                    icon={<Plus size={iconSize} />}
-                  />
+                    aria-label="Add a record"
+                    startIcon={<Plus size={iconSize} />}
+                  >
+                    Add a record
+                  </Button>
                 </Tip>
               )}
             </>
@@ -141,6 +147,19 @@ export function RecordList() {
     >
       <Table
         empty={info.rls && !info.can_alter ? 'No record that a policy lets you see' : 'No record'}
+        then={
+          writes &&
+          fields.some((f) => f.column?.can_insert) && (
+            <Button
+              component={Link}
+              to={createPath({ resource, type: 'create' })}
+              variant="outlined"
+              startIcon={<Plus size={iconSize} />}
+            >
+              Add a record
+            </Button>
+          )
+        }
         rowClick={hasId ? 'edit' : false}
         bulkActionButtons={writes && info.can_delete ? <DeleteChosen /> : false}
       >

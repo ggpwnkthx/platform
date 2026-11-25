@@ -54,7 +54,26 @@ export function KindTable(props: {
     </IconButton>
   )
   const table = (
-    <Table empty={kind.empty} bulkActionButtons={false} rowClick={false} data-kind={kind.name}>
+    <Table
+      empty={kind.empty}
+      // A section's own add is beside its heading; a page's is in the header, far from here.
+      then={
+        props.lead &&
+        may &&
+        kind.create && (
+          <Button
+            variant="outlined"
+            startIcon={<Plus size={iconSize} />}
+            onClick={() => setOpen({ action: 'create' })}
+          >
+            {label}
+          </Button>
+        )
+      }
+      bulkActionButtons={false}
+      rowClick={false}
+      data-kind={kind.name}
+    >
       {kind.columns.map((column, at) => (
         <DataTable.Col
           key={column.source}
@@ -102,7 +121,9 @@ export function KindTable(props: {
       </Section>
       {props.lead && add && (
         <HeaderActions>
-          <Tip title={label}>{add}</Tip>
+          <Tip title={label} labelled>
+            {add}
+          </Tip>
         </HeaderActions>
       )}
       {open && <KindChange kind={kind} where={where} open={open} onClose={() => setOpen(null)} />}

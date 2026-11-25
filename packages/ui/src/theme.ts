@@ -44,6 +44,8 @@ export const hairline = `1px solid ${c.hairline}`
 export const mono = { fontFamily: t.value!.fontFamily, fontSize: px(t.value!.fontSize) }
 /** A control that shows its icon alone: its name is still read, but it takes no room. */
 export const iconAlone = { fontSize: 0 }
+/** The same control with its words again, from a width where there is room for them. */
+export const wordsFromMd = { fontSize: { md: px(t.control!.fontSize) } }
 
 export const theme = createTheme({
   spacing: 4,
