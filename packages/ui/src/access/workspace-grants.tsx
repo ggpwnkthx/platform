@@ -12,10 +12,9 @@ export const schemaGrants = defineKind<
   { role: string; usage: boolean; create: boolean }
 >({
   name: 'schema-grants',
-  title: 'Who may use it',
-  note: 'USAGE lets a role reach what the workspace holds; CREATE lets it make collections here. The rights on each collection are its own.',
-  add: 'Grant on the workspace',
-  noun: 'right on the workspace',
+  title: 'Grants',
+  note: 'Reach (USAGE) lets a role into the workspace; Make collections (CREATE) lets it add them here. What it may do in each collection is granted on that collection.',
+  noun: 'grant',
   empty: 'Nobody but its owner may use this workspace.',
   read: async (db, { schema }) =>
     (await schemaReach(db, schema)).filter((r) => r.usage || r.create),

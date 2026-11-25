@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { KindTable } from '../kit/Kinds.tsx'
 import { Page } from '../kit/Page.tsx'
 import { useNames, useWorkspace } from '../kit/place.ts'
@@ -7,7 +7,7 @@ import { memberships, roles } from './roles.tsx'
 
 /** Users and groups: PostgreSQL's roles, as the caller may see them. They are the same in every workspace. */
 export const RoleList = () => (
-  <Page title="Users and groups" crumb="Access">
+  <Page title="Users and groups">
     <KindTable kind={roles} where={{}} lead />
     <KindTable kind={memberships} where={{}} />
   </Page>
@@ -19,7 +19,7 @@ export function RolePage() {
   const workspace = useWorkspace()
   const names = useNames()
   return (
-    <Page title={role} crumb="Role">
+    <Page title={role} crumb={<Link to="/roles">Users and groups</Link>}>
       <KindTable
         kind={memberships}
         where={{ member: role }}

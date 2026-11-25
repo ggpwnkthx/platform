@@ -15,9 +15,10 @@ import {
 import { SelectInput, TextInput } from 'react-admin'
 import { Link } from 'react-router-dom'
 import { defineKind } from '../data/kinds.ts'
-import { useNames } from '../kit/place.ts'
-import { ItemMark, RoleName, Tag } from '../kit/marks.tsx'
+import { useNames, useWorkspace } from '../kit/place.ts'
+import { ItemMark, Mono, Tag } from '../kit/marks.tsx'
 import { useSession } from '../session/session.ts'
+import { Role } from '../access/roles.tsx'
 
 /** The model of a workspace, as kinds: its collections, their keys and rules, their links. */
 export interface Place {
@@ -43,9 +44,9 @@ export const required = (value: unknown, what: string) => {
   return text
 }
 export const onDelete = [
-  { id: 'restrict', name: 'Refuse while rows point at it' },
-  { id: 'cascade', name: 'Delete the rows that point at it' },
-  { id: 'set_null', name: 'Empty the field of the rows that point at it' },
+  { id: 'restrict', name: 'Refuse while records point at it' },
+  { id: 'cascade', name: 'Delete the records that point at it' },
+  { id: 'set_null', name: 'Empty the field of the records that point at it' },
 ]
 /** The collections of the workspace in view, to choose one of. */
 export function CollectionInput(props: { source: string; label: string; schema: string }) {
@@ -73,9 +74,19 @@ export function CollectionName({ schema, name }: { schema: string; name: string 
     >
       <ItemMark {...said} table />
       {/* The name people read; the table's own is in the address, the SQL and the title. */}
-      <span title={said.name === name ? undefined : name}>{said.name}</span>
+      {said.name === name ? <Mono>{name}</Mono> : <span title={name}>{said.name}</span>}
     </Box>
   )
+}
+
+/**
+ * A collection's name as people read it, in a table's cell: its own name is its title. Without
+ * a schema it is a collection of the workspace in view.
+ */
+export function CollectionLabel({ schema, name }: { schema?: string; name: string }) {
+  const here = useWorkspace()?.name ?? ''
+  const said = useNames()(schema ?? here, name)
+  return said.name === name ? <Mono>{name}</Mono> : <span title={name}>{said.name}</span>
 }
 
 export const workspaces = defineKind<{ name: string }, object, { name: string; owner: string }>({
@@ -89,8 +100,16 @@ export const workspaces = defineKind<{ name: string }, object, { name: string; o
   columns: [{ source: 'name', label: 'Workspace' }],
   Inputs: () => (
     <>
-      <TextInput source="name" label="Name: a PostgreSQL schema" {...mono} />
-      <TextInput source="owner" label="Owner: a group, or nobody for yourself" {...mono} />
+      <TextInput
+        source="name"
+        label="Name in the database: in the address and the SQL (a schema)"
+        {...mono}
+      />
+      <TextInput
+        source="owner"
+        label="Owner: a group, or leave it empty to own it yourself"
+        {...mono}
+      />
     </>
   ),
   create: (form) => [
@@ -105,7 +124,7 @@ export const collections = defineKind<
 >({
   name: 'collections',
   title: 'Collections',
-  note: 'A collection is a table. New ones are made with row security on and no policies: grants alone never make rows visible.',
+  note: 'A collection is a table. A new one starts with row security on and no row policies, so nobody sees its records until a policy lets them.',
   noun: 'collection',
   empty: 'No collection in this workspace that you may reach.',
   read: async (_db, { schema }, { catalog }) => tablesIn(catalog, schema),
@@ -116,19 +135,27 @@ export const collections = defineKind<
       label: 'Collection',
       render: (row) => <CollectionName schema={row.schema} name={row.name} />,
     },
-    { source: 'kind', label: 'Kind', render: (row) => (row.kind === 'v' ? 'View' : 'Table') },
+    {
+      source: 'kind',
+      label: 'Kind',
+      render: (row) => (row.kind === 'v' ? 'View (read-only)' : 'Collection'),
+    },
     {
       source: 'rls',
       label: 'Row security',
-      render: (row) => <Tag color="info">{row.rls ? 'Policies decide rows' : 'Off'}</Tag>,
+      render: (row) => <Tag color="info">{row.rls ? 'Policies decide records' : 'Off'}</Tag>,
     },
-    { source: 'owner', label: 'Owner', render: (row) => <RoleName name={row.owner} group /> },
+    { source: 'owner', label: 'Owner', render: (row) => <Role name={row.owner} /> },
     { source: 'comment', label: 'Note' },
   ],
   may: ({ schema }, { catalog }) => !!catalog.schemas.find((s) => s.name === schema)?.can_create,
   Inputs: () => (
     <>
-      <TextInput source="name" label="Name: a PostgreSQL table" {...mono} />
+      <TextInput
+        source="name"
+        label="Name in the database: in the address and the SQL (a table)"
+        {...mono}
+      />
       <TextInput source="display_name" label="The name people read" helperText={false} />
       <TextInput source="note" label="Note" helperText={false} />
     </>
@@ -149,5 +176,6 @@ export const collections = defineKind<
         : []),
     ]
   },
+  loses: () => 'Every record in the collection goes with it. Nothing brings them back.',
   remove: (row, { schema }) => [dropCollectionStatement(schema, row.name)],
 })

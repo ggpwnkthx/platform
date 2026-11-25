@@ -12,7 +12,7 @@ import {
 import { BooleanInput, SelectInput, TextInput } from 'react-admin'
 import { defineKind } from '../data/kinds.ts'
 import { Mono, Tag } from '../kit/marks.tsx'
-import { mono, ownsTable, type Place } from '../model/collections.tsx'
+import { CollectionLabel, mono, ownsTable, type Place } from '../model/collections.tsx'
 import { named, Role, RoleInput } from './roles.tsx'
 
 /** Which rows: the row policies of a collection, and whether row security is on. */
@@ -39,7 +39,7 @@ const drafted = (form: PolicyForm, schema: string, table: string) =>
 export const policies = defineKind<PolicyInfo, { schema: string; table?: string }, PolicyForm>({
   name: 'policies',
   title: 'Row policies',
-  note: 'A policy decides which rows a role reaches, over and above its grants. It is written and changed on its own collection.',
+  note: 'A row policy decides which records a role can see or write, on top of its grants. It is written and changed on its own collection.',
   noun: 'row policy',
   empty:
     'No row policy. Where row security is on, a collection with none shows its rows to its owner alone.',
@@ -47,7 +47,11 @@ export const policies = defineKind<PolicyInfo, { schema: string; table?: string 
   key: (row) => `${row.name} on ${row.table}`,
   columns: [
     { source: 'name', label: 'Policy', render: (row) => <Mono>{row.name}</Mono> },
-    { source: 'table', label: 'Collection', render: (row) => <Mono>{row.table}</Mono> },
+    {
+      source: 'table',
+      label: 'Collection',
+      render: (row) => <CollectionLabel schema={row.schema} name={row.table} />,
+    },
     { source: 'command', label: 'For', render: (row) => <Mono>{row.command}</Mono> },
     {
       source: 'roles',
@@ -81,16 +85,21 @@ export const policies = defineKind<PolicyInfo, { schema: string; table?: string 
         validate={(v) => (v ? undefined : 'Required')}
         {...mono}
       />
-      <RoleInput source="roles" label="To: nobody named is PUBLIC" many everyone />
+      <RoleInput
+        source="roles"
+        label="Who it applies to: nobody chosen is everyone (PUBLIC)"
+        many
+        everyone
+      />
       <BooleanInput
         source="permissive"
-        label="Permissive: it lets rows in. Off, it is restrictive and keeps rows out"
+        label="Lets records in (permissive). Off, it keeps records out (restrictive)"
         helperText={false}
       />
-      <TextInput source="using" label="USING: the rows it reaches" multiline {...mono} />
+      <TextInput source="using" label="Which records it shows (USING)" multiline {...mono} />
       <TextInput
         source="check"
-        label="WITH CHECK: the rows it lets be written"
+        label="Which records may be written (WITH CHECK)"
         multiline
         {...mono}
       />
@@ -122,7 +131,7 @@ export const rowSecurity = defineKind<
 >({
   name: 'row-security',
   title: 'Row security',
-  note: 'With it on, a role reaches only the rows a policy gives it: grants alone show nobody a row.',
+  note: 'With it on, a role sees only the records a row policy gives it: grants alone show nothing.',
   noun: 'row security',
   empty: '',
   read: async (_db, { schema, table }, { catalog }) => [tableOf(catalog, schema, table)!],
@@ -133,14 +142,16 @@ export const rowSecurity = defineKind<
       label: 'Row security',
       render: (row) => (
         <Tag color="info">
-          {row.rls ? 'On: policies decide which rows a role reaches' : 'Off: grants alone decide'}
+          {row.rls
+            ? 'On: policies decide which records a role reaches'
+            : 'Off: grants alone decide'}
         </Tag>
       ),
     },
     {
       source: 'force_rls',
-      label: 'Its owner',
-      render: (row) => (row.force_rls ? 'Held to the policies too' : 'Reads every row'),
+      label: 'Owner',
+      render: (row) => (row.force_rls ? 'Held to the policies too' : 'Reads every record'),
     },
   ],
   may: ownsTable,

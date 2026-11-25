@@ -40,15 +40,19 @@ export function NewField({ where }: { where: Place }) {
   const type = useWatch({ name: 'type' })
   return (
     <>
-      <TextInput source="name" label="Name: a PostgreSQL column" {...mono} />
-      <SelectInput source="type" label="Type" choices={fieldTypeChoices} {...mono} />
+      <TextInput
+        source="name"
+        label="Name in the database: in the address and the SQL (a column)"
+        {...mono}
+      />
+      <SelectInput source="type" label="Type" choices={fieldTypeChoices} />
       {type === 'relation' && (
         <CollectionInput source="relation" label="Points at" schema={where.schema} />
       )}
       {type === 'relation' && (
         <SelectInput
           source="on_delete"
-          label="When that row is deleted"
+          label="When that record is deleted"
           choices={onDelete}
           helperText={false}
         />

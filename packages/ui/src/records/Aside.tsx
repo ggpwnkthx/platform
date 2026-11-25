@@ -3,10 +3,12 @@ import { type ActivityInfo, type PolicyInfo, tablePrivileges } from '@platform/c
 import { ReferenceManyCount, useGetList, useRecordContext } from 'react-admin'
 import type { Field } from '../fields/types.ts'
 import { minute } from '../fields/values.tsx'
-import { Mono, Privilege, PrivilegeLegend, RoleName, Tag } from '../kit/marks.tsx'
+import { Mono, Privilege, PrivilegeLegend, Tag } from '../kit/marks.tsx'
+import { Role } from '../access/roles.tsx'
 import { Statement } from '../kit/said.tsx'
 import { Aside, AsideGroup } from '../kit/Page.tsx'
 import { useCollection } from './collection.ts'
+import { operationWord } from '../kit/words.ts'
 
 /** A privilege as the reader holds it: PostgreSQL's answer for the table, and for each field. */
 function held(name: string, table: Record<string, unknown>, fields: Field[]) {
@@ -33,7 +35,7 @@ export function CollectionAside() {
         <Mono>{`${schema}.${table}`}</Mono>
         {info.comment && <Typography variant="body2">{info.comment}</Typography>}
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          Owned by <RoleName name={info.owner} group />
+          Owned by <Role name={info.owner} />
         </Typography>
       </AsideGroup>
       <AsideGroup title="Your rights">
@@ -98,7 +100,7 @@ export function RecordAside() {
           ))}
       </AsideGroup>
       {children.length > 0 && (
-        <AsideGroup title="Rows that point at this one">
+        <AsideGroup title="Records that point at this one">
           {children.map((f) => (
             <Typography
               key={f.name}
@@ -120,7 +122,10 @@ export function RecordAside() {
         {history.data?.length ? (
           history.data.map((revision) => (
             <Typography key={revision.id} variant="body2" data-revision>
-              <Tag>{revision.operation}</Tag> <Mono>{minute(revision.at)}</Mono> {revision.actor}
+              <span title={revision.operation}>
+                <Tag>{operationWord(revision.operation)}</Tag>
+              </span>{' '}
+              <Mono>{minute(revision.at)}</Mono> {revision.actor}
             </Typography>
           ))
         ) : (

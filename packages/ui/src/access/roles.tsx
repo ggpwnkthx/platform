@@ -61,7 +61,7 @@ export function Role({ name }: { name: string }) {
 export const roles = defineKind<RoleInfo, object, { name: string; login: boolean }>({
   name: 'roles',
   title: 'Roles',
-  note: "A user is a LOGIN role named after a person's email; a group is a NOLOGIN role. You see the roles you may use; an operator sees them all.",
+  note: 'A user is a person who signs in, named by their email; a group gathers users so that rights are granted once. PostgreSQL calls both roles. You see the roles you may use; an operator sees them all.',
   noun: 'role',
   empty: 'No role that you may see.',
   read: async (db) => (await readRoles(db)).roles.filter((r) => !/^pg_/.test(r.name)),
@@ -92,7 +92,7 @@ export const roles = defineKind<RoleInfo, object, { name: string; login: boolean
       <TextInput source="name" label="Name: a person's email, or a group's name" {...mono} />
       <BooleanInput
         source="login"
-        label="A user: may sign in, and joins platform_users"
+        label="A person who signs in (a user). Off, it is a group"
         helperText={false}
       />
     </>

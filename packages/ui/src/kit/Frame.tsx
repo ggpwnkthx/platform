@@ -13,9 +13,9 @@ import {
   History,
   LogOut,
   Menu as MenuIcon,
-  ShieldCheck,
-  Table2,
+  Rows3,
   TerminalSquare,
+  Users,
 } from 'lucide-react'
 import { type ReactNode, Suspense, useEffect, useState } from 'react'
 import { Loading, TitlePortal, useLogout } from 'react-admin'
@@ -29,8 +29,8 @@ import { useWorkspace } from './place.ts'
 
 const { layout, colors, rounded } = tokens
 const modules = [
-  ['Data', Table2, (ws: string) => `/w/${ws}`, /^\/(w\/|[^/]+\.)|^\/$/],
-  ['Access', ShieldCheck, () => '/roles', /^\/roles/],
+  ['Data', Rows3, (ws: string) => `/w/${ws}`, /^\/(w\/|[^/]+\.)|^\/$/],
+  ['Users and groups', Users, () => '/roles', /^\/roles/],
   ['Activity', History, (ws: string) => `/activity/${ws}`, /^\/activity/],
   ['SQL', TerminalSquare, () => '/sql', /^\/sql/],
 ] as const

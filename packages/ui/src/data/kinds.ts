@@ -50,6 +50,8 @@ export interface Kind<Row = any, Where = any, Form = any> {
   create?(form: Form, where: Where, ctx: Ctx): string[]
   update?(form: Form, where: Where, row: Row, ctx: Ctx): string[]
   remove?(row: Row, where: Where, ctx: Ctx): string[]
+  /** What deleting one destroys beyond itself, said before the statement: data a delete takes with it. */
+  loses?(row: Row): string
 }
 
 const kinds = new Map<string, Kind>()

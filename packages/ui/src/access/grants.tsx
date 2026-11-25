@@ -17,8 +17,8 @@ import {
 import { BooleanInput, SelectArrayInput, SelectInput } from 'react-admin'
 import { useWatch } from 'react-hook-form'
 import { defineKind } from '../data/kinds.ts'
-import { Mono, Privilege, PrivilegeLegend } from '../kit/marks.tsx'
-import { grantsOn, mono } from '../model/collections.tsx'
+import { Privilege, PrivilegeLegend } from '../kit/marks.tsx'
+import { CollectionLabel, grantsOn, mono } from '../model/collections.tsx'
 import { useSession } from '../session/session.ts'
 import { named, Role, RoleInput } from './roles.tsx'
 
@@ -101,9 +101,8 @@ function GrantInputs({ where, row }: { where: Where; row?: GrantRow }) {
 }
 export const grants = defineKind<GrantRow, Where, GrantForm>({
   name: 'grants',
-  title: 'Who holds what',
-  note: "PostgreSQL's own answer for each role, so a right held through a group or as PUBLIC counts. A change writes the difference to the ACL.",
-  add: 'Grant on this collection',
+  title: 'Grants',
+  note: 'What each role may do on this collection, as PostgreSQL answers it: a right held through a group, or by everyone (PUBLIC), counts. A change writes only the difference.',
   noun: 'grant',
   empty: 'Nobody but its owner holds a right here.',
   async read(db, where) {
@@ -120,7 +119,7 @@ export const grants = defineKind<GrantRow, Where, GrantForm>({
   key: (row) => `${row.role} on ${row.table}`,
   columns: [
     { source: 'role', label: 'Role', render: (row) => <Role name={row.role} /> },
-    { source: 'table', label: 'Collection', render: (row) => <Mono>{row.table}</Mono> },
+    { source: 'table', label: 'Collection', render: (row) => <CollectionLabel name={row.table} /> },
     {
       source: 'select',
       label: 'Holds, by grant, by group or as PUBLIC',

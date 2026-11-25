@@ -35,7 +35,7 @@ export const statement = async (page: Page) =>
   (await page.locator('[data-change] [data-statement] pre').textContent({ timeout: 10_000 })) ?? ''
 export const run = async (page: Page) => {
   await change(page)
-    .getByRole('button', { name: /^(Run|Remove)$/ })
+    .getByRole('button', { name: /^(Run|Delete)$/ })
     .click()
   await expect(change(page)).toBeHidden()
 }

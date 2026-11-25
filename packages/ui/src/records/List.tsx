@@ -75,7 +75,7 @@ export function RecordList() {
   if (!info) return <PageTitle title={table} crumb="No such collection that you may reach" />
   const shown = fields.filter((f) => f.column?.can_select && f.views.list !== 'hide')
   const filters = [
-    <SearchInput key="q" source="q" alwaysOn placeholder="Search every readable column" />,
+    <SearchInput key="q" source="q" alwaysOn placeholder="Search the fields you may read" />,
     ...fields
       .filter((f) => f.views.filter !== 'hide' && (f.virtual || f.column?.can_select))
       .map((f) => (
@@ -104,7 +104,7 @@ export function RecordList() {
                   component={Link}
                   to={`/w/${schema}/${table}`}
                   variant="outlined"
-                  aria-label="Data model"
+                  aria-label="Data model and access"
                   startIcon={<Settings2 size={iconSize} />}
                 />
               </Tip>

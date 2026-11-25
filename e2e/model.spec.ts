@@ -43,7 +43,7 @@ test('a row policy is written and applies', async ({ app }) => {
   await app.getByRole('button', { name: 'Add a row policy' }).click()
   await change(app).getByLabel('Name', { exact: true }).fill('desk_reads')
   await change(app)
-    .getByLabel(/^USING/)
+    .getByLabel(/\(USING\)/)
     .fill('desk_email IS NOT NULL')
   const sql = await statement(app)
   expect(sql).toContain(
@@ -58,7 +58,7 @@ test('PostgreSQL refuses, and the refusal is shown with its SQLSTATE', async ({ 
   await app.getByRole('button', { name: 'Add a row policy' }).click()
   await change(app).getByLabel('Name', { exact: true }).fill('broken')
   await change(app)
-    .getByLabel(/^USING/)
+    .getByLabel(/\(USING\)/)
     .fill('no_such_column = 1')
   await change(app).getByRole('button', { name: 'Run' }).click()
   await expect(change(app).locator('[data-refusal]')).toContainText('(42703)')
@@ -68,22 +68,24 @@ test('PostgreSQL refuses, and the refusal is shown with its SQLSTATE', async ({ 
 test('a new collection, with a relation and choices', async ({ app }) => {
   await go(app, '/w/newsroom')
   await app.getByRole('button', { name: 'Add a collection' }).click()
-  await change(app).getByLabel('Name: a PostgreSQL table').fill('pitches')
+  await change(app)
+    .getByLabel(/^Name in the database/)
+    .fill('pitches')
   expect(await statement(app)).toContain(
     `SELECT platform.create_collection('newsroom', 'pitches');`
   )
   await run(app)
   await go(app, '/w/newsroom/pitches')
-  await expect(app.getByRole('cell', { name: 'uuid', exact: true }).first()).toBeVisible()
+  await expect(app.getByRole('cell', { name: 'Identifier', exact: true }).first()).toBeVisible()
   await app.getByRole('button', { name: 'Access', exact: true }).click()
-  await expect(app.getByText('On: policies decide which rows a role reaches')).toBeVisible()
+  await expect(app.getByText('On: policies decide which records a role reaches')).toBeVisible()
   await app.getByRole('button', { name: 'Fields', exact: true }).click()
   for (const field of ['name', 'stage', 'section']) {
     await app.getByRole('button', { name: 'Add a field' }).click()
     await change(app).getByLabel('Name').fill(field)
     if (field === 'stage') await change(app).getByLabel('One of').fill('idea, commissioned, filed')
     if (field === 'section') {
-      await choose(app, 'Type', /^relation/)
+      await choose(app, 'Type', /\(relation\)/)
       await choose(app, 'Points at', 'sections')
       expect(await statement(app)).toContain(
         'FOREIGN KEY ("section") REFERENCES "newsroom"."sections" (id) ON DELETE RESTRICT'
@@ -96,7 +98,7 @@ test('a new collection, with a relation and choices', async ({ app }) => {
 
 test('a many-to-many is made in one step, as a table of its own', async ({ app }) => {
   await go(app, '/w/newsroom/articles')
-  await app.getByRole('button', { name: 'Link to another collection' }).click()
+  await app.getByRole('button', { name: 'Add a link to many' }).click()
   await choose(app, 'The other collection', 'pitches')
   const sql = await statement(app)
   expect(sql).toContain(`SELECT platform.create_collection('newsroom', 'articles_pitches');`)

@@ -84,7 +84,7 @@ function RecordForm({
   return (
     <SimpleForm sx={{ maxWidth: tokens.layout.form }} toolbar={false}>
       <PageTitle
-        title={creating ? `New in ${said.name}` : textOf(record?.[named]) || 'Record'}
+        title={creating ? 'Add a record' : textOf(record?.[named]) || 'Record'}
         crumb={<Link to={`/${resource}`}>{said.name}</Link>}
         mark={<ItemMark {...said} table />}
         actions={

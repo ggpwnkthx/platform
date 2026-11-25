@@ -77,7 +77,9 @@ export function describe(error: unknown): { title: string; detail?: string } {
   const code = sqlState(error)
   if (code && /^[0-9A-Z]{5}$/.test(code)) {
     const detail = [e.detail, e.hint && `Hint: ${e.hint}`].filter(Boolean).join(' ')
-    return { title: `${e.message} (${code})`, detail: detail || undefined }
+    // An error already described carries its SQLSTATE in its message: it is said once.
+    const title = e.message.endsWith(`(${code})`) ? e.message : `${e.message} (${code})`
+    return { title, detail: detail || undefined }
   }
   return { title: error instanceof Error ? error.message : String(error) }
 }

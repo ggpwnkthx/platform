@@ -19,13 +19,19 @@ import {
 import { defineKind } from '../data/kinds.ts'
 import { resolveFields } from '../fields/resolve.ts'
 import { Mono, Privilege, Tag } from '../kit/marks.tsx'
-import { ownsTable, type Place } from './collections.tsx'
+import { CollectionLabel, ownsTable, type Place } from './collections.tsx'
 
 import { type FieldForm, NewField, places, type Row, SaidOfField, words } from './field-inputs.tsx'
+import { defaultWord, typeWord } from '../kit/words.ts'
 
 /** The fields of a collection, as a kind: what PostgreSQL holds, and what the owner says of each. */
 const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
 const said = (text?: string | null) => text?.trim() || null
+/** A field's default: in words where it is a value, as PostgreSQL keeps it where it is SQL. */
+function Starts({ with: expression }: { with: string }) {
+  const word = defaultWord(expression)
+  return word ? <span title={expression}>{word}</span> : <Mono>= {expression}</Mono>
+}
 export const fields = defineKind<Row, Place, FieldForm>({
   name: 'fields',
   title: 'Fields',
@@ -41,18 +47,31 @@ export const fields = defineKind<Row, Place, FieldForm>({
     {
       source: 'name',
       label: 'Field',
-      render: (row) => (
-        <>
-          <Mono>{row.name}</Mono> {row.label !== row.name && row.label}
-        </>
-      ),
+      // The name people read; the column's own is its title, and stays in the address and the SQL.
+      render: (row) =>
+        row.label !== row.name ? (
+          <span title={row.name}>{row.label}</span>
+        ) : (
+          <Mono>{row.name}</Mono>
+        ),
     },
     {
       source: 'type_name',
       label: 'Type',
-      render: (row) => (
-        <Mono>{row.relation ? `→ ${row.relation.target_table}` : row.type_name}</Mono>
-      ),
+      render: (row) => {
+        if (row.relation)
+          return (
+            <>
+              →{' '}
+              <CollectionLabel
+                schema={row.relation.target_schema}
+                name={row.relation.target_table}
+              />
+            </>
+          )
+        const word = typeWord(row.type_name)
+        return word ? <span title={row.type_name}>{word}</span> : <Mono>{row.type_name}</Mono>
+      },
     },
     {
       source: 'required',
@@ -62,7 +81,7 @@ export const fields = defineKind<Row, Place, FieldForm>({
           {row.column!.required && <Tag>required</Tag>} {row.system && <Tag>system</Tag>}{' '}
           {row.computed && <Tag>computed</Tag>}{' '}
           {row.choices && <Tag>{row.choices.join(' · ')}</Tag>}{' '}
-          {row.column!.default && !row.system && <Mono>= {row.column!.default}</Mono>}{' '}
+          {row.column!.default && !row.system && <Starts with={row.column!.default} />}{' '}
           {Object.entries(places)
             .filter(([place]) => row.views[place] !== 'show')
             .map(([place, where]) => (
@@ -80,9 +99,16 @@ export const fields = defineKind<Row, Place, FieldForm>({
       wide: true,
       render: (row) => (
         <>
-          <Privilege name="SELECT" held={row.column!.can_select} />
-          <Privilege name="INSERT" held={row.column!.can_insert} />
-          <Privilege name="UPDATE" held={row.column!.can_update} />
+          {/* Only what is not held is drawn: a full row of marks says nothing. */}
+          {row.column!.can_select && row.column!.can_insert && row.column!.can_update ? (
+            'Read, add and change'
+          ) : (
+            <>
+              <Privilege name="SELECT" held={row.column!.can_select} />
+              <Privilege name="INSERT" held={row.column!.can_insert} />
+              <Privilege name="UPDATE" held={row.column!.can_update} />
+            </>
+          )}
         </>
       ),
     },
@@ -156,6 +182,8 @@ export const fields = defineKind<Row, Place, FieldForm>({
     if (!out.length) throw new Error('Nothing is changed yet.')
     return out
   },
+  loses: (row) =>
+    `Every record loses its ${row.label} value with the field. Nothing brings it back.`,
   remove: (row, { schema, table }) => {
     if (row.system) throw new InvalidName(`${row.name} is made with every collection, and stays.`)
     return [dropFieldStatement(schema, table, row.name)]

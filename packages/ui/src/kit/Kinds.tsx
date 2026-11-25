@@ -1,4 +1,4 @@
-import { Button, IconButton } from '@mui/material'
+import { Alert, Button, IconButton } from '@mui/material'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { DataTable, ListBase } from 'react-admin'
@@ -30,7 +30,7 @@ export function KindTable(props: {
   const may = kind.may?.(where, ctx) ?? true
   const mayRow = (row: object) => kind.mayRow?.(row, where, ctx) ?? may
   const acts = (may || kind.mayRow) && (kind.update || kind.remove)
-  const label = props.add ?? kind.add ?? `Add a ${kind.noun}`
+  const label = props.add ?? addLabel(kind)
   const add = may && kind.create && (
     <Button
       variant={props.lead ? 'contained' : 'outlined'}
@@ -46,8 +46,8 @@ export function KindTable(props: {
     <IconButton
       size="small"
       color={action === 'remove' ? 'error' : 'default'}
-      aria-label={`${action === 'remove' ? 'Remove' : 'Change'} ${row.id}`}
-      title={action === 'remove' ? 'Remove' : 'Change'}
+      aria-label={`${action === 'remove' ? 'Delete' : 'Change'} ${row.id}`}
+      title={action === 'remove' ? 'Delete' : 'Change'}
       onClick={() => setOpen({ action, row })}
     >
       {action === 'remove' ? <Trash2 size={iconSize} /> : <Pencil size={iconSize} />}
@@ -131,6 +131,9 @@ export function KindTable(props: {
   )
 }
 
+/** What adding one of a kind is called: on its button and on the drawer it opens. */
+const addLabel = (kind: Kind) => kind.add ?? `Add a ${kind.noun}`
+
 /** One change to one kind: its form, and the statements the kind says the change is. */
 export function KindChange({
   kind,
@@ -146,16 +149,16 @@ export function KindChange({
   const { db: _db, ...ctx } = useSession()
   const { action, row } = open
   const title = {
-    create: `New ${kind.noun}`,
+    create: addLabel(kind),
     update: `Change ${kind.noun} ${row?.id ?? ''}`,
-    remove: `Remove ${kind.noun} ${row?.id ?? ''}`,
+    remove: `Delete ${kind.noun} ${row?.id ?? ''}`,
   }[action]
   return (
     <Change
       title={title}
       onClose={onClose}
       danger={action === 'remove'}
-      label={action === 'remove' ? 'Remove' : undefined}
+      label={action === 'remove' ? 'Delete' : undefined}
       defaults={action === 'remove' ? {} : kind.defaults?.(where, row, ctx)}
       statements={(form) =>
         action === 'create'
@@ -166,6 +169,11 @@ export function KindChange({
       }
     >
       {action !== 'remove' && kind.Inputs && <kind.Inputs where={where} row={row} />}
+      {action === 'remove' && kind.loses && (
+        <Alert severity="warning" data-loses>
+          {kind.loses(row)}
+        </Alert>
+      )}
     </Change>
   )
 }

@@ -15,6 +15,7 @@ import { itemIcons, Mono } from '../kit/marks.tsx'
 import { palette } from '../kit/palette.ts'
 import { useSession } from '../session/session.ts'
 import { mono, ownsSchema, ownsTable } from './collections.tsx'
+import { metadataWord } from '../kit/words.ts'
 
 /** What an item says of itself: its metadata, as a kind. */
 /** A value as a document, or as the text it is. */
@@ -59,16 +60,23 @@ function MetadataInputs({ where, row }: { where: MetadataTarget; row?: MetadataE
 }
 export const metadata = defineKind<MetadataEntry, MetadataTarget, { key: string; value: string }>({
   name: 'metadata',
-  title: 'What it says of itself',
+  title: 'Metadata',
   note: 'Metadata describes the item it is on. Whoever may reach the item reads it; only its owner changes it.',
-  noun: 'saying',
-  empty: 'Nothing is said of it yet.',
+  noun: 'metadata entry',
+  empty: 'No metadata yet.',
   read: (db, where) => readMetadata(db, where),
   key: (row) => row.key,
   columns: [
-    { source: 'key', label: 'Key', render: (row) => <Mono>{row.key}</Mono> },
+    {
+      source: 'key',
+      label: 'Key',
+      render: (row) => {
+        const word = metadataWord(row.key)
+        return word ? <span title={row.key}>{word}</span> : <Mono>{row.key}</Mono>
+      },
+    },
     { source: 'value', label: 'Value', render: (row) => <Mono>{textOf(row.value)}</Mono> },
-    { source: 'updated_by', label: 'Said by' },
+    { source: 'updated_by', label: 'Changed by' },
   ],
   may: (where, ctx) =>
     where.table

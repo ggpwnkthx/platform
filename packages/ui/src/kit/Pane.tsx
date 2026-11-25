@@ -76,12 +76,12 @@ export function Pane({ ws }: { ws: string }) {
         {identity.can_create_workspace && (
           <MenuItem value="+">
             <Plus size={iconSize} />
-            &nbsp;New workspace
+            &nbsp;Add a workspace
           </MenuItem>
         )}
       </Select>
       <Typography variant="subtitle2" sx={{ color: 'text.secondary', px: 3, py: 1.5 }}>
-        {activity ? 'Revisions of' : 'Collections'}
+        Collections
       </Typography>
       <List disablePadding>
         {activity && item(`/activity/${ws}`, 'Every collection', <Layers size={iconSize} />)}

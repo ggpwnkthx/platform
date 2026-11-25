@@ -19,7 +19,6 @@ export const links = defineKind<
   name: 'links',
   title: 'Linked to many',
   note: 'A many-to-many relation is a table of its own: a key to each side, unique together.',
-  add: 'Link to another collection',
   noun: 'link to many',
   empty: 'This collection is linked to no other through a table of links.',
   read: async (_db, { schema, table }, { catalog }) =>
@@ -68,5 +67,6 @@ export const links = defineKind<
       [[left, right]]
     )
   },
+  loses: (row) => `Every link it holds goes with ${row.table}. The records on either side stay.`,
   remove: (row, { schema }) => [dropCollectionStatement(schema, row.table)],
 })

@@ -1,4 +1,4 @@
-import { Box, Chip } from '@mui/material'
+import { Box, Chip, Tooltip } from '@mui/material'
 import type { Hold } from '@platform/core'
 import { Globe, User, Users } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -33,9 +33,27 @@ export function ItemMark(props: { icon?: string | null; color?: string | null; t
 }
 
 const holds = {
-  all: 'Held on the whole collection',
-  some: 'Held on some fields',
-  none: 'Not held',
+  all: 'held on the whole collection',
+  some: 'held on some fields',
+  none: 'not held',
+}
+/** What each of PostgreSQL's privileges lets a role do, in the reader's words. */
+const means: Record<string, string> = {
+  SELECT: 'Read records',
+  INSERT: 'Add records',
+  UPDATE: 'Change records',
+  DELETE: 'Delete records',
+  TRUNCATE: 'Empty the collection at once',
+  REFERENCES: 'Point at it from another collection',
+  TRIGGER: 'Attach triggers',
+  USAGE: 'Reach into the workspace',
+  CREATE: 'Make collections in it',
+}
+/** A privilege's tip: what it lets a role do, and how much of it is held. */
+const tipOf = (name: string, hold: Hold, count?: string) => {
+  const [some, of] = count?.split('/') ?? []
+  const held = hold === 'some' && some ? `held on ${some} of ${of} fields` : holds[hold]
+  return means[name] ? `${means[name]} (${name}): ${held}` : ''
 }
 /** A privilege: PostgreSQL's own name beside a full, half or empty mark. It describes; it does not edit. */
 export function Privilege(props: { name: string; held: Hold | boolean; count?: string }) {
@@ -49,32 +67,33 @@ export function Privilege(props: { name: string; held: Hold | boolean; count?: s
     none: { border: `${layout.ring} solid ${colors['palette-grey']}` },
   }[hold]
   return (
-    <Box
-      component="span"
-      title={holds[hold]}
-      data-held={hold}
-      sx={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 1.5,
-        mr: 3,
-        ...tokens.typography.privilege,
-        color: hold === 'none' ? 'text.disabled' : 'text.primary',
-      }}
-    >
+    <Tooltip title={tipOf(props.name, hold, props.count)} disableInteractive describeChild>
       <Box
-        component="i"
+        component="span"
+        data-held={hold}
         sx={{
-          width: layout['privilege-mark'],
-          height: layout['privilege-mark'],
-          borderRadius: rounded.round,
-          flex: 'none',
-          ...disc,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 1.5,
+          mr: 3,
+          ...tokens.typography.privilege,
+          color: hold === 'none' ? 'text.disabled' : 'text.primary',
         }}
-      />
-      {props.name}
-      {props.count && hold === 'some' ? ` ${props.count}` : ''}
-    </Box>
+      >
+        <Box
+          component="i"
+          sx={{
+            width: layout['privilege-mark'],
+            height: layout['privilege-mark'],
+            borderRadius: rounded.round,
+            flex: 'none',
+            ...disc,
+          }}
+        />
+        {props.name}
+        {props.count && hold === 'some' ? ` ${props.count}` : ''}
+      </Box>
+    </Tooltip>
   )
 }
 export const PrivilegeLegend = () => (

@@ -16,7 +16,7 @@ test('a record is written, read back, changed under its version, and logged', as
   const aside = app.locator('aside')
   await expect(aside.getByText('version')).toBeVisible()
   await expect(aside.locator('p', { hasText: 'version' })).toContainText('2')
-  await expect(aside.locator('[data-revision]', { hasText: 'UPDATE' })).toBeVisible()
+  await expect(aside.locator('[data-revision]', { hasText: 'Changed' })).toBeVisible()
 })
 
 test('search and a filter narrow the records, in the address', async ({ app }) => {
@@ -86,5 +86,5 @@ test('chosen rows are deleted together, each under the version the page shows', 
   await app.getByRole('button', { name: 'Confirm' }).click()
   await expect(app.getByText('No record matches the search and its conditions.')).toBeVisible()
   await go(app, '/activity/newsroom?table=tags')
-  await expect(app.getByRole('cell', { name: 'DELETE' })).toHaveCount(1)
+  await expect(app.getByRole('cell', { name: 'Deleted', exact: true })).toHaveCount(1)
 })

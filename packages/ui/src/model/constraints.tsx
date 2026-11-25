@@ -26,6 +26,7 @@ import {
   type Place,
   required,
 } from './collections.tsx'
+import { typeWord } from '../kit/words.ts'
 
 /** The keys and rules of a collection: its constraints and its indexes. */
 interface ConstraintRow {
@@ -35,10 +36,10 @@ interface ConstraintRow {
   index: boolean
 }
 const constraintTypes = [
-  { id: 'unique', name: 'Unique: no two rows hold the same' },
-  { id: 'check', name: 'Check: every row passes a test' },
-  { id: 'foreign', name: 'Foreign key: the field points at a row' },
-  { id: 'index', name: 'Index: the rows are found without a scan' },
+  { id: 'unique', name: 'Unique: no two records hold the same' },
+  { id: 'check', name: 'Check: every record passes a test' },
+  { id: 'foreign', name: 'Foreign key: the field points at a record' },
+  { id: 'index', name: 'Index: records are found without reading them all' },
 ]
 const typeWords: Record<string, string> = {
   p: 'Primary key',
@@ -115,7 +116,7 @@ export const constraints = defineKind<
         {type === 'foreign' && (
           <SelectInput
             source="on_delete"
-            label="When that row is deleted"
+            label="When that record is deleted"
             choices={onDelete}
             helperText={false}
           />
@@ -144,6 +145,6 @@ export const constraints = defineKind<
 })
 
 export const fieldTypeChoices = [
-  ...Object.keys(columnTypes).map((id) => ({ id, name: id })),
-  { id: 'relation', name: 'relation: points at a row of another collection' },
+  ...Object.entries(columnTypes).map(([id, type]) => ({ id, name: `${typeWord(type)} (${id})` })),
+  { id: 'relation', name: 'Points at a record of another collection (relation)' },
 ]

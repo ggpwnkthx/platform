@@ -1,19 +1,48 @@
 import { Alert, Box, Stack, Typography } from '@mui/material'
-import { describe } from '@platform/core'
+import { describe, sqlState } from '@platform/core'
 import type { ReactNode } from 'react'
 import tokens from 'virtual:design-tokens'
 
 const { layout } = tokens
 /** What the studio says one way everywhere: a statement, a refusal, an empty place, a section. */
 export { type Standing, Statement } from './Statement.tsx'
+/** What to do about the refusals people meet most, in the reader's words, under PostgreSQL's own. */
+function nextStep(code?: string): string | null {
+  if (!code) return null
+  if (code === '42501')
+    return "Your role doesn't hold the right this needs. An owner of the workspace can grant it, under Data model and access, then Access."
+  if (code === '23505')
+    return 'Another record already has this value, and the field must be unique. Change it, or change that record.'
+  if (code === '23503')
+    return 'It points at a record that does not exist, or another record still points at this one.'
+  if (code === '23502') return 'A required field is empty. Fill it in, then save again.'
+  if (code === '23514')
+    return "A value breaks one of the collection's Keys and rules. Change it to fit."
+  if (code === '22P02' || code === '22007' || code === '22008')
+    return 'A value is not in the form its field expects: a number, a date, an identifier.'
+  if (code === '40001' || code === '40P01')
+    return 'Someone else changed the same thing at the same moment. Try again.'
+  if (code === '42P01' || code === '42703')
+    return 'Something it names does not exist, or your role may not see it.'
+  if (code === '42601') return 'PostgreSQL could not read the SQL. Look near the word it points at.'
+  if (code === '01006' || code === '01007')
+    return 'Nothing changed: the role already held, or never held, what was asked.'
+  return null
+}
 /** What PostgreSQL refused, in its own words, with its SQLSTATE. The one way a refusal is shown. */
 export function Refusal({ error }: { error: unknown }) {
   if (!error) return null
   const said = describe(error)
+  const step = nextStep(sqlState(error))
   return (
     <Alert severity="error" data-refusal sx={{ my: 2 }}>
       <strong>{said.title}</strong>
       {said.detail && <div>{said.detail}</div>}
+      {step && (
+        <Box data-next-step sx={{ mt: 1.5 }}>
+          {step}
+        </Box>
+      )}
     </Alert>
   )
 }
