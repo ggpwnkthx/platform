@@ -53,7 +53,11 @@ function platformSite(dir: string, inPage: boolean): Plugin {
   return {
     name: 'platform-site',
     resolveId: (source) => (source in modules ? `\0${source}` : undefined),
-    load: (id) => modules[id.slice(1)]?.(),
+    load(id) {
+      // The tokens follow the document: an edit to DESIGN.md reloads the page with the new ones.
+      if (id === '\0virtual:design-tokens') this.addWatchFile(join(repository, 'DESIGN.md'))
+      return modules[id.slice(1)]?.()
+    },
     configureServer(server) {
       server.middlewares.use('/config.json', (_request, response) => {
         response.setHeader('content-type', 'application/json')
