@@ -18,24 +18,24 @@ network and the browser assets accordingly.
 | One way in            | Network logins are by token; a role password is not a login; forged, expired and foreign tokens fail                     |
 | Revocation            | Native REVOKE and NOLOGIN; no application token cache                                                                    |
 | Impersonation         | PostgreSQL checks SET ROLE and SET SESSION AUTHORIZATION                                                                 |
-| Workspace             | Native schema USAGE/CREATE, ownership and object grants                                                                  |
-| Fields                | Column ACLs apply to projection, predicates, sort and writes                                                             |
+| Schema                | Native schema USAGE/CREATE, ownership and object grants                                                                  |
+| Columns               | Column ACLs apply to projection, predicates, sort and writes                                                             |
 | Rows                  | Native RLS USING and WITH CHECK, based on session_user                                                                   |
 | Validation            | PostgreSQL types and CHECK/NOT NULL/UNIQUE/FK constraints                                                                |
 | Write-only clients    | Writes return counts rather than RETURNING *                                                                             |
 | Revisions             | Database triggers log every write, from the interface or any client, in the same transaction                             |
-| Audit confidentiality | Revisions are readable only by workspace-owner members, and in each row only the columns the reader may SELECT           |
-| Audit integrity       | Normal users cannot write/delete/truncate audit records or disable table triggers                                        |
-| Owner restraint       | The guard refuses ordinary roles whatever turns a collection out of row security or lets writes pass by its history      |
+| Audit confidentiality | Revisions are readable only by schema-owner members, and in each row only the columns the reader may SELECT              |
+| Audit integrity       | Normal users cannot write/delete/truncate audit rows or disable table triggers                                           |
+| Owner restraint       | The guard refuses ordinary roles whatever turns a table out of row security or lets writes pass by its history           |
 | SQL construction      | Quoted identifiers; bound data values; escaped DDL literals                                                              |
 | Protocol              | The page's wire client logs in by OAUTHBEARER and runs one bound statement per query, directly and through the relay     |
 | State leakage         | One authenticated login per page; the reader's own statements run on a login of their own                                |
 
-The only SECURITY DEFINER helper that acts on the database appends real trigger records to
+The only SECURITY DEFINER helper that acts on the database appends real trigger rows to
 platform.activity. Its owner is platform_core, with no login or role-administration
 privileges. (The guard's helpers are a second pair: they are owned by the cluster superuser
 who installed the guard, they answer only about the caller, and they act on nothing.) The logged rows are read through one view of the same owner, platform.revisions,
-which shows a workspace's owners its history and cuts each row down to the columns the reader
+which shows a schema's owners its history and cuts each row down to the columns the reader
 holds SELECT on in the table it was logged from (`platform.readable_row`); the rows in
 platform.activity itself are granted to nobody. Public execution is revoked on the functions that act; the read-only helpers
 that answer questions about the caller may be executed by anyone who may connect, and each
@@ -47,8 +47,8 @@ rewrite historical labels.
 
 Superusers, BYPASSRLS roles and object owners are trusted administrators, as in native
 PostgreSQL. Table owners can alter policies, disable/drop triggers, replace tables and change
-ownership. A workspace owner reads its revision history, but owning the workspace is not a
-right on a column: a column withheld from them in a collection is withheld in its revisions
+ownership. A schema owner reads its revision history, but owning the schema is not a
+right on a column: a column withheld from them in a table is withheld in its revisions
 too, and the revisions of a table that has been dropped, or of a column that has been dropped
 or renamed, show nothing of it to anyone but an operator reading the log itself. The owner of
 a table holds every column of it, and reads them all. The audit table is append-only for ordinary roles, not tamper-proof against database owners,
@@ -67,17 +67,17 @@ the server can change what it holds. Use pgAudit and an external protected log d
 when more of those events or tamper-resistant retention are required. Tables created manually need the audit/stamp triggers installed by
 an owner; the project does not install a superuser event trigger to intercept all DDL.
 `psql -f deploy/sql/doctor.sql` names the tables that write no revisions, because they have no audit
-trigger or it has been disabled, and the collections owned by a person rather than a group.
+trigger or it has been disabled, and the tables owned by a person rather than a group.
 
-A table owner may, by PostgreSQL's own rules, turn a collection out of row security, and
+A table owner may, by PostgreSQL's own rules, turn a table out of row security, and
 drop, disable or rewrite the triggers that write its history. The guard
 (`deploy/sql/guard.sql`, installed by the local stack as it installs itself) refuses that to
 every role but a superuser and the operators (the members of `platform_core` and
 `platform_admins`). It is a pair of event triggers that read the catalogs before and after
 each DDL command, not the statement's text, so a comment inside the statement, dynamic SQL in
 a DO block, a renamed trigger, `DISABLE TRIGGER ALL` and `CREATE OR REPLACE TRIGGER` are all
-the same to it. It also refuses a rule on a collection and a child table of one: both let
-writes pass by the history. A collection dropped whole is its owner's to drop, and leaves one
+the same to it. It also refuses a rule on a table and a child table of one: both let
+writes pass by the history. A table dropped whole is its owner's to drop, and leaves one
 revision that says so. Everything else an owner may do — a column, a policy, a comment — is
 theirs, and stays theirs. An owner can still add a BEFORE trigger that runs after the stamp
 trigger and overwrites `created_by` or `updated_by`; a revision still names the role that
@@ -103,11 +103,11 @@ side channels.
 A foreign key is one of those side channels, and it is worth naming plainly: PostgreSQL
 checks a key with the rights of the table that owns the constraint, and the check is not
 subject to the reader's row policies. A reader who may write a column that points at another
-collection can therefore learn whether a row they may not read exists — the write is accepted
-for a row that is there and refused for one that is not — and a collection whose rows are
-hidden by a policy is still a collection whose rows may be found out this way. Where that
+table can therefore learn whether a row they may not read exists — the write is accepted
+for a row that is there and refused for one that is not — and a table whose rows are
+hidden by a policy is still a table whose rows may be found out this way. Where that
 matters, keep the right to write the pointing column away from the readers who may not read
-the pointed-at collection, or hold the target in a workspace the reader cannot use.
+the pointed-at table, or hold the target in a schema the reader cannot use.
 
 A site folder is code, not data. Its SQL files are run as they are, beside the server, by the
 server's own superuser, so they carry the server's authority. Its `extensions.tsx` and its

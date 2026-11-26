@@ -35,8 +35,8 @@ colors:
   aubergine-violet-ink: "#5a3a6d"
   night-indigo: "#5e54a3"
   night-indigo-ink: "#3b3567"
-  field-olive: "#bebf4f"
-  field-olive-ink: "#6f6e2e"
+  column-olive: "#bebf4f"
+  column-olive-ink: "#6f6e2e"
   cast-bronze: "#be964e"
   cast-bronze-ink: "#574422"
   terracotta-clay: "#bf704e"
@@ -245,14 +245,14 @@ studio's work is to show that answer: which columns a reader may read, which row
 lets them see, what a change will run, and what PostgreSQL said when it refused.
 
 The studio is a working surface, not a canvas. It is light and dense on purpose: a near-black
-module bar down the left edge, a navigation pane that names the workspace in view, a sticky
+module bar down the left edge, a navigation pane that names the schema in view, a sticky
 header carrying the page's actions, and the page itself. Tables are the floor of the product —
-most of a reader's day is a grid of records, a form, a filter, a statement — so the grid is
+most of a reader's day is a grid of rows, a form, a filter, a statement — so the grid is
 given the space and everything else recedes.
 
 The system's character comes from what it shows rather than how it decorates. Every right is
 drawn in PostgreSQL's own privilege names with one full / half / empty mark; every change shows
-its SQL statement before it runs; every withheld field or filtered row says why. Interface text
+its SQL statement before it runs; every withheld column or filtered row says why. Interface text
 is Inter; anything the database owns — values, identifiers, SQL, privilege names, role names —
 is JetBrains Mono, so the reader can always tell the studio's voice from the database's.
 
@@ -285,7 +285,7 @@ categorical data — an item that carries its own colour.
 ### Primary
 
 - **Studio Orange** — the fill of the primary action, the active module tile, the held
-  privilege, the focus border on an input, the mark of a collection that has no colour of its
+  privilege, the focus border on an input, the mark of a table that has no colour of its
   own. Orange says "do this" or "this is chosen", and nothing else.
 - **Orange Ink** — the dark step: orange text on an orange ground (the active nav item, a chip,
   a badge that says what applies to you), and the ink on a Studio Orange fill, because the
@@ -326,7 +326,7 @@ The status trio, and only ever as a status:
 
 ### Reserved Families
 
-Eleven families are held for categorical data and never decorate. A workspace and a collection
+Eleven families are held for categorical data and never decorate. A schema and a table
 are categorical data — each one is an item with its own name and its own mark — so the reserved
 families have their job: the colour of the mark.
 
@@ -335,7 +335,7 @@ families have their job: the colour of the mark.
 | Garden Mint | Mint | Deep Mint | Grape Purple | Purple | Deep Purple |
 | Storm Steel | Steel | Deep Steel | Aubergine Violet | Violet | Deep Violet |
 | Pool Cyan | Cyan | Deep Cyan | Night Indigo | Indigo | Deep Indigo |
-| Lagoon Teal | Teal | Deep Teal | Field Olive | Olive | Deep Olive |
+| Lagoon Teal | Teal | Deep Teal | Column Olive | Olive | Deep Olive |
 | Orchid Pink | Pink | Deep Pink | Cast Bronze | Bronze | Deep Bronze |
 | | | | Terracotta Clay | Clay | Deep Clay |
 
@@ -365,7 +365,7 @@ its position in the list: settled words are green, ended or refused words are re
 words are amber, starting words are grey, and anything else is blue. The accent never takes a
 value's tone.
 
-**The Item Colour Rule.** A workspace or a collection may carry a colour of its own, stored with
+**The Item Colour Rule.** A schema or a table may carry a colour of its own, stored with
 its metadata. The colour fills that item's mark — the small tile that carries its icon — and
 nowhere else: never a heading, never a border, never a ground, and never the accent, which
 keeps meaning "do this" and "chosen".
@@ -403,18 +403,18 @@ statement), it is set in JetBrains Mono; if the studio wrote it, it is Inter.
 ## Layout
 
 A four-column frame: the module bar (64px), the navigation pane (264px), the main column, and
-on collection and record pages an aside (312px). The users-and-groups pages have no workspace
+on table and row pages an aside (312px). The users-and-groups pages have no schema
 in view and drop the pane, leaving the bar alone.
 
 The header is sticky at the top of the main column: 64px tall, padded 32px either side, on
 Paper with a hairline beneath, carrying the item's mark, where the page belongs, and its
-title on the left, and at the right what the page is for doing — a list's filter, a record's
+title on the left, and at the right what the page is for doing — a list's filter, a row's
 Delete and Save, the add of the table a page leads with — its one primary button last. A page
 in sections switches them from there too, before its actions. A section's other adds stay at
 its heading. The page body is padded 24px 32px 48px.
 
-The aside carries what is known about the thing in view — a collection's information, the
-reader's rights on it and the policies that apply; a record's stamps, the rows that point at
+The aside carries what is known about the thing in view — a table's information, the
+reader's rights on it and the policies that apply; a row's stamps, the rows that point at
 it and its revisions — on a 10px-cornered card of Subdued Grey, padded 20px, beside the page.
 
 Spacing runs on a 4px step — 10, 12, 16, 20, 24, 32, 48 — named in the frontmatter.
@@ -427,7 +427,7 @@ and going somewhere closes it. Under 900px the sign-in stacks its steps above th
 above it; it is never a bordered box. A card (panel, tile, table wrapper) is the only box on the
 page, so boxes never nest inside boxes.
 
-**The Sticky First Column Rule.** In a record table the first field stays pinned while the rest
+**The Sticky First Column Rule.** In a row table the first column stays pinned while the rest
 scrolls, once there are more than three columns. A value longer than its column ends in an
 ellipsis at 320px, and the whole value is in its title.
 
@@ -484,7 +484,7 @@ tile is the palette's black or its white.
   catches a click, and never replaces the name of what it describes.
 - **Danger:** solid Danger Red, and it appears only where something is destroyed.
 
-### Inputs / Fields
+### Inputs / Columns
 
 - **Style:** 36px, 12px of padding, 6px radius, Paper ground, a hairline stroke at 13px; values
   are set in JetBrains Mono at 13px when PostgreSQL owns them.
@@ -497,7 +497,7 @@ tile is the palette's black or its white.
 
 ### Chips and Pills
 
-- **Filter conditions:** beside the search, each a field's name over the operator it is held
+- **Filter conditions:** beside the search, each a column's name over the operator it is held
   to, the value it is given, and a button that removes it.
 - **Badges:** a light ground in the family's tint with the family's dark step as the text, a
   full pill 20px tall at 11px and padded 0 10px, never uppercase, 700 weight, or 600 where the
@@ -517,12 +517,12 @@ tile is the palette's black or its white.
   orange tile with the palette's black icon. The brand cell sits at the top in the raised ink
   with the database mark in orange. At the foot a round paper tile carries the reader's
   initials; it opens who is signed in to PostgreSQL, in mono, and the way out.
-- **Navigation pane:** Subdued Grey with a hairline on the right, padded 12px. The workspace
-  switcher is at the top; the collections and the workspace's own links follow under 12px grey
+- **Navigation pane:** Subdued Grey with a hairline on the right, padded 12px. The schema
+  switcher is at the top; the tables and the schema's own links follow under 12px grey
   group titles. A link is padded 8px 12px and stands about 38px tall with no corner rounding;
   hover takes the greyer ground, and the active link takes the orange's light ground with the
-  orange's darkest step as its text. The pane is drawn in the modules read one workspace at a
-  time, Data and Activity, and not in Users and groups or SQL.
+  orange's darkest step as its text. The pane is drawn in the modules read one schema at a
+  time, Data and Activity, and not in Roles or SQL.
 - **Sections:** a page too long to read at once is in sections, switched from its header by a
   joined row of icons that carry their names from the lg breakpoint up and a tip below it,
   before what the page is for doing so its one primary button stays last. The section in view takes the orange's light ground with the
@@ -530,7 +530,7 @@ tile is the palette's black or its white.
 
 ### Data Table
 
-One table, `kit/Table.tsx`, lists records and every kind of thing: bordered, with 10px
+One table, `kit/Table.tsx`, lists rows and every kind of thing: bordered, with 10px
 corners, rows 40px tall and cells padded 7px 10px, rows highlighted on hover, the first column
 pinned, a row's actions pinned at the right, numeric columns right-aligned and set in mono, a
 null shown as a faint mono `null`. Columns sort from their header. Rows chosen with their
@@ -541,16 +541,16 @@ only box on the page.
 ### Privilege Marks (signature)
 
 A privilege is drawn the same way everywhere: a 14px disc that is solid orange (held on the
-whole collection), half orange and half Orange Wash Deep (held on some fields), or an empty
+whole table), half orange and half Orange Wash Deep (held on some columns), or an empty
 grey ring (not held), beside its PostgreSQL name in mono. A legend of the three marks appears
-wherever they do. A half mark carries its count beside it — the fields it covers of the fields
-there are, eleven of twelve. Where the question is who holds a field, the answer is the roles
-by name: small tags in mono, a role that holds the whole collection quieter than one granted
-the field by name. A role is drawn the same wherever access is read: a person, a group or
+wherever they do. A half mark carries its count beside it — the columns it covers of the columns
+there are, eleven of twelve. Where the question is who holds a column, the answer is the roles
+by name: small tags in mono, a role that holds the whole table quieter than one granted
+the column by name. A role is drawn the same wherever access is read: a person, a group or
 everyone as its icon, and its name in mono.
 
 The marks describe; they do not edit. A grant is changed in the change surface, where each privilege
-is chosen as not held, the whole collection or chosen fields, and the mark beside the privilege
+is chosen as not held, the whole table or chosen columns, and the mark beside the privilege
 follows the choice, so the drawer reads like the table it came from.
 
 **The One Rights Vocabulary Rule.** Rights are named only by PostgreSQL's privileges (SELECT,
@@ -586,32 +586,32 @@ the scroll to a refusal arrive without moving.
 
 ### Item Marks (signature)
 
-A workspace or a collection may present itself: a display name, an icon and a colour, kept in
+A schema or a table may present itself: a display name, an icon and a colour, kept in
 its own metadata and drawn by the interface wherever the item appears. The mark is a rounded
-tile of 34px, in a page header and beside a collection's name, filled with the item's colour
+tile of 34px, in a page header and beside a table's name, filled with the item's colour
 and carrying its icon in the ink that reads on it. Without a colour the mark is Subdued Grey. The icon
 set is the studio's own, one stroke and one weight, named by the metadata (`newspaper`,
 `file-text`, `building-2`); an icon the studio does not draw falls back to the generic mark. The
 navigation pane keeps its list quiet: the item's icon there, in the neutral grey, and the colour
 in the places where the item is presented.
 
-### Field Names
+### Column Names
 
-A field may carry a display name: the word the interface shows for a column where people read
-it — the header of a records table, the label of a record's own field. The name is the studio's
+A column may carry a display name: the word the interface shows for a column where people read
+it — the header of a rows table, the label of a row's own column. The name is the studio's
 word for the column, so it is set in Inter, and it is drawn alone: the column's own name is
-its title, and stays in the address and the SQL. A field without one shows its column's name,
-in JetBrains Mono; a collection is named the same way. The name reaches only the readers who may
-read the column: PostgreSQL does not return the metadata of a field they may not reach, so a
-hidden field keeps its raw name and nothing else.
+its title, and stays in the address and the SQL. A column without one shows its column's name,
+in JetBrains Mono; a table is named the same way. The name reaches only the readers who may
+read the column: PostgreSQL does not return the metadata of a column they may not reach, so a
+hidden column keeps its raw name and nothing else.
 
-### Where a Field Appears
+### Where a Column Appears
 
-A field is drawn in three places — the records table, the record form and the filter builder —
-and the owner of a collection says which of them a field belongs to, in the field's own
+A column is drawn in three places — the rows table, the row form and the filter builder —
+and the owner of a table says which of them a column belongs to, in the column's own
 metadata, so PostgreSQL keeps the rules: only the owner changes it, and it narrows the interface
-without granting anything. A field that says nothing appears everywhere; the editor is three
-choices in the change surface — shown, hidden, and, in the record, shown and locked — with
+without granting anything. A column that says nothing appears everywhere; the editor is three
+choices in the change surface — shown, hidden, and, in the row, shown and locked — with
 the statements that will run below them, like every other change. A column PostgreSQL computes itself — a
 generated column, an identity column — is shown and locked whatever the owner says, because the
 database writes it.
@@ -632,55 +632,51 @@ paragraph and the people who may sign in.
 ## Words and Icons
 
 One thing has one name, and one icon means one thing, everywhere it appears: in the module
-bar, the pane, a header, a tab, a table and a drawer. An action's name is a verb and the thing
-it acts on; the drawer it opens carries the same words as the button that opened it.
+bar, the pane, a header, a tab, a table and a drawer. The name is PostgreSQL's own: schema,
+table, view, column, row, role, privilege, policy, constraint, index. An action's name is the
+verb of the statement it writes and the thing it acts on; the drawer it opens carries the same
+words as the button that opened it.
 
 | Icon (lucide) | Means | Named |
 | --- | --- | --- |
-| `Rows3` | the records of a collection | Data (module), Records |
-| `Table2` | a collection | Collections, a collection's default mark |
-| `Database` | a workspace | a workspace's default mark, the brand cell |
-| `Settings2` | a model and who may reach it | Data model and access |
-| `Columns3` | fields | Fields |
-| `KeyRound` | constraints and indexes | Keys and rules |
-| `ShieldUser` | grants and row policies | Access |
-| `Info` | what an item says of itself | Metadata |
-| `Users` / `User` | roles: groups / users | Users and groups |
+| `Rows3` | the rows of a table | Data (module), Rows |
+| `Table2` | a table | Tables, a table's default mark |
+| `Database` | a schema | a schema's default mark, the brand cell |
+| `Settings2` | a table's definition and privileges | Definition and privileges |
+| `Columns3` | columns | Columns |
+| `KeyRound` | constraints and indexes | Constraints and indexes |
+| `ShieldUser` | privileges and row-level security | Privileges |
+| `Info` | metadata of an object | Metadata |
+| `Users` / `User` | roles: NOLOGIN / LOGIN | Roles |
 | `History` | the revisions log | Activity |
-| `TerminalSquare` | one statement as the reader | SQL |
-| `Plus` | make one | Add a … |
-| `Pencil` | change one | Change … |
-| `Trash2` | destroy one | Delete … |
-| `Save` | write the form | Save |
+| `TerminalSquare` | statements as the reader | SQL |
+| `Plus` | create one | Create …, Insert row, Grant … |
+| `Pencil` | alter one | Alter …, Update, Grant or revoke … |
+| `Trash2` | drop one | Drop …, Delete, Revoke … |
+| `Save` | write the form | Insert, Update |
 | `Play` | run the statement | Run |
 
-- **Add** makes a thing, **Change** alters it and **Delete** destroys it: never New, Create,
-  Edit, Remove, or a verb of PostgreSQL's (Grant, Link) on a button. PostgreSQL's words stay
-  in the SQL, in a privilege mark and in a note that explains.
-- **Record** is the reader's word for a row of a collection, wherever records are read;
-  **row** is PostgreSQL's, kept for row security and row policies.
-- **Access** is a section: who holds what on a workspace or a collection. The roles themselves
-  are **Users and groups**.
-- **The reader's words lead; PostgreSQL's follow.** A label or a note says what a thing does
-  first and gives PostgreSQL's term after it, in brackets: "Which records it shows (USING)",
-  "Reach (USAGE)". Where a table shows a value PostgreSQL spells for itself, the reader's word
-  is drawn and PostgreSQL's is its title: a field's type (Date and time, `timestamptz`), what a
-  revision did (Added, Changed, Deleted for `INSERT`, `UPDATE`, `DELETE`), a metadata key the
-  interface reads (Name people read, `display_name`). The words live in `kit/words.ts`.
-- **A privilege mark says what it lets a role do** in its tip: "Read records (SELECT): held on 11
-  of 12 fields".
+- **The verb is the statement's.** An object is **Create**d, **Alter**ed and **Drop**ped; a
+  row is **Insert**ed, **Update**d and **Delete**d; a privilege or a role membership is
+  **Grant**ed and **Revoke**d. A session's query is **Cancel**led and the session
+  **Terminate**d; a table is **Maintain**ed (VACUUM, ANALYZE, REINDEX).
+- **PostgreSQL's words lead, and an explanation follows only where the term alone is
+  opaque**, after a colon: "USING", "FOR ROLE: objects this role creates". A value PostgreSQL
+  spells for itself is shown as it spells it: a column's data type (`timestamptz`), what a
+  revision did (`INSERT`, `UPDATE`, `DELETE`), a metadata key (`display_name`), a default
+  (`DEFAULT 'draft'::text`).
+- **A role is drawn as what it is**, LOGIN or NOLOGIN, wherever it owns something.
+- **A privilege mark is PostgreSQL's privilege name**, and its tip says how much of it is held:
+  "SELECT: held on 11 of 12 columns".
 - **A refusal says what to do next** for the refusals people meet most, in one line under
   PostgreSQL's own words and SQLSTATE, which are shown once.
-- **A Delete that takes data with it says so** in a warning above its statement: a field takes
-  its value in every record, a collection its records, a link table its links.
-- **A collection is named as people read it in every table** — grants, row policies, Activity,
-  a relation's type — and a role is drawn as what it is, a user or a group, wherever it owns
-  something. A revision reads as its record's name, then each changed field by its name:
-  "Status: review → published". A field's default is said in words where it is a value
-  ("Starts as draft"). A field whose three privileges are all held says "Read, add and change"
-  rather than drawing three full marks.
+- **A Drop or Delete that takes data with it says so** in a warning above its statement: a
+  column takes its value in every row, a table its rows, a join table its rows.
+- **A table is named by its display_name where its owner gave one** — in grants, policies,
+  Activity, a foreign key's type — with its own name as the title. A revision reads as its
+  row's name, then each changed column by its name: "status: review → published".
 - **An empty table offers what fills it** when that action lives in the header, far from it:
-  the records of a collection, and the lead table of a model page.
+  the rows of a table, and the lead table of a definition page.
 
 ## Do's and Don'ts
 
@@ -691,10 +687,10 @@ it acts on; the drawer it opens carries the same words as the button that opened
 - **Do** take every colour from the pinned palette, including the chrome.
 - **Do** set every database-owned string in JetBrains Mono and every studio-written string in
   Inter.
-- **Do** draw rights with PostgreSQL privilege names and the full / half / empty mark, with the
+- **Do** draw privileges with PostgreSQL privilege names and the full / half / empty mark, with the
   legend nearby.
 - **Do** show the statement in a "Runs as you" figure before the button that runs it.
-- **Do** pin the first column of record tables, clip long values with an ellipsis, and keep the
+- **Do** pin the first column of row tables, clip long values with an ellipsis, and keep the
   whole value in the title.
 - **Do** separate page sections with a heading and a hairline; let the card be the only box.
 - **Do** tone choice badges by what the word means.

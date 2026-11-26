@@ -101,8 +101,8 @@ bun run lines        # our own lines, by area
 ## Documents
 
 [Product](PRODUCT.md) · [Design](DESIGN.md) · [Architecture](docs/architecture.md) ·
-[Security](docs/security.md) · [Interface](docs/interface.md) · [Fields](docs/fields.md) ·
-[Access](docs/access.md) · [Applying SQL](docs/apply.md) · [Operations](docs/operations.md) ·
+[Security](docs/security.md) · [Interface](docs/interface.md) · [Columns](docs/columns.md) ·
+[Privileges](docs/access.md) · [Applying SQL](docs/apply.md) · [Operations](docs/operations.md) ·
 [The remake](docs/remake.md) · [Validation](docs/validation.md)
 
 MIT licensed. Free and open-source software.

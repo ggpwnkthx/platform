@@ -15,7 +15,7 @@ psql -1 -v ON_ERROR_STOP=1 -f migrations/0001_platform.sql
 The file makes the reserved roles, the `platform` schema, the revisions, the metadata and the
 views of the catalog, and marks the database with the version it holds. The interface is built
 for one version and says so when a database holds another. `platform_core` must stay an
-unprivileged NOLOGIN group, and must never be granted to workspace administrators.
+unprivileged NOLOGIN group, and must never be granted to schema administrators.
 
 A site's own schema, a deployment's administrator and the files below are applied the same
 way: see [applying SQL](apply.md).
@@ -35,10 +35,10 @@ psql -1 -f deploy/sql/harden.sql -f deploy/sql/guard.sql
 working for everyone. psql's `\du` and pg_dump then need an operator or a superuser. The
 interface is unchanged: it reads roles through the platform's functions, which answer about
 the caller. `guard.sql` installs two event triggers, one before and one after every DDL
-command of an ordinary role. They compare each collection before and after, and refuse (42501)
+command of an ordinary role. They compare each table before and after, and refuse (42501)
 a command that turned its row security off, lost, disabled or changed a trigger that stamps
 its rows or writes its history, gave it a rule, or made it the parent of another table. A
-collection its owner drops leaves one revision of the drop.
+table its owner drops leaves one revision of the drop.
 `deploy/sql/restore.sql` puts PostgreSQL's default back. The local stack applies both as it
 installs itself.
 
@@ -56,7 +56,7 @@ The database server needs three things, all of which deploy/postgres provides as
 2. A token validator. PostgreSQL ships none; the image builds
    [pg_oidc_validator](https://github.com/percona/pg_oidc_validator) 1.1.0 from a checksummed
    release and sets `oauth_validator_libraries=pg_oidc_validator` and
-   `pg_oidc_validator.authn_field=email`. A managed PostgreSQL service that cannot load a
+   `pg_oidc_validator.authn_column=email`. A managed PostgreSQL service that cannot load a
    validator library cannot host Platform.
 3. Authentication rules in which the network accepts tokens only. The image writes:
 
@@ -101,14 +101,14 @@ The database server needs three things, all of which deploy/postgres provides as
 
    The image also starts PostgreSQL with `log_connections=on` and `log_statement=ddl`, so the
    server's log says who connected and as whom, and holds every statement that changes a
-   role, a grant, a policy or a table: what the revisions do not record. Both are given
+   role, a grant, a policy or a table: what the revisions do not row. Both are given
    before your own settings, so `-c log_statement=...` of yours decides. Send that log
    somewhere the database's own administrators cannot rewrite it.
 
 `psql -f deploy/sql/doctor.sql`, run as a superuser, reads the live rules and reports as a
 problem any network rule that lets a login in without a token: only `oauth` and `reject`
 pass. It then says what the deployment has left open: TLS that is off, role catalogs every
-connection reads, no guard on row security, collections owned by a person rather than a
+connection reads, no guard on row security, tables owned by a person rather than a
 group, and tables that write no revisions.
 
 To lock a person out at once, take the login away and end their sessions:

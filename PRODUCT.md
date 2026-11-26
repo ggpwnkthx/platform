@@ -8,15 +8,15 @@ web
 
 ## Users
 
-The primary user is an application developer working inside their own workspace: their team owns
-the schema, they build and ship against it, and the interface is where they model collections,
-read and write records, grant access and run SQL.
+The primary user is an application developer working inside their own schema: their team owns
+the schema, they build and ship against it, and the interface is where they model tables,
+read and write rows, grant access and run SQL.
 
 The interface is confirmed to serve two audiences, and design must not be built against either
 one of them alone:
 
-- **Data entry users** — people whose job is the record: reading, creating, editing and
-  correcting rows in the collections they are given. They work inside a workspace they do not
+- **Data entry users** — people whose job is the row: reading, creating, editing and
+  correcting rows in the tables they are given. They work inside a schema they do not
   own, and their rights are what PostgreSQL gives them.
 - **Data security managers** — people whose job is who may do what: roles, groups,
   memberships, grants, column privileges and row policies. They read access where it belongs
@@ -24,8 +24,8 @@ one of them alone:
 
 The product also serves, and design must not be built against, these confirmed roles:
 
-- **Workspace owner** — administers the model inside a workspace they own: creates collections and
-  fields, and reads that workspace's full revision history.
+- **Schema owner** — administers the model inside a schema they own: creates tables and
+  columns, and reads that schema's full revision history.
 - **Ordinary reader** — sees only what grants and row policies allow, cannot use the audit log to
   bypass column permissions, and must never own a table.
 - **Cluster operator** — installs, migrates, hardens the role catalogs, deploys and diagnoses.
@@ -78,7 +78,7 @@ of, and it is honest about refusals rather than hiding them behind a policy laye
   psql, which signs in through Dex itself (it prints an address and a code;
   `PGOAUTHDEBUG=UNSAFE` is needed only because the local Dex is plain HTTP):
   `migrations/0001_platform.sql` installs the platform, a site's `apply/*.sql` its schema and
-  records, and `deploy/sql` holds `doctor.sql`, `harden.sql`, `guard.sql`, `restore.sql` and
+  rows, and `deploy/sql` holds `doctor.sql`, `harden.sql`, `guard.sql`, `restore.sql` and
   `administrator.sql`. `deploy/models/crm.sql` is a second schema, a CRM model with real
   foreign keys.
 - The local stack (`bun run deploy local up`) builds the image under `deploy/postgres` and
@@ -144,69 +144,69 @@ of, and it is honest about refusals rather than hiding them behind a policy laye
 
 **Terminology** (the product's own words; use them consistently):
 
-- **Workspace** — a PostgreSQL schema. Its owner controls model administration.
-- **Collection** — a table. Fields are columns; relations are foreign keys.
+- **Schema** — a PostgreSQL schema. Its owner controls model administration.
+- **Table** — a PostgreSQL table, made with `platform.create_table`; relations are foreign keys.
 - **User** — a `LOGIN` role. **Group** — a `NOLOGIN` role. Membership lives in `pg_auth_members`.
 - **Revision** — a trigger-logged row change, stored in `platform.activity` and read through
   `platform.revisions`, which shows a reader the columns of the row they may read.
-- **platform** — the helper schema owned by `platform_core`. It is the one **system workspace**:
-  its tables (`activity`, `revisions`, `installation`) are **system collections**, shown by
+- **platform** — the helper schema owned by `platform_core`. It is the one **system schema**:
+  its tables (`activity`, `revisions`, `installation`) are **system tables**, shown by
   the interface like any other and read under their own row security. Its model is changed by
   migrations, never from the interface.
 
 **Capabilities**
 
 - The interface (`packages/ui/`): a data studio in the manner of a headless CMS — a module bar
-  (Data, Access, Activity, SQL), a navigation pane with the workspace switcher and the
-  collections, and a sidebar with the collection's information, the reader's rights and the row
+  (Data, Roles, Activity, Database, SQL), a navigation pane with the schema switcher and the
+  tables, and a sidebar with the table's information, the reader's rights and the row
   policies that apply. Every page is made of the same building blocks: one table, one form
-  mechanism, one change surface. Records, model inspection, runtime collection and field creation, roles,
+  mechanism, one change surface. Rows, model inspection, runtime table and column creation, roles,
   memberships, row policies, activity and one-statement SQL. The data module holds two views of
-  a collection: its records, which is what comes up by default, and its model, behind the
-  Data model button of its records page. It reads one workspace at a time:
-  the workspace, the collection and the record are part of the address
-  (`#/newsroom.articles/<id>`), links carry them, and every module presents that workspace
+  a table: its rows, which is what comes up by default, and its model, behind the
+  Data model button of its rows page. It reads one schema at a time:
+  the schema, the table and the row are part of the address
+  (`#/newsroom.articles/<id>`), links carry them, and every module presents that schema
   alone.
 - An access module that reads only what the caller may see (the roles they may use, their
-  memberships, the cluster's policies, the grants in the workspace) and composes the GRANT,
+  memberships, the cluster's policies, the grants in the schema) and composes the GRANT,
   CREATE POLICY, membership and role statements for the caller to run. Access is read from a
-  role, from a workspace, from a collection and from a field, and changed from any of them: the
+  role, from a schema, from a table and from a column, and changed from any of them: the
   permissions belong to the thing they are about, and one editor writes the difference between
-  what an ACL records and what is asked for, down to the fields a privilege is limited to.
+  what an ACL rows and what is asked for, down to the columns a privilege is limited to.
   Every statement that changes the model or access is shown before it runs, then runs as the
   caller's own role in one transaction; the interface grants nothing, and PostgreSQL refuses it
-  if they lack the authority. Refusals are shown with their SQLSTATE; withheld fields are marked
+  if they lack the authority. Refusals are shown with their SQLSTATE; withheld columns are marked
   hidden, write-only or read-only.
-- Typed collection and field builders producing real CHECK, NOT NULL, UNIQUE, indexes and foreign
+- Typed table and column builders producing real CHECK, NOT NULL, UNIQUE, indexes and foreign
   keys; native `ALTER TABLE` for anything else, native views and joins for relationships.
-- Metadata of a workspace, of a collection and of a field: what an item is, as opposed to what
+- Metadata of a schema, of a table and of a column: what an item is, as opposed to what
   it holds. It is stored in the platform schema and gated by row security that asks
   PostgreSQL's own privilege functions, so a reader reaches the metadata of the items they may
-  reach and only the owner of an item may change it. A field's metadata is secured by the
-  field's own rights: whoever holds a right on the column reaches it, and nobody else does.
+  reach and only the owner of an item may change it. A column's metadata is secured by the
+  column's own rights: whoever holds a right on the column reaches it, and nobody else does.
   Three keys of it are reserved for presentation: `display_name`, `icon` and `color`, so a
-  workspace or a collection can carry the name people read, a mark of the platform's own icons
-  and a colour, and the interface draws them wherever the item appears. A field is presented
+  schema or a table can carry the name people read, a mark of the platform's own icons
+  and a colour, and the interface draws them wherever the item appears. A column is presented
   by its name alone, and that name labels the column wherever the interface shows it.
-- A field that says where it appears: the records grid, the record form, the filter builder.
-  The owner of a collection may keep a field out of one of them, or lock it in the record. It
-  is the field's own metadata, so PostgreSQL's own rights decide who reads the saying and who
-  changes it, and it grants nothing: PostgreSQL still decides who may read the field and who
+- A column that says where it appears: the grid, the row form, the filter builder.
+  The owner of a table may keep a column out of one of them, or lock it in the row. It
+  is the column's own metadata, so PostgreSQL's own rights decide who reads the saying and who
+  changes it, and it grants nothing: PostgreSQL still decides who may read the column and who
   may write it. A column the database computes itself — a generated column, an identity
   column — is shown and never offered as an input.
-- A record browser with named-operator filters, a case-insensitive search across the readable
+- A row browser with named-operator filters, a case-insensitive search across the readable
   columns, sorting, paging with a row count, and updates guarded by the version the reader saw.
 - A one-statement SQL page executing as the signed-in reader; native PostgreSQL checks every
   GRANT, REVOKE, CREATE ROLE, CREATE POLICY and DDL statement.
 - Transactional row revisions from database triggers, including direct SQL writes and TRUNCATE.
   Owners read full revisions; ordinary readers cannot use the audit log to bypass column
   permissions.
-- A schema as SQL files: users, groups, workspaces, collections, grants and policies, applied
+- A schema as SQL files: users, groups, schemas, tables, grants and policies, applied
   by psql in one transaction, and tried in one that is rolled back.
 - The catalog and the access rules as views of the platform's own, so psql reads what the
   interface reads (`SELECT * FROM platform.catalog_tables`).
 - A deployment CLI for Docker/Podman Compose and Kubernetes, and nothing else.
-- Renderers and field types that a site registers for itself, through `@platform/ui/extensions`.
+- Renderers and column types that a site registers for itself, through `@platform/ui/extensions`.
 
 **Constraints**
 
@@ -215,11 +215,11 @@ of, and it is honest about refusals rather than hiding them behind a policy laye
   build's in-page PostgreSQL uses `SET SESSION AUTHORIZATION` to stand in for a token login; it
   never reaches a production bundle.)
 - `platform_core` is `NOLOGIN` without `CREATEROLE`, `CREATEDB`, `SUPERUSER` or `BYPASSRLS`, and
-  must never be granted to workspace administrators. `platform_users` is a `NOLOGIN` convenience
-  group with no access to any workspace table.
-- New collections have RLS enabled and no policies: grants alone never make rows visible. Owners
+  must never be granted to schema administrators. `platform_users` is a `NOLOGIN` convenience
+  group with no access to any schema table.
+- New tables have RLS enabled and no policies: grants alone never make rows visible. Owners
   administer their tables; ordinary users must never own them.
-- `platform.create_collection` and `platform.stamp` run as SECURITY INVOKER; creating a table
+- `platform.create_table` and `platform.stamp` run as SECURITY INVOKER; creating a table
   requires the caller's own CREATE privilege on the schema. `platform.record_change` is the only
   SECURITY DEFINER helper: it runs as `platform_core`, is trigger-only, and accepts no actor
   argument.
@@ -241,18 +241,18 @@ of, and it is honest about refusals rather than hiding them behind a policy laye
   front of it and no caps of its own has no per-address limit.
 - Role catalogs are visible to every connection by default; `deploy/sql/harden.sql` hides them from ordinary
   sessions while the interface keeps working. The local stack hardens itself as it installs.
-- The guard (`deploy/sql/guard.sql`) compares each collection before and after an ordinary
+- The guard (`deploy/sql/guard.sql`) compares each table before and after an ordinary
   role's DDL, and refuses what turned its row security off or let writes pass by its history:
   a trigger dropped, disabled or changed, a rule, a child table. Everything else a table owner
   may do stays theirs.
 - The audit table is append-only for ordinary roles, not tamper-proof against database owners,
   `platform_core` members or superusers. RLS is not a substitute for withholding table ownership.
-- The metadata of every workspace is kept in one collection, `platform.item_metadata`, under
-  forced row security. A row names its item by name: an item that is renamed leaves its
-  metadata behind until a database administrator carries the rows across, and a workspace
+- The metadata of every schema is kept in one table, `platform.item_metadata`, under
+  forced row security. A row names its item by name: a rename made in the interface carries
+  the rows across in its own transaction, one made by hand leaves them behind, and a schema
   dumped by its schema does not take its metadata with it.
 - Metadata is not audited in `platform.activity`; its rows carry their own `created_by`,
-  `updated_by` and `version`, and a dropped collection leaves its metadata behind, unread.
+  `updated_by` and `version`, and a dropped table leaves its metadata behind, unread.
 - Writes return counts rather than `RETURNING *`.
 - The browser surface: a strict CSP (`default-src 'self'`, `script-src 'self'`, `style-src 'self'
   'unsafe-inline'` — the component library writes its styles into the document —, `connect-src` limited to the
@@ -261,7 +261,7 @@ of, and it is honest about refusals rather than hiding them behind a policy laye
   open sessions one address and one role may hold: the relay's own, the edge's, and
   PostgreSQL's `CONNECTION LIMIT`.
 - The relay to PostgreSQL leg is plain TCP and must stay on a network the operator trusts.
-- A relation's constraint carries PostgreSQL's own name (`<table>_<field>_fkey`) rather than a
+- A relation's constraint carries PostgreSQL's own name (`<table>_<column>_fkey`) rather than a
   computed one; an existing constraint is found by its column, whatever its name.
 - A row policy's expression is checked by PostgreSQL alone: the page does not parse it first.
   Every statement is still sent as one prepared statement, so nothing can ride along.
@@ -273,7 +273,7 @@ of, and it is honest about refusals rather than hiding them behind a policy laye
 - A file is at most 200 lines (`bun run lines`). The cap is a guard on what one file says, not
   a target to be met by splitting.
 - Not carried into the remakes: manifests and `apply`; a token used outside a browser or psql;
-  conditions on a field of the row a relation reaches; views of the owner's own; editors for
+  conditions on a column of the row a relation reaches; views of the owner's own; editors for
   an installation's own metadata keys. `docs/remake.md` lists them.
 
 **Designed surfaces beyond the interface** (settled):
@@ -318,7 +318,7 @@ system does, not of how it feels — which future work may keep or replace.
    PostgreSQL's own, so an administrator can always fall back to psql.
 4. **Least surprise for the developer.** The interface shows what the database says — including
    what it refuses, and why — and shows a change as SQL before it runs.
-5. **One workspace at a time.** A workspace is the unit of ownership and of permission, so
-   surfaces read inside a workspace rather than showing every schema at once.
+5. **One schema at a time.** A schema is the unit of ownership and of permission, so
+   surfaces read inside a schema rather than showing every schema at once.
 6. **Free software, honestly.** There is no pricing and no commercial story; the product's
    value is that it gives its users their own PostgreSQL's truth and nothing else.

@@ -67,6 +67,43 @@ Not verified here:
 - Screens between 390px and 1440px other than those two widths.
 - A continuous-integration run: the archive held no workflow.
 
+## November 25, 2026: the rest of PostgreSQL in the interface
+
+Renames, a field's type and default, owners, a workspace dropped, a role's attributes; the
+options of keys and indexes, triggers; default privileges and grants on sequences, functions,
+types and the database; views, functions and procedures, types, sequences and extensions;
+scripts and plans on the SQL page; the Database page; CSV in and out; full-text search. Verified
+with Bun 1.4.5, Playwright's own Chromium and PGlite 0.5.17.
+
+| Check                                | Result                                                                                                       |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `bun run check`                      | Passed: builds, typechecks, lints, is formatted, and no file is over 200 lines                               |
+| `bun test`                           | 105 tests passed, 0 failed, 341 assertions, across 22 files                                                  |
+| The new statements, run              | Each kind of statement run in PostgreSQL as the administrator; metadata carried across every kind of rename  |
+| PostgreSQL judging them              | A role altered without ADMIN OPTION is refused; a function a trigger still calls is not dropped              |
+| The guard                            | An ordinary owner renames, retypes, indexes, adds and disables triggers and views; the history triggers stay |
+| The interface in Chrome (`test:e2e`) | 28 scenarios passed, 6 of them new, under the site's own Content-Security-Policy                             |
+
+The six new browser scenarios: a collection renamed from its page, its address following it
+and its metadata moved in the statements shown; a field renamed and given a new type; a view
+made, reading as its reader; a script of two statements run in one transaction, and a plan
+explained; the Database page; the records of a collection saved as a CSV file. The suite ran
+with Playwright's Chromium in place of the Chrome the configuration names, which was not
+installed.
+
+Not verified here:
+
+- **The Database page against a server.** PGlite holds one session and offers one extension:
+  sessions were not listed, ended or cancelled, and no extension was installed, updated or
+  removed. `catalog_sessions` and `catalog_extensions` were read, not acted on.
+- **Adding records from a CSV file, in a browser.** Reading and writing CSV is tested in core,
+  and the import's INSERTs are the record form's; no file was chosen in a browser.
+- **Default privileges taking effect** on a collection made afterwards by the role they name;
+  the grants were written and read back.
+- **Every form, opened as alice.** The new forms were opened as the administrator only; what
+  alice is offered follows the same catalog answers (`can_alter`, `can_create`, ADMIN OPTION).
+- **The pages read against DESIGN.md** in a browser, at 1440px or 390px.
+
 The earlier validation of 2.2.0, against PostgreSQL 18.7 with pg_oidc_validator and Dex, covered
 the database and the deployment files. This remake changed the migration (the views of the
 catalog), the Compose file (no installer container; a static `site` image) and the Kubernetes

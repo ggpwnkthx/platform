@@ -7,29 +7,32 @@ few building blocks, so a page cannot be inconsistent with another.
 ## Pages and addresses
 
 The address is a hash, so one document serves every page with no rewrite rule on the CDN. The
-workspace in view is part of the address, and every link carries it.
+schema in view is part of the address, and every link carries it.
 
-| Address                                | Page                                                                                  |
-| -------------------------------------- | ------------------------------------------------------------------------------------- |
-| `#/newsroom.articles`                  | The records of a collection. Search, filters, sort and page are in the address        |
-| `#/newsroom.articles/<id>`, `…/create` | The record form                                                                       |
-| `#/w/newsroom`                         | The workspace: its collections, who may use it, its row policies, its metadata        |
-| `#/w/newsroom/articles`                | The collection's model: fields, links, keys and rules, row security, grants, metadata |
-| `#/roles`, `#/roles/<role>`            | Users and groups; one role's memberships and what it holds                            |
-| `#/activity/newsroom`                  | The revisions of the workspace                                                        |
-| `#/sql`                                | One statement, as the reader                                                          |
+| Address                                | Page                                                                          |
+| -------------------------------------- | ----------------------------------------------------------------------------- |
+| `#/newsroom.articles`                  | The rows of a table. Search, filters, sort and page are in the address        |
+| `#/newsroom.articles/<id>`, `…/create` | The row form                                                                  |
+| `#/schemas/newsroom`                   | The schema: its tables, views, functions, types, access and metadata          |
+| `#/schemas/newsroom/articles`          | The table's model: columns, links, keys, rules and triggers, access, metadata |
+| `#/roles`, `#/roles/<role>`            | Roles; one role's memberships and its privileges                              |
+| `#/activity/newsroom`                  | The revisions of the schema                                                   |
+| `#/database`                           | Sessions, tables by size and their upkeep, extensions                         |
+| `#/sql`                                | One statement, as the reader                                                  |
 
-The frame is a module bar (Data, Users and groups, Activity, SQL), a navigation pane, a sticky header,
-and the page. The pane belongs to the modules read one workspace at a time: in Data it holds
-the workspace switcher and the collections, in Activity the same collections choose whose
-revisions are read, and Users and groups and SQL have none. On a screen under 900px the pane is a
+The frame is a module bar (Data, Roles, Activity, Database, SQL), a navigation pane, a sticky header,
+and the page. The pane belongs to the modules read one schema at a time: in Data it holds
+the schema switcher and the tables, in Activity the same tables choose whose
+revisions are read, and Roles, Database and SQL have none. On a screen under 900px the pane is a
 drawer behind a menu button. The foot of the module bar says who is signed in, and signs out.
 
 The header carries the page's name and, at its right, what the page is for doing: its one
-one primary action last (Add a record, Run), which keeps its words where there is room; the
+one primary action last (Insert row, Run), which keeps its words where there is room; the
 others are icons with their names in a tip. A page too long to read at once is in tabs, and the
-address says which (`?tab=Access`): a collection's model is Fields, Keys and rules, Access and
-Metadata. An input's name stands above it, always.
+address says which (`?tab=Privileges`): a schema is Tables, Views, Functions, Types, Privileges
+and Metadata; a table's definition is Columns, Constraints and indexes, Privileges and Metadata. A schema's
+page and a table's model carry their own change and delete in the header: a rename or a
+drop takes the reader to the address of what is left. An input's name stands above it, always.
 
 ## The building blocks
 
@@ -39,7 +42,7 @@ All of them are in `packages/ui/src/kit`. A page is made of these and nothing el
   stack of sections, in **Tabbed** parts where it is long.
 - **Table** — the one table: react-admin's `DataTable` in a bordered card, with the first
   column pinned at the left and a row's actions at the right, values clipped at one width, and
-  one way each of saying loading, empty and refused. Records and every kind of thing are
+  one way each of saying loading, empty and refused. Rows and every kind of thing are
   listed by it. An empty page says what emptied it: a search, a policy, or nothing.
 - **Change** — the one way a change to the model or to access is made: a drawer holding the
   form, the statements the form writes, shown before the button that runs them, and
@@ -53,7 +56,7 @@ Query by way of react-admin's data provider.
 
 ## Kinds
 
-Everything PostgreSQL holds beside records — a field, a constraint, a row policy, a grant, a
+Everything PostgreSQL holds beside rows — a column, a constraint, a row policy, a grant, a
 role, a membership, a metadata entry, a revision — is a _kind_ (`data/kinds.ts`): how its rows
 are read, how they are drawn, what its form asks, and the statements a change is.
 
@@ -73,6 +76,10 @@ export const policies = defineKind({
 })
 ```
 
+A kind may also say what removing one is called where it is not deleting (`removeWord: 'End'`
+for a session), and that its statements cannot run inside a transaction (`atomic: false` for
+VACUUM), when they run one after another and the first refused stops the rest.
+
 `<KindTable kind={policies} where={{ schema, table }} />` is then the whole of a section: its
 heading and note, the add action at the heading's right, the table, the change and remove
 actions on each row, and the change surface. `may` decides only whether
@@ -86,8 +93,8 @@ keeps the login open; a transaction takes one to itself; the reader's own statem
 page runs on a login of its own. Every query is prepared, so a second statement in the text is
 refused by the server (42601).
 
-`data/provider.ts` is the data provider. A resource is a collection (`workspace.collection`)
-or a kind. Records are read with their filters, search, sort, page and count under row
+`data/provider.ts` is the data provider. A resource is a table (`schema.table`)
+or a kind. Rows are read with their filters, search, sort, page and count under row
 security; written without RETURNING; an update is guarded by the version the reader saw, and a
 row policy that refuses it is said as such. Rows chosen in the grid are deleted in one
 transaction, each under the version the grid showed. `run` executes the statements of a
@@ -95,7 +102,22 @@ change, and undoes them all if PostgreSQL warns that a GRANT or REVOKE changed n
 
 The SQL page runs one statement on Ctrl-Enter (⌘-Enter) or the Run button, and shows
 PostgreSQL's answer with what it said beside it: its warnings and notices, with their
-SQLSTATE.
+SQLSTATE. As a script, the text is cut at the semicolons that end a statement — not inside a
+string, a quoted name, a dollar-quoted body or a comment (`core/src/sql/split.ts`) — and each
+is sent on its own, prepared, in one transaction that a refusal undoes. Explain shows a
+statement's plan; with ANALYZE it runs the statement, measures it and rolls it back.
+
+The grid saves what is in view as a CSV file: the columns the reader may read, under
+the filters and the sort shown, up to 10,000 rows. A CSV file is added to a table by
+matching its columns to the columns the reader may write, by name or by the name people read,
+and shown before anything is written; each row is then an INSERT as the reader, in one
+transaction, and an empty cell gives nothing so the column's default applies.
+
+The Database page lists the sessions on the database (what another role's session runs is
+PostgreSQL's to show: to that role, and to pg_read_all_stats), with a statement cancelled or a
+session ended where PostgreSQL lets the reader; the tables the reader may reach by size,
+with VACUUM, ANALYZE and REINDEX where they own it or hold MAINTAIN; and the extensions the
+server offers, installed, updated and removed by whoever PostgreSQL lets.
 
 The interface holds no permission of its own. react-admin's access-control layer is not used:
 there is no `canAccess`. What is offered follows the catalog's answers (`can_select`,
