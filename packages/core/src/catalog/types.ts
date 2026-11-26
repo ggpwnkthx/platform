@@ -87,14 +87,31 @@ export interface ConstraintInfo {
   type: string
   definition: string
   columns: string[]
-  /** For a foreign key: the collection it points at. A key over several columns points
-   * at one collection too, and is read as a constraint rather than as a relation. */
+  /** For a foreign key: the table it points at. A key over several columns points
+   * at one table too, and is read as a constraint rather than as a relation. */
   target_schema?: string | null
   target_table?: string | null
   /** For a foreign key: the column of the target its first column points at. */
   target_column?: string | null
   /** For a foreign key: the letter PostgreSQL keeps the delete rule by. */
   on_delete?: string | null
+  /** For a foreign key: the letter it keeps the update rule by. */
+  on_update?: string | null
+  /** Whether the rows already there were checked: false for one added NOT VALID. */
+  validated?: boolean
+  deferrable?: boolean
+}
+/** An index as PostgreSQL would write it again, whatever its method or its predicate. */
+export interface IndexDefinition {
+  schema: string
+  table: string
+  name: string
+  definition: string
+  unique: boolean
+  primary: boolean
+  valid: boolean
+  /** The index a unique key or an exclusion is held by: it goes with its constraint. */
+  backs_constraint: boolean
 }
 export interface TypeInfo {
   name: string
@@ -119,7 +136,7 @@ export interface Identity {
   database: string
   platform_version: string | null
   server_version: string
-  can_create_workspace: boolean
+  can_create_schema: boolean
   is_operator: boolean
   /** The roles the caller may admit members to. */
   admits: string[]

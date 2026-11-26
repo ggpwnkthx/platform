@@ -1,6 +1,6 @@
 import { Box, Button, Drawer, Stack, Typography } from '@mui/material'
 import { useMutation } from '@tanstack/react-query'
-import { type ReactNode, useEffect, useMemo } from 'react'
+import { type ReactNode, useEffect, useMemo, useRef } from 'react'
 import { Form, useDataProvider, useNotify, useRefresh } from 'react-admin'
 import { useWatch } from 'react-hook-form'
 import tokens from 'virtual:design-tokens'
@@ -22,6 +22,10 @@ export interface ChangeProps {
   statements(form: Record<string, unknown>): string[]
   label?: string
   danger?: boolean
+  /** False where the statements cannot run inside a transaction: each runs on its own. */
+  atomic?: boolean
+  /** Called with the form once its statements have run: a rename follows the thing to its new name. */
+  onRan?(form: Record<string, unknown>): void
   children?: ReactNode
 }
 export function Change(props: ChangeProps) {
@@ -45,14 +49,19 @@ function Body(props: ChangeProps) {
   const refresh = useRefresh()
   const change = useMemo(() => {
     try {
-      return { sql: props.statements(form), problem: null }
+      const sql = props.statements(form)
+      // A kind says only what a change is; a form that asks for none is said here, once for all.
+      if (!sql.length) throw new Error('Nothing is changed yet.')
+      return { sql, problem: null }
     } catch (problem) {
       return { sql: [], problem: problem instanceof Error ? problem.message : String(problem) }
     }
   }, [props.statements, form])
+  const asked = useRef(form)
   const run = useMutation({
-    mutationFn: (sql: string[]) => provider.run(sql),
+    mutationFn: (sql: string[]) => provider.run(sql, props.atomic !== false),
     onSuccess(_done, sql) {
+      props.onRan?.(asked.current)
       notify(`${props.title}: ${sql.length} statement${sql.length === 1 ? '' : 's'} ran as you.`, {
         type: 'success',
       })
@@ -99,7 +108,10 @@ function Body(props: ChangeProps) {
           color={props.danger ? 'error' : 'primary'}
           loading={run.isPending}
           disabled={!change.sql.length || run.isSuccess}
-          onClick={() => run.mutate(change.sql)}
+          onClick={() => {
+            asked.current = form
+            run.mutate(change.sql)
+          }}
         >
           {props.label ?? 'Run'}
         </Button>

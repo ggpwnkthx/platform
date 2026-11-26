@@ -1,46 +1,27 @@
 import {
-  checkConstraintStatement,
   columnTypes,
   constraintsOf,
   deleteRule,
   dropConstraintStatement,
   dropIndexStatement,
-  foreignKeyStatement,
-  indexesOf,
-  indexStatement,
-  InvalidName,
-  type OnDelete,
-  uniqueConstraintStatement,
+  type IndexDefinition,
+  renameConstraintStatement,
+  renameIndexStatement,
+  validateConstraintStatement,
 } from '@platform/core'
-import { SelectArrayInput, SelectInput, TextInput } from 'react-admin'
-import { useWatch } from 'react-hook-form'
-import { defineKind } from '../data/kinds.ts'
-import { Mono } from '../kit/marks.tsx'
-import { useSession } from '../session/session.ts'
-import {
-  CollectionInput,
-  choices,
-  mono,
-  onDelete,
-  ownsTable,
-  type Place,
-  required,
-} from './collections.tsx'
-import { typeWord } from '../kit/words.ts'
+import { BooleanInput, TextInput } from 'react-admin'
+import { defineKind, mono, ownsTable, type Place, required } from '../data/kinds.ts'
+import { Mono, Tag } from '../kit/marks.tsx'
+import { type ConstraintForm, constraintStatements, NewConstraint } from './constraint-inputs.tsx'
 
-/** The keys and rules of a collection: its constraints and its indexes. */
+/** The keys and rules of a table: its constraints and its indexes. */
 interface ConstraintRow {
   name: string
   type: string
   definition: string
   index: boolean
+  validated: boolean
 }
-const constraintTypes = [
-  { id: 'unique', name: 'Unique: no two records hold the same' },
-  { id: 'check', name: 'Check: every record passes a test' },
-  { id: 'foreign', name: 'Foreign key: the field points at a record' },
-  { id: 'index', name: 'Index: records are found without reading them all' },
-]
 const typeWords: Record<string, string> = {
   p: 'Primary key',
   u: 'Unique',
@@ -48,94 +29,96 @@ const typeWords: Record<string, string> = {
   f: 'Foreign key',
   x: 'Exclusion',
 }
-export const constraints = defineKind<
-  ConstraintRow,
-  Place,
-  { type: string; columns: string[]; expression: string; target: string; on_delete: OnDelete }
->({
+export const constraints = defineKind<ConstraintRow, Place, ConstraintForm>({
   name: 'constraints',
-  title: 'Keys and rules',
-  note: 'The constraints and indexes PostgreSQL holds the collection to.',
-  noun: 'key or rule',
-  empty: 'This collection holds no key and no rule.',
-  async read(_db, { schema, table }, { catalog }) {
+  title: 'Constraints and indexes',
+  note: 'The constraints and indexes PostgreSQL holds the table to.',
+  noun: 'constraint or index',
+  empty: 'This table holds no key and no rule.',
+  async read(db, { schema, table }, { catalog }) {
     const held = constraintsOf(catalog, schema, table)
-    const backing = new Set(held.map((c) => c.name))
+    const indexes = await db.query<IndexDefinition>(
+      `SELECT * FROM platform.catalog_index_definitions WHERE schema = $1 AND "table" = $2 ORDER BY name`,
+      [schema, table]
+    )
     return [
       ...held.map((c) => ({
         name: c.name,
         type: typeWords[c.type] ?? c.type,
-        definition: c.definition + (c.on_delete ? ` — ${deleteRule(c.on_delete)}` : ''),
+        definition:
+          c.definition +
+          (c.on_delete && !c.definition.includes('ON DELETE')
+            ? ` — ${deleteRule(c.on_delete)}`
+            : ''),
         index: false,
+        validated: c.validated !== false,
       })),
-      ...indexesOf(catalog, schema, table)
-        .filter((i) => !backing.has(i.name))
+      ...indexes.rows
+        .filter((i) => !i.backs_constraint)
         .map((i) => ({
           name: i.name,
           type: i.unique ? 'Unique index' : 'Index',
-          definition: `(${i.columns.join(', ')})`,
+          definition: i.definition.replace(/^CREATE (UNIQUE )?INDEX \S+ ON \S+ /, ''),
           index: true,
+          validated: i.valid,
         })),
     ]
   },
   key: (row) => row.name,
   columns: [
     { source: 'name', label: 'Name', render: (row) => <Mono>{row.name}</Mono> },
-    { source: 'type', label: 'Kind' },
+    {
+      source: 'type',
+      label: 'Kind',
+      render: (row) => (
+        <>
+          {row.type} {!row.validated && <Tag color="warning">not validated</Tag>}
+        </>
+      ),
+    },
     {
       source: 'definition',
-      label: 'As PostgreSQL holds it',
+      label: 'Definition',
       render: (row) => <Mono title={row.definition}>{row.definition}</Mono>,
     },
   ],
   may: ownsTable,
-  defaults: () => ({ type: 'unique', columns: [], on_delete: 'restrict' }),
-  Inputs({ where }) {
-    const { catalog } = useSession()
-    const type = useWatch({ name: 'type' })
-    const fields = catalog.columns
-      .filter((c) => c.schema === where.schema && c.table === where.table)
-      .map((c) => c.name)
-    return (
+  defaults: (_where, row) =>
+    row
+      ? { name: row.name, validate: false }
+      : {
+          type: 'unique',
+          columns: [],
+          on_delete: 'restrict',
+          on_update: 'restrict',
+          method: 'btree',
+        },
+  Inputs: ({ where, row }) =>
+    row ? (
       <>
-        <SelectInput source="type" label="Kind" choices={constraintTypes} helperText={false} />
-        {type !== 'check' && (
-          <SelectArrayInput
-            source="columns"
-            label={type === 'foreign' ? 'Field' : 'Fields'}
-            choices={choices(fields)}
-            {...mono}
-          />
-        )}
-        {type === 'check' && (
-          <TextInput source="expression" label="The test, in SQL" multiline minRows={2} {...mono} />
-        )}
-        {type === 'foreign' && (
-          <CollectionInput source="target" label="Points at" schema={where.schema} />
-        )}
-        {type === 'foreign' && (
-          <SelectInput
-            source="on_delete"
-            label="When that record is deleted"
-            choices={onDelete}
+        <TextInput source="name" label="Name" {...mono} />
+        {!row.validated && !row.index && (
+          <BooleanInput
+            source="validate"
+            label="Check the rows already there, and hold them to it (VALIDATE)"
             helperText={false}
           />
         )}
       </>
-    )
-  },
-  create(form, { schema, table }) {
-    const columns = form.columns ?? []
-    if (form.type === 'check')
-      return [checkConstraintStatement(schema, table, form.expression ?? '')]
-    if (form.type === 'index') return [indexStatement(schema, table, columns)]
-    if (form.type === 'unique') return [uniqueConstraintStatement(schema, table, columns)]
-    if (columns.length !== 1)
-      throw new InvalidName('A relation is one field that points at one row.')
-    const target = required(form.target, 'Choose the collection the field points at.')
-    return [
-      foreignKeyStatement(schema, table, columns[0]!, { schema, table: target }, form.on_delete),
-    ]
+    ) : (
+      <NewConstraint where={where} />
+    ),
+  create: constraintStatements,
+  update(form, { schema, table }, row) {
+    const name = required(form.name, 'Name it.')
+    const out = form.validate ? [validateConstraintStatement(schema, table, row.name)] : []
+    if (name !== row.name)
+      out.push(
+        row.index
+          ? renameIndexStatement(schema, row.name, name)
+          : renameConstraintStatement(schema, table, row.name, name)
+      )
+    return out
   },
   remove: (row, { schema, table }) => [
     row.index
@@ -144,7 +127,7 @@ export const constraints = defineKind<
   ],
 })
 
-export const fieldTypeChoices = [
-  ...Object.entries(columnTypes).map(([id, type]) => ({ id, name: `${typeWord(type)} (${id})` })),
-  { id: 'relation', name: 'Points at a record of another collection (relation)' },
+export const columnTypeChoices = [
+  ...Object.entries(columnTypes).map(([id, type]) => ({ id, name: type })),
+  { id: 'relation', name: 'uuid REFERENCES another table (foreign key)' },
 ]

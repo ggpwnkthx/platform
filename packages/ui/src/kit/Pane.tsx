@@ -19,10 +19,10 @@ import { useNames } from './place.ts'
 
 const { layout } = tokens
 /**
- * The navigation pane: the workspace switcher, and the collections of the workspace in view.
- * In the activity module the same collections choose whose revisions are read.
+ * The navigation pane: the schema switcher, and the tables of the schema in view.
+ * In the activity module the same tables choose whose revisions are read.
  */
-export function Pane({ ws }: { ws: string }) {
+export function Pane({ schema }: { schema: string }) {
   const { catalog, identity } = useSession()
   const names = useNames()
   const navigate = useNavigate()
@@ -43,7 +43,7 @@ export function Pane({ ws }: { ws: string }) {
   return (
     <Box
       component="nav"
-      aria-label="Workspace"
+      aria-label="Schema"
       sx={{
         width: layout['nav-pane'],
         flex: 'none',
@@ -59,47 +59,47 @@ export function Pane({ ws }: { ws: string }) {
     >
       <Select
         fullWidth
-        value={ws}
-        aria-label="Workspace"
+        value={schema}
+        aria-label="Schema"
         onChange={(event) =>
           navigate(
-            `/${activity && event.target.value !== '+' ? 'activity' : 'w'}/${event.target.value}`
+            `/${activity && event.target.value !== '+' ? 'activity' : 'schemas'}/${event.target.value}`
           )
         }
         sx={{ mb: 3 }}
       >
-        {catalog.schemas.map((schema) => (
-          <MenuItem key={schema.name} value={schema.name}>
-            {names(schema.name).name}
+        {catalog.schemas.map((one) => (
+          <MenuItem key={one.name} value={one.name}>
+            {names(one.name).name}
           </MenuItem>
         ))}
-        {identity.can_create_workspace && (
+        {identity.can_create_schema && (
           <MenuItem value="+">
             <Plus size={iconSize} />
-            &nbsp;Add a workspace
+            &nbsp;Create schema
           </MenuItem>
         )}
       </Select>
       <Typography variant="subtitle2" sx={{ color: 'text.secondary', px: 3, py: 1.5 }}>
-        Collections
+        Tables
       </Typography>
       <List disablePadding>
-        {activity && item(`/activity/${ws}`, 'Every collection', <Layers size={iconSize} />)}
-        {tablesIn(catalog, ws).map((table) =>
+        {activity && item(`/activity/${schema}`, 'Every table', <Layers size={iconSize} />)}
+        {tablesIn(catalog, schema).map((table) =>
           item(
-            activity ? `/activity/${ws}?table=${table.name}` : `/${ws}.${table.name}`,
-            names(ws, table.name).name,
-            <ItemIcon name={names(ws, table.name).icon} table />
+            activity ? `/activity/${schema}?table=${table.name}` : `/${schema}.${table.name}`,
+            names(schema, table.name).name,
+            <ItemIcon name={names(schema, table.name).icon} table />
           )
         )}
       </List>
       {!activity && (
         <>
           <Typography variant="subtitle2" sx={{ color: 'text.secondary', px: 3, py: 1.5, mt: 3 }}>
-            Workspace
+            Schema
           </Typography>
           <List disablePadding>
-            {item(`/w/${ws}`, 'Data model and access', <Settings2 size={iconSize} />)}
+            {item(`/schemas/${schema}`, 'Definition and privileges', <Settings2 size={iconSize} />)}
           </List>
         </>
       )}

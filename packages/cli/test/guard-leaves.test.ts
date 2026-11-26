@@ -17,14 +17,14 @@ describe('the guard, beside what it refuses', () => {
       'CREATE RULE quiet AS ON DELETE TO alice_ws.notes DO ALSO NOTHING;',
     ])
       expect(await as(alice, statement), statement).toBe(
-        "42501: A rule on a collection is not yours to write: it would send writes past the collection's history."
+        "42501: A rule on a table is not yours to write: it would send writes past the table's history."
       )
     for (const statement of [
       'CREATE TABLE alice_ws.child () INHERITS (alice_ws.notes);',
       'ALTER TABLE alice_ws.loose INHERIT alice_ws.notes;',
     ])
       expect(await as(alice, statement), statement).toBe(
-        '42501: A collection is not yours to make the parent of another table: rows written there would have no history.'
+        '42501: A table is not yours to make the parent of another table: rows written there would have no history.'
       )
     expect(
       await one(`SELECT (SELECT count(*) FROM pg_rewrite WHERE ev_class = 'alice_ws.notes'::regclass)::int AS rules,
@@ -32,7 +32,7 @@ describe('the guard, beside what it refuses', () => {
     ).toEqual({ rules: 0, children: 0 })
   })
 
-  test('writes a revision of a collection its owner drops, whose rows leave none of their own', async () => {
+  test('writes a revision of a table its owner drops, whose rows leave none of their own', async () => {
     const drops = () =>
       one<{ n: number }>(
         "SELECT count(*)::int AS n FROM platform.activity WHERE operation = 'DROP' AND schema_name = 'alice_ws' AND table_name = 'gone'"
@@ -40,12 +40,12 @@ describe('the guard, beside what it refuses', () => {
     expect(
       await as(
         alice,
-        "SELECT platform.create_collection('alice_ws', 'gone'); INSERT INTO alice_ws.gone DEFAULT VALUES;"
+        "SELECT platform.create_table('alice_ws', 'gone'); INSERT INTO alice_ws.gone DEFAULT VALUES;"
       )
     ).toBe('done')
     expect(await drops()).toBe(0)
-    // Dropped, and made again under the same name: the new table is no collection, and the
-    // old one's end is in the history its workspace's owners read.
+    // Dropped, and made again under the same name: the new table is no table, and the
+    // old one's end is in the history its schema's owners read.
     expect(await as(alice, 'DROP TABLE alice_ws.gone; CREATE TABLE alice_ws.gone (n int);')).toBe(
       'done'
     )
@@ -63,14 +63,12 @@ describe('the guard, beside what it refuses', () => {
     const nested = `CREATE FUNCTION alice_ws.busy() RETURNS int LANGUAGE plpgsql AS $$
       BEGIN EXECUTE 'CREATE TABLE IF NOT EXISTS alice_ws.scratch (n int)'; RETURN 1; END $$;
       ALTER TABLE alice_ws.notes DISABLE ROW LEVEL SECURITY, ADD COLUMN n int DEFAULT alice_ws.busy();`
-    expect(await as(alice, nested)).toBe(
-      '42501: Row security on a collection is not yours to turn off.'
-    )
+    expect(await as(alice, nested)).toBe('42501: Row security on a table is not yours to turn off.')
     expect(await state()).toMatchObject({ rls: true })
   })
 
   test('leaves the operators and the superuser free: they administer the deployment', async () => {
-    const ops = `SELECT platform.create_collection('alice_ws', 'runbook');
+    const ops = `SELECT platform.create_table('alice_ws', 'runbook');
       ALTER TABLE alice_ws.runbook DISABLE ROW LEVEL SECURITY; ALTER TABLE alice_ws.runbook DISABLE TRIGGER ALL;`
     expect(await as('"ops@example.com"', ops)).toBe('done')
     expect(await as('postgres', 'ALTER TABLE alice_ws.notes NO FORCE ROW LEVEL SECURITY;')).toBe(

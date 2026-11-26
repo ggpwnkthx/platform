@@ -35,9 +35,9 @@ export function grantStatement(draft: GrantDraft, revoke = false): string {
   const who = [draft.grantee].flat().map(grantee)
   if (!who.length) throw new InvalidName('Choose who receives it')
   const columns = (draft.columns ?? []).map((column) => id(column))
-  if (columns.length && !draft.table) throw new InvalidName('Fields belong to a collection')
+  if (columns.length && !draft.table) throw new InvalidName('Columns belong to a table')
   if (columns.length && privileges.includes(all))
-    throw new InvalidName('Every privilege cannot be limited to fields: name the privileges.')
+    throw new InvalidName('Every privilege cannot be limited to columns: name the privileges.')
   const what = list(
     privileges.map((p) =>
       columns.length && narrows(p) ? sql`${sql.raw(p)} (${list(columns)})` : sql.raw(p)
@@ -55,7 +55,7 @@ export interface Held {
   whole: boolean
   columns: string[]
 }
-/** What a role holds on a collection by the ACL itself: on the whole of it, or on named fields. */
+/** What a role holds on a table by the ACL itself: on the whole of it, or on named columns. */
 export function heldBy(
   grants: readonly {
     table: string | null
@@ -75,7 +75,7 @@ export function heldBy(
   }
   return held
 }
-/** What is asked for one privilege: none of it, the whole collection, or these fields. */
+/** What is asked for one privilege: none of it, the whole table, or these columns. */
 export type Wanted = 'none' | 'all' | string[]
 export interface GrantChange {
   schema: string
@@ -85,13 +85,13 @@ export interface GrantChange {
   wanted: Record<string, Wanted | undefined>
 }
 
-/** The fields of one privilege, gathered so that one statement names them together. */
-interface Fields {
+/** The columns of one privilege, gathered so that one statement names them together. */
+interface Columns {
   columns: string[]
   privileges: string[]
 }
-const fieldsFor = () => new Map<string, Fields>()
-const addFields = (into: Map<string, Fields>, name: string, columns: string[]) => {
+const columnsFor = () => new Map<string, Columns>()
+const addColumns = (into: Map<string, Columns>, name: string, columns: string[]) => {
   if (!columns.length) return
   const key = JSON.stringify(columns)
   const entry = into.get(key) ?? { columns, privileges: [] }
@@ -100,15 +100,15 @@ const addFields = (into: Map<string, Fields>, name: string, columns: string[]) =
 }
 
 /**
- * The difference between what an ACL records and what is asked for. PostgreSQL's two levels
- * do not mirror each other: narrowing from the collection to fields revokes on the collection
- * and grants the fields by name; widening gives the field grants up.
+ * The difference between what an ACL rows and what is asked for. PostgreSQL's two levels
+ * do not mirror each other: narrowing from the table to columns revokes on the table
+ * and grants the columns by name; widening gives the column grants up.
  */
 export function grantChangeStatements(change: GrantChange): string[] {
   const revokeWhole: string[] = []
   const grantWhole: string[] = []
-  const revokeFields = fieldsFor()
-  const grantFields = fieldsFor()
+  const revokeColumns = columnsFor()
+  const grantColumns = columnsFor()
   for (const [written, wanted] of Object.entries(change.wanted)) {
     if (wanted === undefined) continue
     const name = privilege(written)
@@ -116,21 +116,21 @@ export function grantChangeStatements(change: GrantChange): string[] {
     if (wanted === 'none') {
       if (held.whole || held.columns.length) revokeWhole.push(name)
     } else if (wanted === 'all') {
-      addFields(revokeFields, name, held.columns)
+      addColumns(revokeColumns, name, held.columns)
       if (!held.whole) grantWhole.push(name)
     } else {
       if (!narrows(name))
-        throw new InvalidName(`${name} covers the whole collection: it cannot be limited to fields`)
-      if (!wanted.length) throw new InvalidName(`Choose the fields ${name} is limited to`)
+        throw new InvalidName(`${name} covers the whole table: it cannot be limited to columns`)
+      if (!wanted.length) throw new InvalidName(`Choose the columns ${name} is limited to`)
       if (held.whole) revokeWhole.push(name)
       else
-        addFields(
-          revokeFields,
+        addColumns(
+          revokeColumns,
           name,
           held.columns.filter((c) => !wanted.includes(c))
         )
-      addFields(
-        grantFields,
+      addColumns(
+        grantColumns,
         name,
         held.whole ? wanted : wanted.filter((c) => !held.columns.includes(c))
       )
@@ -144,9 +144,9 @@ export function grantChangeStatements(change: GrantChange): string[] {
     grantee: change.grantee,
   })
   return [
-    ...[...revokeFields.values()].map((f) => grantStatement(draft(f.privileges, f.columns), true)),
+    ...[...revokeColumns.values()].map((f) => grantStatement(draft(f.privileges, f.columns), true)),
     ...(revokeWhole.length ? [grantStatement(draft(revokeWhole), true)] : []),
     ...(grantWhole.length ? [grantStatement(draft(grantWhole))] : []),
-    ...[...grantFields.values()].map((f) => grantStatement(draft(f.privileges, f.columns))),
+    ...[...grantColumns.values()].map((f) => grantStatement(draft(f.privileges, f.columns))),
   ]
 }

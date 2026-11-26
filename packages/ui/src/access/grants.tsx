@@ -16,27 +16,27 @@ import {
 } from '@platform/core'
 import { BooleanInput, SelectArrayInput, SelectInput } from 'react-admin'
 import { useWatch } from 'react-hook-form'
-import { defineKind } from '../data/kinds.ts'
+import { defineKind, grantsOn, mono, choices } from '../data/kinds.ts'
 import { Privilege, PrivilegeLegend } from '../kit/marks.tsx'
-import { CollectionLabel, grantsOn, mono } from '../model/collections.tsx'
+import { TableLabel } from '../model/tables.tsx'
 import { useSession } from '../session/session.ts'
-import { named, Role, RoleInput } from './roles.tsx'
+import { Role, RoleInput } from './roles.tsx'
 
-/** Who holds what on a collection: read from the ACLs, and from PostgreSQL's own answer for each role. */
+/** Who holds what on a table: read from the ACLs, and from PostgreSQL's own answer for each role. */
 type GrantRow = ReachInfo & { acl: Record<string, Held> }
 type Where = { schema: string; table?: string; role?: string }
 interface GrantForm {
   role: string
   table: string
   usage: boolean
-  wanted: Record<string, 'none' | 'all' | 'fields'>
-  fields: Record<string, string[]>
+  wanted: Record<string, 'none' | 'all' | 'columns'>
+  columns: Record<string, string[]>
 }
 const wantedOf = (form: GrantForm): Record<string, Wanted> =>
   Object.fromEntries(
     Object.entries(form.wanted ?? {}).map(([p, want]) => [
       p,
-      want === 'fields' ? (form.fields?.[p] ?? []) : want,
+      want === 'columns' ? (form.columns?.[p] ?? []) : want,
     ])
   )
 // A privilege and what it is held on: the mark names the input, whose own label is not drawn.
@@ -48,10 +48,10 @@ const between = {
 }
 const extents = [
   { id: 'none', name: 'Not held' },
-  { id: 'all', name: 'Whole collection' },
-  { id: 'fields', name: 'Chosen fields' },
+  { id: 'all', name: 'Whole table' },
+  { id: 'columns', name: 'Chosen columns' },
 ]
-/** One role on one collection: each privilege not held, held on the whole of it, or on chosen fields. */
+/** One role on one table: each privilege not held, held on the whole of it, or on chosen columns. */
 function GrantInputs({ where, row }: { where: Where; row?: GrantRow }) {
   const { catalog } = useSession()
   const form = useWatch() as GrantForm
@@ -63,13 +63,13 @@ function GrantInputs({ where, row }: { where: Where; row?: GrantRow }) {
       <PrivilegeLegend />
       {tablePrivileges.map((p) => {
         const want = form.wanted?.[p] ?? 'none'
-        const chosen = form.fields?.[p] ?? []
+        const chosen = form.columns?.[p] ?? []
         return (
           <Box key={p} data-privilege={p}>
             <Box sx={between}>
               <Privilege
                 name={p}
-                held={want === 'fields' ? 'some' : (want as Hold)}
+                held={want === 'columns' ? 'some' : (want as Hold)}
                 count={`${chosen.length}/${columns.length}`}
               />
               <SelectInput
@@ -80,11 +80,11 @@ function GrantInputs({ where, row }: { where: Where; row?: GrantRow }) {
                 helperText={false}
               />
             </Box>
-            {want === 'fields' && (
+            {want === 'columns' && (
               <SelectArrayInput
-                source={`fields.${p}`}
+                source={`columns.${p}`}
                 label={`${p} on`}
-                choices={named(columns)}
+                choices={choices(columns)}
                 {...mono}
               />
             )}
@@ -102,9 +102,10 @@ function GrantInputs({ where, row }: { where: Where; row?: GrantRow }) {
 export const grants = defineKind<GrantRow, Where, GrantForm>({
   name: 'grants',
   title: 'Grants',
-  note: 'What each role may do on this collection, as PostgreSQL answers it: a right held through a group, or by everyone (PUBLIC), counts. A change writes only the difference.',
-  noun: 'grant',
-  empty: 'Nobody but its owner holds a right here.',
+  note: 'Each role’s privileges on this table, as PostgreSQL answers has_table_privilege and has_column_privilege: a privilege held through a role it is a member of, or by PUBLIC, counts. A change writes only the difference as GRANT and REVOKE.',
+  noun: 'privileges',
+  verbs: { create: 'Grant', update: 'Grant or revoke', remove: 'Revoke' },
+  empty: 'No role but its owner holds a privilege here.',
   async read(db, where) {
     const acl = await readGrants(db, where.schema)
     const reached = await reach(db, where.schema, where)
@@ -119,13 +120,13 @@ export const grants = defineKind<GrantRow, Where, GrantForm>({
   key: (row) => `${row.role} on ${row.table}`,
   columns: [
     { source: 'role', label: 'Role', render: (row) => <Role name={row.role} /> },
-    { source: 'table', label: 'Collection', render: (row) => <CollectionLabel name={row.table} /> },
+    { source: 'table', label: 'Table', render: (row) => <TableLabel name={row.table} /> },
     {
       source: 'select',
-      label: 'Holds, by grant, by group or as PUBLIC',
+      label: 'Privileges, directly, through membership or as PUBLIC',
       wide: true,
       render: (row, { catalog }) => {
-        const fields = catalog.columns.filter((c) => c.table === row.table).length
+        const columnCount = catalog.columns.filter((c) => c.table === row.table).length
         return tablePrivileges.slice(0, 5).map((p) => {
           const hold = row[p.toLowerCase() as 'select'] as Hold | boolean
           return (
@@ -134,7 +135,9 @@ export const grants = defineKind<GrantRow, Where, GrantForm>({
               name={p}
               held={hold}
               count={
-                row.acl[p]?.columns.length ? `${row.acl[p].columns.length}/${fields}` : undefined
+                row.acl[p]?.columns.length
+                  ? `${row.acl[p].columns.length}/${columnCount}`
+                  : undefined
               }
             />
           )
@@ -142,7 +145,7 @@ export const grants = defineKind<GrantRow, Where, GrantForm>({
       },
     },
   ],
-  // A grant is made on a collection's page; on a role's page each row is its own collection.
+  // A grant is made on a table's page; on a role's page each row is its own table.
   may: (where, ctx) => !!where.table && grantsOn(where, ctx),
   mayRow: (row, where, ctx) => grantsOn({ schema: where.schema, table: row.table }, ctx),
   Inputs: GrantInputs,
@@ -152,16 +155,16 @@ export const grants = defineKind<GrantRow, Where, GrantForm>({
     wanted: Object.fromEntries(
       tablePrivileges.map((p) => [
         p,
-        row?.acl[p]?.whole ? 'all' : row?.acl[p]?.columns.length ? 'fields' : 'none',
+        row?.acl[p]?.whole ? 'all' : row?.acl[p]?.columns.length ? 'columns' : 'none',
       ])
     ),
-    fields: Object.fromEntries(tablePrivileges.map((p) => [p, row?.acl[p]?.columns ?? []])),
+    columns: Object.fromEntries(tablePrivileges.map((p) => [p, row?.acl[p]?.columns ?? []])),
   }),
   create: (form, where, ctx) =>
     grantsFor(form.role, form.table ?? where.table, {}, form, where.schema, true, ctx),
   update: (form, where, row, ctx) =>
     grantsFor(row.role, row.table, row.acl, form, where.schema, row.usage, ctx),
-  // What the ACL records for the role is taken back: what it holds through a group stays the group's.
+  // What the ACL rows for the role is taken back: what it holds through a group stays the group's.
   remove(row, where) {
     const all = Object.fromEntries(Object.keys(row.acl).map((p) => [p, 'none' as const]))
     const said = { schema: where.schema, table: row.table, grantee: row.role }
@@ -173,7 +176,7 @@ export const grants = defineKind<GrantRow, Where, GrantForm>({
     return out
   },
 })
-/** The difference between what an ACL records and what is asked, and USAGE on the workspace beside it. */
+/** The difference between what an ACL rows and what is asked, and USAGE on the schema beside it. */
 function grantsFor(
   role: string,
   table: string | undefined,
@@ -184,9 +187,8 @@ function grantsFor(
   ctx: Parameters<typeof grantsOn>[1]
 ) {
   if (!role?.trim()) throw new InvalidName('Choose the role the grant is for.')
-  if (!table) throw new InvalidName('Choose the collection.')
+  if (!table) throw new InvalidName('Choose the table.')
   const out = grantChangeStatements({ schema, table, grantee: role, held, wanted: wantedOf(form) })
-  if (!out.length) throw new Error('Nothing is changed yet.')
   const grantsSomething = out.some((s) => s.startsWith('GRANT'))
   return [
     ...(form.usage && !hasUsage && grantsSomething && grantsOn({ schema }, ctx)

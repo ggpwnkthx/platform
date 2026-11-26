@@ -10,7 +10,7 @@ import { HeaderActions, Tip } from './Header.tsx'
 import { Section } from './said.tsx'
 import { Table } from './Table.tsx'
 
-type Open = { action: 'create' | 'update' | 'remove'; row?: Record<string, unknown> } | null
+export type Open = { action: 'create' | 'update' | 'remove'; row?: Record<string, unknown> } | null
 /**
  * The rows of a kind, in the one table, with its changes offered where PostgreSQL would
  * accept them: add at the heading's right, change and remove on each row, each through the
@@ -46,8 +46,8 @@ export function KindTable(props: {
     <IconButton
       size="small"
       color={action === 'remove' ? 'error' : 'default'}
-      aria-label={`${action === 'remove' ? 'Delete' : 'Change'} ${row.id}`}
-      title={action === 'remove' ? 'Delete' : 'Change'}
+      aria-label={`${verbsOf(kind)[action]} ${row.id}`}
+      title={verbsOf(kind)[action]}
       onClick={() => setOpen({ action, row })}
     >
       {action === 'remove' ? <Trash2 size={iconSize} /> : <Pencil size={iconSize} />}
@@ -131,8 +131,14 @@ export function KindTable(props: {
   )
 }
 
-/** What adding one of a kind is called: on its button and on the drawer it opens. */
-const addLabel = (kind: Kind) => kind.add ?? `Add a ${kind.noun}`
+/** The verbs of a kind's changes: PostgreSQL's CREATE, ALTER and DROP unless it says others. */
+export const verbsOf = (kind: Kind) => ({
+  create: 'Create',
+  update: 'Alter',
+  remove: 'Drop',
+  ...kind.verbs,
+})
+const addLabel = (kind: Kind) => `${verbsOf(kind).create} ${kind.noun}`
 
 /** One change to one kind: its form, and the statements the kind says the change is. */
 export function KindChange({
@@ -140,25 +146,29 @@ export function KindChange({
   where,
   open,
   onClose,
+  onRan,
 }: {
   kind: Kind
   where: object
   open: NonNullable<Open>
   onClose(): void
+  onRan?(form: Record<string, unknown>): void
 }) {
   const { db: _db, ...ctx } = useSession()
   const { action, row } = open
   const title = {
     create: addLabel(kind),
-    update: `Change ${kind.noun} ${row?.id ?? ''}`,
-    remove: `Delete ${kind.noun} ${row?.id ?? ''}`,
+    update: `${verbsOf(kind).update} ${kind.noun} ${row?.id ?? ''}`,
+    remove: `${verbsOf(kind).remove} ${kind.noun} ${row?.id ?? ''}`,
   }[action]
   return (
     <Change
       title={title}
       onClose={onClose}
+      onRan={onRan}
       danger={action === 'remove'}
-      label={action === 'remove' ? 'Delete' : undefined}
+      label={action === 'remove' ? verbsOf(kind).remove : undefined}
+      atomic={kind.atomic}
       defaults={action === 'remove' ? {} : kind.defaults?.(where, row, ctx)}
       statements={(form) =>
         action === 'create'

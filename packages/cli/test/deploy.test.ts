@@ -118,7 +118,7 @@ describe("the operator's SQL files", () => {
     expect(left).not.toContain('No guard')
   }, 60000)
 
-  test('doctor names a rule that lets logins in without a token, and a collection that writes no history', async () => {
+  test('doctor names a rule that lets logins in without a token, and a table that writes no history', async () => {
     const pg = await installed('examples/newsroom/apply/schema.sql')
     await pg.exec('CREATE TABLE newsroom.loose (id int)')
     const said = (await doctor(pg)).map((row) => `${row.finding}: ${row.said}`).join('\n')

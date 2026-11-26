@@ -10,6 +10,7 @@ import {
 } from '@mui/material'
 import {
   Database,
+  Gauge,
   History,
   LogOut,
   Menu as MenuIcon,
@@ -25,13 +26,14 @@ import { useSession, useSigned } from '../session/session.ts'
 import { iconSize } from './marks.tsx'
 import { HeaderRight, HeaderSlot } from './Header.tsx'
 import { Pane } from './Pane.tsx'
-import { useWorkspace } from './place.ts'
+import { useSchema } from './place.ts'
 
 const { layout, colors, rounded } = tokens
 const modules = [
-  ['Data', Rows3, (ws: string) => `/w/${ws}`, /^\/(w\/|[^/]+\.)|^\/$/],
-  ['Users and groups', Users, () => '/roles', /^\/roles/],
-  ['Activity', History, (ws: string) => `/activity/${ws}`, /^\/activity/],
+  ['Data', Rows3, (schema: string) => `/schemas/${schema}`, /^\/(schemas\/|[^/]+\.)|^\/$/],
+  ['Roles', Users, () => '/roles', /^\/roles/],
+  ['Activity', History, (schema: string) => `/activity/${schema}`, /^\/activity/],
+  ['Database', Gauge, () => '/database', /^\/database/],
   ['SQL', TerminalSquare, () => '/sql', /^\/sql/],
 ] as const
 const tile = {
@@ -50,10 +52,10 @@ export const Frame = ({ children }: { children: ReactNode }) =>
 function Framed({ children }: { children: ReactNode }) {
   const { identity } = useSession()
   const { pathname } = useLocation()
-  const workspace = useWorkspace()
+  const schema = useSchema()
   const logout = useLogout()
-  const ws = workspace?.name ?? ''
-  // The pane belongs to the modules that are read one workspace at a time. On a narrow screen
+  const inView = schema?.name ?? ''
+  // The pane belongs to the modules that are read one schema at a time. On a narrow screen
   // it is a drawer the menu button opens, and going somewhere closes it.
   const wide = useMediaQuery((theme) => theme.breakpoints.up('md'))
   const [menu, setMenu] = useState(false)
@@ -61,7 +63,7 @@ function Framed({ children }: { children: ReactNode }) {
   const [slot, setSlot] = useState<HTMLElement | null>(null)
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new address closes the drawer
   useEffect(() => setMenu(false), [pathname])
-  const pane = /^\/(roles|sql)/.test(pathname) ? null : <Pane ws={ws} />
+  const pane = /^\/(roles|sql|database)/.test(pathname) ? null : <Pane schema={inView} />
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
       <Box
@@ -99,7 +101,7 @@ function Framed({ children }: { children: ReactNode }) {
             <Tooltip key={label} title={label} placement="right">
               <ButtonBase
                 component={Link}
-                to={to(ws)}
+                to={to(inView)}
                 aria-label={label}
                 aria-current={active ? 'page' : undefined}
                 sx={{

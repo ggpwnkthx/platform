@@ -1,4 +1,4 @@
--- The example's schema: the groups, the people, the two workspaces with their collections,
+-- The example's schema: the groups, the people, the two schemas with their tables,
 -- grants and row policies. It is run once, in a database the platform is installed in, by
 -- the server's own superuser:
 --
@@ -18,7 +18,7 @@ CREATE ROLE "bob@example.com" LOGIN;
 GRANT platform_users, newsroom_reader, newsroom_writer TO "alice@example.com";
 GRANT platform_users, newsroom_reader, newsroom_writer, sales TO "bob@example.com";
 
--- The administrator: in every group, admits people to each, and may make roles and workspaces.
+-- The administrator: in every group, admits people to each, and may make roles and schemas.
 DO $$
 DECLARE admin text := current_setting('deployment.admin');
 BEGIN
@@ -32,22 +32,22 @@ END $$;
 SELECT set_config('role', current_setting('deployment.admin'), false);
 CREATE SCHEMA newsroom;
 INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value) VALUES
-  ('workspace', 'newsroom', NULL, NULL, 'display_name', '"Newsroom"'),
-  ('workspace', 'newsroom', NULL, NULL, 'icon', '"newspaper"'),
-  ('workspace', 'newsroom', NULL, NULL, 'color', '"steel"'),
-  ('workspace', 'newsroom', NULL, NULL, 'purpose', '"The newsroom''s stories, desks and corrections."'),
-  ('workspace', 'newsroom', NULL, NULL, 'contact', '"desk@example.com"');
-SELECT platform.create_collection('newsroom', 'sections');
+  ('schema', 'newsroom', NULL, NULL, 'display_name', '"Newsroom"'),
+  ('schema', 'newsroom', NULL, NULL, 'icon', '"newspaper"'),
+  ('schema', 'newsroom', NULL, NULL, 'color', '"steel"'),
+  ('schema', 'newsroom', NULL, NULL, 'purpose', '"The newsroom''s stories, desks and corrections."'),
+  ('schema', 'newsroom', NULL, NULL, 'contact', '"desk@example.com"');
+SELECT platform.create_table('newsroom', 'sections');
 ALTER TABLE newsroom.sections ADD COLUMN name text NOT NULL UNIQUE CHECK (char_length(name) <= 60);
 ALTER TABLE newsroom.sections ADD COLUMN desk_email text;
 COMMENT ON TABLE newsroom.sections IS 'The desks an article is filed under.';
 ALTER TABLE newsroom.sections DISABLE ROW LEVEL SECURITY;
 INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value) VALUES
-  ('field', 'newsroom', 'sections', 'name', 'renderers', '{"list":{"renderer":"marked","options":{"icon":"newspaper","colour":"steel"}}}'),
-  ('collection', 'newsroom', 'sections', NULL, 'display_name', '"Sections"'),
-  ('collection', 'newsroom', 'sections', NULL, 'icon', '"list-todo"'),
-  ('collection', 'newsroom', 'sections', NULL, 'color', '"cyan"');
-SELECT platform.create_collection('newsroom', 'articles');
+  ('column', 'newsroom', 'sections', 'name', 'renderers', '{"list":{"renderer":"marked","options":{"icon":"newspaper","colour":"steel"}}}'),
+  ('table', 'newsroom', 'sections', NULL, 'display_name', '"Sections"'),
+  ('table', 'newsroom', 'sections', NULL, 'icon', '"list-todo"'),
+  ('table', 'newsroom', 'sections', NULL, 'color', '"cyan"');
+SELECT platform.create_table('newsroom', 'articles');
 ALTER TABLE newsroom.articles ADD COLUMN title text NOT NULL CHECK (char_length(title) <= 120);
 ALTER TABLE newsroom.articles ADD COLUMN status text DEFAULT 'draft' NOT NULL CHECK (status IN ('draft', 'review', 'published'));
 CREATE INDEX ON newsroom.articles (status);
@@ -58,33 +58,33 @@ ALTER TABLE newsroom.articles ADD COLUMN internal_notes text;
 COMMENT ON COLUMN newsroom.articles.internal_notes IS 'Editors only: legal flags, sources, embargoes.';
 COMMENT ON TABLE newsroom.articles IS 'Every story, from first draft to publication.';
 INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value) VALUES
-  ('field', 'newsroom', 'articles', 'word_count', 'renderers', '{"list":"reading-time"}'),
-  ('collection', 'newsroom', 'articles', NULL, 'display_name', '"Articles"'),
-  ('collection', 'newsroom', 'articles', NULL, 'icon', '"file-text"'),
-  ('collection', 'newsroom', 'articles', NULL, 'color', '"indigo"'),
-  ('collection', 'newsroom', 'articles', NULL, 'display_field', '"title"'),
-  ('collection', 'newsroom', 'articles', NULL, 'retention', '{"drafts_days":90,"published":"forever"}'),
-  ('field', 'newsroom', 'articles', 'title', 'display_name', '"Headline"'),
-  ('field', 'newsroom', 'articles', 'internal_notes', 'display_name', '"Legal flags"');
-SELECT platform.create_collection('newsroom', 'tags');
+  ('column', 'newsroom', 'articles', 'word_count', 'renderers', '{"list":"reading-time"}'),
+  ('table', 'newsroom', 'articles', NULL, 'display_name', '"Articles"'),
+  ('table', 'newsroom', 'articles', NULL, 'icon', '"file-text"'),
+  ('table', 'newsroom', 'articles', NULL, 'color', '"indigo"'),
+  ('table', 'newsroom', 'articles', NULL, 'display_column', '"title"'),
+  ('table', 'newsroom', 'articles', NULL, 'retention', '{"drafts_days":90,"published":"forever"}'),
+  ('column', 'newsroom', 'articles', 'title', 'display_name', '"Headline"'),
+  ('column', 'newsroom', 'articles', 'internal_notes', 'display_name', '"Legal flags"');
+SELECT platform.create_table('newsroom', 'tags');
 ALTER TABLE newsroom.tags ADD COLUMN name text NOT NULL UNIQUE CHECK (char_length(name) <= 40);
 COMMENT ON TABLE newsroom.tags IS 'The subjects a story is filed under.';
 ALTER TABLE newsroom.tags DISABLE ROW LEVEL SECURITY;
 INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value) VALUES
-  ('collection', 'newsroom', 'tags', NULL, 'display_name', '"Tags"'),
-  ('collection', 'newsroom', 'tags', NULL, 'icon', '"tags"'),
-  ('collection', 'newsroom', 'tags', NULL, 'color', '"grape"');
-SELECT platform.create_collection('newsroom', 'article_tags');
+  ('table', 'newsroom', 'tags', NULL, 'display_name', '"Tags"'),
+  ('table', 'newsroom', 'tags', NULL, 'icon', '"tags"'),
+  ('table', 'newsroom', 'tags', NULL, 'color', '"grape"');
+SELECT platform.create_table('newsroom', 'article_tags');
 ALTER TABLE newsroom.article_tags ADD COLUMN article uuid NOT NULL;
 ALTER TABLE newsroom.article_tags ADD COLUMN tag uuid NOT NULL;
 COMMENT ON TABLE newsroom.article_tags IS 'Which story carries which tag: a link between two rows, and nothing else.';
 ALTER TABLE newsroom.article_tags DISABLE ROW LEVEL SECURITY;
 CREATE UNIQUE INDEX ON newsroom.article_tags (article, tag);
 INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value) VALUES
-  ('collection', 'newsroom', 'article_tags', NULL, 'display_name', '"Article tags"'),
-  ('collection', 'newsroom', 'article_tags', NULL, 'icon', '"link"'),
-  ('collection', 'newsroom', 'article_tags', NULL, 'color', '"gray"');
-SELECT platform.create_collection('newsroom', 'corrections');
+  ('table', 'newsroom', 'article_tags', NULL, 'display_name', '"Article tags"'),
+  ('table', 'newsroom', 'article_tags', NULL, 'icon', '"link"'),
+  ('table', 'newsroom', 'article_tags', NULL, 'color', '"gray"');
+SELECT platform.create_table('newsroom', 'corrections');
 ALTER TABLE newsroom.corrections ADD COLUMN article uuid NOT NULL;
 ALTER TABLE newsroom.corrections ADD COLUMN wording text NOT NULL;
 ALTER TABLE newsroom.corrections ADD COLUMN severity text DEFAULT 'minor' NOT NULL CHECK (severity IN ('minor', 'material', 'retraction'));
@@ -96,9 +96,9 @@ CREATE INDEX ON newsroom.article_tags (tag);
 ALTER TABLE newsroom.corrections ADD CONSTRAINT corrections_article_fkey FOREIGN KEY (article) REFERENCES newsroom.articles (id) ON DELETE CASCADE;
 CREATE INDEX ON newsroom.corrections (article);
 INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value) VALUES
-  ('collection', 'newsroom', 'corrections', NULL, 'display_name', '"Corrections"'),
-  ('collection', 'newsroom', 'corrections', NULL, 'icon', '"pencil-ruler"'),
-  ('collection', 'newsroom', 'corrections', NULL, 'color', '"bronze"');
+  ('table', 'newsroom', 'corrections', NULL, 'display_name', '"Corrections"'),
+  ('table', 'newsroom', 'corrections', NULL, 'icon', '"pencil-ruler"'),
+  ('table', 'newsroom', 'corrections', NULL, 'color', '"bronze"');
 GRANT USAGE ON SCHEMA newsroom TO newsroom_reader, newsroom_writer;
 GRANT SELECT ON TABLE newsroom.sections TO newsroom_reader;
 GRANT SELECT (id, title, status, section, word_count, published_at, created_at, updated_at, created_by, updated_by, version) ON TABLE newsroom.articles TO newsroom_reader;
@@ -122,11 +122,11 @@ GRANT platform_users TO sales;
 CREATE SCHEMA crm AUTHORIZATION sales;
 SET ROLE sales;
 INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value) VALUES
-  ('workspace', 'crm', NULL, NULL, 'display_name', '"CRM"'),
-  ('workspace', 'crm', NULL, NULL, 'icon', '"briefcase"'),
-  ('workspace', 'crm', NULL, NULL, 'color', '"purple"'),
-  ('workspace', 'crm', NULL, NULL, 'purpose', '"Accounts, the people at them and the deals in flight."');
-SELECT platform.create_collection('crm', 'accounts');
+  ('schema', 'crm', NULL, NULL, 'display_name', '"CRM"'),
+  ('schema', 'crm', NULL, NULL, 'icon', '"briefcase"'),
+  ('schema', 'crm', NULL, NULL, 'color', '"purple"'),
+  ('schema', 'crm', NULL, NULL, 'purpose', '"Accounts, the people at them and the deals in flight."');
+SELECT platform.create_table('crm', 'accounts');
 ALTER TABLE crm.accounts ADD COLUMN name text NOT NULL;
 CREATE INDEX ON crm.accounts (name);
 ALTER TABLE crm.accounts ADD COLUMN type text DEFAULT 'prospect' NOT NULL CHECK (type IN ('prospect', 'customer', 'partner', 'vendor', 'former_customer'));
@@ -136,15 +136,15 @@ ALTER TABLE crm.accounts ADD COLUMN annual_revenue numeric(14, 2);
 ALTER TABLE crm.accounts ADD COLUMN website text;
 COMMENT ON TABLE crm.accounts IS 'Companies and organisations: prospects, customers, partners and vendors.';
 INSERT INTO platform.item_metadata (scope, schema_name, table_name, column_name, key, value) VALUES
-  ('collection', 'crm', 'accounts', NULL, 'display_name', '"Accounts"'),
-  ('collection', 'crm', 'accounts', NULL, 'icon', '"building-2"'),
-  ('collection', 'crm', 'accounts', NULL, 'color', '"mint"');
-SELECT platform.create_collection('crm', 'contacts');
+  ('table', 'crm', 'accounts', NULL, 'display_name', '"Accounts"'),
+  ('table', 'crm', 'accounts', NULL, 'icon', '"building-2"'),
+  ('table', 'crm', 'accounts', NULL, 'color', '"mint"');
+SELECT platform.create_table('crm', 'contacts');
 ALTER TABLE crm.contacts ADD COLUMN full_name text NOT NULL;
 ALTER TABLE crm.contacts ADD COLUMN email text UNIQUE;
 ALTER TABLE crm.contacts ADD COLUMN title text;
 ALTER TABLE crm.contacts ADD COLUMN account uuid;
-SELECT platform.create_collection('crm', 'deals');
+SELECT platform.create_table('crm', 'deals');
 ALTER TABLE crm.deals ADD COLUMN name text NOT NULL;
 ALTER TABLE crm.deals ADD COLUMN account uuid NOT NULL;
 ALTER TABLE crm.deals ADD COLUMN stage text DEFAULT 'qualify' NOT NULL CHECK (stage IN ('qualify', 'propose', 'negotiate', 'won', 'lost'));
@@ -162,7 +162,7 @@ CREATE POLICY everyone_reads ON crm.accounts FOR SELECT TO PUBLIC
 RESET ROLE;
 
 -- What the items say of themselves is stamped with the installer's name. Each row is handed
--- to whoever owns its workspace, as if they had written it; the stamp is set aside meanwhile.
+-- to whoever owns its schema, as if they had written it; the stamp is set aside meanwhile.
 ALTER TABLE platform.item_metadata DISABLE TRIGGER USER;
 UPDATE platform.item_metadata SET created_by = current_setting('deployment.admin'), updated_by = current_setting('deployment.admin')
  WHERE schema_name = 'newsroom';

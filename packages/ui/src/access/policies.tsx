@@ -10,12 +10,12 @@ import {
   tableOf,
 } from '@platform/core'
 import { BooleanInput, SelectInput, TextInput } from 'react-admin'
-import { defineKind } from '../data/kinds.ts'
+import { defineKind, mono, ownsTable, type Place, choices } from '../data/kinds.ts'
 import { Mono, Tag } from '../kit/marks.tsx'
-import { CollectionLabel, mono, ownsTable, type Place } from '../model/collections.tsx'
-import { named, Role, RoleInput } from './roles.tsx'
+import { TableLabel } from '../model/tables.tsx'
+import { Role, RoleInput } from './roles.tsx'
 
-/** Which rows: the row policies of a collection, and whether row security is on. */
+/** Which rows: the row policies of a table, and whether row security is on. */
 interface PolicyForm {
   table: string
   name: string
@@ -38,19 +38,19 @@ const drafted = (form: PolicyForm, schema: string, table: string) =>
   })
 export const policies = defineKind<PolicyInfo, { schema: string; table?: string }, PolicyForm>({
   name: 'policies',
-  title: 'Row policies',
-  note: 'A row policy decides which records a role can see or write, on top of its grants. It is written and changed on its own collection.',
-  noun: 'row policy',
+  title: 'Policies',
+  note: 'Row-level security policies decide which rows a role may select or write, beyond its table privileges. A policy is created and altered on its own table.',
+  noun: 'policy',
   empty:
-    'No row policy. Where row security is on, a collection with none shows its rows to its owner alone.',
+    'No row policy. Where row security is on, a table with none shows its rows to its owner alone.',
   read: (db, { schema, table }) => readPolicies(db, schema, table),
   key: (row) => `${row.name} on ${row.table}`,
   columns: [
     { source: 'name', label: 'Policy', render: (row) => <Mono>{row.name}</Mono> },
     {
       source: 'table',
-      label: 'Collection',
-      render: (row) => <CollectionLabel schema={row.schema} name={row.table} />,
+      label: 'Table',
+      render: (row) => <TableLabel schema={row.schema} name={row.table} />,
     },
     { source: 'command', label: 'For', render: (row) => <Mono>{row.command}</Mono> },
     {
@@ -75,34 +75,22 @@ export const policies = defineKind<PolicyInfo, { schema: string; table?: string 
     },
   ],
   may: (where, ctx) => (where.table ? ownsTable(where as Place, ctx) : false),
-  Inputs: ({ row }) => (
+  // On a schema's page each policy is its table's, and changed by whoever owns that.
+  mayRow: (row, where, ctx) => ownsTable({ schema: where.schema, table: row.table }, ctx),
+  Inputs: () => (
     <>
-      <TextInput source="name" label="Name" disabled={!!row} {...mono} />
+      <TextInput source="name" label="Name" {...mono} />
       <SelectInput
         source="command"
         label="For"
-        choices={named(policyCommands)}
+        choices={choices(policyCommands)}
         validate={(v) => (v ? undefined : 'Required')}
         {...mono}
       />
-      <RoleInput
-        source="roles"
-        label="Who it applies to: nobody chosen is everyone (PUBLIC)"
-        many
-        everyone
-      />
-      <BooleanInput
-        source="permissive"
-        label="Lets records in (permissive). Off, it keeps records out (restrictive)"
-        helperText={false}
-      />
-      <TextInput source="using" label="Which records it shows (USING)" multiline {...mono} />
-      <TextInput
-        source="check"
-        label="Which records may be written (WITH CHECK)"
-        multiline
-        {...mono}
-      />
+      <RoleInput source="roles" label="TO: roles (none chosen: PUBLIC)" many everyone />
+      <BooleanInput source="permissive" label="PERMISSIVE (off: RESTRICTIVE)" helperText={false} />
+      <TextInput source="using" label="USING" multiline {...mono} />
+      <TextInput source="check" label="WITH CHECK" multiline {...mono} />
     </>
   ),
   defaults: (_where, row) =>
@@ -119,7 +107,7 @@ export const policies = defineKind<PolicyInfo, { schema: string; table?: string 
   create: (form, where) => [drafted(form, where.schema, where.table!)],
   update: (form, where, row) => [
     dropPolicyStatement(where.schema, row.table, row.name),
-    drafted({ ...form, name: row.name }, where.schema, row.table),
+    drafted({ ...form, name: form.name || row.name }, where.schema, row.table),
   ],
   remove: (row, where) => [dropPolicyStatement(where.schema, row.table, row.name)],
 })
@@ -131,11 +119,11 @@ export const rowSecurity = defineKind<
 >({
   name: 'row-security',
   title: 'Row security',
-  note: 'With it on, a role sees only the records a row policy gives it: grants alone show nothing.',
+  note: 'With ROW LEVEL SECURITY enabled, a role reaches only the rows a policy allows: table privileges alone return none.',
   noun: 'row security',
   empty: '',
   read: async (_db, { schema, table }, { catalog }) => [tableOf(catalog, schema, table)!],
-  key: () => 'of this collection',
+  key: () => 'of this table',
   columns: [
     {
       source: 'rls',
@@ -143,37 +131,36 @@ export const rowSecurity = defineKind<
       render: (row) => (
         <Tag color="info">
           {row.rls
-            ? 'On: policies decide which records a role reaches'
-            : 'Off: grants alone decide'}
+            ? 'Enabled: policies decide which rows a role reaches'
+            : 'Disabled: table privileges alone decide'}
         </Tag>
       ),
     },
     {
       source: 'force_rls',
-      label: 'Owner',
-      render: (row) => (row.force_rls ? 'Held to the policies too' : 'Reads every record'),
+      label: 'FORCE',
+      render: (row) =>
+        row.force_rls
+          ? 'Forced: the owner is subject to policies'
+          : 'Not forced: the owner bypasses policies',
     },
   ],
   may: ownsTable,
   Inputs: () => (
     <>
-      <BooleanInput source="rls" label="Row security is on" helperText={false} />
+      <BooleanInput source="rls" label="ENABLE ROW LEVEL SECURITY" helperText={false} />
       <BooleanInput
         source="force_rls"
-        label="The owner is held to the policies too"
+        label="FORCE ROW LEVEL SECURITY: the owner is subject to the policies"
         helperText={false}
       />
     </>
   ),
   defaults: (_where, row) => ({ rls: row!.rls, force_rls: row!.force_rls }),
-  update(form, { schema, table }, row) {
-    const out = [
-      ...(!!form.rls !== row.rls ? [rowSecurityStatement(schema, table, !!form.rls)] : []),
-      ...(!!form.force_rls !== row.force_rls
-        ? [forceRowSecurityStatement(schema, table, !!form.force_rls)]
-        : []),
-    ]
-    if (!out.length) throw new Error('Nothing is changed yet.')
-    return out
-  },
+  update: (form, { schema, table }, row) => [
+    ...(!!form.rls !== row.rls ? [rowSecurityStatement(schema, table, !!form.rls)] : []),
+    ...(!!form.force_rls !== row.force_rls
+      ? [forceRowSecurityStatement(schema, table, !!form.force_rls)]
+      : []),
+  ],
 })

@@ -1,4 +1,4 @@
-import { systemFields } from '../sql/columns.ts'
+import { systemColumns } from '../sql/columns.ts'
 import { type Catalog, systemSchema } from './types.ts'
 
 export const tablesIn = (catalog: Catalog, schema: string) =>
@@ -9,10 +9,10 @@ export const columnsOf = (catalog: Catalog, schema: string, table: string) =>
   catalog.columns.filter((c) => c.schema === schema && c.table === table)
 export const relationOf = (catalog: Catalog, schema: string, table: string, column: string) =>
   catalog.relations.find((r) => r.schema === schema && r.table === table && r.column === column)
-/** The constraints a collection holds: the rules PostgreSQL keeps about its rows. */
+/** The constraints a table holds: the rules PostgreSQL keeps about its rows. */
 export const constraintsOf = (catalog: Catalog, schema: string, table: string) =>
   catalog.constraints.filter((c) => c.schema === schema && c.table === table)
-/** The indexes a collection holds: the ways its rows are found without a scan. */
+/** The indexes a table holds: the ways its rows are found without a scan. */
 export const indexesOf = (catalog: Catalog, schema: string, table: string) =>
   catalog.indexes.filter((i) => i.schema === schema && i.table === table)
 
@@ -68,7 +68,7 @@ export function labelColumn(
   const preferred = columns.find((c) => ['name', 'title', 'full_name', 'label'].includes(c.name))
   if (preferred) return preferred.name
   const text = columns.find(
-    (c) => !systemFields.includes(c.name) && /^(text|character varying)/.test(c.type)
+    (c) => !systemColumns.includes(c.name) && /^(text|character varying)/.test(c.type)
   )
   return text?.name ?? null
 }

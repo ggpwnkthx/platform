@@ -3,7 +3,7 @@
   "version": "3.0.0",
   "private": true,
   "type": "module",
-  "description": "What the platform says to PostgreSQL and reads back: statements, catalog, records, access, metadata.",
+  "description": "What the platform says to PostgreSQL and reads back: statements, catalog, rows, privileges, metadata.",
   "license": "MIT",
   "exports": {
     ".": "./src/index.ts",

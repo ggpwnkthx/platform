@@ -7,6 +7,8 @@ export interface RoleInfo {
   create_role: boolean
   bypass_rls: boolean
   superuser: boolean
+  /** How many sessions it may hold at once; -1 where there is no limit. */
+  connection_limit: number
   admits: boolean
 }
 export interface MembershipInfo {
@@ -85,7 +87,7 @@ export async function policies(db: Db, schema: string, table?: string): Promise<
   return result.rows
 }
 
-/** Every grant in a workspace, from the ACLs themselves: the schema, its tables, their columns. */
+/** Every grant in a schema, from the ACLs themselves: the schema, its tables, their columns. */
 export async function grants(db: Db, schema: string): Promise<GrantInfo[]> {
   const result = await db.query<GrantInfo>(
     `SELECT * FROM platform.access_grants WHERE schema = $1
@@ -96,7 +98,7 @@ export async function grants(db: Db, schema: string): Promise<GrantInfo[]> {
 }
 
 /**
- * What each role may do in a workspace: PostgreSQL's own answer for that role, so a right
+ * What each role may do in a schema: PostgreSQL's own answer for that role, so a right
  * held through a group or through PUBLIC counts.
  */
 export async function reach(

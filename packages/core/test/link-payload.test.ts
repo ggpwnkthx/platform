@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, test } from 'bun:test'
 import {
   catalog,
   linkedRows,
-  records,
+  selectRows,
   setLinks,
   type RelationPath,
   transaction,
@@ -25,7 +25,7 @@ describe('a link that carries something of its own', () => {
     const db = await w.root()
     const exists = await db.query(`SELECT to_regclass('newsroom.tag_notes') AS t`)
     if (!exists.rows[0]?.t) {
-      await db.query(`SELECT platform.create_collection('newsroom','tag_notes')`)
+      await db.query(`SELECT platform.create_table('newsroom','tag_notes')`)
       await db.query(`ALTER TABLE newsroom.tag_notes ADD COLUMN note text`)
       await db.query(
         `ALTER TABLE newsroom.tag_notes ADD COLUMN article uuid REFERENCES newsroom.articles(id) ON DELETE CASCADE`
@@ -66,10 +66,10 @@ describe('a link that carries something of its own', () => {
     const db = await makePayloadJoin()
     const cat = await catalog(db)
     const tag = (
-      await records(db, { schema: 'newsroom', table: 'tags', columns: ['id'], limit: 1 })
+      await selectRows(db, { schema: 'newsroom', table: 'tags', columns: ['id'], limit: 1 })
     ).rows[0]!
     const article = (
-      await records(db, { schema: 'newsroom', table: 'articles', columns: ['id'], limit: 1 })
+      await selectRows(db, { schema: 'newsroom', table: 'articles', columns: ['id'], limit: 1 })
     ).rows[0]!
     await transaction(db, () => setLinks(db, notesPath(), String(article.id), [String(tag.id)]))
     const links = await linkedRows(db, cat, notesPath(), String(article.id))
@@ -80,10 +80,10 @@ describe('a link that carries something of its own', () => {
     const db = await makePayloadJoin()
     const cat = await catalog(db)
     const tag = (
-      await records(db, { schema: 'newsroom', table: 'tags', columns: ['id'], limit: 1 })
+      await selectRows(db, { schema: 'newsroom', table: 'tags', columns: ['id'], limit: 1 })
     ).rows[0]!
     const article = (
-      await records(db, { schema: 'newsroom', table: 'articles', columns: ['id'], limit: 1 })
+      await selectRows(db, { schema: 'newsroom', table: 'articles', columns: ['id'], limit: 1 })
     ).rows[0]!
     await transaction(db, () => setLinks(db, notesPath(), String(article.id), [String(tag.id)]))
     await db.query(`UPDATE newsroom.tag_notes SET note = 'a note'`)

@@ -27,7 +27,7 @@ export default defineConfig({
   projects: [
     {
       name: 'dev',
-      testMatch: /(model|records|reader)\.spec\.ts/,
+      testMatch: /(model|rows|reader|surfaces)\.spec\.ts/,
       use: { baseURL: 'http://localhost:5179' },
     },
     {

@@ -1,4 +1,4 @@
-import { systemFields } from '../sql/columns.ts'
+import { systemColumns } from '../sql/columns.ts'
 import type { ColumnInfo, IndexInfo, JoinInfo, RelationInfo } from './types.ts'
 
 /**
@@ -27,12 +27,12 @@ export function joinsOf(
   for (const [key, held] of tables) {
     if (held.length !== 2) continue
     const [left, right] = held as [RelationInfo, RelationInfo]
-    // A join table is made of the two keys and the columns every collection is made with.
+    // A join table is made of the two keys and the columns every table is made with.
     const own = columns.filter(
       (column) =>
         column.schema === left.schema &&
         column.table === left.table &&
-        !systemFields.includes(column.name)
+        !systemColumns.includes(column.name)
     )
     // The two keys are columns of the table: a table whose keys are not its own is not one.
     const pair = new Set([left.column, right.column])

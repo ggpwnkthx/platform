@@ -1,4 +1,4 @@
-import { Alert, Button, TextField, Typography } from '@mui/material'
+import { Alert, Box, Button, FormControlLabel, Switch, TextField, Typography } from '@mui/material'
 import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 import {
@@ -9,8 +9,8 @@ import {
   useList,
 } from 'react-admin'
 import type { Provider } from '../data/provider.ts'
-import { textOf } from '../fields/values.tsx'
-import { Play } from 'lucide-react'
+import { textOf } from '../columns/values.tsx'
+import { Play, ScanSearch } from 'lucide-react'
 import { Mono, iconSize } from '../kit/marks.tsx'
 import { Refusal, Section } from '../kit/said.tsx'
 import { Tip } from '../kit/Header.tsx'
@@ -50,29 +50,50 @@ export function Sql() {
   const [text, setText] = useState(
     "SELECT session_user, current_setting('server_version') AS server"
   )
-  const run = useMutation({ mutationFn: (statement: string) => provider.sql(statement) })
+  const [script, setScript] = useState(false)
+  const [analyze, setAnalyze] = useState(false)
+  const run = useMutation({
+    mutationFn: (ask: { explain?: 'plan' | 'analyze' }) => provider.sql(text, { script, ...ask }),
+  })
+  const go = () => run.mutate({})
+  const explain = () => run.mutate({ explain: analyze ? 'analyze' : 'plan' })
   return (
     <Page
       title="Ask the database"
       crumb="SQL"
       actions={
-        <Tip title="Run" labelled>
-          <Button
-            variant="contained"
-            aria-label="Run"
-            loading={run.isPending}
-            disabled={!text.trim()}
-            startIcon={<Play size={iconSize} />}
-            onClick={() => run.mutate(text)}
+        <>
+          <Tip
+            title={analyze ? 'Explain: run it, show its plan, undo it' : 'Explain: show its plan'}
           >
-            Run
-          </Button>
-        </Tip>
+            <Button
+              variant="outlined"
+              aria-label="Explain"
+              disabled={!text.trim() || script}
+              startIcon={<ScanSearch size={iconSize} />}
+              onClick={explain}
+            >
+              Explain
+            </Button>
+          </Tip>
+          <Tip title="Run" labelled>
+            <Button
+              variant="contained"
+              aria-label="Run"
+              loading={run.isPending}
+              disabled={!text.trim()}
+              startIcon={<Play size={iconSize} />}
+              onClick={go}
+            >
+              Run
+            </Button>
+          </Tip>
+        </>
       }
     >
       <Section
-        title="One statement, as you"
-        note="It runs on a login of its own with your role's authority, prepared, so nothing rides along with it, and nothing carries over to the next. Ctrl-Enter (⌘-Enter on a Mac) runs it. PostgreSQL's own answer is shown, with what it warned of."
+        title={script ? 'Statements, as you' : 'One statement, as you'}
+        note="It runs on a login of its own with your role's authority, prepared, so nothing rides along with it, and nothing carries over to the next. Several statements are sent one at a time in one transaction, and one refused undoes them all. Ctrl-Enter (⌘-Enter on a Mac) runs it. PostgreSQL's own answer is shown, with what it warned of."
       >
         <TextField
           multiline
@@ -81,13 +102,22 @@ export function Sql() {
           value={text}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && text.trim())
-              run.mutate(text)
+            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && text.trim()) go()
           }}
           slotProps={{
             htmlInput: { 'aria-label': 'Statement', className: 'mono', spellCheck: false },
           }}
         />
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          <FormControlLabel
+            control={<Switch checked={script} onChange={(_e, on) => setScript(on)} />}
+            label="A script: run in order, in one transaction"
+          />
+          <FormControlLabel
+            control={<Switch checked={analyze} onChange={(_e, on) => setAnalyze(on)} />}
+            label="Explain runs it, measures it, and undoes it (ANALYZE)"
+          />
+        </Box>
         <Refusal error={run.error} />
         {run.data?.notices.map((notice) => (
           <Alert
@@ -99,14 +129,26 @@ export function Sql() {
             {notice.code && ` (${notice.code})`}
           </Alert>
         ))}
-        {run.data && (
+        {run.data?.plan && (
+          <Box
+            component="pre"
+            className="mono"
+            data-plan
+            sx={{ m: 0, p: 4, overflowX: 'auto', bgcolor: 'action.hover', borderRadius: 1 }}
+          >
+            {run.data.plan}
+          </Box>
+        )}
+        {run.data && !run.data.plan && (
           <Typography variant="body2" sx={{ color: 'text.secondary' }} data-answer>
+            {run.data.statements > 1 &&
+              `${run.data.statements} statements ran in one transaction; the last answered `}
             <Mono>{run.data.command}</Mono> {run.data.count ?? 0} row
             {run.data.count === 1 ? '' : 's'}
             {run.data.rows.length > 500 && '; the first 500 are shown'}
           </Typography>
         )}
-        {run.data && run.data.fields.length > 0 && <Rows result={run.data} />}
+        {run.data && !run.data.plan && run.data.fields.length > 0 && <Rows result={run.data} />}
       </Section>
     </Page>
   )

@@ -78,7 +78,9 @@ export function inPage(files: string[]): InPage {
       // own would not: a statement that left the session someone else's is undone and refused,
       // and DISCARD ALL clears settings, SET ROLE, prepared statements and temporary tables.
       // It is not a full boundary: one DO block may become the superuser and switch back.
-      const own: Session['own'] = (work) =>
+      // Every statement of the reader's is in a transaction here already: one that is undone
+      // is never committed.
+      const own: Session['own'] = (work, how = {}) =>
         exclusive(async (one) => {
           await pg.query('BEGIN')
           try {
@@ -92,7 +94,7 @@ export function inPage(files: string[]): InPage {
                 new Error(`${role} may not become another role's session: nothing was kept.`),
                 { code: '42501' }
               )
-            await pg.query('COMMIT')
+            if (!how.undo) await pg.query('COMMIT')
             return result
           } finally {
             await pg.query('ROLLBACK')

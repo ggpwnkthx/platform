@@ -1,4 +1,4 @@
--- The demonstration: the records of the example's collections, and the history they would
+-- The demonstration: the rows of the example's tables, and the history they would
 -- have. It is run once, after schema.sql, as the server's own superuser.
 --
 -- The rows are written with the triggers off and the stamps set to who would have written
@@ -124,12 +124,12 @@ UPDATE crm.contacts SET created_by = 'bob@example.com', updated_by = 'bob@exampl
 UPDATE crm.deals SET created_by = 'bob@example.com', updated_by = 'bob@example.com';
 
 -- The revisions the triggers would have written, in the order the rows were made. Whatever
--- the installation itself recorded of these collections gives way to them.
+-- the installation itself recorded of these tables gives way to them.
 DELETE FROM platform.activity WHERE schema_name IN ('newsroom', 'crm');
 CREATE TEMP TABLE demo_activity (LIKE platform.activity INCLUDING DEFAULTS);
 ALTER TABLE demo_activity ALTER COLUMN id DROP NOT NULL;
 ALTER TABLE demo_activity ALTER COLUMN relation DROP NOT NULL;
-INSERT INTO demo_activity (at, actor, actor_oid, workspace_owner, schema_name, table_name, operation, after_row)
+INSERT INTO demo_activity (at, actor, actor_oid, schema_owner, schema_name, table_name, operation, after_row)
 SELECT r.created_at, r.created_by, (SELECT oid FROM pg_roles WHERE rolname = r.created_by),
        (SELECT nspowner FROM pg_namespace WHERE nspname = r.s), r.s, r.t, 'INSERT', r.doc
   FROM (SELECT 'newsroom' s, 'sections' t, created_at, created_by, to_jsonb(x) doc FROM newsroom.sections x
@@ -140,13 +140,13 @@ SELECT r.created_at, r.created_by, (SELECT oid FROM pg_roles WHERE rolname = r.c
         UNION ALL SELECT 'crm', 'deals', created_at, created_by, to_jsonb(x) FROM crm.deals x) r
  ORDER BY r.created_at;
 -- Articles move through review to publication: the author sends it, an editor publishes it.
-INSERT INTO demo_activity (at, actor, actor_oid, workspace_owner, schema_name, table_name, operation, before_row, after_row)
+INSERT INTO demo_activity (at, actor, actor_oid, schema_owner, schema_name, table_name, operation, before_row, after_row)
 SELECT a.updated_at - interval '3 hours', a.created_by, (SELECT oid FROM pg_roles WHERE rolname = a.created_by),
        (SELECT nspowner FROM pg_namespace WHERE nspname = 'newsroom'), 'newsroom', 'articles', 'UPDATE',
        to_jsonb(a) || jsonb_build_object('status', 'draft', 'version', 1),
        to_jsonb(a) || jsonb_build_object('status', 'review', 'version', 2)
   FROM newsroom.articles a WHERE a.status IN ('review', 'published');
-INSERT INTO demo_activity (at, actor, actor_oid, workspace_owner, schema_name, table_name, operation, before_row, after_row)
+INSERT INTO demo_activity (at, actor, actor_oid, schema_owner, schema_name, table_name, operation, before_row, after_row)
 SELECT a.updated_at, current_setting('deployment.admin'), (SELECT oid FROM pg_roles WHERE rolname = current_setting('deployment.admin')),
        (SELECT nspowner FROM pg_namespace WHERE nspname = 'newsroom'), 'newsroom', 'articles', 'UPDATE',
        to_jsonb(a) || jsonb_build_object('status', 'review', 'version', 2, 'published_at', null),
@@ -154,15 +154,15 @@ SELECT a.updated_at, current_setting('deployment.admin'), (SELECT oid FROM pg_ro
   FROM newsroom.articles a WHERE a.status = 'published';
 UPDATE newsroom.articles SET version = CASE status WHEN 'published' THEN 3 WHEN 'review' THEN 2 ELSE 1 END;
 -- Two drafts their authors withdrew.
-INSERT INTO demo_activity (at, actor, actor_oid, workspace_owner, schema_name, table_name, operation, before_row)
+INSERT INTO demo_activity (at, actor, actor_oid, schema_owner, schema_name, table_name, operation, before_row)
 SELECT now() - (n || ' hours')::interval, who, (SELECT oid FROM pg_roles WHERE rolname = who),
        (SELECT nspowner FROM pg_namespace WHERE nspname = 'newsroom'), 'newsroom', 'articles', 'DELETE',
        jsonb_build_object('id', gen_random_uuid(), 'title', title, 'status', 'draft', 'created_by', who, 'version', 1)
   FROM (VALUES (5, 'alice@example.com', 'Draft: river crossing timeline'),
                (29, 'bob@example.com', 'Notes for the hustings live blog')) AS w(n, who, title);
 -- In the order they happened, so the newest revision has the highest id, as a trigger would leave it.
-INSERT INTO platform.activity (at, actor, actor_oid, workspace_owner, relation, schema_name, table_name, operation, before_row, after_row)
-SELECT at, actor, actor_oid, workspace_owner,
+INSERT INTO platform.activity (at, actor, actor_oid, schema_owner, relation, schema_name, table_name, operation, before_row, after_row)
+SELECT at, actor, actor_oid, schema_owner,
        (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
          WHERE n.nspname = schema_name AND c.relname = table_name),
        schema_name, table_name, operation, before_row, after_row

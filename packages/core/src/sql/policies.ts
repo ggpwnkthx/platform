@@ -38,14 +38,14 @@ export function policyStatement(draft: PolicyDraft): string {
 }
 export const dropPolicyStatement = (schema: string, table: string, name: string) =>
   stmt`DROP POLICY IF EXISTS ${id(name)} ON ${id(schema, table)}`
-/** A collection's row security: on, off, and whether the owner is held to it as well. */
+/** A table's row security: on, off, and whether the owner is held to it as well. */
 export const rowSecurityStatement = (schema: string, table: string, enable: boolean) =>
   stmt`ALTER TABLE ${id(schema, table)} ${sql.raw(enable ? 'ENABLE' : 'DISABLE')} ROW LEVEL SECURITY`
 
 /**
- * Whether the owner of the collection is held to its row security as well. A table's owner
- * is exempt from it unless it is forced, so a collection whose owner reads everything is
- * a collection whose policies do not reach its owner.
+ * Whether the owner of the table is held to its row security as well. A table's owner
+ * is exempt from it unless it is forced, so a table whose owner reads everything is
+ * a table whose policies do not reach its owner.
  */
 export const forceRowSecurityStatement = (schema: string, table: string, force = true) =>
   stmt`ALTER TABLE ${id(schema, table)} ${sql.raw(force ? 'FORCE' : 'NO FORCE')} ROW LEVEL SECURITY`

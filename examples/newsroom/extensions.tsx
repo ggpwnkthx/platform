@@ -12,7 +12,7 @@ import {
 
 /**
  * What the newsroom adds to the interface: renderers of its own, offered beside the
- * platform's wherever a field's owner chooses how it is drawn. A site names this module as
+ * platform's wherever a column's owner chooses how it is drawn. A site names this module as
  * `extensions` in its platform.json, and every build of the folder carries it.
  */
 const defaultPace = 230

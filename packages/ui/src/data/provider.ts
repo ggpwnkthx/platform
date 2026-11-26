@@ -1,8 +1,17 @@
-import { type Db, describe, type Notice, sqlState, transaction, unchanged } from '@platform/core'
+import {
+  type Db,
+  describe,
+  type Notice,
+  type Result,
+  splitStatements,
+  sqlState,
+  transaction,
+  unchanged,
+} from '@platform/core'
 import type { DataProvider, RaRecord } from 'react-admin'
 import { session } from '../session/session.ts'
 import { kindNamed } from './kinds.ts'
-import * as rows from './records.ts'
+import * as rows from './rows.ts'
 
 /** What PostgreSQL refused, as an error whose message is its own words and its SQLSTATE. */
 export class Refused extends Error {
@@ -42,12 +51,13 @@ async function kindList(name: string, params: Parameters<DataProvider['getList']
     found = found.filter((row) =>
       JSON.stringify(row).toLowerCase().includes(String(q).toLowerCase())
     )
-  const { field, order } = params.sort ?? {}
-  if (field && field !== 'id')
+  const { field: column, order } = params.sort ?? {}
+  if (column && column !== 'id')
     found.sort(
       (a, b) =>
-        String(a[field] ?? '').localeCompare(String(b[field] ?? ''), undefined, { numeric: true }) *
-        (order === 'DESC' ? -1 : 1)
+        String(a[column] ?? '').localeCompare(String(b[column] ?? ''), undefined, {
+          numeric: true,
+        }) * (order === 'DESC' ? -1 : 1)
     )
   const { page = 1, perPage = found.length } = params.pagination ?? {}
   return {
@@ -58,21 +68,31 @@ async function kindList(name: string, params: Parameters<DataProvider['getList']
 
 /**
  * Everything the interface reads and writes goes through here, on the reader's own login.
- * A resource is a collection (`workspace.collection`) or a kind; `run` is the one way a
+ * A resource is a table (`schema.table`) or a kind; `run` is the one way a
  * change to the model or to access is made: the statements the reader was shown, in one
  * transaction, as them.
  */
+export interface Answer {
+  fields: string[]
+  rows: Record<string, unknown>[]
+  command: string
+  count: number | null
+  /** What PostgreSQL said beside its answer: its warnings and notices. */
+  notices: Notice[]
+  /** How many statements ran: the answer is the last one's. */
+  statements: number
+  /** The plan, where one was asked for. */
+  plan?: string
+}
 export interface Provider extends DataProvider {
-  run(statements: string[]): Promise<void>
-  /** The reader's own statement, on a login of its own, so that it cannot reach the platform's work. */
-  sql(text: string): Promise<{
-    fields: string[]
-    rows: Record<string, unknown>[]
-    command: string
-    count: number | null
-    /** What PostgreSQL said beside its answer: its warnings and notices. */
-    notices: Notice[]
-  }>
+  /** The statements of a change, in one transaction; or one by one where they cannot be in one. */
+  run(statements: string[], atomic?: boolean): Promise<void>
+  /**
+   * The reader's own statement, on a login of its own, so that it cannot reach the platform's
+   * work; or a script, cut into statements and run one at a time in one transaction; or a
+   * statement's plan, with ANALYZE run and rolled back.
+   */
+  sql(text: string, how?: { script?: boolean; explain?: 'plan' | 'analyze' }): Promise<Answer>
 }
 export const dataProvider: Provider = {
   getList: (resource, params) =>
@@ -94,7 +114,7 @@ export const dataProvider: Provider = {
       data: await rows.update(resource, String(id), data, previousData),
     })) as never,
   updateMany: () =>
-    Promise.reject(new Error('Records are changed one at a time, under the version you saw.')),
+    Promise.reject(new Error('Rows are changed one at a time, under the version you saw.')),
   delete: (resource, { id, previousData }) =>
     asked(async () => {
       await rows.remove(resource, [String(id)], { [String(id)]: previousData?.version })
@@ -106,10 +126,10 @@ export const dataProvider: Provider = {
       await rows.remove(resource, ids.map(String), meta?.versions)
       return { data: ids }
     }) as never,
-  run: (statements) =>
+  run: (statements, atomic = true) =>
     asked(async () => {
-      await session.get()!.db.exclusive((one: Db) =>
-        transaction(one, async () => {
+      await session.get()!.db.exclusive(async (one: Db) => {
+        const each = async () => {
           // A GRANT or REVOKE that PostgreSQL only warns changed nothing undoes the whole change.
           for (const [at, statement] of statements.entries())
             try {
@@ -117,21 +137,42 @@ export const dataProvider: Provider = {
             } catch (error) {
               throw Object.assign(error as object, { statement: at })
             }
-        })
-      )
+        }
+        await (atomic ? transaction(one, each) : each())
+      })
       await session.refresh()
     }),
-  sql: (text) =>
-    asked(() =>
-      session.get()!.db.own(async (one) => {
-        const result = await one.query(text)
-        return {
-          fields: result.fields.map((f) => f.name),
-          rows: result.rows,
-          command: result.command,
-          count: result.rowCount,
-          notices: result.notices ?? [],
-        }
-      })
-    ),
+  sql: (text, how = {}) =>
+    asked(() => {
+      const statements = how.script ? splitStatements(text) : [text]
+      if (how.explain && statements.length !== 1)
+        throw new Error('A plan is of one statement: run the script as statements.')
+      if (how.explain)
+        statements[0] = `EXPLAIN (${how.explain === 'analyze' ? 'ANALYZE, BUFFERS, ' : ''}FORMAT TEXT) ${statements[0]}`
+      return session.get()!.db.own(
+        async (one) => {
+          const notices: Notice[] = []
+          let result: Result | null = null
+          for (const [at, statement] of statements.entries())
+            try {
+              result = await one.query(statement)
+              notices.push(...(result.notices ?? []))
+            } catch (error) {
+              throw Object.assign(error as object, { statement: at })
+            }
+          return {
+            fields: result!.fields.map((f) => f.name),
+            rows: result!.rows,
+            command: result!.command,
+            count: result!.rowCount,
+            notices,
+            statements: statements.length,
+            plan: how.explain
+              ? result!.rows.map((r) => String(Object.values(r)[0])).join('\n')
+              : undefined,
+          }
+        },
+        { atomic: statements.length > 1, undo: how.explain === 'analyze' }
+      )
+    }),
 }

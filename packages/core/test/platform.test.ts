@@ -5,14 +5,14 @@ import {
   choicesOf,
   columnsOf,
   type Db,
-  deleteRecord,
+  deleteRow,
   identity,
-  insertRecord,
-  record,
-  records,
+  insertRow,
+  selectRow,
+  selectRows,
   sqlState,
   tablesIn,
-  updateRecord,
+  updateRow,
 } from '../src/index.ts'
 import { admin, world } from './world.ts'
 
@@ -38,7 +38,7 @@ describe('the example, applied', () => {
       'sections',
       'tags',
     ])
-    // The platform's own views of the catalog are questions, not collections.
+    // The platform's own views of the catalog are questions, not tables.
     expect(tablesIn(held, 'platform').map((t) => t.name)).toEqual([
       'activity',
       'installation',
@@ -60,9 +60,9 @@ describe('the example, applied', () => {
   test('the catalog is what the reader may reach', async () => {
     const alice = await catalog(await w.as('alice@example.com'))
     expect(alice.schemas.map((s) => s.name)).toEqual(['crm', 'newsroom', 'platform'])
-    const fields = columnsOf(alice, 'newsroom', 'articles')
-    expect(fields.find((c) => c.name === 'internal_notes')).toMatchObject({ can_select: false })
-    expect(fields.find((c) => c.name === 'title')).toMatchObject({
+    const columns = columnsOf(alice, 'newsroom', 'articles')
+    expect(columns.find((c) => c.name === 'internal_notes')).toMatchObject({ can_select: false })
+    expect(columns.find((c) => c.name === 'title')).toMatchObject({
       can_select: true,
       can_update: true,
     })
@@ -77,7 +77,7 @@ describe('the example, applied', () => {
   })
 })
 
-describe('records', () => {
+describe('rows', () => {
   const articles = { schema: 'newsroom', table: 'articles' }
   let db: Db
   beforeAll(async () => {
@@ -86,7 +86,7 @@ describe('records', () => {
 
   test('search, filter, sort, page and count under row security', async () => {
     db = await w.as('alice@example.com')
-    const page = await records(db, {
+    const page = await selectRows(db, {
       ...articles,
       columns: ['id', 'title', 'status', 'section'],
       searchable: ['title'],
@@ -106,17 +106,15 @@ describe('records', () => {
 
   test('a withheld column is refused by PostgreSQL, not hidden by the page', async () => {
     db = await w.as('alice@example.com')
-    expect(await refused(records(db, { ...articles, columns: ['internal_notes'], limit: 1 }))).toBe(
-      '42501'
-    )
+    expect(
+      await refused(selectRows(db, { ...articles, columns: ['internal_notes'], limit: 1 }))
+    ).toBe('42501')
   })
 
   test('writes are stamped, versioned and guarded by the version the reader saw', async () => {
     db = await w.as('alice@example.com')
-    expect(await insertRecord(db, 'newsroom', 'articles', { title: 'A test of the remake' })).toBe(
-      1
-    )
-    const found = await records(db, {
+    expect(await insertRow(db, 'newsroom', 'articles', { title: 'A test of the remake' })).toBe(1)
+    const found = await selectRows(db, {
       ...articles,
       columns: ['id', 'version', 'created_by'],
       filter: { title: { op: 'eq', value: 'A test of the remake' } },
@@ -124,16 +122,16 @@ describe('records', () => {
     })
     const row = found.rows[0] as { id: string; version: number; created_by: string }
     expect(row).toMatchObject({ version: 1, created_by: 'alice@example.com' })
-    expect(await updateRecord(db, 'newsroom', 'articles', row.id, { status: 'review' }, 1)).toBe(1)
-    expect(await updateRecord(db, 'newsroom', 'articles', row.id, { status: 'draft' }, 1)).toBe(0)
-    expect(await record(db, 'newsroom', 'articles', ['version', 'status'], row.id)).toEqual({
+    expect(await updateRow(db, 'newsroom', 'articles', row.id, { status: 'review' }, 1)).toBe(1)
+    expect(await updateRow(db, 'newsroom', 'articles', row.id, { status: 'draft' }, 1)).toBe(0)
+    expect(await selectRow(db, 'newsroom', 'articles', ['version', 'status'], row.id)).toEqual({
       version: 2,
       status: 'review',
     })
     expect(
-      await refused(updateRecord(db, 'newsroom', 'articles', row.id, { status: 'nonsense' }))
+      await refused(updateRow(db, 'newsroom', 'articles', row.id, { status: 'nonsense' }))
     ).toBe('23514')
-    expect(await deleteRecord(db, 'newsroom', 'articles', row.id, 2)).toBe(1)
+    expect(await deleteRow(db, 'newsroom', 'articles', row.id, 2)).toBe(1)
     // The owner reads the revisions; alice, who wrote them, does not.
     expect(await activity(db, { schema: 'newsroom', row: row.id })).toEqual([])
     const history = await activity(await w.as(admin), { schema: 'newsroom', row: row.id })

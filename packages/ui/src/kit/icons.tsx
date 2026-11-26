@@ -14,7 +14,7 @@ export const itemIcons = Object.keys(drawn)
 /** A name outside the offered set is not an icon. */
 export const isIcon = (name: unknown): name is string =>
   typeof name === 'string' && Object.hasOwn(drawn, name)
-/** An item's icon by its name; a collection without one is a table, a workspace a database. */
+/** An item's icon by its name; a table without one is a table, a schema a database. */
 export function ItemIcon(props: { name?: unknown; size?: number; table?: boolean }) {
   const Icon = isIcon(props.name) ? drawn[props.name]! : props.table ? Table2 : Database
   return <Icon size={props.size ?? iconSize} />

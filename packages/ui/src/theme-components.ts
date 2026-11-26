@@ -35,7 +35,7 @@ export const components = (): ThemeOptions['components'] => ({
   MuiTextField: { defaultProps: { variant: 'outlined', size: 'small' } },
   MuiFormControl: { defaultProps: { variant: 'outlined', size: 'small' } },
   MuiSelect: { defaultProps: { variant: 'outlined', size: 'small' } },
-  // A field's name stands above its input, always: it is read before the value, and it never
+  // A column's name stands above its input, always: it is read before the value, and it never
   // moves. The outline is whole, with no notch cut for a label that floats.
   MuiInputLabel: {
     defaultProps: { shrink: true },

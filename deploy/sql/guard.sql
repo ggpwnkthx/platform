@@ -1,26 +1,26 @@
--- The guard: what an ordinary role may not do to a collection. The owner of a table may do
--- anything to it, and the owner of a collection is often an ordinary member of a workspace:
+-- The guard: what an ordinary role may not do to a table. The owner of a table may do
+-- anything to it, and the owner of a table is often an ordinary member of a schema:
 -- without the guard, they could turn its row security off, or drop, disable or rewrite the
 -- triggers that stamp its rows and write its history, or let writes pass by those triggers.
 --
--- A collection is a table that carries a trigger calling platform.record_change(), whatever
+-- An audited table is one that carries a trigger calling platform.record_change(), whatever
 -- the trigger is named. Before every DDL command of an ordinary role, the guard notes each
--- collection's row security (on, forced), its audit and stamp triggers (enabled, and what
+-- table's row security (on, forced), its audit and stamp triggers (enabled, and what
 -- each does: function, events, timing, columns, arguments, WHEN), its rules and the tables
--- that inherit from it. After the command, it refuses (42501) the command if any collection
+-- that inherit from it. After the command, it refuses (42501) the command if any table
 -- that had row security has it no longer or lost FORCE; lost, disabled or changed one of those
 -- triggers (CREATE OR REPLACE TRIGGER keeps a trigger's oid, not what it does); gained a rule
 -- or had one rewritten or enabled (DO INSTEAD sends a write elsewhere, past the triggers); or
--- gained a child table (rows written to a child show through the collection, with no history).
+-- gained a child table (rows written to a child show through the table, with no history).
 -- It reads what the catalogs say, not what the statement said, so comments, dynamic SQL in DO
--- blocks, renamed triggers and DISABLE TRIGGER ALL are all the same to it. Adding fields and
+-- blocks, renamed triggers and DISABLE TRIGGER ALL are all the same to it. Adding columns and
 -- writing policies remain the owner's.
 --
--- Dropping a whole collection remains the owner's too, and its rows go with it: a dropped
+-- Dropping a whole table remains the owner's too, and its rows go with it: a dropped
 -- table has nothing left to read, so no DELETE revision is written for them. The guard writes
--- one revision of the drop instead (operation DROP, no rows), which the workspace's owners
+-- one revision of the drop instead (operation DROP, no rows), which the schema's owners
 -- read like any other; a table made afterwards under the same name is a new table, and not a
--- collection until it is made one.
+-- table until it is made one.
 --
 -- The superusers and the operators (the members of platform_core and platform_admins) are not
 -- refused, nor is their drop recorded: they administer the deployment. Run as the cluster
@@ -50,7 +50,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
     FROM pg_trigger t WHERE t.oid = trigger_oid
 $$;
 
--- Each collection: its name and workspace owner (for the revision of its drop), its row
+-- Each table: its name and schema owner (for the revision of its drop), its row
 -- security, its audit and stamp triggers by oid (enabled, and what each does), its rules by
 -- oid (enabled, and their definition) and the tables that inherit from it.
 CREATE OR REPLACE FUNCTION platform.guard_state() RETURNS jsonb
@@ -114,15 +114,15 @@ BEGIN
     was := noted.state->rel;
     SELECT * INTO cur FROM pg_class WHERE oid = rel::oid;
     IF NOT FOUND THEN
-      -- A collection dropped whole is its owner's to drop; its history says that it was.
-      INSERT INTO platform.activity (actor, actor_oid, workspace_owner, relation, schema_name, table_name, operation)
+      -- A table dropped whole is its owner's to drop; its history says that it was.
+      INSERT INTO platform.activity (actor, actor_oid, schema_owner, relation, schema_name, table_name, operation)
       VALUES (session_user, (SELECT oid FROM pg_roles WHERE rolname = session_user), (was->>'owner')::oid,
               rel::oid, was->>'schema', was->>'table', 'DROP');
       CONTINUE;
     END IF;
     IF ((was->>'rls')::boolean AND NOT cur.relrowsecurity)
        OR ((was->>'force')::boolean AND NOT cur.relforcerowsecurity) THEN
-      RAISE EXCEPTION 'Row security on a collection is not yours to turn off.'
+      RAISE EXCEPTION 'Row security on a table is not yours to turn off.'
         USING ERRCODE = '42501', DETAIL = format('%s had row security before this command.', cur.oid::regclass);
     END IF;
     IF EXISTS (SELECT FROM jsonb_each(was->'triggers') t
@@ -130,18 +130,18 @@ BEGIN
                   AND NOT EXISTS (SELECT FROM pg_trigger g
                                    WHERE g.oid = t.key::oid AND g.tgenabled IN ('O', 'A')
                                      AND platform.guard_trigger(g.oid) = t.value->'does')) THEN
-      RAISE EXCEPTION 'The triggers that write a collection''s history are not yours to drop, disable or change.'
+      RAISE EXCEPTION 'The triggers that write a table''s history are not yours to drop, disable or change.'
         USING ERRCODE = '42501', DETAIL = format('%s lost or changed an audit or stamp trigger in this command.', cur.oid::regclass);
     END IF;
     IF EXISTS (SELECT FROM pg_rewrite r
                 WHERE r.ev_class = cur.oid AND r.ev_enabled <> 'D'
                   AND (was->'rules'->>r.oid::text) IS DISTINCT FROM r.ev_enabled::text || ' ' || pg_get_ruledef(r.oid)) THEN
-      RAISE EXCEPTION 'A rule on a collection is not yours to write: it would send writes past the collection''s history.'
+      RAISE EXCEPTION 'A rule on a table is not yours to write: it would send writes past the table''s history.'
         USING ERRCODE = '42501', DETAIL = format('%s gained a rule, or had one changed or enabled, in this command.', cur.oid::regclass);
     END IF;
     IF EXISTS (SELECT FROM pg_inherits i
                 WHERE i.inhparent = cur.oid AND NOT (was->'children') ? i.inhrelid::text) THEN
-      RAISE EXCEPTION 'A collection is not yours to make the parent of another table: rows written there would have no history.'
+      RAISE EXCEPTION 'A table is not yours to make the parent of another table: rows written there would have no history.'
         USING ERRCODE = '42501', DETAIL = format('%s gained a child table in this command.', cur.oid::regclass);
     END IF;
   END LOOP;

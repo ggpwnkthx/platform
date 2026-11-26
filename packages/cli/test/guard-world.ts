@@ -34,7 +34,7 @@ export const state = () =>
      (SELECT string_agg(t.tgenabled::text, '' ORDER BY t.tgname) FROM pg_trigger t WHERE t.tgrelid = c.oid AND NOT t.tgisinternal) AS enabled
      FROM pg_class c WHERE c.oid = 'alice_ws.notes'::regclass`)
 
-/** A PostgreSQL with the platform, the hardening and the guard, and a collection alice owns. */
+/** A PostgreSQL with the platform, the hardening and the guard, and a table alice owns. */
 export async function guarded() {
   pg = await PGlite.create()
   await pg.exec(await Bun.file(join(ROOT, 'migrations/0001_platform.sql')).text())
@@ -45,6 +45,6 @@ export async function guarded() {
   for (const file of ['harden.sql', 'guard.sql']) await pg.exec(await sql(file))
   await as(
     alice,
-    "SELECT platform.create_collection('alice_ws', 'notes'); ALTER TABLE alice_ws.notes FORCE ROW LEVEL SECURITY;"
+    "SELECT platform.create_table('alice_ws', 'notes'); ALTER TABLE alice_ws.notes FORCE ROW LEVEL SECURITY;"
   )
 }

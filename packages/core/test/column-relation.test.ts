@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
-import { records } from '../src/index.ts'
+import { selectRows } from '../src/index.ts'
 import { world } from './world.ts'
 
 let w: Awaited<ReturnType<typeof world>>
@@ -8,7 +8,7 @@ beforeAll(async () => {
 })
 
 /**
- * A condition on a relation read as a column: the row a record points at. A column holds
+ * A condition on a relation read as a column: the row a row points at. A column holds
  * one row, and the condition says what that row must be.
  */
 describe('a condition on a column relation', () => {
@@ -22,7 +22,7 @@ describe('a condition on a column relation', () => {
   }
   const withSection = async (op: 'eq' | 'has_all' | 'has_none', value: string[]) => {
     const db = await w.as('alice@example.com')
-    return records(db, {
+    return selectRows(db, {
       schema: 'newsroom',
       table: 'articles',
       columns: ['id'],
@@ -35,7 +35,7 @@ describe('a condition on a column relation', () => {
   test('is linked to all of them, and to none of them', async () => {
     const db = await w.as('alice@example.com')
     const sections = (
-      await records(db, { schema: 'newsroom', table: 'sections', columns: ['id'], limit: 2 })
+      await selectRows(db, { schema: 'newsroom', table: 'sections', columns: ['id'], limit: 2 })
     ).rows
     const one = String(sections[0]!.id)
     const two = String(sections[1]!.id)

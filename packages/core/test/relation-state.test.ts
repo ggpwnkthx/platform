@@ -8,7 +8,7 @@ beforeAll(async () => {
 })
 
 /**
- * A relation is a foreign key. Dropped, the two collections are apart until it is made again,
+ * A relation is a foreign key. Dropped, the two tables are apart until it is made again,
  * and the catalog says so either way.
  */
 describe('a relation that is taken away', () => {

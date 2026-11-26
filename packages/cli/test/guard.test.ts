@@ -14,7 +14,7 @@ describe('the guard', () => {
     ])
   })
 
-  test('leaves an owner the ordinary changes: a field, a policy, a renamed trigger, a collection of their own', async () => {
+  test('leaves an owner the ordinary changes: a column, a policy, a renamed trigger, a table of their own', async () => {
     expect(await as(alice, 'ALTER TABLE alice_ws.notes ADD COLUMN body text;')).toBe('done')
     expect(
       await as(alice, 'CREATE POLICY mine ON alice_ws.notes USING (created_by = session_user);')
@@ -25,7 +25,7 @@ describe('the guard', () => {
     expect(
       await as(
         alice,
-        "SELECT platform.create_collection('alice_ws', 'drafts'); DROP TABLE alice_ws.drafts;"
+        "SELECT platform.create_table('alice_ws', 'drafts'); DROP TABLE alice_ws.drafts;"
       )
     ).toBe('done')
     expect(await state()).toEqual({ rls: true, force: true, enabled: 'OOO' })
@@ -39,12 +39,12 @@ describe('the guard', () => {
       "DO $$ BEGIN EXECUTE 'ALTER TABLE alice_ws.notes ' || 'DISABLE ROW LEVEL SECURITY'; END $$;",
     ])
       expect(await as(alice, statement), statement).toBe(
-        '42501: Row security on a collection is not yours to turn off.'
+        '42501: Row security on a table is not yours to turn off.'
       )
     expect(await state()).toMatchObject({ rls: true, force: true })
   })
 
-  test('refuses an ordinary owner the triggers that write a collection’s history, by any name', async () => {
+  test('refuses an ordinary owner the triggers that write a table’s history, by any name', async () => {
     for (const statement of [
       'DROP TRIGGER history ON alice_ws.notes;',
       'DROP TRIGGER platform_stamp ON alice_ws.notes;',
@@ -56,7 +56,7 @@ describe('the guard', () => {
       "DO $$ BEGIN EXECUTE format('DROP TRIGGER %I ON alice_ws.notes', 'history'); END $$;",
     ])
       expect(await as(alice, statement), statement).toBe(
-        "42501: The triggers that write a collection's history are not yours to drop, disable or change."
+        "42501: The triggers that write a table's history are not yours to drop, disable or change."
       )
     expect(await state()).toEqual({ rls: true, force: true, enabled: 'OOO' })
   })
@@ -87,7 +87,7 @@ describe('the guard', () => {
       'CREATE OR REPLACE TRIGGER platform_stamp BEFORE INSERT OR UPDATE OF body ON alice_ws.notes FOR EACH ROW EXECUTE FUNCTION platform.stamp();',
     ])
       expect(await as(alice, statement), statement).toBe(
-        "42501: The triggers that write a collection's history are not yours to drop, disable or change."
+        "42501: The triggers that write a table's history are not yours to drop, disable or change."
       )
     expect(await definitions()).toEqual(before)
     // The same trigger again, as it was, changes nothing and is the owner's.

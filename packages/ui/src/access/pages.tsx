@@ -1,37 +1,40 @@
 import { Link, useParams } from 'react-router-dom'
 import { KindTable } from '../kit/Kinds.tsx'
 import { Page } from '../kit/Page.tsx'
-import { useNames, useWorkspace } from '../kit/place.ts'
+import { useNames, useSchema } from '../kit/place.ts'
 import { grants } from './grants.tsx'
-import { memberships, roles } from './roles.tsx'
+import { databaseGrants } from './database-grants.tsx'
+import { memberships } from './memberships.tsx'
+import { roles } from './roles.tsx'
 
-/** Users and groups: PostgreSQL's roles, as the caller may see them. They are the same in every workspace. */
+/** Roles: PostgreSQL's roles, as the caller may see them. They are the same in every schema. */
 export const RoleList = () => (
-  <Page title="Users and groups">
+  <Page title="Roles">
     <KindTable kind={roles} where={{}} lead />
     <KindTable kind={memberships} where={{}} />
+    <KindTable kind={databaseGrants} where={{}} />
   </Page>
 )
 
-/** One role: what it belongs to, who belongs to it, and what it holds in the workspace in view. */
+/** One role: what it belongs to, who belongs to it, and what it holds in the schema in view. */
 export function RolePage() {
   const { role = '' } = useParams()
-  const workspace = useWorkspace()
+  const inView = useSchema()
   const names = useNames()
   return (
-    <Page title={role} crumb={<Link to="/roles">Users and groups</Link>}>
+    <Page title={role} crumb={<Link to="/roles">Roles</Link>}>
       <KindTable
         kind={memberships}
         where={{ member: role }}
-        add="Add to a group"
-        title="Belongs to"
+        add="Grant a role to it"
+        title="Member of"
       />
-      <KindTable kind={memberships} where={{ role }} add="Add a member" title="Members" />
-      {workspace && (
+      <KindTable kind={memberships} where={{ role }} add="Grant it to a role" title="Members" />
+      {inView && (
         <KindTable
           kind={grants}
-          where={{ schema: workspace.name, role }}
-          title={`Holds in ${names(workspace.name).name}`}
+          where={{ schema: inView.name, role }}
+          title={`Holds in ${names(inView.name).name}`}
         />
       )}
     </Page>

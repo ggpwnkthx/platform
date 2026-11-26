@@ -4,13 +4,13 @@ import { useNames } from '../kit/place.ts'
 import { Page } from '../kit/Page.tsx'
 import { KindTable } from '../kit/Kinds.tsx'
 
-/** What was done in the workspace in view: every write, from the interface or any client. */
+/** What was done in the schema in view: every write, from the interface or any client. */
 export function Activity() {
-  const { ws = '' } = useParams()
+  const { schema = '' } = useParams()
   const table = useSearchParams()[0].get('table') ?? undefined
   return (
-    <Page title="Activity" crumb={useNames()(ws).name}>
-      <KindTable kind={revisions} where={{ schema: ws, table }} />
+    <Page title="Activity" crumb={useNames()(schema).name}>
+      <KindTable kind={revisions} where={{ schema, table }} />
     </Page>
   )
 }

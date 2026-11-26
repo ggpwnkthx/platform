@@ -3,7 +3,7 @@ import {
   catalog,
   checkConstraintStatement,
   dropConstraintStatement,
-  fieldStatements,
+  columnStatements,
   foreignKeyStatement,
   notNullStatement,
   uniqueConstraintStatement,
@@ -20,7 +20,7 @@ describe('the statements a constraint is written as', () => {
     const statement = uniqueConstraintStatement('newsroom', 'articles', ['title'])
     expect(statement).toContain('ADD CONSTRAINT "articles_title_key" UNIQUE ("title")')
   })
-  test('a pair is one key, and is named after both of its fields', () => {
+  test('a pair is one key, and is named after both of its columns', () => {
     const statement = uniqueConstraintStatement('newsroom', 'article_tags', ['article', 'tag'])
     expect(statement).toContain(
       'ADD CONSTRAINT "article_tags_article_tag_key" UNIQUE ("article", "tag")'
@@ -34,7 +34,7 @@ describe('the statements a constraint is written as', () => {
     expect(statement).toContain('ADD CONSTRAINT "articles_section_fkey" FOREIGN KEY ("section")')
     expect(statement).toContain('REFERENCES "newsroom"."sections" (id) ON DELETE RESTRICT')
   })
-  test('a check is the owner’s own SQL, and is named after the field it is about', () => {
+  test('a check is the owner’s own SQL, and is named after the column it is about', () => {
     expect(checkConstraintStatement('newsroom', 'articles', 'word_count >= 0')).toContain(
       'ADD CONSTRAINT "articles_check" CHECK (word_count >= 0)'
     )
@@ -42,13 +42,13 @@ describe('the statements a constraint is written as', () => {
       checkConstraintStatement('newsroom', 'articles', 'word_count >= 0', undefined, 'word_count')
     ).toContain('ADD CONSTRAINT "articles_word_count_check" CHECK (word_count >= 0)')
   })
-  test('a field may not be empty, and may be again', () => {
+  test('a column may not be empty, and may be again', () => {
     expect(notNullStatement('newsroom', 'articles', 'title')).toContain(
       'ALTER COLUMN "title" SET NOT NULL'
     )
   })
-  test('a field that points at another is indexed', () => {
-    const statements = fieldStatements('newsroom', 'articles', {
+  test('a column that points at another is indexed', () => {
+    const statements = columnStatements('newsroom', 'articles', {
       name: 'section',
       type: 'relation',
       relation: 'sections',
@@ -60,7 +60,7 @@ describe('the statements a constraint is written as', () => {
   })
 })
 
-describe('the constraints a collection holds', () => {
+describe('the constraints a table holds', () => {
   test('a key is indexed: the rows that point at another are found without a scan', async () => {
     const found = await (await w.root()).query<{ name: string }>(
       `SELECT ic.relname::text AS name FROM pg_index x

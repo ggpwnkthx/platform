@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import {
-  collectionTarget,
+  tableTarget,
   createRoleStatements,
-  fieldStatements,
-  fieldTarget,
+  columnStatements,
+  columnTarget,
   membershipStatement,
   metadataRemoval,
   metadataStatement,
@@ -45,8 +45,8 @@ describe('policies, roles and the model', () => {
       'GRANT "editors" TO "carol@example.com" WITH ADMIN OPTION;'
     )
   })
-  test('a field is a column with real constraints, and carries its own saying', () => {
-    const statements = fieldStatements('newsroom', 'places', {
+  test('a column carries real constraints, and its own saying', () => {
+    const statements = columnStatements('newsroom', 'places', {
       name: 'spot',
       type: 'public.geometry',
       modifiers: ['Point', '4326'],
@@ -59,45 +59,47 @@ describe('policies, roles and the model', () => {
       'CREATE INDEX ON "newsroom"."places" ("spot");',
       `COMMENT ON COLUMN "newsroom"."places"."spot" IS 'Where it''s at';`,
     ])
-    // A field that says nothing appears everywhere, and nothing is written of it.
+    // A column that says nothing appears everywhere, and nothing is written of it.
     expect(statements).toHaveLength(3)
-    expect(() => fieldStatements('n', 't', { name: 'id', type: 'text' })).toThrow(
-      'made with every collection'
+    expect(() => columnStatements('n', 't', { name: 'id', type: 'text' })).toThrow(
+      'made with every table'
     )
     expect(() =>
-      fieldStatements('n', 't', { name: 'n', type: 'integer', default: '1; drop' })
+      columnStatements('n', 't', { name: 'n', type: 'integer', default: '1; drop' })
     ).toThrow('not a number')
   })
   test('metadata is written by the item’s names, and a null takes a key away', () => {
-    const articles = collectionTarget('newsroom', 'articles')
+    const articles = tableTarget('newsroom', 'articles')
     expect(metadataStatement(articles, 'icon', 'file-text')).toContain(
-      `VALUES ('collection', 'newsroom', 'articles', NULL, 'icon', '"file-text"'::jsonb)`
+      `VALUES ('table', 'newsroom', 'articles', NULL, 'icon', '"file-text"'::jsonb)`
     )
     expect(metadataRemoval(articles, 'color')).toStartWith('DELETE FROM platform.item_metadata')
-    expect(metadataStatement(fieldTarget('n', 't', 'c'), 'display_name', 'C')).toContain("'field'")
+    expect(metadataStatement(columnTarget('n', 't', 'c'), 'display_name', 'C')).toContain(
+      "'column'"
+    )
   })
 })
 
-describe('what fields say', () => {
+describe('what columns say', () => {
   test('views are read leniently and held to what a situation knows', () => {
     expect(
-      parseViews({ list: false, record: 'readonly', filter: 'readonly', export: 'hide', junk: 3 })
-    ).toEqual({ list: 'hide', record: 'readonly', filter: 'show', export: 'hide' })
-    expect(parseViews(null)).toEqual({ list: 'show', record: 'show', filter: 'show' })
+      parseViews({ list: false, row: 'readonly', filter: 'readonly', export: 'hide', junk: 3 })
+    ).toEqual({ list: 'hide', row: 'readonly', filter: 'show', export: 'hide' })
+    expect(parseViews(null)).toEqual({ list: 'show', row: 'show', filter: 'show' })
   })
   test('renderers are a name, or a name and its options', () => {
     const parsed = parseRenderers({
       list: 'truncate',
-      record: { renderer: 'template', options: { template: '» {value}' } },
+      row: { renderer: 'template', options: { template: '» {value}' } },
       filter: { renderer: 'no good!' },
     })
     expect(parsed).toEqual({
       list: { renderer: 'truncate', options: {} },
-      record: { renderer: 'template', options: { template: '» {value}' } },
+      row: { renderer: 'template', options: { template: '» {value}' } },
     })
     expect(renderersValue(parsed)).toEqual({
       list: 'truncate',
-      record: { renderer: 'template', options: { template: '» {value}' } },
+      row: { renderer: 'template', options: { template: '» {value}' } },
     })
   })
 })

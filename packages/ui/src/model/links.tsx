@@ -1,26 +1,20 @@
-import {
-  collectionStatements,
-  dropCollectionStatement,
-  joinsOf,
-  otherSide,
-  joinSide,
-} from '@platform/core'
+import { tableStatements, dropTableStatement, joinsOf, otherSide, joinSide } from '@platform/core'
 import { TextInput } from 'react-admin'
-import { defineKind } from '../data/kinds.ts'
+import { defineKind, mono, type Place, required, createsIn } from '../data/kinds.ts'
 import { Mono } from '../kit/marks.tsx'
-import { CollectionInput, CollectionName, mono, type Place, required } from './collections.tsx'
+import { TableInput, TableName } from './tables.tsx'
 
-/** A link to many: a table of its own that joins two collections, made in one step. */
+/** A link to many: a table of its own that joins two tables, made in one step. */
 export const links = defineKind<
   { schema: string; table: string; other: string },
   Place,
   { other: string; name: string }
 >({
   name: 'links',
-  title: 'Linked to many',
-  note: 'A many-to-many relation is a table of its own: a key to each side, unique together.',
-  noun: 'link to many',
-  empty: 'This collection is linked to no other through a table of links.',
+  title: 'Join tables',
+  note: 'A many-to-many relationship is a join table: a foreign key to each side, unique together.',
+  noun: 'join table',
+  empty: 'No join table links this table to another.',
   read: async (_db, { schema, table }, { catalog }) =>
     joinsOf(catalog, schema, table).map((join) => ({
       schema: join.schema,
@@ -31,42 +25,33 @@ export const links = defineKind<
   columns: [
     {
       source: 'other',
-      label: 'Linked to',
-      render: (row) => <CollectionName schema={row.schema} name={row.other} />,
+      label: 'References',
+      render: (row) => <TableName schema={row.schema} name={row.other} />,
     },
     { source: 'table', label: 'Through', render: (row) => <Mono>{row.table}</Mono> },
   ],
-  may: ({ schema }, { catalog }) => !!catalog.schemas.find((s) => s.name === schema)?.can_create,
+  may: createsIn,
   Inputs: ({ where }) => (
     <>
-      <CollectionInput source="other" label="The other collection" schema={where.schema} />
-      <TextInput
-        source="name"
-        label={'The table of links: named after both, unless you say'}
-        {...mono}
-      />
+      <TableInput source="other" label="Referenced table" schema={where.schema} />
+      <TextInput source="name" label={'Join table name (empty: named after both)'} {...mono} />
     </>
   ),
   // A many-to-many relation is a table of its own: a key to each side, unique together.
   create(form, { schema, table }) {
-    const other = required(form.other, 'Choose the collection to link to.')
+    const other = required(form.other, 'Choose the referenced table.')
     const name = form.name?.trim() || `${table}_${other}`
     const [left, right] = [table, other === table ? `other_${other}` : other]
-    const key = (field: string, relation: string) => ({
-      name: field,
+    const key = (column: string, relation: string) => ({
+      name: column,
       type: 'relation',
       relation,
       required: true,
       onDelete: 'cascade' as const,
     })
-    return collectionStatements(
-      schema,
-      name,
-      '',
-      [key(left, table), key(right, other)],
-      [[left, right]]
-    )
+    return tableStatements(schema, name, '', [key(left, table), key(right, other)], [[left, right]])
   },
-  loses: (row) => `Every link it holds goes with ${row.table}. The records on either side stay.`,
-  remove: (row, { schema }) => [dropCollectionStatement(schema, row.table)],
+  loses: (row) =>
+    `Every row of ${row.table} is dropped with it. The rows of the tables it joins stay.`,
+  remove: (row, { schema }) => [dropTableStatement(schema, row.table)],
 })

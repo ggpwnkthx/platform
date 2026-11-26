@@ -2,13 +2,13 @@ import { beforeAll, describe, expect, test } from 'bun:test'
 import {
   catalog,
   choicesOf,
-  collectionStatements,
+  tableStatements,
   columnsOf,
-  fieldMetadata,
+  columnMetadata,
   grants,
   grantStatement,
   identity,
-  indexFields,
+  indexColumns,
   policies,
   reach,
   roles,
@@ -97,9 +97,9 @@ describe('access', () => {
 })
 
 describe('the model and its metadata', () => {
-  test('a collection is made with statements shown first, as its owner', async () => {
+  test('a table is made with statements shown first, as its owner', async () => {
     const db = await w.as('bob@example.com')
-    const statements = collectionStatements('crm', 'visits', 'Who we went to see.', [
+    const statements = tableStatements('crm', 'visits', 'Who we went to see.', [
       {
         name: 'account',
         type: 'relation',
@@ -123,7 +123,7 @@ describe('the model and its metadata', () => {
         renderers: { list: 'truncate' },
       },
     ])
-    expect(statements[0]).toBe(`SELECT platform.create_collection('crm', 'visits');`)
+    expect(statements[0]).toBe(`SELECT platform.create_table('crm', 'visits');`)
     await transaction(db, async () => {
       for (const statement of statements) await db.query(statement)
     })
@@ -149,12 +149,12 @@ describe('the model and its metadata', () => {
         on_delete: 'c',
       })
     )
-    const said = indexFields(await fieldMetadata(db, 'crm', 'visits'))
-    expect(said.place?.views).toMatchObject({ list: 'hide', record: 'show' })
+    const said = indexColumns(await columnMetadata(db, 'crm', 'visits'))
+    expect(said.place?.views).toMatchObject({ list: 'hide', row: 'show' })
     expect(said.place?.renderers).toEqual({ list: { renderer: 'truncate', options: {} } })
-    // A field that says nothing appears everywhere: only what narrows that is written.
+    // A column that says nothing appears everywhere: only what narrows that is written.
     expect(said.id?.views).toBeUndefined()
-    // New collections have row security and no policies: a grant alone shows no row.
+    // New tables have row security and no policies: a grant alone shows no row.
     expect(cat.tables.find((t) => t.name === 'visits')).toMatchObject({
       rls: true,
       owner: 'bob@example.com',
@@ -163,13 +163,13 @@ describe('the model and its metadata', () => {
 
   test('metadata is read by who reaches the item and written by its owner alone', async () => {
     const alice = await w.as('alice@example.com')
-    const labels = indexFields(await fieldMetadata(alice, 'newsroom', 'articles'))
+    const labels = indexColumns(await columnMetadata(alice, 'newsroom', 'articles'))
     expect(labels.title?.label).toBe('Headline')
     expect(labels.internal_notes).toBeUndefined()
     expect(
       await refused(
         alice.query(
-          `INSERT INTO platform.item_metadata (scope, schema_name, key, value) VALUES ('workspace','newsroom','x','1')`
+          `INSERT INTO platform.item_metadata (scope, schema_name, key, value) VALUES ('schema','newsroom','x','1')`
         )
       )
     ).toBe('42501')

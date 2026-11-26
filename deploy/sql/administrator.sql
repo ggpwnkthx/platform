@@ -1,6 +1,6 @@
 -- The administrator of a deployment that applies no site of its own: the role named in
 -- deployment.admin may sign in, administers roles, admits people to the platform, and may
--- make workspaces. Run beside the server, as its own superuser:
+-- make schemas. Run beside the server, as its own superuser:
 --
 --   PGOPTIONS='-c deployment.admin=admin@example.com' psql -1 -f deploy/sql/administrator.sql
 DO $$

@@ -1,7 +1,7 @@
 import type { Catalog, JoinInfo, RelationInfo } from './types.ts'
 
 /**
- * The relations of a collection, read both ways: the row it points at, and the rows that
+ * The relations of a table, read both ways: the row it points at, and the rows that
  * point at it. The catalog holds every foreign key the reader may see, so the second way
  * is the first read backwards — nothing else is asked of PostgreSQL.
  */

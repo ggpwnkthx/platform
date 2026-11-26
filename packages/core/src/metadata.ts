@@ -39,19 +39,28 @@ export async function metadata(db: Db, target: MetadataTarget) {
   )
   return result.rows
 }
-/** Every field's metadata of one collection, in one statement. */
-export async function fieldMetadata(db: Db, schema: string, table: string) {
+/** Every column's metadata of one table, in one statement. */
+export async function columnMetadata(db: Db, schema: string, table: string) {
   const result = await db.query<MetadataRow>(
     `SELECT ${columns} FROM platform.item_metadata
-      WHERE scope = 'field' AND schema_name = $1 AND table_name = $2 ORDER BY column_name, key`,
+      WHERE scope = 'column' AND schema_name = $1 AND table_name = $2 ORDER BY column_name, key`,
     [schema, table]
+  )
+  return result.rows
+}
+/** Every saying of a schema, or of a table and its columns: what a rename carries across. */
+export async function itemMetadata(db: Db, schema: string, table?: string | null) {
+  const result = await db.query<MetadataRow>(
+    `SELECT ${columns} FROM platform.item_metadata
+      WHERE schema_name = $1 AND ($2::text IS NULL OR table_name = $2) ORDER BY 1, 3, 4, 5`,
+    [schema, table ?? null]
   )
   return result.rows
 }
 export async function presentations(db: Db): Promise<MetadataRow[]> {
   const result = await db.query<MetadataRow>(
     `SELECT ${columns} FROM platform.item_metadata
-      WHERE key = ANY($1::text[]) OR (scope = 'collection' AND key = 'display_field')`,
+      WHERE key = ANY($1::text[]) OR (scope = 'table' AND key = 'display_column')`,
     [[...presentationKeys]]
   )
   return result.rows
@@ -63,13 +72,13 @@ export interface Presentation {
   displayName: string | null
   icon: string | null
   color: string | null
-  displayField: string | null
+  displayColumn: string | null
 }
 const noPresentation: Presentation = {
   displayName: null,
   icon: null,
   color: null,
-  displayField: null,
+  displayColumn: null,
 }
 export type PresentationIndex = Record<string, Presentation>
 const itemKey = (schema: string, table?: string | null, column?: string | null) =>
@@ -78,7 +87,7 @@ const slots = {
   display_name: 'displayName',
   icon: 'icon',
   color: 'color',
-  display_field: 'displayField',
+  display_column: 'displayColumn',
 } as const
 export function indexPresentations(rows: readonly MetadataRow[]): PresentationIndex {
   const index: PresentationIndex = {}
@@ -100,16 +109,16 @@ export const presentationOf = (
 
 // ----------------------------------------------------------------------------------- views
 
-export type Situation = 'list' | 'record' | 'filter'
-export const situations: Situation[] = ['list', 'record', 'filter']
-/** `readonly` means something in the record form only: shown, never an input. */
+export type Situation = 'list' | 'row' | 'filter'
+export const situations: Situation[] = ['list', 'row', 'filter']
+/** `readonly` means something in the row form only: shown, never an input. */
 export const situationModes: Record<Situation, ViewMode[]> = {
   list: ['show', 'hide'],
-  record: ['show', 'readonly', 'hide'],
+  row: ['show', 'readonly', 'hide'],
   filter: ['show', 'hide'],
 }
-export type FieldViews = Record<Situation, ViewMode> & Record<string, ViewMode | undefined>
-export const everyView: FieldViews = { ...defaultViews }
+export type ColumnViews = Record<Situation, ViewMode> & Record<string, ViewMode | undefined>
+export const everyView: ColumnViews = { ...defaultViews }
 export const validViewName = (name: string) => /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(name.trim())
 const modeOf = (value: unknown): ViewMode | null =>
   value === true
@@ -120,8 +129,8 @@ const modeOf = (value: unknown): ViewMode | null =>
         ? value
         : null
 /** The saying as it is kept, read leniently: the three situations, then the owner's own views. */
-export function parseViews(value: unknown): FieldViews {
-  const views: FieldViews = { ...everyView }
+export function parseViews(value: unknown): ColumnViews {
+  const views: ColumnViews = { ...everyView }
   if (!value || typeof value !== 'object' || Array.isArray(value)) return views
   for (const [name, said] of Object.entries(value)) {
     const mode = modeOf(said)
@@ -138,7 +147,7 @@ export interface RendererChoice {
   renderer: string
   options: Record<string, unknown>
 }
-export type FieldRenderers = Record<string, RendererChoice | undefined>
+export type ColumnRenderers = Record<string, RendererChoice | undefined>
 export const validRendererName = validViewName
 function choiceOf(value: unknown): RendererChoice | null {
   const said = typeof value === 'string' ? { renderer: value } : value
@@ -148,8 +157,8 @@ function choiceOf(value: unknown): RendererChoice | null {
   const given = options && typeof options === 'object' && !Array.isArray(options) ? options : {}
   return { renderer: renderer.trim(), options: given as Record<string, unknown> }
 }
-export function parseRenderers(value: unknown): FieldRenderers {
-  const renderers: FieldRenderers = {}
+export function parseRenderers(value: unknown): ColumnRenderers {
+  const renderers: ColumnRenderers = {}
   if (!value || typeof value !== 'object' || Array.isArray(value)) return renderers
   for (const [situation, said] of Object.entries(value)) {
     const choice = choiceOf(said)
@@ -158,25 +167,27 @@ export function parseRenderers(value: unknown): FieldRenderers {
   return renderers
 }
 /** The saying as it is written: a name alone where a renderer takes no options. */
-export const renderersValue = (renderers: FieldRenderers) =>
+export const renderersValue = (renderers: ColumnRenderers) =>
   Object.fromEntries(
     Object.entries(renderers).flatMap(([situation, choice]) =>
       choice ? [[situation, Object.keys(choice.options).length ? choice : choice.renderer]] : []
     )
   )
 
-/** What a collection's fields say of themselves, by column. */
-export function indexFields(rows: readonly MetadataRow[]) {
-  const index: Record<string, { label?: string; views?: FieldViews; renderers?: FieldRenderers }> =
-    {}
+/** What a table's columns say of themselves, by column. */
+export function indexColumns(rows: readonly MetadataRow[]) {
+  const index: Record<
+    string,
+    { label?: string; views?: ColumnViews; renderers?: ColumnRenderers }
+  > = {}
   for (const row of rows) {
     if (!row.column_name) continue
     index[row.column_name] ??= {}
-    const field = index[row.column_name]!
-    if (row.key === viewsKey) field.views = parseViews(row.value)
-    else if (row.key === renderersKey) field.renderers = parseRenderers(row.value)
+    const column = index[row.column_name]!
+    if (row.key === viewsKey) column.views = parseViews(row.value)
+    else if (row.key === renderersKey) column.renderers = parseRenderers(row.value)
     else if (row.key === 'display_name' && typeof row.value === 'string' && row.value.trim())
-      field.label = row.value.trim()
+      column.label = row.value.trim()
   }
   return index
 }

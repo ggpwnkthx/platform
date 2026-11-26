@@ -1,27 +1,27 @@
 import { type RawBuilder, sql } from 'kysely'
 import { InvalidName, lit, stmt } from './kit.ts'
 
-export type MetadataScope = 'workspace' | 'collection' | 'field'
+export type MetadataScope = 'schema' | 'table' | 'column'
 export interface MetadataTarget {
   scope: MetadataScope
   schema: string
   table: string | null
   column: string | null
 }
-export const workspaceTarget = (schema: string): MetadataTarget => ({
-  scope: 'workspace',
+export const schemaTarget = (schema: string): MetadataTarget => ({
+  scope: 'schema',
   schema,
   table: null,
   column: null,
 })
-export const collectionTarget = (schema: string, table: string): MetadataTarget => ({
-  scope: 'collection',
+export const tableTarget = (schema: string, table: string): MetadataTarget => ({
+  scope: 'table',
   schema,
   table,
   column: null,
 })
-export const fieldTarget = (schema: string, table: string, column: string): MetadataTarget => ({
-  scope: 'field',
+export const columnTarget = (schema: string, table: string, column: string): MetadataTarget => ({
+  scope: 'column',
   schema,
   table,
   column,
@@ -31,7 +31,7 @@ export const viewsKey = 'views'
 export const renderersKey = 'renderers'
 export const viewModes = ['show', 'hide', 'readonly'] as const
 export type ViewMode = (typeof viewModes)[number]
-export const defaultViews = { list: 'show', record: 'show', filter: 'show' } as const
+export const defaultViews = { list: 'show', row: 'show', filter: 'show' } as const
 
 /** The row that holds one saying of one item: its place, its key, and what was said. */
 export const metadataColumns = 'scope, schema_name, table_name, column_name, key, value'
@@ -54,8 +54,8 @@ export const metadataRemoval = (t: MetadataTarget, key: string) =>
  WHERE scope = ${lit(t.scope)} AND schema_name = ${lit(t.schema)}
    AND table_name IS NOT DISTINCT FROM ${lit(t.table)}
    AND column_name IS NOT DISTINCT FROM ${lit(t.column)} AND key = ${lit(key)}`
-/** Where a field appears: what the owner says, over the default of appearing everywhere. */
-export function fieldViewsStatement(target: MetadataTarget, views: Record<string, string> = {}) {
+/** Where a column appears: what the owner says, over the default of appearing everywhere. */
+export function columnViewsStatement(target: MetadataTarget, views: Record<string, string> = {}) {
   for (const [name, mode] of Object.entries(views))
     if (!viewModes.includes(mode as ViewMode))
       throw new InvalidName(`${name}: a view is shown, hidden or shown and locked`)

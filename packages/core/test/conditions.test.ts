@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
-import { records, type RelationPath } from '../src/index.ts'
+import { selectRows, type RelationPath } from '../src/index.ts'
 import { world } from './world.ts'
 
 let w: Awaited<ReturnType<typeof world>>
@@ -19,9 +19,9 @@ const path = (): RelationPath => ({
 })
 
 describe('the names on the other side', () => {
-  test('the search finds a record by the name of the row it points at', async () => {
+  test('the search finds a row by the name of the row it points at', async () => {
     const db = await w.as('alice@example.com')
-    const bySection = await records(db, {
+    const bySection = await selectRows(db, {
       schema: 'newsroom',
       table: 'articles',
       columns: ['id', 'title'],
@@ -41,7 +41,7 @@ describe('the names on the other side', () => {
     })
     expect(bySection.total).toBeGreaterThan(0)
     // The search of the columns alone finds nothing: the name is on the other side.
-    const byTitle = await records(db, {
+    const byTitle = await selectRows(db, {
       schema: 'newsroom',
       table: 'articles',
       columns: ['id'],
@@ -54,7 +54,7 @@ describe('the names on the other side', () => {
 
   test('the search follows the links of a join table', async () => {
     const db = await w.as('alice@example.com')
-    const found = await records(db, {
+    const found = await selectRows(db, {
       schema: 'newsroom',
       table: 'articles',
       columns: ['id'],
@@ -66,11 +66,11 @@ describe('the names on the other side', () => {
     expect(found.total).toBeGreaterThan(0)
   })
 
-  test('the search follows the rows that point at a record', async () => {
+  test('the search follows the rows that point at a row', async () => {
     const db = await w.as('alice@example.com')
     // The corrections are the rows that point at an article, and the table they live in
     // is also the table of the rows themselves: it may not be joined to itself.
-    const found = await records(db, {
+    const found = await selectRows(db, {
       schema: 'newsroom',
       table: 'articles',
       columns: ['id'],

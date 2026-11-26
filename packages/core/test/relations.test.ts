@@ -2,9 +2,9 @@ import { beforeAll, describe, expect, test } from 'bun:test'
 import {
   catalog,
   countLinked,
-  insertRecordWithLinks,
+  insertRowWithLinks,
   linkedRows,
-  records,
+  selectRows,
   setLinks,
   type RelationPath,
   transaction,
@@ -38,17 +38,17 @@ describe('a join table', () => {
       left: { column: 'article', target_table: 'articles' },
       right: { column: 'tag', target_table: 'tags' },
     })
-    // A collection that is not made of two keys is not a link.
+    // A table that is not made of two keys is not a link.
     expect(cat.joins.find((one) => one.table === 'articles')).toBeUndefined()
   })
 
-  test('a record reads the rows it is linked to', async () => {
+  test('a row reads the rows it is linked to', async () => {
     const db = await w.as('alice@example.com')
     const cat = await catalog(db)
     const tag = (
-      await records(db, { schema: 'newsroom', table: 'tags', columns: ['id'], limit: 1 })
+      await selectRows(db, { schema: 'newsroom', table: 'tags', columns: ['id'], limit: 1 })
     ).rows[0]!
-    const found = await records(db, {
+    const found = await selectRows(db, {
       schema: 'newsroom',
       table: 'articles',
       columns: ['id', 'title'],
@@ -66,14 +66,14 @@ describe('a join table', () => {
   test('a link is written and taken away', async () => {
     const db = await w.as('alice@example.com')
     const cat = await catalog(db)
-    const tags = await records(db, {
+    const tags = await selectRows(db, {
       schema: 'newsroom',
       table: 'tags',
       columns: ['id'],
       limit: 50,
     })
     const article = (
-      await records(db, {
+      await selectRows(db, {
         schema: 'newsroom',
         table: 'articles',
         columns: ['id'],
@@ -105,10 +105,10 @@ describe('a join table', () => {
     expect((await linkedRows(db, cat, path(), String(article.id))).length).toBe(held.length)
   })
 
-  test('a new record is written with the links it starts with', async () => {
+  test('a new row is written with the links it starts with', async () => {
     const db = await w.as('alice@example.com')
     const cat = await catalog(db)
-    const tags = await records(db, {
+    const tags = await selectRows(db, {
       schema: 'newsroom',
       table: 'tags',
       columns: ['id'],
@@ -116,7 +116,7 @@ describe('a join table', () => {
     })
     const wanted = tags.rows.map((tag) => String(tag.id))
     await transaction(db, () =>
-      insertRecordWithLinks(
+      insertRowWithLinks(
         db,
         'newsroom',
         'articles',
@@ -124,7 +124,7 @@ describe('a join table', () => {
         [{ path: path(), ids: wanted }]
       )
     )
-    const found = await records(db, {
+    const found = await selectRows(db, {
       schema: 'newsroom',
       table: 'articles',
       columns: ['id', 'title'],
@@ -139,14 +139,14 @@ describe('a join table', () => {
 
   test('the links are written inside a transaction, and are refused outside one', async () => {
     const db = await w.as('alice@example.com')
-    const tags = await records(db, {
+    const tags = await selectRows(db, {
       schema: 'newsroom',
       table: 'tags',
       columns: ['id'],
       limit: 1,
     })
     const article = (
-      await records(db, { schema: 'newsroom', table: 'articles', columns: ['id'], limit: 1 })
+      await selectRows(db, { schema: 'newsroom', table: 'articles', columns: ['id'], limit: 1 })
     ).rows[0]!
     const wanted = [String(tags.rows[0]!.id)]
     // Outside a transaction the lock that holds the read and the write against another
@@ -163,7 +163,7 @@ describe('a join table', () => {
 describe('a condition that crosses a relation', () => {
   const tagIds = async () => {
     const db = await w.as('alice@example.com')
-    const tags = await records(db, {
+    const tags = await selectRows(db, {
       schema: 'newsroom',
       table: 'tags',
       columns: ['id'],
@@ -173,7 +173,7 @@ describe('a condition that crosses a relation', () => {
   }
   const linked = async (op: 'has_any' | 'has_none' | 'has_all', value: string[]) => {
     const db = await w.as('alice@example.com')
-    return records(db, {
+    return selectRows(db, {
       schema: 'newsroom',
       table: 'articles',
       columns: ['id', 'title'],

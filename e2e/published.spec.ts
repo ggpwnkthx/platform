@@ -11,7 +11,7 @@ test('the published site signs in through the issuer and returns to the page ask
   await signIn(app).click()
   await expect(app.getByRole('columnheader', { name: 'Headline' })).toBeVisible({ timeout: 30_000 })
   expect(address(app)).toContain('#/newsroom.articles')
-  // The records arrived over a WebSocket, through the relay, from PostgreSQL's own protocol.
+  // The rows arrived over a WebSocket, through the relay, from PostgreSQL's own protocol.
   await expect(app.getByText('1-25 of 60')).toBeVisible()
   await expect(rows(app)).toHaveCount(25)
 })

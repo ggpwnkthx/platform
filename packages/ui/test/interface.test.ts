@@ -1,10 +1,10 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { type Catalog, catalog, fieldMetadata } from '@platform/core'
+import { type Catalog, catalog, columnMetadata } from '@platform/core'
 import { world } from '../../core/test/world.ts'
 import { defaultRuntimeConfig, headersFile } from '../src/config.ts'
-import { reachesOf, resolveFields } from '../src/fields/resolve.ts'
+import { reachesOf, resolveColumns } from '../src/columns/resolve.ts'
 import { familyOf, palette, tone } from '../src/kit/palette.ts'
 
 let w: Awaited<ReturnType<typeof world>>
@@ -13,8 +13,8 @@ beforeAll(async () => {
   w = await world()
   held = await catalog(await w.as('alice@example.com'))
 })
-const fieldsOf = async (table: string) =>
-  resolveFields(held, 'newsroom', table, await fieldMetadata(w.db, 'newsroom', table))
+const columnsOf = async (table: string) =>
+  resolveColumns(held, 'newsroom', table, await columnMetadata(w.db, 'newsroom', table))
 
 const source = join(import.meta.dir, '../src')
 const files = (dir: string): string[] =>
@@ -22,30 +22,30 @@ const files = (dir: string): string[] =>
     entry.isDirectory() ? files(join(dir, entry.name)) : [join(dir, entry.name)]
   )
 
-describe('the fields of a collection, as the interface meets them', () => {
+describe('the columns of a table, as the interface meets them', () => {
   test('a column is claimed by the type that fits it best', async () => {
-    const fields = Object.fromEntries((await fieldsOf('articles')).map((f) => [f.name, f]))
-    expect(fields.title!.type.name).toBe('text')
-    expect(fields.title!.label).toBe('Headline')
-    expect(fields.status!.type.name).toBe('choice')
-    expect(fields.status!.choices).toEqual(['draft', 'review', 'published'])
-    expect(fields.section!.type.name).toBe('relation')
-    expect(fields.word_count!.type.name).toBe('integer')
-    expect(fields.word_count!.renderers.list?.renderer).toBe('reading-time')
-    expect(fields.version!.system).toBe(true)
+    const columns = Object.fromEntries((await columnsOf('articles')).map((f) => [f.name, f]))
+    expect(columns.title!.type.name).toBe('text')
+    expect(columns.title!.label).toBe('Headline')
+    expect(columns.status!.type.name).toBe('choice')
+    expect(columns.status!.choices).toEqual(['draft', 'review', 'published'])
+    expect(columns.section!.type.name).toBe('relation')
+    expect(columns.word_count!.type.name).toBe('integer')
+    expect(columns.word_count!.renderers.list?.renderer).toBe('reading-time')
+    expect(columns.version!.system).toBe(true)
   })
-  test('PostgreSQL said what the reader may read and write, and the field carries the answer', async () => {
-    const fields = Object.fromEntries((await fieldsOf('articles')).map((f) => [f.name, f]))
-    expect(fields.internal_notes!.column).toMatchObject({ can_select: false, can_update: false })
-    // The name of a field she may not read is not hers to learn: its metadata is not returned.
-    expect(fields.internal_notes!.label).toBe('internal_notes')
-    expect(fields.title!.column).toMatchObject({ can_select: true, can_update: true })
-    expect(fields.published_at!.column).toMatchObject({ can_select: true, can_update: false })
+  test('PostgreSQL said what the reader may read and write, and the column carries the answer', async () => {
+    const columns = Object.fromEntries((await columnsOf('articles')).map((f) => [f.name, f]))
+    expect(columns.internal_notes!.column).toMatchObject({ can_select: false, can_update: false })
+    // The name of a column she may not read is not hers to learn: its metadata is not returned.
+    expect(columns.internal_notes!.label).toBe('internal_notes')
+    expect(columns.title!.column).toMatchObject({ can_select: true, can_update: true })
+    expect(columns.published_at!.column).toMatchObject({ can_select: true, can_update: false })
   })
-  test('a join table is the rows a record is linked to; a key that points here is its children', async () => {
-    const fields = await fieldsOf('articles')
-    const links = fields.find((f) => f.link?.kind === 'links')!
-    const children = fields.find((f) => f.link?.kind === 'children')!
+  test('a join table is the rows a row is linked to; a key that points here is its children', async () => {
+    const columns = await columnsOf('articles')
+    const links = columns.find((f) => f.link?.kind === 'links')!
+    const children = columns.find((f) => f.link?.kind === 'children')!
     expect(links).toMatchObject({ name: 'tags', virtual: true, column: null })
     expect(links.link!.path).toMatchObject({
       table: 'article_tags',
@@ -58,14 +58,14 @@ describe('the fields of a collection, as the interface meets them', () => {
     // Neither is a column of the grid; both may be asked about in a filter.
     expect(links.views.list).toBe('hide')
     expect(links.type.operators).toEqual(['has_any', 'has_none', 'has_all'])
-    // A join table is a collection like any other, and its keys are relations.
-    expect((await fieldsOf('article_tags')).filter((f) => f.relation).map((f) => f.name)).toEqual([
+    // A join table is a table like any other, and its keys are relations.
+    expect((await columnsOf('article_tags')).filter((f) => f.relation).map((f) => f.name)).toEqual([
       'article',
       'tag',
     ])
   })
   test('the search and the conditions follow a relation by the name on the other side', async () => {
-    const reaches = reachesOf(held, await fieldsOf('articles'))
+    const reaches = reachesOf(held, await columnsOf('articles'))
     expect(reaches.section).toMatchObject({ kind: 'column', table: 'sections', label: 'name' })
     expect(reaches.tags).toMatchObject({ kind: 'rows', table: 'article_tags', label: 'name' })
   })

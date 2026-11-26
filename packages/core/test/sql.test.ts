@@ -45,7 +45,7 @@ describe('names and values', () => {
 
 describe('grants', () => {
   const on = { schema: 'newsroom', table: 'articles', grantee: 'newsroom_writer' }
-  test('a grant names its privileges, its fields and its roles', () => {
+  test('a grant names its privileges, its columns and its roles', () => {
     expect(
       grantStatement({
         ...on,
@@ -66,7 +66,7 @@ describe('grants', () => {
     )
     expect(() => grantStatement({ ...on, privileges: ['all'], columns: ['title'] })).toThrow()
   })
-  test('narrowing from the collection to fields revokes the collection and names the fields', () => {
+  test('narrowing from the table to columns revokes the table and names the columns', () => {
     expect(
       grantChangeStatements({
         ...on,
@@ -78,7 +78,7 @@ describe('grants', () => {
       'GRANT SELECT ("id", "title") ON TABLE "newsroom"."articles" TO "newsroom_writer";',
     ])
   })
-  test('widening gives the field grants up; changing fields writes only the difference', () => {
+  test('widening gives the column grants up; changing columns writes only the difference', () => {
     expect(
       grantChangeStatements({
         ...on,
@@ -107,7 +107,7 @@ describe('grants', () => {
       })
     ).toEqual([])
     expect(() => grantChangeStatements({ ...on, held: {}, wanted: { DELETE: ['title'] } })).toThrow(
-      'whole collection'
+      'whole table'
     )
   })
 })

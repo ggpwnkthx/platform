@@ -1,13 +1,13 @@
 import { presentationOf } from '@platform/core'
 import { useLocation } from 'react-router-dom'
 import { useSession } from '../session/session.ts'
-let lastWorkspace = ''
+let lastSchema = ''
 /**
- * The workspace in view. A workspace is the unit of ownership and of permission, so the
- * interface reads in one at a time, and the address says which: a collection is
- * `workspace.collection`, and a workspace's own pages carry its name.
+ * The schema in view. A schema is the unit of ownership and of permission, so the
+ * interface reads in one at a time, and the address says which: a table is
+ * `schema.table`, and a schema's own pages carry its name.
  */
-export function useWorkspace() {
+export function useSchema() {
   const { catalog } = useSession()
   const [, first = '', second = ''] = useLocation().pathname.split('/')
   const said = ['w', 'activity'].includes(first)
@@ -17,13 +17,13 @@ export function useWorkspace() {
       : ''
   const found =
     catalog.schemas.find((s) => s.name === decodeURIComponent(said)) ??
-    catalog.schemas.find((s) => s.name === lastWorkspace) ??
+    catalog.schemas.find((s) => s.name === lastSchema) ??
     catalog.schemas.find((s) => s.kind === 'user') ??
     catalog.schemas[0]
-  if (found) lastWorkspace = found.name
+  if (found) lastSchema = found.name
   return found
 }
-/** The name people read for a workspace or a collection, and the mark it carries. */
+/** The name people read for a schema or a table, and the mark it carries. */
 export function useNames() {
   const { presentations } = useSession()
   return (schema: string, table?: string) => {

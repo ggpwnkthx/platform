@@ -33,27 +33,15 @@ export function ItemMark(props: { icon?: string | null; color?: string | null; t
 }
 
 const holds = {
-  all: 'held on the whole collection',
-  some: 'held on some fields',
+  all: 'held on the whole table',
+  some: 'held on some columns',
   none: 'not held',
 }
-/** What each of PostgreSQL's privileges lets a role do, in the reader's words. */
-const means: Record<string, string> = {
-  SELECT: 'Read records',
-  INSERT: 'Add records',
-  UPDATE: 'Change records',
-  DELETE: 'Delete records',
-  TRUNCATE: 'Empty the collection at once',
-  REFERENCES: 'Point at it from another collection',
-  TRIGGER: 'Attach triggers',
-  USAGE: 'Reach into the workspace',
-  CREATE: 'Make collections in it',
-}
-/** A privilege's tip: what it lets a role do, and how much of it is held. */
+/** A privilege's tip: how much of it is held. */
 const tipOf = (name: string, hold: Hold, count?: string) => {
   const [some, of] = count?.split('/') ?? []
-  const held = hold === 'some' && some ? `held on ${some} of ${of} fields` : holds[hold]
-  return means[name] ? `${means[name]} (${name}): ${held}` : ''
+  const held = hold === 'some' && some ? `held on ${some} of ${of} columns` : holds[hold]
+  return `${name}: ${held}`
 }
 /** A privilege: PostgreSQL's own name beside a full, half or empty mark. It describes; it does not edit. */
 export function Privilege(props: { name: string; held: Hold | boolean; count?: string }) {
@@ -98,8 +86,8 @@ export function Privilege(props: { name: string; held: Hold | boolean; count?: s
 }
 export const PrivilegeLegend = () => (
   <Box>
-    <Privilege name="whole collection" held="all" />
-    <Privilege name="some fields" held="some" />
+    <Privilege name="whole table" held="all" />
+    <Privilege name="some columns" held="some" />
     <Privilege name="not held" held="none" />
   </Box>
 )

@@ -1,5 +1,5 @@
 import { Client, neonConfig, Pool, types } from '@neondatabase/serverless'
-import { broken, type Db } from '@platform/core'
+import { broken, type Db, transaction } from '@platform/core'
 import { fromPg, typeParsers, withToken } from '@platform/core/token-client'
 
 export interface Login {
@@ -13,11 +13,18 @@ export interface Login {
 export interface Session extends Db {
   /** Work that must not interleave with anything else: a transaction. */
   exclusive<T>(work: (db: Db) => Promise<T>): Promise<T>
-  /** The reader's own statements, on a login of their own that is closed afterwards. */
-  own<T>(work: (db: Db) => Promise<T>): Promise<T>
+  /**
+   * The reader's own statements, on a login of their own that is closed afterwards: in one
+   * transaction where `atomic`, and rolled back at the end where `undo` (EXPLAIN ANALYZE).
+   */
+  own<T>(work: (db: Db) => Promise<T>, how?: Own): Promise<T>
   close(): Promise<void>
 }
 
+export interface Own {
+  atomic?: boolean
+  undo?: boolean
+}
 const TokenClient = withToken(Client)
 
 /**
@@ -78,10 +85,12 @@ export function openSession(login: Login): Session {
   return {
     query: (text, params) => withClient((db) => db.query(text, params)),
     exclusive: withClient,
-    async own(work) {
+    async own(work, how = {}) {
       const db = await connect(login)
       try {
-        return await work(db)
+        return how.atomic || how.undo
+          ? await transaction(db, () => work(db), how.undo)
+          : await work(db)
       } finally {
         db.close()
       }

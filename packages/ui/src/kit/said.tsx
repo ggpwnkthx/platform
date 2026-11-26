@@ -6,20 +6,19 @@ import tokens from 'virtual:design-tokens'
 const { layout } = tokens
 /** What the studio says one way everywhere: a statement, a refusal, an empty place, a section. */
 export { type Standing, Statement } from './Statement.tsx'
-/** What to do about the refusals people meet most, in the reader's words, under PostgreSQL's own. */
+/** What to do about the refusals people meet most, in one line, under PostgreSQL's own. */
 function nextStep(code?: string): string | null {
   if (!code) return null
   if (code === '42501')
-    return "Your role doesn't hold the right this needs. An owner of the workspace can grant it, under Data model and access, then Access."
+    return 'Your role lacks the privilege this needs. The owner of the object can GRANT it, under Definition and privileges, then Privileges.'
   if (code === '23505')
-    return 'Another record already has this value, and the field must be unique. Change it, or change that record.'
+    return 'Another row already holds this value, and a UNIQUE constraint forbids a duplicate. Update this row or that one.'
   if (code === '23503')
-    return 'It points at a record that does not exist, or another record still points at this one.'
-  if (code === '23502') return 'A required field is empty. Fill it in, then save again.'
-  if (code === '23514')
-    return "A value breaks one of the collection's Keys and rules. Change it to fit."
+    return 'It points at a row that does not exist, or another row still points at this one.'
+  if (code === '23502') return 'A required column is empty. Fill it in, then save again.'
+  if (code === '23514') return 'A value violates a CHECK constraint of the table.'
   if (code === '22P02' || code === '22007' || code === '22008')
-    return 'A value is not in the form its field expects: a number, a date, an identifier.'
+    return 'A value is not in the form its column expects: a number, a date, an identifier.'
   if (code === '40001' || code === '40P01')
     return 'Someone else changed the same thing at the same moment. Try again.'
   if (code === '42P01' || code === '42703')

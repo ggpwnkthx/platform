@@ -1,4 +1,4 @@
--- What a deployment has left open: how the server lets people in, and what its collections
+-- What a deployment has left open: how the server lets people in, and what its tables
 -- lack. Run as whoever is to be told — a superuser is told everything:
 --
 --   psql -f deploy/sql/doctor.sql
@@ -42,7 +42,7 @@ BEGIN
     RETURN QUERY SELECT 'problem', 'Every connection reads the role catalogs: who belongs to which group. deploy/sql/harden.sql hides them from ordinary connections.';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_event_trigger WHERE evtname IN ('platform_guard_start', 'platform_guard_end')) THEN
-    RETURN QUERY SELECT 'problem', 'No guard on row security: deploy/sql/guard.sql refuses an ordinary owner whatever would turn a collection out of row security, or let writes pass by the triggers that write its history.';
+    RETURN QUERY SELECT 'problem', 'No guard on row security: deploy/sql/guard.sql refuses an ordinary owner whatever would turn a table out of row security, or let writes pass by the triggers that write its history.';
   END IF;
   BEGIN
     SELECT string_agg(format('%I.%I (%s)', n.nspname, c.relname, r.rolname), ', ' ORDER BY 1) INTO names
@@ -50,10 +50,10 @@ BEGIN
      WHERE c.relkind IN ('r','p') AND n.nspname NOT IN ('platform','information_schema') AND n.nspname !~ '^pg_'
        AND r.rolcanlogin AND NOT r.rolsuper;
     IF names IS NOT NULL THEN
-      RETURN QUERY SELECT 'note', 'Owned by a person, who is not held to its row security: ' || names || '. A NOLOGIN group that owns a collection owns it for its members.';
+      RETURN QUERY SELECT 'note', 'Owned by a person, who is not held to its row security: ' || names || '. A NOLOGIN group that owns a table owns it for its members.';
     END IF;
   EXCEPTION WHEN insufficient_privilege THEN
-    RETURN QUERY SELECT 'skipped', 'Who owns the collections: the role catalogs are hidden from you.';
+    RETURN QUERY SELECT 'skipped', 'Who owns the tables: the role catalogs are hidden from you.';
   END;
   SELECT string_agg(format('%I.%I', n.nspname, c.relname), ', ' ORDER BY 1) INTO names
     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -62,7 +62,7 @@ BEGIN
                         AND t.tgfoid = to_regprocedure('platform.record_change()') AND (t.tgtype & 28) <> 0
                         AND t.tgenabled IN ('O','A'));
   IF names IS NOT NULL THEN
-    RETURN QUERY SELECT 'note', 'No enabled audit trigger, so writes leave no revision: ' || names || '. Collections made by platform.create_collection carry one.';
+    RETURN QUERY SELECT 'note', 'No enabled audit trigger, so writes leave no revision: ' || names || '. Tables made by platform.create_table carry one.';
   END IF;
 END $$;
 SELECT * FROM pg_temp.doctor();

@@ -1,11 +1,11 @@
 import { id, InvalidName, list, lit, sql } from './kit.ts'
 
 /**
- * The column a field is: its type, its emptiness, its uniqueness and its defaults. The
+ * The column a column is: its type, its emptiness, its uniqueness and its defaults. The
  * rules PostgreSQL holds it by are part of the column itself, not a statement beside it.
  */
 
-export const systemFields = [
+export const systemColumns = [
   'id',
   'created_at',
   'updated_at',
@@ -25,12 +25,16 @@ export const columnTypes = {
   time: 'time',
   timestamp: 'timestamptz',
   json: 'jsonb',
+  interval: 'interval',
+  inet: 'inet',
+  text_list: 'text[]',
+  search: 'tsvector',
 } as const
 export const onDeleteActions = { restrict: 'RESTRICT', cascade: 'CASCADE', set_null: 'SET NULL' }
 /** The letter PostgreSQL keeps a delete rule by: the same rules, as the catalog has them. */
 export type OnDelete = keyof typeof onDeleteActions
 
-export interface FieldSpec {
+export interface ColumnSpec {
   name: string
   type: string
   modifiers?: string[]
@@ -47,6 +51,10 @@ export interface FieldSpec {
   onDelete?: OnDelete
   views?: Record<string, string>
   renderers?: Record<string, unknown>
+  /** Computed by PostgreSQL from the row's other columns, in SQL: never written. */
+  generated?: string
+  /** Numbered by PostgreSQL, one more for each row: a whole number that is never written. */
+  identity?: boolean
 }
 
 /** A relation is stored as the uuid it points at; `string` is the manifests' word for text. */
@@ -76,26 +84,32 @@ function defaultSql(type: string, value: unknown, name: string) {
   }
   return lit(value)
 }
-export function columnSql(field: FieldSpec) {
-  if (systemFields.includes(field.name))
-    throw new InvalidName(`${field.name} is made with every collection`)
-  const name = id(field.name)
-  const type = storageType(field.type)
+export function columnSql(column: ColumnSpec) {
+  if (systemColumns.includes(column.name))
+    throw new InvalidName(`${column.name} is made with every table`)
+  const name = id(column.name)
+  const type = storageType(column.type)
   const number = (value: number) => {
-    if (!Number.isFinite(value)) throw new InvalidName(`${field.name}: not a number`)
+    if (!Number.isFinite(value)) throw new InvalidName(`${column.name}: not a number`)
     return sql.raw(String(value))
   }
-  const parts = [sql`${name} ${typeSql(type, field.modifiers)}`]
-  if (field.default !== undefined && field.default !== null && field.default !== '')
-    parts.push(sql`DEFAULT ${defaultSql(type, field.default, field.name)}`)
-  if (field.required) parts.push(sql.raw('NOT NULL'))
-  if (field.unique) parts.push(sql.raw('UNIQUE'))
-  if (field.maxLength !== undefined)
-    parts.push(sql`CHECK (char_length(${name}) <= ${number(field.maxLength)})`)
-  if (field.choices?.length)
-    parts.push(sql`CHECK (${name} IN (${list(field.choices.map((choice) => lit(choice)))}))`)
-  if (field.min !== undefined) parts.push(sql`CHECK (${name} >= ${number(field.min)})`)
-  if (field.max !== undefined) parts.push(sql`CHECK (${name} <= ${number(field.max)})`)
+  const parts = [sql`${name} ${typeSql(type, column.modifiers)}`]
+  const generated = column.generated?.trim()
+  if (generated) parts.push(sql`GENERATED ALWAYS AS (${sql.raw(generated)}) STORED`)
+  else if (column.identity) {
+    if (!['integer', 'bigint'].includes(type))
+      throw new InvalidName(`${column.name}: only a whole number is numbered by PostgreSQL`)
+    parts.push(sql.raw('GENERATED ALWAYS AS IDENTITY'))
+  } else if (column.default !== undefined && column.default !== null && column.default !== '')
+    parts.push(sql`DEFAULT ${defaultSql(type, column.default, column.name)}`)
+  if (column.required) parts.push(sql.raw('NOT NULL'))
+  if (column.unique) parts.push(sql.raw('UNIQUE'))
+  if (column.maxLength !== undefined)
+    parts.push(sql`CHECK (char_length(${name}) <= ${number(column.maxLength)})`)
+  if (column.choices?.length)
+    parts.push(sql`CHECK (${name} IN (${list(column.choices.map((choice) => lit(choice)))}))`)
+  if (column.min !== undefined) parts.push(sql`CHECK (${name} >= ${number(column.min)})`)
+  if (column.max !== undefined) parts.push(sql`CHECK (${name} <= ${number(column.max)})`)
   return sql.join(parts, sql.raw(' '))
 }
-/** A real foreign key to another collection of the same workspace, named by PostgreSQL. */
+/** A real foreign key to another table of the same schema, named by PostgreSQL. */

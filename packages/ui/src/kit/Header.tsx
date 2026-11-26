@@ -81,7 +81,7 @@ export function Tip(props: { title: string; labelled?: boolean; children: ReactN
 }
 /**
  * Buttons for the header's right, from wherever on the page they belong. They keep the context
- * they are written in — a list's filters, a record's form — and leave with the part that drew them.
+ * they are written in — a list's filters, a row's form — and leave with the part that drew them.
  */
 export function HeaderActions({ children }: { children: ReactNode }) {
   const slot = useContext(HeaderSlot)

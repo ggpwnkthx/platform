@@ -6,7 +6,7 @@ import { Empty, Refusal } from './said.tsx'
 
 const { layout, rounded, colors } = tokens
 /**
- * The one table. Records and every kind of thing are listed by it: a bordered card, a pinned
+ * The one table. Rows and every kind of thing are listed by it: a bordered card, a pinned
  * first column, values clipped at one width with the whole value in their title, and one
  * way each of saying loading, empty and refused.
  */

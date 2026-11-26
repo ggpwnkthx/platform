@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
-import { catalog, linkedRows, records } from '../src/index.ts'
+import { catalog, linkedRows, selectRows } from '../src/index.ts'
 import { world } from './world.ts'
 
 let w: Awaited<ReturnType<typeof world>>
@@ -28,7 +28,7 @@ describe('a key that points at a column of its own', () => {
         `UPDATE newsroom.articles a SET section_code = s.code FROM newsroom.sections s WHERE s.id = a.section`
       )
       // A link between an article and a section, by the code and not by the id.
-      await db.query(`SELECT platform.create_collection('newsroom','article_sections')`)
+      await db.query(`SELECT platform.create_table('newsroom','article_sections')`)
       await db.query(`ALTER TABLE newsroom.article_sections ADD COLUMN article uuid`)
       await db.query(
         `ALTER TABLE newsroom.article_sections ADD COLUMN section text REFERENCES newsroom.sections(code) ON DELETE CASCADE`
@@ -66,7 +66,7 @@ describe('a key that points at a column of its own', () => {
 
   test('a condition on the row the key points at finds it', async () => {
     const db = await withNaturalKey()
-    const found = await records(db, {
+    const found = await selectRows(db, {
       schema: 'newsroom',
       table: 'articles',
       columns: ['id', 'title'],
@@ -85,9 +85,9 @@ describe('a key that points at a column of its own', () => {
     expect(found.total).toBeGreaterThan(0)
   })
 
-  test('a condition finds the records that point at a row by its natural key', async () => {
+  test('a condition finds the rows that point at a row by its natural key', async () => {
     const db = await withNaturalKey()
-    const page = await records(db, {
+    const page = await selectRows(db, {
       schema: 'newsroom',
       table: 'articles',
       columns: ['id', 'section_code'],
@@ -121,7 +121,7 @@ describe('a key that points at a column of its own', () => {
       target_table: 'sections',
       target_column: 'code',
     }
-    const articles = await records(db, {
+    const articles = await selectRows(db, {
       schema: 'newsroom',
       table: 'articles',
       columns: ['id'],
@@ -134,11 +134,11 @@ describe('a key that points at a column of its own', () => {
 })
 
 /**
- * A key may point at a collection of another workspace: the schemas are PostgreSQL's own,
+ * A key may point at a table of another schema: the schemas are PostgreSQL's own,
  * and a key written across them is read as it is written.
  */
-describe('a key that points at another workspace', () => {
-  test('the catalog says which collection the key points at', async () => {
+describe('a key that points at another schema', () => {
+  test('the catalog says which table the key points at', async () => {
     const db = await w.root()
     const made = await db.query(`SELECT to_regclass('newsroom.article_accounts') AS t`)
     if (!made.rows[0]?.t) {

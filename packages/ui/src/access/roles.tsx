@@ -1,20 +1,26 @@
 import { Box } from '@mui/material'
 import {
   createRoleStatements,
+  platformUsers,
+  renameRoleStatement,
+  roleAttributesStatement,
   dropRoleStatement,
-  type MembershipInfo,
-  membershipStatement,
   reservedRole,
   type RoleInfo,
   roles as readRoles,
 } from '@platform/core'
-import { BooleanInput, SelectArrayInput, SelectInput, TextInput, useGetList } from 'react-admin'
+import {
+  BooleanInput,
+  NumberInput,
+  SelectArrayInput,
+  SelectInput,
+  TextInput,
+  useGetList,
+} from 'react-admin'
 import { Link } from 'react-router-dom'
-import { defineKind } from '../data/kinds.ts'
+import { choices, defineKind, mono } from '../data/kinds.ts'
 import { RoleName, Tag } from '../kit/marks.tsx'
-import { mono } from '../model/collections.tsx'
 /** Who there is: PostgreSQL's roles and their memberships, as the caller may see them. */
-export const named = (names: readonly string[]) => names.map((id) => ({ id, name: id }))
 const everyRole = { pagination: { page: 1, perPage: 1000 } }
 /** The roles the caller may see, to choose one of; any other may be typed where PostgreSQL knows it. */
 export function RoleInput(props: {
@@ -37,7 +43,7 @@ export function RoleInput(props: {
     <Input
       source={props.source}
       label={props.label}
-      choices={named(props.everyone ? [...known, 'public'] : known)}
+      choices={choices(props.everyone ? [...known, 'public'] : known)}
       {...mono}
     />
   )
@@ -58,20 +64,32 @@ export function Role({ name }: { name: string }) {
   )
 }
 
-export const roles = defineKind<RoleInfo, object, { name: string; login: boolean }>({
+type RoleRow = RoleInfo & { user: boolean }
+type RoleForm = {
+  name: string
+  login: boolean
+  create_role: boolean
+  inherit: boolean
+  connection_limit: number
+}
+export const roles = defineKind<RoleRow, object, RoleForm>({
   name: 'roles',
   title: 'Roles',
-  note: 'A user is a person who signs in, named by their email; a group gathers users so that rights are granted once. PostgreSQL calls both roles. You see the roles you may use; an operator sees them all.',
+  note: 'Database roles. A role with LOGIN signs in, and is named by a person’s email; a role with NOLOGIN is a group role whose privileges its members inherit. You see the roles you are a member of; an operator sees them all.',
   noun: 'role',
   empty: 'No role that you may see.',
-  read: async (db) => (await readRoles(db)).roles.filter((r) => !/^pg_/.test(r.name)),
+  async read(db) {
+    const { roles, memberships } = await readRoles(db)
+    const users = new Set(memberships.filter((m) => m.role === platformUsers).map((m) => m.member))
+    return roles.filter((r) => !/^pg_/.test(r.name)).map((r) => ({ ...r, user: users.has(r.name) }))
+  },
   key: (row) => row.name,
   columns: [
     { source: 'name', label: 'Role', render: (row) => <Role name={row.name} /> },
     {
       source: 'login',
       label: 'Kind',
-      render: (row) => (row.login ? 'User: may sign in' : 'Group'),
+      render: (row) => (row.login ? 'LOGIN' : 'NOLOGIN'),
     },
     {
       source: 'superuser',
@@ -81,65 +99,58 @@ export const roles = defineKind<RoleInfo, object, { name: string; login: boolean
           {row.superuser && <Tag color="warning">SUPERUSER</Tag>}{' '}
           {row.create_role && <Tag>CREATEROLE</Tag>}{' '}
           {row.bypass_rls && <Tag color="warning">BYPASSRLS</Tag>}{' '}
+          {!row.inherit && <Tag>NOINHERIT</Tag>}{' '}
+          {row.connection_limit >= 0 && <Tag>{`${row.connection_limit} sessions at most`}</Tag>}{' '}
           {row.admits && <Tag color="primary">you admit members</Tag>}
         </>
       ),
     },
   ],
   may: (_where, { identity }) => identity.is_operator,
-  Inputs: () => (
+  // PostgreSQL alters a role for whoever holds CREATEROLE and ADMIN OPTION on it.
+  mayRow: (row, _where, { identity }) =>
+    identity.is_operator && row.admits && !reservedRole(row.name),
+  Inputs: ({ row }) => (
     <>
-      <TextInput source="name" label="Name: a person's email, or a group's name" {...mono} />
-      <BooleanInput
-        source="login"
-        label="A person who signs in (a user). Off, it is a group"
-        helperText={false}
-      />
+      <TextInput source="name" label="Role name" {...mono} />
+      <BooleanInput source="login" label="LOGIN (off: NOLOGIN, a group role)" helperText={false} />
+      {row && (
+        <>
+          <BooleanInput source="create_role" label="CREATEROLE" helperText={false} />
+          <BooleanInput source="inherit" label="INHERIT" helperText={false} />
+          <NumberInput
+            source="connection_limit"
+            label="CONNECTION LIMIT (-1: none)"
+            helperText={false}
+          />
+        </>
+      )}
     </>
   ),
-  defaults: () => ({ login: false }),
+  defaults: (_where, row) =>
+    row
+      ? {
+          name: row.name,
+          login: row.login,
+          create_role: row.create_role,
+          inherit: row.inherit,
+          connection_limit: row.connection_limit,
+        }
+      : { login: false },
   create: (form) => createRoleStatements({ name: form.name ?? '', login: !!form.login }),
+  update(form, _where, row) {
+    const out: string[] = []
+    const attributes = roleAttributesStatement(row.name, row, {
+      ...form,
+      connection_limit: form.connection_limit ?? -1,
+    })
+    if (attributes) out.push(attributes)
+    // A person can sign in once they belong to the platform's users.
+    if (form.login && !row.user) out.push(createRoleStatements({ name: row.name, login: true })[1]!)
+    const name = form.name?.trim() || row.name
+    if (name !== row.name) out.push(renameRoleStatement(row.name, name))
+    return out
+  },
+  loses: () => 'PostgreSQL refuses while the role owns anything or holds a right: those go first.',
   remove: (row) => [dropRoleStatement(row.name)],
-})
-
-export const memberships = defineKind<
-  MembershipInfo,
-  { role?: string; member?: string },
-  { role: string; member: string; admin: boolean }
->({
-  name: 'memberships',
-  title: 'Memberships',
-  note: 'Who belongs to which group, as far as you may see.',
-  noun: 'membership',
-  empty: 'None that you may see.',
-  read: async (db, where) =>
-    (await readRoles(db)).memberships.filter(
-      (m) => (!where.role || m.role === where.role) && (!where.member || m.member === where.member)
-    ),
-  key: (row) => `${row.member} in ${row.role}`,
-  columns: [
-    { source: 'member', label: 'Member', render: (row) => <Role name={row.member} /> },
-    { source: 'role', label: 'Belongs to', render: (row) => <Role name={row.role} /> },
-    {
-      source: 'admin_option',
-      label: 'Admits others',
-      render: (row) => (row.admin_option ? <Tag color="primary">WITH ADMIN OPTION</Tag> : null),
-    },
-  ],
-  // PostgreSQL's answer: the roles the caller holds WITH ADMIN OPTION.
-  may: (where, { identity }) =>
-    where.role ? identity.admits.includes(where.role) : identity.admits.length > 0,
-  mayRow: (row, _where, { identity }) => identity.admits.includes(row.role),
-  Inputs: ({ where }) => (
-    <>
-      {!where.member && <RoleInput source="member" label="Member" />}
-      {!where.role && <RoleInput source="role" label="Belongs to" groups admitted />}
-      <BooleanInput source="admin" label="May admit others to it" helperText={false} />
-    </>
-  ),
-  defaults: (where) => ({ ...where, admin: false }),
-  create: (form) => [
-    membershipStatement({ role: form.role, member: form.member, admin: form.admin }),
-  ],
-  remove: (row) => [membershipStatement(row, true)],
 })

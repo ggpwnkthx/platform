@@ -13,7 +13,7 @@ const { colors, rounded } = tokens
 const steps = [
   ['Your sign-in', 'The issuer vouches for who you are'],
   ['PostgreSQL', 'Checks the token and logs in your role'],
-  ['Your role and records', 'Every grant and policy applies, as in psql'],
+  ['Your role and rows', 'Every grant and policy applies, as in psql'],
 ]
 const card: SxProps = {
   border: 1,
